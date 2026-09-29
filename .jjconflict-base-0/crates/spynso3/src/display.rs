@@ -69,48 +69,17 @@ mod mathml;
 pub(crate) mod metadata;
 pub(crate) mod network;
 
-/// Presentation settings shared by Typst source, HTML, and SVG rendering.
+/// Immutable presentation options for tensor notation and component displays.
 ///
-/// ``index_style="alphabet"`` assigns representation-specific letters to graph
-/// and generated dummy indices within each displayed expression. ``"graph"`` keeps graph identities
-/// in their subscripts; ``"raw"`` preserves the original index notation. All
-/// styles leave the underlying expression and tensor interface unchanged.
-/// ``component_style="superscript"`` displays concrete components as A(x,7)^{0,1}.
-/// Use ``component_style="array"`` for A(x,7)[0,1]; ordinary arguments remain in
-/// parentheses in both styles.
-/// Concrete tensors use an interactive component explorer in notebooks.
-/// ``tensor_view="matrix"`` selects the static mathematical display instead.
+/// Formatting does not change indices, tensor algebra, or component order.
+/// The defaults use representation-specific index alphabets and an interactive
+/// component explorer. Typst/plain source supports ports layout; alternative
+/// layouts and custom spacing require a rich HTML or SVG renderer.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> settings = sp.DisplaySettings(index_style="raw", show_dimensions=True)
-/// >>> text = A.format_tensor(settings=settings)
-///
-/// Parameters
-/// ----------
-/// tensor_layout : Literal['ports', 'schoonschip', 'call']
-///     "ports" displays ordered tensor ports, "schoonschip" uses compact tensor notation, and "call" shows function-call notation.
-/// show_dimensions : bool
-///     Whether to display representation dimensions; False hides them.
-/// parentheses : bool
-///     Whether the selected display layout wraps tensor arguments in parentheses.
-/// commas : bool, optional
-///     Whether displayed function arguments are comma-separated. None uses the selected layout’s convention.
-/// symbol_scripts : bool
-///     Render subscripts and superscripts encoded in symbol names using mathematical script notation.
-/// index_gap : str
-///     Spacing between displayed indices, expressed as a Typst length such as "0.08em".
-/// factor_gap : str
-///     Spacing between displayed factors, expressed as a Typst length such as "0.12em".
-/// index_style : Literal['alphabet', 'graph', 'raw']
-///     "alphabet" assigns readable index letters, "graph" retains graph-style labels, and "raw" displays the stored index names.
-/// component_style : Literal['superscript', 'array']
-///     "superscript" for mathematical component notation or "array" for array-style coordinates.
-/// tensor_view : Literal['interactive', 'matrix']
-///     "interactive" uses the HTML component explorer; "matrix" requests a static component view.
+/// >>> from symbolica.community.tensor import DisplaySettings
+/// >>> settings = DisplaySettings(component_style="array", index_style="alphabet")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -120,94 +89,140 @@ pub(crate) mod network;
 )]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplaySettings {
-    /// "ports" displays ordered tensor ports, "schoonschip" uses compact tensor notation, and "call" shows function-call notation.
+    /// Rich layout: "ports" places indices by tensor axes; "schoonschip"
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Rich layout: "ports" places indices by tensor axes; "schoonschip"
+    ///     uses compact contracted-vector notation; "call" uses function-call notation.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.tensor_layout
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().tensor_layout
     #[pyo3(get)]
     tensor_layout: String,
-    /// "alphabet" assigns readable index letters, "graph" retains graph-style labels, and "raw" displays the stored index names.
+    /// "alphabet" assigns representation-specific letters to generated indices;
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     "alphabet" assigns representation-specific letters to generated indices;
+    ///     "graph" shows graph identities; "raw" retains the original labels.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.index_style
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().index_style
     #[pyo3(get)]
     index_style: String,
-    /// "superscript" for mathematical component notation or "array" for array-style coordinates.
+    /// Concrete component labels: "superscript" for A(x,7)^{0,1},
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Concrete component labels: "superscript" for A(x,7)^{0,1},
+    ///     or "array" for A(x,7)[0,1]. Scalar arguments stay in parentheses.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.component_style
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().component_style
     #[pyo3(get)]
     component_style: String,
-    /// "interactive" uses the HTML component explorer; "matrix" requests a static component view.
+    /// Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.tensor_view
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().tensor_view
     #[pyo3(get)]
     tensor_view: String,
-    /// Whether representation dimensions are displayed.
+    /// Include representation dimensions in index notation.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Include representation dimensions in index notation.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.show_dimensions
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().show_dimensions
     #[pyo3(get)]
     show_dimensions: bool,
-    /// Whether the selected display layout wraps tensor arguments in parentheses.
+    /// Include the optional grouping parentheses used by tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Include the optional grouping parentheses used by tensor notation.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.parentheses
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().parentheses
     #[pyo3(get)]
     parentheses: bool,
-    /// Whether displayed function arguments are comma-separated. None uses the selected layout’s convention.
+    /// Show comma separators. None follows the layout: enabled for "call",
+    ///
+    /// Returns
+    /// -------
+    /// bool or None
+    ///     Show comma separators. None follows the layout: enabled for "call",
+    ///     disabled otherwise.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.commas
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().commas
     #[pyo3(get)]
     commas: Option<bool>,
-    /// Render subscripts and superscripts encoded in symbol names using mathematical script notation.
+    /// Render index and component information using symbol scripts where supported.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Render index and component information using symbol scripts where supported.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.symbol_scripts
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().symbol_scripts
     #[pyo3(get)]
     symbol_scripts: bool,
-    /// Spacing between displayed indices, expressed as a Typst length such as "0.08em".
+    /// Spacing between rendered indices, as a finite Typst length using
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Spacing between rendered indices, as a finite Typst length using
+    ///     pt, mm, cm, in, em, or %.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.index_gap
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().index_gap
     #[pyo3(get)]
     index_gap: String,
-    /// Spacing between displayed factors, expressed as a Typst length such as "0.12em".
+    /// Spacing between rendered factors, using the same length units as index_gap.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Spacing between rendered factors, using the same length units as index_gap.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.DisplaySettings()
-    /// >>> result = settings.factor_gap
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().factor_gap
     #[pyo3(get)]
     factor_gap: String,
 }
@@ -249,39 +264,51 @@ fn validate_typst_length(value: &str, field: &str) -> PyResult<()> {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl DisplaySettings {
-    /// Choose how tensor names, indices, and components are displayed.
-    /// These settings change presentation only; they do not change tensor algebra or data.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> settings = sp.DisplaySettings(index_style="raw", show_dimensions=True)
-    /// >>> text = A.format_tensor(settings=settings)
+    /// Choose tensor notation, index labels, and component presentation.
     ///
     /// Parameters
     /// ----------
-    /// tensor_layout : Literal['ports', 'schoonschip', 'call']
-    ///     "ports" displays ordered tensor ports, "schoonschip" uses compact tensor notation, and "call" shows function-call notation.
-    /// show_dimensions : bool
-    ///     Whether to display representation dimensions; False hides them.
-    /// parentheses : bool
-    ///     Whether the selected display layout wraps tensor arguments in parentheses.
-    /// commas : bool, optional
-    ///     Whether displayed function arguments are comma-separated. None uses the selected layout’s convention.
-    /// symbol_scripts : bool
-    ///     Render subscripts and superscripts encoded in symbol names using mathematical script notation.
-    /// index_gap : str
-    ///     Spacing between displayed indices, expressed as a Typst length such as "0.08em".
-    /// factor_gap : str
-    ///     Spacing between displayed factors, expressed as a Typst length such as "0.12em".
-    /// index_style : Literal['alphabet', 'graph', 'raw']
-    ///     "alphabet" assigns readable index letters, "graph" retains graph-style labels, and "raw" displays the stored index names.
-    /// component_style : Literal['superscript', 'array']
-    ///     "superscript" for mathematical component notation or "array" for array-style coordinates.
-    /// tensor_view : Literal['interactive', 'matrix']
-    ///     "interactive" uses the HTML component explorer; "matrix" requests a static component view.
+    /// tensor_layout : str, default "ports"
+    ///     Rich layout: "ports" places indices by tensor axes; "schoonschip"
+    ///     uses compact contracted-vector notation; "call" uses function-call notation.
+    /// show_dimensions : bool, default False
+    ///     Include representation dimensions in index notation.
+    /// parentheses : bool, default True
+    ///     Include the optional grouping parentheses used by tensor notation.
+    /// commas : bool or None, default None
+    ///     Show comma separators. None follows the layout: enabled for "call",
+    ///     disabled otherwise.
+    /// symbol_scripts : bool, default True
+    ///     Render index and component information using symbol scripts where supported.
+    /// index_gap : str, default "0.08em"
+    ///     Spacing between rendered indices, as a finite Typst length using
+    ///     pt, mm, cm, in, em, or %.
+    /// factor_gap : str, default "0.12em"
+    ///     Spacing between rendered factors, using the same length units as index_gap.
+    /// index_style : str, default "alphabet"
+    ///     "alphabet" assigns representation-specific letters to generated indices;
+    ///     "graph" shows graph identities; "raw" retains the original labels.
+    /// component_style : str, default "superscript"
+    ///     Concrete component labels: "superscript" for A(x,7)^{0,1},
+    ///     or "array" for A(x,7)[0,1]. Scalar arguments stay in parentheses.
+    /// tensor_view : str, default "interactive"
+    ///     Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+    ///
+    /// Returns
+    /// -------
+    /// DisplaySettings
+    ///     Immutable settings to pass to formatting methods.
+    ///
+    /// Notes
+    /// -----
+    /// The tensor_view option affects concrete tensor HTML, not symbolic
+    /// TensorExpression algebra or TensorNetwork graph rendering.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> settings = DisplaySettings(component_style="array", tensor_view="matrix")
     #[new]
     #[pyo3(signature = (
         tensor_layout = "ports",
@@ -344,29 +371,40 @@ impl DisplaySettings {
         })
     }
 
-    /// Show tensor ports with their index labels.
+    /// Select the ports tensor layout with default options.
+    ///
+    /// Returns
+    /// -------
+    /// DisplaySettings
+    ///     Default presentation with this layout.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> settings = sp.DisplaySettings.ports()
-    /// >>> text = A.format_tensor(settings=settings)
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings.ports().tensor_layout
+    /// 'ports'
     #[staticmethod]
     fn ports() -> Self {
         Self::default()
     }
 
-    /// Use compact Schoonschip notation for compatible tensors.
+    /// Select the schoonschip tensor layout with default options.
+    ///
+    /// Returns
+    /// -------
+    /// DisplaySettings
+    ///     Default presentation with this layout.
+    ///
+    /// Notes
+    /// -----
+    /// Use with rich HTML or SVG rendering. Plain and Typst source methods
+    /// require ports layout.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> settings = sp.DisplaySettings.schoonschip()
-    /// >>> html = A.to_html(settings=settings)
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings.schoonschip().tensor_layout
+    /// 'schoonschip'
     #[staticmethod]
     fn schoonschip() -> Self {
         Self {
@@ -375,15 +413,23 @@ impl DisplaySettings {
         }
     }
 
-    /// Show tensor arguments and indices as function calls.
+    /// Select the call tensor layout with default options.
+    ///
+    /// Returns
+    /// -------
+    /// DisplaySettings
+    ///     Default presentation with this layout; comma separators are enabled.
+    ///
+    /// Notes
+    /// -----
+    /// Use with rich HTML or SVG rendering. Plain and Typst source methods
+    /// require ports layout.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> settings = sp.DisplaySettings.call()
-    /// >>> html = A.to_html(settings=settings)
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings.call().tensor_layout
+    /// 'call'
     #[staticmethod]
     fn call() -> Self {
         Self {
@@ -1286,20 +1332,26 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
     ))
 }
 
-/// Return a style element containing the bundled math font for offline HTML.
+/// Embed the bundled math font in an HTML notebook or document.
 ///
-/// Normal expression HTML references a pinned CDN font, preferring a locally
-/// installed STIX Two Math. Display this setup once before your expressions to
-/// avoid font downloads, or insert it once into an exported HTML document's
-/// head. Keep the setup output when saving a notebook. It applies to expressions
-/// in the same HTML document; isolated output frames need their own setup.
-/// The returned HTML includes the font's redistribution license.
+/// Returns
+/// -------
+/// str
+///     A style element with the font data and redistribution license.
+///
+/// Notes
+/// -----
+/// Display this HTML once before tensor outputs, or include it in an exported
+/// document's head. It avoids the normal font download and applies to the same
+/// HTML document; isolated output frames need their own copy. In Marimo, use
+/// ``mo.Html(load_math_font())``; in IPython, use ``HTML(load_math_font())``.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> font_css = sp.load_math_font()
-/// >>> html_page = font_css + "<p>Tensor notebook</p>"
+/// >>> from symbolica.community.tensor import load_math_font
+/// >>> html = load_math_font()
+/// >>> html.startswith("<style>")
+/// True
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2298,24 +2350,35 @@ pub(crate) fn format_concrete_tensor_output_rich(
     }
 }
 
-/// Format a tensor expression using compact Spenso notation.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> expression = A.to_expression()
-/// >>> text = sp.format_tensor(expression, settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+/// Produce compact plain-text tensor notation.
 ///
 /// Parameters
 /// ----------
 /// expression : Expression
-///     Symbolica expression containing registered tensor functions. Import the tensor module before constructing expressions that use built-in tensor names.
+///     Symbolica tensor syntax or scalar algebra to display. For a
+///     TensorExpression or component Tensor, prefer its formatting methods.
 /// show_dimensions : bool, optional
-///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+///     Override settings.show_dimensions for this call. None retains the
+///     selected settings, whose default omits dimensions.
 /// settings : DisplaySettings, optional
-///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+///     Tensor notation and display choices. Defaults to DisplaySettings().
+///
+/// Returns
+/// -------
+/// str
+///     Readable tensor text, suitable for logs or terminal output.
+///
+/// Notes
+/// -----
+/// Only ports layout and default spacing are supported in this source
+/// format. Use to_html() or to_svg() for other layouts and custom gaps.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S
+/// >>> expression = S("x") + 1
+/// >>> from symbolica.community.tensor import format_tensor
+/// >>> output = format_tensor(expression)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2337,24 +2400,37 @@ fn format_tensor(
     ))
 }
 
-/// Format a tensor expression as Typst math source.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> expression = A.to_expression()
-/// >>> typst_source = sp.to_typst(expression, settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+/// Produce static Typst math source.
 ///
 /// Parameters
 /// ----------
 /// expression : Expression
-///     Symbolica expression containing registered tensor functions. Import the tensor module before constructing expressions that use built-in tensor names.
+///     Symbolica tensor syntax or scalar algebra to display. For a
+///     TensorExpression or component Tensor, prefer its formatting methods.
 /// show_dimensions : bool, optional
-///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+///     Override settings.show_dimensions for this call. None retains the
+///     selected settings, whose default omits dimensions.
 /// settings : DisplaySettings, optional
-///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+///     Tensor notation and display choices. Defaults to DisplaySettings().
+///
+/// Returns
+/// -------
+/// str
+///     Typst source without an enclosing document; no compilation is performed.
+///
+/// Notes
+/// -----
+/// Only ports layout and default spacing are supported in this source
+/// format. Use to_html() or to_svg() for other layouts and custom gaps.
+///
+/// Static Typst output remains available independently of the HTML explorer.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S
+/// >>> expression = S("x") + 1
+/// >>> from symbolica.community.tensor import to_typst
+/// >>> output = to_typst(expression)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2376,26 +2452,39 @@ fn to_typst(
     ))
 }
 
-/// Render a tensor expression to semantic HTML through the optional Typst runtime.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> expression = A.to_expression()
-/// >>> html = sp.to_html(expression, settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+/// Render the tensor as an HTML fragment.
 ///
 /// Parameters
 /// ----------
 /// expression : Expression
-///     Symbolica expression containing registered tensor functions. Import the tensor module before constructing expressions that use built-in tensor names.
+///     Symbolica tensor syntax or scalar algebra to display. For a
+///     TensorExpression or component Tensor, prefer its formatting methods.
 /// show_dimensions : bool, optional
-///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+///     Override settings.show_dimensions for this call. None retains the
+///     selected settings, whose default omits dimensions.
 /// settings : DisplaySettings, optional
-///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+///     Tensor notation and display choices. Defaults to DisplaySettings().
 /// notation_source : str, optional
-///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+///     Custom Typst notation source used by the rich renderer. This is
+///     Typst code, not a filename; omit it for the supplied tensor notation.
+///
+/// Returns
+/// -------
+/// str
+///     Self-contained output fragment for an HTML-capable notebook or page.
+///
+/// Notes
+/// -----
+/// Mathematical rendering uses the optional Typst runtime. The returned
+/// string is not automatically displayed; pass it to the notebook's HTML
+/// or SVG display facility.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S
+/// >>> expression = S("x") + 1
+/// >>> from symbolica.community.tensor import to_html
+/// >>> output = to_html(expression)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2414,26 +2503,39 @@ fn to_html(
     atom_to_html(py, &expression.expr, &settings, notation_source.as_deref())
 }
 
-/// Render a tensor expression to an SVG string through the optional Typst runtime.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> expression = A.to_expression()
-/// >>> svg = sp.to_svg(expression, settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+/// Render static mathematical tensor notation to SVG.
 ///
 /// Parameters
 /// ----------
 /// expression : Expression
-///     Symbolica expression containing registered tensor functions. Import the tensor module before constructing expressions that use built-in tensor names.
+///     Symbolica tensor syntax or scalar algebra to display. For a
+///     TensorExpression or component Tensor, prefer its formatting methods.
 /// show_dimensions : bool, optional
-///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+///     Override settings.show_dimensions for this call. None retains the
+///     selected settings, whose default omits dimensions.
 /// settings : DisplaySettings, optional
-///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+///     Tensor notation and display choices. Defaults to DisplaySettings().
 /// notation_source : str, optional
-///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+///     Custom Typst notation source used by the rich renderer. This is
+///     Typst code, not a filename; omit it for the supplied tensor notation.
+///
+/// Returns
+/// -------
+/// str
+///     SVG markup suitable for embedding or saving to a file.
+///
+/// Notes
+/// -----
+/// Mathematical rendering uses the optional Typst runtime. The returned
+/// string is not automatically displayed; pass it to the notebook's HTML
+/// or SVG display facility.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S
+/// >>> expression = S("x") + 1
+/// >>> from symbolica.community.tensor import to_svg
+/// >>> output = to_svg(expression)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2452,26 +2554,33 @@ fn to_svg(
     atom_to_svg(py, &expression.expr, &settings, notation_source.as_deref())
 }
 
-/// Build Symbolica's rich display wrapper for a tensor expression.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> expression = A.to_expression()
-/// >>> display_value = sp.formatted(expression, settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+/// Create a rich display value for a notebook.
 ///
 /// Parameters
 /// ----------
 /// expression : Expression
-///     Symbolica expression containing registered tensor functions. Import the tensor module before constructing expressions that use built-in tensor names.
+///     Symbolica tensor syntax or scalar algebra to display. For a
+///     TensorExpression or component Tensor, prefer its formatting methods.
 /// show_dimensions : bool, optional
-///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+///     Override settings.show_dimensions for this call. None retains the
+///     selected settings, whose default omits dimensions.
 /// settings : DisplaySettings, optional
-///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+///     Tensor notation and display choices. Defaults to DisplaySettings().
 /// notation_source : str, optional
-///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+///     Custom Typst notation source used by the rich renderer. This is
+///     Typst code, not a filename; omit it for the supplied tensor notation.
+///
+/// Returns
+/// -------
+/// FormattedOutput
+///     Symbolica display wrapper with text and available rich representations.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S
+/// >>> expression = S("x") + 1
+/// >>> from symbolica.community.tensor import formatted
+/// >>> output = formatted(expression)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")

@@ -293,19 +293,19 @@ fn antifundamental_port(dimension: &Atom, index: &Atom) -> Atom {
     }
 }
 
-/// A Symbolica expression representing one tensor port in a rewrite pattern.
+/// A Symbolica pattern for a tensor index or its representation.
 ///
-/// Port patterns may name an exact representation or constrain a wildcard
-/// representation head by its Spenso duality tags. Omitting `index` produces a
-/// stripped representation, suitable for compact vector and trace patterns.
+/// Use an exact representation or a wildcard constrained by representation
+/// tags. Omitting the index produces representation-only syntax for compact
+/// vectors and traces. These are Expression objects for matching, not actual
+/// tensor axes with an inferred dimension.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> from symbolica import E, S
-/// >>> r = sp.Representation.euc(2)
-/// >>> D, i = S("docs::D_", "docs::i_")
-/// >>> port = sp.PortPattern.any("docs::R_any_", D, i)
+/// >>> from symbolica import S
+/// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+/// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+/// >>> port = PortPattern.self_dual("SelfDual_", D_, i_)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -343,35 +343,75 @@ impl PortPattern {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PortPattern {
-    /// Match the contextual input port of a factor inside a chain or trace.
-    /// Swap input and output in a factor pattern to match its transpose.
+    /// Refer to a factor's input endpoint inside a chain or trace pattern.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Contextual endpoint marker, interpreted relative to the surrounding
+    ///     factor sequence rather than as an explicit index label.
+    ///
+    /// Notes
+    /// -----
+    /// Exchange chain_in() and chain_out() in a factor pattern to match its
+    /// transposed orientation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> gamma = TensorPattern.dirac_gamma(D_, PortPattern.chain_in(), PortPattern.chain_out(), mu_)
     #[staticmethod]
     fn chain_in(py: Python<'_>) -> PyResult<Py<Self>> {
         Self::from_atom(py, Atom::var(SPENSO_TAG.chain_in))
     }
 
-    /// Match the contextual output port of a factor inside a chain or trace.
+    /// Refer to a factor's output endpoint inside a chain or trace pattern.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Contextual endpoint marker, interpreted relative to the surrounding
+    ///     factor sequence rather than as an explicit index label.
+    ///
+    /// Notes
+    /// -----
+    /// Exchange chain_in() and chain_out() in a factor pattern to match its
+    /// transposed orientation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> gamma = TensorPattern.dirac_gamma(D_, PortPattern.chain_in(), PortPattern.chain_out(), mu_)
     #[staticmethod]
     fn chain_out(py: Python<'_>) -> PyResult<Py<Self>> {
         Self::from_atom(py, Atom::var(SPENSO_TAG.chain_out))
     }
 
-    /// Match one exact representation, optionally carrying `index`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> D, i = S("docs::D_", "docs::i_")
-    /// >>> port = sp.PortPattern.exact(r, i)
+    /// Match one specific representation and optionally an index.
     ///
     /// Parameters
     /// ----------
     /// rep : Representation
-    ///     Representation, including its dimension, for the tensor’s ports.
-    /// index : Expression or scalar, optional
-    ///     Optional index expression or wildcard. None matches a representation declaration without an index.
+    ///     Representation, including its dimension and duality. Its dimension
+    ///     may be a wildcard symbol.
+    /// index : scalar expression, optional
+    ///     Exact index or wildcard. Omit it to match representation-only syntax.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Symbolica expression for a typed port or a stripped representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> port = PortPattern.exact(Representation.euc(3), i_)
     #[staticmethod]
     #[pyo3(signature = (rep, index=None))]
     fn exact(
@@ -383,27 +423,29 @@ impl PortPattern {
         Self::from_atom(py, rep.representation.to_symbolic(index))
     }
 
-    /// Match any Spenso representation head.
-    ///
-    /// `name` is the reusable Symbolica wildcard name and must end in one
-    /// underscore, for example `"R_"`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> D, i = S("docs::D_", "docs::i_")
-    /// >>> port = sp.PortPattern.any("docs::R_any_", D, i)
+    /// Match any registered representation head.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Wildcard head name ending in exactly one underscore, such as "my_model::T_".
-    /// dimension : Expression or scalar
-    ///     Concrete dimension or a Symbolica dimension wildcard, such as S("D_").
-    /// index : Expression or scalar, optional
-    ///     Optional index expression or wildcard. None matches a representation declaration without an index.
+    ///     Wildcard name ending in exactly one underscore. Reuse this name
+    ///     to constrain multiple occurrences to the same representation.
+    /// dimension : scalar expression
+    ///     Dimension value or wildcard.
+    /// index : scalar expression, optional
+    ///     Index value or wildcard. Omit for representation-only syntax.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Tagged Symbolica pattern, without constructing a concrete index space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> port = PortPattern.any("R_", D_, i_)
     #[staticmethod]
     #[pyo3(signature = (name, dimension, index=None))]
     fn any(
@@ -424,22 +466,27 @@ impl PortPattern {
 
     /// Match a self-dual representation head.
     ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> D, i = S("docs::D_", "docs::i_")
-    /// >>> port = sp.PortPattern.self_dual("docs::R_self_dual_", D, i)
-    ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Wildcard head name ending in exactly one underscore, such as "my_model::T_".
-    /// dimension : Expression or scalar
-    ///     Concrete dimension or a Symbolica dimension wildcard, such as S("D_").
-    /// index : Expression or scalar, optional
-    ///     Optional index expression or wildcard. None matches a representation declaration without an index.
+    ///     Wildcard name ending in exactly one underscore. Reuse this name
+    ///     to constrain multiple occurrences to the same representation.
+    /// dimension : scalar expression
+    ///     Dimension value or wildcard.
+    /// index : scalar expression, optional
+    ///     Index value or wildcard. Omit for representation-only syntax.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Tagged Symbolica pattern, without constructing a concrete index space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> port = PortPattern.self_dual("SelfDual_", D_, i_)
     #[staticmethod]
     #[pyo3(signature = (name, dimension, index=None))]
     fn self_dual(
@@ -463,26 +510,31 @@ impl PortPattern {
         )
     }
 
-    /// Match a dualizable representation in its base or dual orientation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> D, i = S("docs::D_", "docs::i_")
-    /// >>> port = sp.PortPattern.dualizable("docs::R_dualizable_", D, i, dual=True)
+    /// Match a dualizable representation head.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Wildcard head name ending in exactly one underscore, such as "my_model::T_".
-    /// dimension : Expression or scalar
-    ///     Concrete dimension or a Symbolica dimension wildcard, such as S("D_").
-    /// index : Expression or scalar, optional
-    ///     Optional index expression or wildcard. None matches a representation declaration without an index.
-    /// dual : bool
-    ///     Match the dual orientation when True, or the base orientation when False.
+    ///     Wildcard name ending in exactly one underscore. Reuse this name
+    ///     to constrain multiple occurrences to the same representation.
+    /// dimension : scalar expression
+    ///     Dimension value or wildcard.
+    /// index : scalar expression, optional
+    ///     Index value or wildcard. Omit for representation-only syntax.
+    /// dual : bool, default False
+    ///     Match the dual partner rather than the base orientation.
+    ///
+    /// Returns
+    /// -------
+    /// PortPattern
+    ///     Tagged Symbolica pattern, without constructing a concrete index space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> port = PortPattern.dualizable("Dual_", D_, i_)
     #[staticmethod]
     #[pyo3(signature = (name, dimension, index=None, *, dual=false))]
     fn dualizable(
@@ -510,29 +562,20 @@ impl PortPattern {
 
 impl ModuleInit for PortPattern {}
 
-/// A tagged Symbolica expression intended for tensor rewrite rules.
+/// Representation-aware Symbolica patterns for matching tensor expressions.
 ///
-/// `args` contains scalar tensor arguments and `ports` contains structural
-/// syntax. The two named sections are concatenated in that order. Since this is
-/// a pattern expression rather than a concrete tensor, either section may
-/// contain ordinary or sequence-wildcard Symbolica expressions.
+/// Scalar arguments and structural ports are specified separately. Either
+/// section can contain Symbolica wildcards, including sequence wildcards.
+/// Unlike TensorExpression, a pattern does not require a concrete rank or
+/// compatible external tensor axes. Use patterns with TensorRule for checked
+/// whole-tensor replacements, or with ordinary Expression matching.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> from symbolica import E, S
-/// >>> r = sp.Representation.euc(2)
-/// >>> i, j = S("docs::i_", "docs::j_")
-/// >>> pattern = sp.TensorPattern(sp.TensorName("docs::A"), ports=[r(i), r(j)])
-///
-/// Parameters
-/// ----------
-/// head : TensorName
-///     TensorName to match exactly. Use TensorPattern.any() when the tensor head should be a wildcard.
-/// args : Sequence[Expression or scalar]
-///     Scalar-argument patterns, kept separate from the structural ports. The default empty list matches no scalar arguments.
-/// ports : Sequence[Slot | Representation | Expression or scalar]
-///     Ordered structural ports to match. Use Slots for concrete labels, Representations for unresolved ports, or PortPattern expressions for wildcard representations.
+/// >>> from symbolica import S
+/// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+/// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+/// >>> pattern = TensorPattern.dirac_gamma(D_, i_, j_, mu_)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -578,26 +621,29 @@ impl TensorPattern {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl TensorPattern {
-    /// Create a pattern for the fixed tensor `head`.
-    ///
-    /// Scalar `args` are always emitted before structural `ports`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern(sp.TensorName("docs::A"), ports=[r(i), r(j)])
+    /// Match a fixed tensor function with separately specified arguments and ports.
     ///
     /// Parameters
     /// ----------
     /// head : TensorName
-    ///     TensorName to match exactly. Use TensorPattern.any() when the tensor head should be a wildcard.
-    /// args : Sequence[Expression or scalar]
-    ///     Scalar-argument patterns, kept separate from the structural ports. The default empty list matches no scalar arguments.
-    /// ports : Sequence[Slot | Representation | Expression or scalar]
-    ///     Ordered structural ports to match. Use Slots for concrete labels, Representations for unresolved ports, or PortPattern expressions for wildcard representations.
+    ///     Exact tensor function head to match.
+    /// args : sequence of scalar expressions, default []
+    ///     Non-index tensor arguments, including ordinary or sequence wildcards.
+    /// ports : sequence of Slot, Representation, or Expression, default []
+    ///     Structural port patterns, placed after args. PortPattern and sequence
+    ///     wildcards can describe representations, indices, or variable arity.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern expression with args before ports.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern(TensorName("B"), ports=[PortPattern.exact(Representation.euc(3), i_)])
     #[new]
     #[gen_stub(override_return_type(type_repr = "TensorPattern"))]
     #[pyo3(signature = (head, *, args=Vec::new(), ports=Vec::new()))]
@@ -614,26 +660,31 @@ impl TensorPattern {
         )
     }
 
-    /// Match any tensor-tagged head.
-    ///
-    /// `name` must end in one underscore, for example `"T_"`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.any("docs::T_", ports=[r(i), r(j)])
+    /// Match any tensor-tagged function.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Wildcard head name ending in exactly one underscore, such as "my_model::T_".
-    /// args : Sequence[Expression or scalar]
-    ///     Scalar-argument patterns, kept separate from the structural ports. The default empty list matches no scalar arguments.
-    /// ports : Sequence[Slot | Representation | Expression or scalar]
-    ///     Ordered structural ports to match. Use Slots for concrete labels, Representations for unresolved ports, or PortPattern expressions for wildcard representations.
+    ///     Wildcard function name ending in exactly one underscore.
+    /// args : sequence of scalar expressions, default []
+    ///     Non-index tensor arguments, including ordinary or sequence wildcards.
+    /// ports : sequence of Slot, Representation, or Expression, default []
+    ///     Structural port patterns, placed after args. PortPattern and sequence
+    ///     wildcards can describe representations, indices, or variable arity.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Tagged pattern. Concrete arity is not imposed, so sequence wildcards
+    ///     can match the argument and port lists.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> rest = S("ports___")
+    /// >>> pattern = TensorPattern.any("T_", ports=[rest])
     #[staticmethod]
     #[pyo3(signature = (name, *, args=Vec::new(), ports=Vec::new()))]
     fn any(
@@ -647,27 +698,31 @@ impl TensorPattern {
         })
     }
 
-    /// Match any rank-one tensor head.
-    ///
-    /// Pattern construction intentionally does not impose a concrete arity, so
-    /// a sequence wildcard may describe the scalar arguments or structural port.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.vector("docs::v_", ports=[r(i)])
+    /// Match a function tagged as a rank-one tensor.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Wildcard head name ending in exactly one underscore, such as "my_model::T_".
-    /// args : Sequence[Expression or scalar]
-    ///     Scalar-argument patterns, kept separate from the structural ports. The default empty list matches no scalar arguments.
-    /// ports : Sequence[Slot | Representation | Expression or scalar]
-    ///     Ordered structural ports to match. Use Slots for concrete labels, Representations for unresolved ports, or PortPattern expressions for wildcard representations.
+    ///     Wildcard function name ending in exactly one underscore.
+    /// args : sequence of scalar expressions, default []
+    ///     Non-index tensor arguments, including ordinary or sequence wildcards.
+    /// ports : sequence of Slot, Representation, or Expression, default []
+    ///     Structural port patterns, placed after args. PortPattern and sequence
+    ///     wildcards can describe representations, indices, or variable arity.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Tagged pattern. Concrete arity is not imposed, so sequence wildcards
+    ///     can match the argument and port lists.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> rest = S("ports___")
+    /// >>> pattern = TensorPattern.vector("V_", ports=[rest])
     #[staticmethod]
     #[pyo3(signature = (name, *, args=Vec::new(), ports=Vec::new()))]
     fn vector(
@@ -681,7 +736,24 @@ impl TensorPattern {
         })
     }
 
-    /// Match a compact dot product, including unrestricted operand wildcards.
+    /// Match a compact tensor dot product.
+    ///
+    /// Parameters
+    /// ----------
+    /// left, right : scalar expression
+    ///     Operand patterns, including unrestricted wildcards.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for the compact dot notation, not explicit indexed products.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.dot(S("left_"), S("right_"))
     #[staticmethod]
     fn dot(py: Python<'_>, left: PatternArgument, right: PatternArgument) -> PyResult<Py<Self>> {
         Self::from_atom(
@@ -690,8 +762,28 @@ impl TensorPattern {
         )
     }
 
-    /// Match an ordered chain with endpoint and factor-sequence patterns.
-    /// Use `PortPattern.chain_in()` and `.chain_out()` within selected factor patterns.
+    /// Match an ordered tensor chain with endpoints and factor patterns.
+    ///
+    /// Parameters
+    /// ----------
+    /// start, end : Slot, Representation, or Expression
+    ///     Endpoint patterns.
+    /// *factors : scalar expression
+    ///     Ordered factor patterns, optionally including sequence wildcards.
+    ///     Contextual PortPattern.chain_in() and chain_out() can select a
+    ///     factor's orientation.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     A chain pattern that does not infer a concrete matrix interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.chain(i_, j_, S("factors___"))
     #[staticmethod]
     #[pyo3(signature = (start, end, *factors))]
     fn chain(
@@ -706,8 +798,26 @@ impl TensorPattern {
         )
     }
 
-    /// Match a trace with its canonical cyclic factor wrapper.
-    /// Sequence wildcards remain patterns and require no concrete tensor interface.
+    /// Match a compact cyclic trace.
+    ///
+    /// Parameters
+    /// ----------
+    /// representation : Representation or Expression
+    ///     Exact traced space, representation pattern, or wildcard.
+    /// *factors : scalar expression
+    ///     Factor patterns, optionally including sequence wildcards.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Trace pattern with the cyclic factor wrapper used by tensor notation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.trace(Representation.euc(3), S("factors___"))
     #[staticmethod]
     #[pyo3(signature = (representation, *factors))]
     fn trace(
@@ -721,7 +831,26 @@ impl TensorPattern {
         )
     }
 
-    /// Match a Casimir invariant with arbitrary degree and representation patterns.
+    /// Match a symbolic Casimir invariant.
+    ///
+    /// Parameters
+    /// ----------
+    /// degree : scalar expression
+    ///     Invariant degree or wildcard.
+    /// representation : Representation or Expression
+    ///     Exact representation, representation pattern, or wildcard.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for a scalar representation invariant.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.casimir(S("degree_"), S("rep_"))
     #[staticmethod]
     fn casimir(
         py: Python<'_>,
@@ -731,7 +860,26 @@ impl TensorPattern {
         Self::from_atom(py, CS.cas(degree.0, representation.0))
     }
 
-    /// Match a Dynkin index with arbitrary degree and representation patterns.
+    /// Match a symbolic Dynkin index.
+    ///
+    /// Parameters
+    /// ----------
+    /// degree : scalar expression
+    ///     Invariant degree or wildcard.
+    /// representation : Representation or Expression
+    ///     Exact representation, representation pattern, or wildcard.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for a scalar representation invariant.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.dynkin_index(S("degree_"), S("rep_"))
     #[staticmethod]
     fn dynkin_index(
         py: Python<'_>,
@@ -741,28 +889,99 @@ impl TensorPattern {
         Self::from_atom(py, CS.idx(degree.0, representation.0))
     }
 
-    /// Match a normalized symmetric group of chain or trace factors.
+    /// Match a normalized symmetric group of matrix factors.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : scalar expression
+    ///     Patterns for the grouped factors, including sequence wildcards.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for the compact FactorProjector syntax inside a chain or trace.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.symmetric(S("factors___"))
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn symmetric(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
         Self::from_atom(py, shadowing::sym(expression_atoms(factors)))
     }
 
-    /// Match a normalized antisymmetric group of chain or trace factors.
+    /// Match a normalized antisymmetric group of matrix factors.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : scalar expression
+    ///     Patterns for the grouped factors, including sequence wildcards.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for the compact FactorProjector syntax inside a chain or trace.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.antisymmetric(S("factors___"))
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn antisymmetric(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
         Self::from_atom(py, shadowing::antisym(expression_atoms(factors)))
     }
 
-    /// Match a cyclic group of chain or trace factors.
+    /// Match a normalized cyclic group of matrix factors.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : scalar expression
+    ///     Patterns for the grouped factors, including sequence wildcards.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Pattern for the compact FactorProjector syntax inside a chain or trace.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.cyclic(S("factors___"))
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn cyclic(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
         Self::from_atom(py, shadowing::cyclic(expression_atoms(factors)))
     }
 
-    /// Match gamma-zero with ordinary indices or contextual chain ports.
+    /// Match the time-component Dirac matrix gamma^0.
+    ///
+    /// Parameters
+    /// ----------
+    /// spinor_dimension : scalar expression
+    ///     Spinor dimension or wildcard.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.gamma0(D_, i_, j_)
     #[staticmethod]
     fn gamma0(
         py: Python<'_>,
@@ -781,7 +1000,27 @@ impl TensorPattern {
         )
     }
 
-    /// Match charge conjugation, retaining its registered antisymmetry.
+    /// Match the Dirac charge-conjugation matrix.
+    ///
+    /// Parameters
+    /// ----------
+    /// spinor_dimension : scalar expression
+    ///     Spinor dimension or wildcard.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.charge_conjugation(D_, i_, j_)
     #[staticmethod]
     fn charge_conjugation(
         py: Python<'_>,
@@ -800,8 +1039,32 @@ impl TensorPattern {
         )
     }
 
-    /// Match a Levi-Civita tensor in one representation, at any fixed rank.
-    /// For an unrestricted port sequence use `TensorPattern(TensorName.levi_civita(), ports=[ports___])`.
+    /// Match the totally antisymmetric Levi-Civita tensor.
+    ///
+    /// Parameters
+    /// ----------
+    /// rep_pattern : Representation or Expression
+    ///     Exact space or a representation-only PortPattern.
+    /// *indices : scalar expression
+    ///     One index pattern per axis; their number fixes the rank.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Notes
+    /// -----
+    /// For an unrestricted number of epsilon axes, use
+    /// TensorPattern(TensorName.levi_civita(), ports=[ports___]).
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.levi_civita(Representation.euc(D_), i_, j_, a_)
     #[staticmethod]
     #[pyo3(signature = (rep_pattern, *indices))]
     fn levi_civita(
@@ -816,24 +1079,27 @@ impl TensorPattern {
         Self::from_atom(py, fixed_tensor(*EPSILON_SYMBOL, Vec::new(), ports))
     }
 
-    /// Match a metric tensor in logical index order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.g(r, i, j)
+    /// Match the metric pairing.
     ///
     /// Parameters
     /// ----------
-    /// rep_pattern : Representation | Expression
-    ///     Concrete Representation or stripped representation pattern produced by PortPattern.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// rep_pattern : Representation or Expression
+    ///     Exact space or a representation-only PortPattern.
+    /// i, j : scalar expression
+    ///     Index values, wildcards, or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.g(Representation.euc(D_), i_, j_)
     #[staticmethod]
     fn g(
         py: Python<'_>,
@@ -846,24 +1112,27 @@ impl TensorPattern {
         Self::from_atom(py, fixed_tensor(ETS.metric, Vec::new(), vec![i, j]))
     }
 
-    /// Match a musical-isomorphism tensor in logical index order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.flat(r, i, j)
+    /// Match the metric map for raising or lowering an index.
     ///
     /// Parameters
     /// ----------
-    /// rep_pattern : Representation | Expression
-    ///     Concrete Representation or stripped representation pattern produced by PortPattern.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// rep_pattern : Representation or Expression
+    ///     Exact space or a representation-only PortPattern.
+    /// i, j : scalar expression
+    ///     Index values, wildcards, or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.flat(Representation.euc(D_), i_, j_)
     #[staticmethod]
     fn flat(
         py: Python<'_>,
@@ -876,25 +1145,29 @@ impl TensorPattern {
         Self::from_atom(py, fixed_tensor(ETS.flat, Vec::new(), vec![i, j]))
     }
 
-    /// Match a gamma matrix in storage `(i, j, mu)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> i, j, mu = S("docs::i_", "docs::j_", "docs::mu_")
-    /// >>> pattern = sp.TensorPattern.gamma(4, i, j, mu)
+    /// Match the Dirac gamma matrices for Clifford algebra.
     ///
     /// Parameters
     /// ----------
-    /// minkowski_dimension : Expression or scalar
-    ///     Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// mu : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// minkowski_dimension : scalar expression
+    ///     Minkowski dimension or wildcard. Spinor dimensions are fixed at four.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    /// mu : scalar expression
+    ///     Lorentz-index pattern.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.dirac_gamma(D_, i_, j_, mu_)
     #[staticmethod]
     fn dirac_gamma(
         py: Python<'_>,
@@ -912,23 +1185,27 @@ impl TensorPattern {
         Self::built_in(py, &AGS.gamma_strct::<AbstractIndex>(4), logical_ports)
     }
 
-    /// Match a gamma-five matrix in logical `(i, j)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.gamma5(4, i, j)
+    /// Match the Dirac chirality matrix gamma^5.
     ///
     /// Parameters
     /// ----------
-    /// spinor_dimension : Expression or scalar
-    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// spinor_dimension : scalar expression
+    ///     Spinor dimension or wildcard.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.gamma5(D_, i_, j_)
     #[staticmethod]
     fn gamma5(
         py: Python<'_>,
@@ -944,23 +1221,27 @@ impl TensorPattern {
         Self::built_in(py, &AGS.gamma5_strct::<AbstractIndex>(4), logical_ports)
     }
 
-    /// Match a left-chiral projector in logical `(i, j)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.projm(4, i, j)
+    /// Match the left-chiral Dirac projector (I - gamma^5)/2.
     ///
     /// Parameters
     /// ----------
-    /// spinor_dimension : Expression or scalar
-    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// spinor_dimension : scalar expression
+    ///     Spinor dimension or wildcard.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.projm(D_, i_, j_)
     #[staticmethod]
     fn projm(
         py: Python<'_>,
@@ -976,23 +1257,27 @@ impl TensorPattern {
         Self::built_in(py, &AGS.projm_strct::<AbstractIndex>(4), logical_ports)
     }
 
-    /// Match a right-chiral projector in logical `(i, j)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> i, j = S("docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.projp(4, i, j)
+    /// Match the right-chiral Dirac projector (I + gamma^5)/2.
     ///
     /// Parameters
     /// ----------
-    /// spinor_dimension : Expression or scalar
-    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// spinor_dimension : scalar expression
+    ///     Spinor dimension or wildcard.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.projp(D_, i_, j_)
     #[staticmethod]
     fn projp(
         py: Python<'_>,
@@ -1008,27 +1293,29 @@ impl TensorPattern {
         Self::built_in(py, &AGS.projp_strct::<AbstractIndex>(4), logical_ports)
     }
 
-    /// Match a sigma matrix. Arguments use logical `(mu, nu, i, j)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> mu, nu, i, j = S("docs::mu_", "docs::nu_", "docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.sigma(4, mu, nu, i, j)
+    /// Match the antisymmetric Dirac sigma tensor.
     ///
     /// Parameters
     /// ----------
-    /// minkowski_dimension : Expression or scalar
-    ///     Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
-    /// mu : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// nu : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// minkowski_dimension : scalar expression
+    ///     Minkowski dimension or wildcard. Spinor dimensions are fixed at four.
+    /// i, j : scalar expression
+    ///     Spinor-index patterns or contextual chain endpoints.
+    /// mu, nu : scalar expression
+    ///     Lorentz-index patterns.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.sigma(D_, mu_, nu_, i_, j_)
     #[staticmethod]
     fn sigma(
         py: Python<'_>,
@@ -1048,25 +1335,27 @@ impl TensorPattern {
         Self::built_in(py, &AGS.sigma_strct::<AbstractIndex>(4), logical_ports)
     }
 
-    /// Match a color structure constant in logical `(a, b, c)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> a, b, c = S("docs::a_", "docs::b_", "docs::c_")
-    /// >>> pattern = sp.TensorPattern.f(8, a, b, c)
+    /// Match the antisymmetric color structure constants f^{abc}.
     ///
     /// Parameters
     /// ----------
-    /// adjoint_dimension : Expression or scalar
-    ///     Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
-    /// a : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// b : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// c : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// adjoint_dimension : scalar expression
+    ///     Adjoint dimension or wildcard, e.g. 8 for SU(3).
+    /// a, b, c : scalar expression
+    ///     Patterns for the three adjoint indices.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.color_f(D_, a_, b_, c_)
     #[staticmethod]
     fn color_f(
         py: Python<'_>,
@@ -1084,27 +1373,31 @@ impl TensorPattern {
         Self::built_in(py, &CS.f_strct::<AbstractIndex>(1), logical_ports)
     }
 
-    /// Match a color generator in logical `(a, i, j)` order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> a, i, j = S("docs::a_", "docs::i_", "docs::j_")
-    /// >>> pattern = sp.TensorPattern.t(8, 3, a, i, j)
+    /// Match the fundamental color generators T^a.
     ///
     /// Parameters
     /// ----------
-    /// adjoint_dimension : Expression or scalar
-    ///     Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
-    /// fundamental_dimension : Expression or scalar
-    ///     Dimension of the fundamental color representation, such as 3 for SU(3).
-    /// a : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// i : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
-    /// j : Expression or scalar
-    ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
+    /// adjoint_dimension : scalar expression
+    ///     Adjoint dimension or wildcard, e.g. 8 for SU(3).
+    /// fundamental_dimension : scalar expression
+    ///     Fundamental dimension or wildcard, e.g. 3 for SU(3).
+    /// a : scalar expression
+    ///     Adjoint-index pattern.
+    /// i, j : scalar expression
+    ///     Fundamental and antifundamental index patterns, or contextual endpoints.
+    ///
+    /// Returns
+    /// -------
+    /// TensorPattern
+    ///     Registered tensor syntax with representation-aware port patterns.
+    ///     Wildcards are retained rather than checked as a concrete tensor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorPattern, PortPattern, Representation, TensorName
+    /// >>> D_, i_, j_, mu_, nu_, a_, b_, c_ = S("D_", "i_", "j_", "mu_", "nu_", "a_", "b_", "c_")
+    /// >>> pattern = TensorPattern.color_t(D_, S("N_"), a_, i_, j_)
     #[staticmethod]
     fn color_t(
         py: Python<'_>,

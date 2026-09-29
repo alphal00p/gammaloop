@@ -19,31 +19,37 @@ create_exception!(
     symbolica.community.tensor,
     CanonicalizationError,
     PyValueError,
-    "Raised when dummy-index canonicalization fails."
+    python_doc!("CanonicalizationError")
 );
 create_exception!(
     symbolica.community.tensor,
     CookingError,
     PyTypeError,
-    "Raised when a symbolic function or representation index cannot be cooked."
+    python_doc!("CookingError")
 );
 create_exception!(
     symbolica.community.tensor,
     DiracAdjointError,
     PyValueError,
-    "Raised when a Dirac adjoint cannot be constructed consistently."
+    python_doc!("DiracAdjointError")
 );
 create_exception!(
     symbolica.community.tensor,
     NetworkToolingError,
     PyValueError,
-    "Raised when a symbolic tensor network cannot be parsed or evaluated."
+    python_doc!("NetworkToolingError")
 );
 
-/// Selects how cooked function payloads are represented as symbols.
+/// Encoding used when compound index labels become symbols.
 ///
-/// Available values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a
-/// stable encoding that can later be restored by `uncook`.
+/// ``FlattenedSymbol`` creates readable names from the function and arguments.
+/// ``ReversibleEncoding`` retains the payload in a stable encoding. These are
+/// encoding choices; the Python API does not currently expose an uncook method.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import CookMode, CookSettings
+/// >>> settings = CookSettings(mode=CookMode.ReversibleEncoding)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
@@ -57,7 +63,7 @@ create_exception!(
 pub(crate) enum PyCookMode {
     /// Build a readable symbol name from the function name and its arguments.
     FlattenedSymbol,
-    /// Store a stable encoding that can later be restored by `uncook` with matching settings.
+    /// Retain the original payload in a stable symbol encoding.
     ReversibleEncoding,
 }
 
@@ -79,7 +85,12 @@ impl From<RustCookMode> for PyCookMode {
     }
 }
 
-/// A tag predicate used to select which function heads are cooked.
+/// Select function heads for index cooking by their Symbolica tags.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import CookTagFilter
+/// >>> selection = CookTagFilter.any(["example::index_label"])
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -116,7 +127,22 @@ impl PyCookTagFilter {
         ))
     }
 
-    /// Match a function head when it carries at least one listed tag.
+    /// Select function heads carrying at least one listed tag.
+    ///
+    /// Parameters
+    /// ----------
+    /// tags : sequence of str
+    ///     Fully namespaced Symbolica tags to test.
+    ///
+    /// Returns
+    /// -------
+    /// CookTagFilter
+    ///     Tag predicate for a CookSourceFilter.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookTagFilter
+    /// >>> selection = CookTagFilter.any(["example::index_label"])
     #[staticmethod]
     pub(crate) fn any(tags: Vec<String>) -> Self {
         Self {
@@ -124,7 +150,22 @@ impl PyCookTagFilter {
         }
     }
 
-    /// Match a function head only when it carries every listed tag.
+    /// Select function heads carrying every listed tag.
+    ///
+    /// Parameters
+    /// ----------
+    /// tags : sequence of str
+    ///     Fully namespaced Symbolica tags to test.
+    ///
+    /// Returns
+    /// -------
+    /// CookTagFilter
+    ///     Tag predicate for a CookSourceFilter.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookTagFilter
+    /// >>> selection = CookTagFilter.all(["example::index_label"])
     #[staticmethod]
     pub(crate) fn all(tags: Vec<String>) -> Self {
         Self {
@@ -132,7 +173,17 @@ impl PyCookTagFilter {
         }
     }
 
-    /// Match the explicit output tags configured on the associated `CookSettings`.
+    /// Select function heads using the associated settings' output tags.
+    ///
+    /// Returns
+    /// -------
+    /// CookTagFilter
+    ///     Predicate resolved against CookSettings.output_tags.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookTagFilter
+    /// >>> selection = CookTagFilter.matched_output_tags()
     #[staticmethod]
     pub(crate) fn matched_output_tags() -> Self {
         Self {
@@ -141,7 +192,12 @@ impl PyCookTagFilter {
     }
 }
 
-/// Selects the function occurrences or representation-index payloads to cook.
+/// Choose which function payloads are eligible for index cooking.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import CookSourceFilter
+/// >>> selection = CookSourceFilter.representation_index_payload()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -188,7 +244,17 @@ impl PyCookSourceFilter {
         })
     }
 
-    /// Select every function-like subexpression.
+    /// Allow every function-like payload encountered by the cooking operation.
+    ///
+    /// Returns
+    /// -------
+    /// CookSourceFilter
+    ///     Unrestricted function selection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSourceFilter
+    /// >>> selection = CookSourceFilter.any_function()
     #[staticmethod]
     pub(crate) fn any_function() -> Self {
         Self {
@@ -196,7 +262,22 @@ impl PyCookSourceFilter {
         }
     }
 
-    /// Select function heads accepted by `filter`.
+    /// Select function payloads whose heads satisfy a tag filter.
+    ///
+    /// Parameters
+    /// ----------
+    /// filter : CookTagFilter
+    ///     Required tag predicate.
+    ///
+    /// Returns
+    /// -------
+    /// CookSourceFilter
+    ///     Function-head selection for CookSettings.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSourceFilter, CookTagFilter
+    /// >>> selection = CookSourceFilter.function_tags(CookTagFilter.any(["example::index_label"]))
     #[staticmethod]
     pub(crate) fn function_tags(filter: &PyCookTagFilter) -> Self {
         Self {
@@ -204,9 +285,22 @@ impl PyCookSourceFilter {
         }
     }
 
-    /// Select only function payloads inside representation indices.
+    /// Select compound index labels inside representation syntax.
     ///
-    /// When `filter` is supplied, the payload's function head must also match it.
+    /// Parameters
+    /// ----------
+    /// filter : CookTagFilter, optional
+    ///     Additional predicate on the index payload's function head.
+    ///
+    /// Returns
+    /// -------
+    /// CookSourceFilter
+    ///     Selection restricted to index payloads, excluding dimensions.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSourceFilter
+    /// >>> selection = CookSourceFilter.representation_index_payload()
     #[staticmethod]
     #[pyo3(signature = (filter = None))]
     pub(crate) fn representation_index_payload(filter: Option<&PyCookTagFilter>) -> Self {
@@ -220,7 +314,15 @@ impl PyCookSourceFilter {
     }
 }
 
-/// Immutable configuration for cooking symbolic functions and index payloads.
+/// Encoding options for compound tensor index labels.
+///
+/// Instances are immutable. Pass a configured instance to the corresponding
+/// tensor operation; its properties expose the selected values.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import CookSettings
+/// >>> settings = CookSettings()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -277,12 +379,36 @@ impl PyCookSettings {
         )
     }
 
-    /// Configure how functions are selected, encoded, and tagged when cooked.
+    /// Configure encoding options for compound tensor index labels.
     ///
-    /// Tags must be fully namespaced Symbolica tags, for example `idenso::cooked`.
-    /// Selecting `ReversibleEncoding` changes only the encoding; use `reversible()` to also
-    /// select the conventional `idenso::cooked` output tag.
-    /// `mode=None` selects `CookMode.FlattenedSymbol`.
+    /// Parameters
+    /// ----------
+    /// mode : CookMode or None, default None
+    ///     FlattenedSymbol makes readable names. ReversibleEncoding stores the
+    ///     original payload in a stable encoding. None selects FlattenedSymbol.
+    /// source : CookSourceFilter or None, default None
+    ///     Predicate selecting function payloads to encode. None selects any function.
+    /// output_tags : sequence of str or None, default None
+    ///     Fully namespaced tags for encoded symbols. None uses the mode factory
+    ///     defaults; the generic constructor starts with no explicit output tags.
+    /// preserve_tags : bool, default False
+    ///     Preserve matching input tags on newly encoded symbols.
+    ///
+    /// Returns
+    /// -------
+    /// CookSettings
+    ///     Immutable settings with the requested options.
+    ///
+    /// Notes
+    /// -----
+    /// Pass these settings through cook_indices in tensor constructors or indexing.
+    /// Cooking replaces compound labels by symbols; it is not tensor simplification.
+    /// The Python API currently exposes no uncook method.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings()
     #[new]
     #[pyo3(
         signature = (
@@ -308,7 +434,21 @@ impl PyCookSettings {
         )
     }
 
-    /// Cook all functions into readable flattened names.
+    /// Use readable names for selected compound labels.
+    ///
+    /// Returns
+    /// -------
+    /// CookSettings
+    ///     Immutable configuration for index cooking.
+    ///
+    /// Notes
+    /// -----
+    /// Selects any function payload, without explicit output tags or tag preservation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings.flattened()
     #[staticmethod]
     pub(crate) fn flattened() -> Self {
         Self {
@@ -316,7 +456,22 @@ impl PyCookSettings {
         }
     }
 
-    /// Cook only nested function payloads inside representation indices and preserve tags.
+    /// Encode nested function payloads in indices while preserving tags.
+    ///
+    /// Returns
+    /// -------
+    /// CookSettings
+    ///     Immutable configuration for index cooking.
+    ///
+    /// Notes
+    /// -----
+    /// Uses readable flattened names and selects representation index payloads,
+    /// not representation dimensions. This is the usual cook_indices setting.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings.indices()
     #[staticmethod]
     pub(crate) fn indices() -> Self {
         Self {
@@ -324,7 +479,22 @@ impl PyCookSettings {
         }
     }
 
-    /// Cook all functions into stable symbols that can be restored by `uncook`.
+    /// Use a stable encoding that retains the original function payload.
+    ///
+    /// Returns
+    /// -------
+    /// CookSettings
+    ///     Immutable configuration for index cooking.
+    ///
+    /// Notes
+    /// -----
+    /// Selects any function and applies the idenso::cooked output tag. The name
+    /// refers to the encoding format; there is no public Python uncook method.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings.reversible()
     #[staticmethod]
     pub(crate) fn reversible() -> Self {
         Self {
@@ -332,13 +502,36 @@ impl PyCookSettings {
         }
     }
 
-    /// Symbol-encoding mode.
+    /// FlattenedSymbol makes readable names. ReversibleEncoding stores the
+    ///
+    /// Returns
+    /// -------
+    /// CookMode
+    ///     FlattenedSymbol makes readable names. ReversibleEncoding stores the
+    ///     original payload in a stable encoding. None selects FlattenedSymbol.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings()
+    /// >>> value = settings.mode
     #[getter]
     pub(crate) fn mode(&self) -> PyCookMode {
         self.inner.mode().into()
     }
 
-    /// Function occurrences selected for cooking.
+    /// Predicate selecting function payloads to encode. None selects any function.
+    ///
+    /// Returns
+    /// -------
+    /// CookSourceFilter
+    ///     Predicate selecting function payloads to encode. None selects any function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings()
+    /// >>> value = settings.source_filter
     #[getter]
     pub(crate) fn source_filter(&self) -> PyCookSourceFilter {
         PyCookSourceFilter {
@@ -346,13 +539,35 @@ impl PyCookSettings {
         }
     }
 
-    /// Explicit tags attached to newly created cooked symbols.
+    /// Fully namespaced tags for encoded symbols. None uses the mode factory
+    ///
+    /// Returns
+    /// -------
+    /// list of str
+    ///     Fully namespaced tags for encoded symbols. The generic constructor starts with no explicit output tags.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings()
+    /// >>> value = settings.output_tags
     #[getter]
     pub(crate) fn output_tags(&self) -> Vec<String> {
         self.inner.output_tags().to_vec()
     }
 
-    /// Whether matching input tags are preserved on cooked symbols.
+    /// Preserve matching input tags on newly encoded symbols.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Preserve matching input tags on newly encoded symbols.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import CookSettings
+    /// >>> settings = CookSettings()
+    /// >>> value = settings.preserve_tags
     #[getter]
     pub(crate) fn preserve_tags(&self) -> bool {
         self.inner.preserves_tags()

@@ -25,13 +25,17 @@ use crate::{
     structure::{SpensoName, SpensoRepresentation, SpensoSlot},
 };
 
-/// A dimension-independent representation identity, including its duality.
+/// A representation identity independent of its dimension.
+///
+/// Obtain this read-only metadata through ``Representation.name``. It distinguishes
+/// self-dual spaces from the two partners of a dualizable space.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> name = sp.Representation.mink(4).name
-/// >>> text = repr(name)
+/// >>> from symbolica.community.tensor import Representation
+/// >>> identity = Representation.mink(4).name
+/// >>> identity.duality
+/// 'self-dual'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -65,25 +69,36 @@ impl SpensoRepresentationName {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoRepresentationName {
-    /// Exact registered symbol name, without dimension or index arguments.
+    /// The exact registered name of the representation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Name without dimension or index arguments.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.Representation.mink(4).name
-    /// >>> result = name.name
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> identity = Representation.mink(4).name
+    /// >>> name = identity.name
     #[getter]
     pub fn name(&self) -> String {
         self.rep.symbol().get_name().to_owned()
     }
 
-    /// Whether this is a self-dual, base, or dual representation.
+    /// How this representation pairs with another space.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     One of "self-dual", "base", or "dual".
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.Representation.mink(4).name
-    /// >>> result = name.duality
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> identity = Representation.mink(4).name
+    /// >>> identity.duality
+    /// 'self-dual'
     #[getter]
     pub fn duality(&self) -> &'static str {
         if self.rep.is_self_dual() {
@@ -95,33 +110,44 @@ impl SpensoRepresentationName {
         }
     }
 
-    /// Return the representation identity paired with this one.
+    /// Return the dimension-independent identity of the paired space.
+    ///
+    /// Returns
+    /// -------
+    /// RepresentationName
+    ///     The same identity for a self-dual space; the dual partner otherwise.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> fundamental = sp.Representation.cof(3).name
-    /// >>> antifundamental = fundamental.dual()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> identity = Representation.cof(3).name
+    /// >>> identity.dual().dual() == identity
+    /// True
     fn dual(&self) -> Self {
         Self {
             rep: self.rep.dual(),
         }
     }
 
-    /// Sign of the canonical contraction pairing at a nonnegative component index.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.Representation.mink(4).name
-    /// >>> time_sign = name.metric_sign(0)
-    /// >>> space_sign = name.metric_sign(1)
-    /// >>> assert (time_sign, space_sign) == (1, -1)
+    /// Return the sign of the canonical pairing at a component coordinate.
     ///
     /// Parameters
     /// ----------
     /// index : int
-    ///     Nonnegative component position. Minkowski position 0 has positive metric sign; spatial positions have negative sign.
+    ///     Nonnegative component coordinate. This identity has no dimension, so
+    ///     the coordinate is not checked against a particular tensor shape.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     +1 or -1. In Minkowski space, zero gives +1 and spatial coordinates -1.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> metric = Representation.mink(4).name
+    /// >>> [metric.metric_sign(i) for i in range(4)]
+    /// [1, -1, -1, -1]
     fn metric_sign(&self, index: usize) -> i8 {
         if self.rep.is_neg(index) { -1 } else { 1 }
     }
@@ -152,13 +178,18 @@ impl SpensoRepresentationName {
         )
     }
 
-    /// Compact metadata display with the registered name, duality, and metric rule.
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.Representation.mink(4).name
-    /// >>> html = name.to_html()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.mink(4).name
+    /// >>> html = value.to_html()
     fn to_html(&self) -> String {
         display::metadata::representation_name(self)
     }
@@ -168,24 +199,20 @@ impl SpensoRepresentationName {
     }
 }
 
-/// Describe a tensor’s identity and ordered external axes without storing component data.
-/// Use Slots for indexed axes and Representations for ports that will be indexed later.
+/// The identity, scalar arguments, and ordered axes of a tensor.
+///
+/// A Slot denotes a labeled axis; a Representation denotes an unresolved axis.
+/// This immutable object stores metadata, without an expression or components.
+/// Axis positions and component shapes follow the order of ``slots``.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> structure = sp.TensorStructure([r("i"), r], name=sp.TensorName("docs::A"))
-/// >>> assert structure.rank == 2
-///
-/// Parameters
-/// ----------
-/// slots : Sequence[Slot | Representation]
-///     Ordered external ports. A Slot fixes an index label; a Representation leaves the port unresolved.
-/// name : TensorName, optional
-///     Optional TensorName recording the data identity. Omit it for anonymous tensor metadata.
-/// arguments : Sequence[Expression or scalar], optional
-///     Optional scalar arguments belonging to the tensor identity. These are metadata, not extra tensor axes.
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(3)
+/// >>> A = TensorName("A")(space, space)
+/// >>> metadata = A.structure
+/// >>> metadata.rank
+/// 2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -219,24 +246,28 @@ pub(crate) fn validate_axis_permutation(rank: usize, axes: &[usize]) -> PyResult
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoTensorStructure {
-    /// Describe a tensor’s identity and ordered external axes without storing component data.
-    /// Use Slots for indexed axes and Representations for ports that will be indexed later.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r], name=sp.TensorName("docs::A"))
-    /// >>> assert structure.rank == 2
+    /// Describe a tensor interface in logical axis order.
     ///
     /// Parameters
     /// ----------
-    /// slots : Sequence[Slot | Representation]
-    ///     Ordered external ports. A Slot fixes an index label; a Representation leaves the port unresolved.
+    /// slots : sequence of Slot or Representation
+    ///     External axes, in the order used for indexing and component coordinates.
     /// name : TensorName, optional
-    ///     Optional TensorName recording the data identity. Omit it for anonymous tensor metadata.
-    /// arguments : Sequence[Expression or scalar], optional
-    ///     Optional scalar arguments belonging to the tensor identity. These are metadata, not extra tensor axes.
+    ///     Name identifying stored tensor data.
+    /// arguments : sequence of scalar expressions, optional
+    ///     Non-index arguments that distinguish named tensors, such as A(x, 7).
+    ///
+    /// Returns
+    /// -------
+    /// TensorStructure
+    ///     Immutable metadata for the supplied axes and optional identity.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorStructure
+    /// >>> metadata = TensorStructure([Representation.euc(2), Representation.euc(3)])
+    /// >>> metadata.shape
+    /// (2, 3)
     #[new]
     #[pyo3(signature = (slots, *, name=None, arguments=None))]
     fn new(
@@ -271,27 +302,39 @@ impl SpensoTensorStructure {
         })
     }
 
-    /// Optional tensor data identity; unnamed expressions have no name.
+    /// Optional name identifying stored tensor data.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName or None
+    ///     Composite expressions may have no name.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.name
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A = A.structure
+    /// >>> name = A.name
     #[getter]
     fn name(&self) -> Option<SpensoName> {
         self.name.map(|name| SpensoName { name })
     }
 
-    /// Scalar arguments belonging to the tensor identity, in their original order.
+    /// Scalar arguments that distinguish the named tensor.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of Expression
+    ///     Non-index arguments, in their original order; empty if there are none.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.arguments
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A.structure.arguments
+    /// ()
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[Expression, ...]"))]
     fn arguments(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
@@ -302,14 +345,20 @@ impl SpensoTensorStructure {
         .unbind())
     }
 
-    /// External slots in logical order, including unresolved representations.
+    /// External axes, in the order used by tensor indexing.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of Slot or Representation
+    ///     Labeled and unresolved axes, respectively.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.slots
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A.structure.slots == (space, space)
+    /// True
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
     fn slots(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
@@ -337,27 +386,41 @@ impl SpensoTensorStructure {
         Ok(PyTuple::new(py, slots)?.unbind())
     }
 
-    /// Number of external slots, including unresolved ports.
+    /// Number of external tensor axes.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Zero for a scalar.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.rank
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A = A.structure
+    /// >>> A.rank
+    /// 2
     #[getter]
     pub(crate) fn rank(&self) -> usize {
         self.interface.canonical().order()
     }
 
-    /// Dimensions in logical order; symbolic dimensions remain symbolic.
+    /// Dimensions in logical axis order.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of int or Expression
+    ///     Concrete dimensions are integers; symbolic dimensions remain expressions.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.shape
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A = A.structure
+    /// >>> A.shape
+    /// (3, 3)
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
     pub(crate) fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
@@ -376,33 +439,44 @@ impl SpensoTensorStructure {
         Ok(PyTuple::new(py, shape)?.unbind())
     }
 
-    /// Whether there are no external axes.
+    /// Whether the tensor has no external axes.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True exactly when rank is zero.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> result = structure.is_scalar
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> A = TensorName("A")(space, space)
+    /// >>> A = A.structure
+    /// >>> A.is_scalar
+    /// False
     #[getter]
     fn is_scalar(&self) -> bool {
         self.rank() == 0
     }
 
-    /// Reorder metadata axes without changing their labels, dimensions, or identity.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> transposed = structure.permute_axes([1, 0])
-    /// >>> assert transposed.slots == structure.slots[::-1]
+    /// Reorder the metadata axes.
     ///
     /// Parameters
     /// ----------
-    /// axes : Sequence[int]
-    ///     Permutation of all axis positions, starting at zero. For a matrix, [1, 0] transposes the logical axes.
+    /// axes : sequence of int
+    ///     Each old axis position exactly once, in the desired new order.
+    ///
+    /// Returns
+    /// -------
+    /// TensorStructure
+    ///     New metadata with the same name and scalar arguments.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorStructure
+    /// >>> metadata = TensorStructure([Representation.euc(2), Representation.euc(3)])
+    /// >>> metadata.permute_axes([1, 0]).shape
+    /// (3, 2)
     fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
         validate_axis_permutation(self.rank(), &axes)?;
         let slots = self.interface.logical_slots();
@@ -442,19 +516,25 @@ impl SpensoTensorStructure {
         format!("TensorStructure([{slots}]{name}, arguments=({args}))")
     }
 
-    /// Inspect the tensor identity and ordered slots without changing its algebra.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> structure = sp.TensorStructure([r("i"), r("j")])
-    /// >>> html = structure.to_html()
+    /// Render a compact HTML view of this tensor metadata.
     ///
     /// Parameters
     /// ----------
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> value = A.structure
+    /// >>> html = value.to_html()
     #[pyo3(signature = (*, settings=None))]
     fn to_html(
         &self,

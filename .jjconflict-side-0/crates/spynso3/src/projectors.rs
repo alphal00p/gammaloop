@@ -18,20 +18,26 @@ use crate::{
     structure::ArithmeticStructure,
 };
 
-/// A normalized group of matrix factors for insertion into a chain or trace.
+/// A normalized permutation group of matrix factors for a chain or trace.
 ///
-/// Symbolic groups stay compact. Groups containing component tensors or networks
-/// retain their data and produce a TensorNetwork when used by chain or trace.
-/// This object is a factor group, not a standalone tensor expression.
-/// Supply individual matrix factors or nested projector groups. To project a
-/// precomposed chain's factors, pass those factors separately.
+/// Symmetric and antisymmetric groups average all permutations with weight
+/// 1/n!, with signs for the antisymmetric case. Cyclic groups average n cyclic
+/// rotations with weight 1/n. Groups may be nested and remain compact until
+/// expanded. They are factor groups, not standalone tensor expressions.
+///
+/// Symbolic factors stay symbolic. A group containing Tensor or TensorNetwork
+/// data produces a TensorNetwork when inserted in a chain or trace. Supply
+/// individual factors rather than a precomposed multi-factor chain.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.tensor import FactorProjector, TensorExpression, Representation, AUTO, trace
-/// >>> gamma = TensorExpression.dirac_gamma(4)
-/// >>> group = FactorProjector.symmetric(gamma(AUTO, AUTO, "mu"), gamma(AUTO, AUTO, "nu"))
-/// >>> result = trace(Representation.bis(4), group)
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import FactorProjector, trace
+/// >>> group = FactorProjector.symmetric(A, A)
+/// >>> trace(space, group).is_scalar
+/// True
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -118,7 +124,28 @@ impl PyFactorProjector {
         PyGenericAlias::new(cls.py(), cls, argument)
     }
 
-    /// Average all permutations of compatible matrix factors with weight 1/n!.
+    /// Average all permutations with weight 1/n!.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : TensorExpression, Tensor, TensorNetwork, or FactorProjector
+    ///     Individual matrix factors with compatible channels, or nested groups.
+    ///     Their order defines the starting permutation.
+    ///
+    /// Returns
+    /// -------
+    /// FactorProjector
+    ///     Compact normalized group, retaining any supplied component data.
+    ///     Insert it with chain() or trace().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import FactorProjector, trace
+    /// >>> group = FactorProjector.symmetric(A, A)
+    /// >>> result = trace(space, group)
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn symmetric(
@@ -131,7 +158,28 @@ impl PyFactorProjector {
         Self::build(py, factors, FactorProjector::Symmetric)
     }
 
-    /// Average all permutations with their signs and weight 1/n!.
+    /// Average all signed permutations with weight 1/n!.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : TensorExpression, Tensor, TensorNetwork, or FactorProjector
+    ///     Individual matrix factors with compatible channels, or nested groups.
+    ///     Their order defines the starting permutation.
+    ///
+    /// Returns
+    /// -------
+    /// FactorProjector
+    ///     Compact normalized group, retaining any supplied component data.
+    ///     Insert it with chain() or trace().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import FactorProjector, trace
+    /// >>> group = FactorProjector.antisymmetric(A, A)
+    /// >>> result = trace(space, group)
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn antisymmetric(
@@ -144,7 +192,28 @@ impl PyFactorProjector {
         Self::build(py, factors, FactorProjector::Antisymmetric)
     }
 
-    /// Average cyclic rotations of compatible matrix factors with weight 1/n.
+    /// Average cyclic rotations with weight 1/n.
+    ///
+    /// Parameters
+    /// ----------
+    /// *factors : TensorExpression, Tensor, TensorNetwork, or FactorProjector
+    ///     Individual matrix factors with compatible channels, or nested groups.
+    ///     Their order defines the starting permutation.
+    ///
+    /// Returns
+    /// -------
+    /// FactorProjector
+    ///     Compact normalized group, retaining any supplied component data.
+    ///     Insert it with chain() or trace().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import FactorProjector, trace
+    /// >>> group = FactorProjector.cyclic(A, A)
+    /// >>> result = trace(space, group)
     #[staticmethod]
     #[pyo3(signature = (*factors))]
     fn cyclic(

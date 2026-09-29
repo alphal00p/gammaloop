@@ -7,26 +7,18 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use spenso::structure::representation::{LibraryRep, RepName};
 
-/// Immutable selection of tensor identities. Dimensions come from tensor slots.
-/// Materialize scalar polynomials explicitly with the result's `expand()` method.
+/// Select optional tensor-algebra identities for reduce_algebra().
+///
+/// Instances are immutable. Dirac, color, and Levi-Civita identities are disabled
+/// by default. Enabling a family includes the contractions needed by that family;
+/// use ContractSettings for general structural contraction.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> settings = sp.AlgebraSettings(gamma=sp.GammaSimplifySettings.canonical())
-/// >>> gamma = sp.TensorExpression.gamma(4)
-/// >>> reduced = (gamma("a", "b", "mu") * gamma("b", "a", "nu")).reduce_algebra(settings)
-///
-/// Parameters
-/// ----------
-/// gamma : GammaSimplifySettings, optional
-///     Gamma-algebra settings, or None to leave gamma identities disabled.
-/// color : ColorSimplifySettings, optional
-///     Color-algebra settings, or None to leave color identities disabled.
-/// epsilon : bool
-///     Enable Levi-Civita identities and the contractions needed to apply them.
-/// max_passes : int
-///     Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+/// >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings
+/// >>> settings = AlgebraSettings(gamma=GammaSimplifySettings())
+/// >>> settings.color is None
+/// True
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -49,25 +41,31 @@ impl PyAlgebraSettings {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyAlgebraSettings {
-    /// Select identities explicitly. An enabled family includes its necessary contractions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings(gamma=sp.GammaSimplifySettings.canonical())
-    /// >>> gamma = sp.TensorExpression.gamma(4)
-    /// >>> reduced = (gamma("a", "b", "mu") * gamma("b", "a", "nu")).reduce_algebra(settings)
+    /// Choose identity families and a transformation budget.
     ///
     /// Parameters
     /// ----------
     /// gamma : GammaSimplifySettings, optional
-    ///     Gamma-algebra settings, or None to leave gamma identities disabled.
+    ///     Dirac-algebra options. None disables this family.
     /// color : ColorSimplifySettings, optional
-    ///     Color-algebra settings, or None to leave color identities disabled.
-    /// epsilon : bool
-    ///     Enable Levi-Civita identities and the contractions needed to apply them.
-    /// max_passes : int
-    ///     Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+    ///     Color-algebra options. None disables this family.
+    /// epsilon : bool, default False
+    ///     Enable supported Levi-Civita identities and their required contractions.
+    /// max_passes : int, default 16
+    ///     Maximum successful transformations in each root or shared-definition domain.
+    ///     Zero is allowed. Inspect the result's reduction_status to detect unfinished work.
+    ///
+    /// Returns
+    /// -------
+    /// AlgebraSettings
+    ///     Immutable options for reduce_algebra().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings
+    /// >>> settings = AlgebraSettings(gamma=GammaSimplifySettings.canonical())
+    /// >>> settings.max_passes
+    /// 16
     #[new]
     #[pyo3(signature=(*, gamma=None, color=None, epsilon=false, max_passes=16))]
     pub(crate) fn new(
@@ -85,13 +83,18 @@ impl PyAlgebraSettings {
         Self { inner }
     }
 
-    /// Enable gamma, color, and epsilon identities with their native defaults.
+    /// Enable Dirac, color, and Levi-Civita identities.
+    ///
+    /// Returns
+    /// -------
+    /// AlgebraSettings
+    ///     Default options for all three families, including their necessary contractions.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings.hep()
-    /// >>> assert settings.epsilon
+    /// >>> from symbolica.community.tensor import AlgebraSettings
+    /// >>> AlgebraSettings.hep().epsilon
+    /// True
     #[staticmethod]
     fn hep() -> Self {
         Self {
@@ -99,46 +102,68 @@ impl PyAlgebraSettings {
         }
     }
 
-    /// Gamma-algebra settings, or None to leave gamma identities disabled.
+    /// Dirac-algebra options; None disables this family.
+    ///
+    /// Returns
+    /// -------
+    /// GammaSimplifySettings or None
+    ///     Dirac-algebra options; None disables this family.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings()
-    /// >>> result = settings.gamma
+    /// >>> from symbolica.community.tensor import AlgebraSettings
+    /// >>> value = AlgebraSettings().gamma
+    /// >>> value is None
+    /// True
     #[getter]
     fn gamma(&self) -> Option<PyGammaSimplifySettings> {
         self.inner.gamma.map(PyGammaSimplifySettings::from_rust)
     }
-    /// Color-algebra settings, or None to leave color identities disabled.
+    /// Color-algebra options; None disables this family.
+    ///
+    /// Returns
+    /// -------
+    /// ColorSimplifySettings or None
+    ///     Color-algebra options; None disables this family.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings()
-    /// >>> result = settings.color
+    /// >>> from symbolica.community.tensor import AlgebraSettings
+    /// >>> value = AlgebraSettings().color
+    /// >>> value is None
+    /// True
     #[getter]
     fn color(&self) -> Option<PyColorSimplifySettings> {
         self.inner.color.map(PyColorSimplifySettings::from_rust)
     }
-    /// Enable Levi-Civita identities and the contractions needed to apply them.
+    /// Whether supported Levi-Civita identities are enabled.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether supported Levi-Civita identities are enabled.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings()
-    /// >>> result = settings.epsilon
+    /// >>> from symbolica.community.tensor import AlgebraSettings
+    /// >>> AlgebraSettings().epsilon
+    /// False
     #[getter]
     fn epsilon(&self) -> bool {
         self.inner.epsilon
     }
-    /// Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+    /// Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.AlgebraSettings()
-    /// >>> result = settings.max_passes
+    /// >>> from symbolica.community.tensor import AlgebraSettings
+    /// >>> AlgebraSettings().max_passes
+    /// 16
     #[getter]
     fn max_passes(&self) -> usize {
         self.inner.max_passes
@@ -166,33 +191,19 @@ impl PyAlgebraSettings {
     }
 }
 
-/// Structural contraction policy. Filters select connecting representation names,
-/// independently of other ports on the same tensor. None permits every representation;
-/// an empty sequence permits none. Intrinsic constructor normalization is unaffected.
+/// Select structural contractions and compact tensor forms.
+///
+/// The default enables metrics, rank-one contractions, matrix-chain collection,
+/// and trace collection in every representation. Filters select representation
+/// names, independently of dimensions or other axes of a tensor. An empty filter
+/// permits no representations. Intrinsic constructor normalization is unaffected.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> settings = sp.ContractSettings(collect_chains=False, collect_traces=False)
-/// >>> contracted = sp.TensorExpression.g(r)("i", "i").contract(settings)
-///
-/// Parameters
-/// ----------
-/// representations : Sequence[Representation | RepresentationName], optional
-///     Restrict contraction and collection to these Representation or RepresentationName values. None permits all representations.
-/// metrics : bool
-///     Contract compatible metric tensors. Disable to retain explicit metric factors.
-/// rank_one : bool
-///     Contract compatible rank-one tensors and recognize their scalar products.
-/// collect_chains : bool
-///     Collect compatible connected matrix products into compact chains. Disable to retain their indexed factors.
-/// collect_traces : bool
-///     Collect compatible closed matrix products into compact traces. This does not request gamma or color trace identities.
-/// order : Sequence[int], optional
-///     Optional tensor-factor contraction order. None lets Spenso choose an order; this does not permute the public tensor axes.
-/// max_passes : int
-///     Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+/// >>> from symbolica.community.tensor import ContractSettings, Representation
+/// >>> settings = ContractSettings(representations=[Representation.euc(3)], collect_traces=False)
+/// >>> settings.collect_traces
+/// False
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -245,33 +256,42 @@ impl PyContractSettings {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyContractSettings {
-    /// Choose which index contractions and compact tensor forms to produce.
-    /// By default all representations are eligible, and metrics, rank-one contractions,
-    /// chains, and traces are enabled. Set a flag to False to leave that operation untouched.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> settings = sp.ContractSettings(collect_chains=False, collect_traces=False)
-    /// >>> contracted = sp.TensorExpression.g(r)("i", "i").contract(settings)
+    /// Choose which compatible indices and matrix channels to contract.
     ///
     /// Parameters
     /// ----------
-    /// representations : Sequence[Representation | RepresentationName], optional
-    ///     Restrict contraction and collection to these Representation or RepresentationName values. None permits all representations.
-    /// metrics : bool
-    ///     Contract compatible metric tensors. Disable to retain explicit metric factors.
-    /// rank_one : bool
-    ///     Contract compatible rank-one tensors and recognize their scalar products.
-    /// collect_chains : bool
-    ///     Collect compatible connected matrix products into compact chains. Disable to retain their indexed factors.
-    /// collect_traces : bool
-    ///     Collect compatible closed matrix products into compact traces. This does not request gamma or color trace identities.
-    /// order : Sequence[int], optional
-    ///     Optional tensor-factor contraction order. None lets Spenso choose an order; this does not permute the public tensor axes.
-    /// max_passes : int
-    ///     Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+    /// representations : sequence of Representation or RepresentationName, optional
+    ///     Restrict eligible connecting axes by representation name. None permits all
+    ///     representations; an empty sequence permits none. Dimensions are not filtered.
+    /// metrics : bool, default True
+    ///     Contract compatible metric tensors.
+    /// rank_one : bool, default True
+    ///     Contract compatible rank-one tensors into compact scalar products.
+    /// collect_chains : bool, default True
+    ///     Collect connected matrix factors into compact chains.
+    /// collect_traces : bool, default True
+    ///     Collect closed matrix products into compact traces, without evaluating
+    ///     Dirac or color trace identities.
+    /// order : sequence of int, optional
+    ///     Requested order of tensor factors for contraction. None selects the default.
+    ///     This does not reorder the tensor's external axes.
+    /// max_passes : int, default 16
+    ///     Maximum successful transformations in each root or shared-definition domain.
+    ///     Zero is allowed. Inspect reduction_status for unfinished work.
+    ///
+    /// Returns
+    /// -------
+    /// ContractSettings
+    ///     Immutable settings for contract().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import ContractSettings, Representation, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> settings = ContractSettings(collect_chains=False, collect_traces=False)
+    /// >>> result = TensorExpression.g(space)("i", "i").contract(settings)
+    /// >>> result.to_expression().is_scalar
+    /// True
     #[new]
     #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_passes=16))]
     fn new(
@@ -312,13 +332,18 @@ impl PyContractSettings {
         })
     }
 
-    /// Restrict contraction and collection to these Representation or RepresentationName values. None permits all representations.
+    /// Allowed representation names; None permits all and an empty list permits none.
+    ///
+    /// Returns
+    /// -------
+    /// list of RepresentationName or None
+    ///     Allowed representation names; None permits all and an empty list permits none.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.representations
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().representations is None
+    /// True
     #[getter]
     fn representations(&self) -> Option<Vec<SpensoRepresentationName>> {
         self.representations.as_ref().map(|values| {
@@ -328,68 +353,98 @@ impl PyContractSettings {
                 .collect()
         })
     }
-    /// Contract compatible metric tensors. Disable to retain explicit metric factors.
+    /// Whether compatible metric tensors are contracted.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether compatible metric tensors are contracted.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.metrics
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().metrics
+    /// True
     #[getter]
     fn metrics(&self) -> bool {
         self.metrics
     }
-    /// Contract compatible rank-one tensors and recognize their scalar products.
+    /// Whether compatible rank-one factors form compact scalar products.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether compatible rank-one factors form compact scalar products.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.rank_one
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().rank_one
+    /// True
     #[getter]
     fn rank_one(&self) -> bool {
         self.rank_one
     }
-    /// Collect compatible connected matrix products into compact chains. Disable to retain their indexed factors.
+    /// Whether compatible matrix products are collected as chains.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether compatible matrix products are collected as chains.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.collect_chains
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().collect_chains
+    /// True
     #[getter]
     fn collect_chains(&self) -> bool {
         self.collect_chains
     }
-    /// Collect compatible closed matrix products into compact traces. This does not request gamma or color trace identities.
+    /// Whether closed matrix products are collected as traces. This does not evaluate their algebraic identities.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether closed matrix products are collected as traces. This does not evaluate their algebraic identities.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.collect_traces
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().collect_traces
+    /// True
     #[getter]
     fn collect_traces(&self) -> bool {
         self.collect_traces
     }
-    /// Optional tensor-factor contraction order. None lets Spenso choose an order; this does not permute the public tensor axes.
+    /// Requested tensor-factor contraction order. None uses the default order.
+    ///
+    /// Returns
+    /// -------
+    /// list of int or None
+    ///     Requested tensor-factor contraction order. None uses the default order.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.order
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().order is None
+    /// True
     #[getter]
     fn order(&self) -> Option<Vec<usize>> {
         self.order.clone()
     }
-    /// Maximum successful transformations per root or alias domain. Inspect .reduction_status when using a small limit; a capped result retains the exact unfinished expression.
+    /// Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> settings = sp.ContractSettings()
-    /// >>> result = settings.max_passes
+    /// >>> from symbolica.community.tensor import ContractSettings
+    /// >>> ContractSettings().max_passes
+    /// 16
     #[getter]
     fn max_passes(&self) -> usize {
         self.max_passes
@@ -445,7 +500,19 @@ impl PyContractSettings {
     }
 }
 
-/// Completion under the selected capabilities and work budget.
+/// Completion of a tensor reduction under its selected settings.
+///
+/// Complete means no eligible work remains. Deferred means exact eligible work
+/// remains for another operation. Capped means the transformation budget stopped
+/// processing. A partial result still represents the exact original tensor;
+/// completion is relative to the requested operations, not every possible identity.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
+/// >>> result = TensorExpression(3).contract()
+/// >>> result.reduction_status == ReductionStatus.Complete
+/// True
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum

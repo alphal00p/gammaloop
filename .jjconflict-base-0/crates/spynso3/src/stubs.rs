@@ -33,6 +33,7 @@ const CONCRETE_FACTORS: &str = "Tensor | TensorNetwork | FactorProjector[TensorN
 const ALL_FACTORS: &str = "TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]";
 
 pub(crate) fn refine(module: &mut Module) {
+    module.doc = python_doc!("module").to_owned();
     let replacements = [
         (
             ConvertibleToReplaceWith::type_input().name,
@@ -112,6 +113,56 @@ pub(crate) fn refine(module: &mut Module) {
             }
         }
         for method in class.methods.values_mut().flatten() {
+            // PyO3 accepts macro doc literals; the stub derive only reads literal
+            // attributes. Reuse the same docs for every manually specified overload.
+            match (class.name, method.name) {
+                ("Representation", "__call__") => {
+                    method.doc = python_doc!("Representation.__call__")
+                }
+                ("TensorName", "__call__") => method.doc = python_doc!("TensorName.__call__"),
+                ("BroadcastFunction", "__call__") => {
+                    method.doc = python_doc!("BroadcastFunction.__call__")
+                }
+                ("Tensor", "__getitem__") => method.doc = python_doc!("Tensor.__getitem__"),
+                ("Tensor", "__setitem__") => method.doc = python_doc!("Tensor.__setitem__"),
+                ("Tensor", "__iter__") => method.doc = python_doc!("Tensor.__iter__"),
+                ("TensorExpression", "__getitem__") => {
+                    method.doc = python_doc!("TensorExpression.__getitem__")
+                }
+                ("TensorExpression", "__add__") => {
+                    method.doc = python_doc!("TensorExpression.__add__")
+                }
+                ("TensorExpression", "__radd__") => {
+                    method.doc = python_doc!("TensorExpression.__radd__")
+                }
+                ("TensorExpression", "__sub__") => {
+                    method.doc = python_doc!("TensorExpression.__sub__")
+                }
+                ("TensorExpression", "__rsub__") => {
+                    method.doc = python_doc!("TensorExpression.__rsub__")
+                }
+                ("TensorExpression", "__mul__") => {
+                    method.doc = python_doc!("TensorExpression.__mul__")
+                }
+                ("TensorExpression", "__rmul__") => {
+                    method.doc = python_doc!("TensorExpression.__rmul__")
+                }
+                ("TensorExpression", "__truediv__") => {
+                    method.doc = python_doc!("TensorExpression.__truediv__")
+                }
+                ("TensorExpression", "__rtruediv__") => {
+                    method.doc = python_doc!("TensorExpression.__rtruediv__")
+                }
+                ("TensorExpression", "outer") => method.doc = python_doc!("TensorExpression.outer"),
+                ("TensorExpression", "contract_ports") => {
+                    method.doc = python_doc!("TensorExpression.contract_ports")
+                }
+                ("TensorExpression", "compose") => {
+                    method.doc = python_doc!("TensorExpression.compose")
+                }
+                _ => {}
+            }
+
             simplify(&mut method.r#return);
             parameters(&mut method.parameters, |parameter| {
                 simplify(&mut parameter.type_info);
@@ -173,29 +224,7 @@ pub(crate) fn refine(module: &mut Module) {
             let mut slice = overloads.last().expect("Tensor component overload").clone();
             slice.parameters.positional_or_keyword[0].type_info = named("tuple[int | slice, ...]");
             slice.r#return = named("_Components");
-            slice.doc = r#"Select tensor components by logical coordinates.
-Each sliced axis contributes a level of nested lists; integer coordinates remove
-that axis. The input tensor is unchanged.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> A = sp.TensorName("docs::A")(r, r)
->>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
->>> assert tensor[:, 1] == [2.0, 4.0]
->>> assert tensor[:, :] == [[1.0, 2.0], [3.0, 4.0]]
-
-Parameters
-----------
-item : tuple[int | slice, ...]
-    One integer or slice for every logical axis. Negative coordinates count
-    from the end; use a full slice to retain an axis.
-
-Returns
--------
-float, complex, Expression, or nested list
-    A scalar when every axis is selected by an integer; nested lists otherwise."#;
+            slice.doc = python_doc!("Tensor.__getitem__");
             overloads.push(slice);
         }
         if class.name == "TensorLibrary"
@@ -223,6 +252,12 @@ float, complex, Expression, or nested list
         }
     }
     for function in module.function.values_mut().flatten() {
+        match function.name {
+            "dot" => function.doc = python_doc!("dot"),
+            "chain" => function.doc = python_doc!("chain"),
+            "trace" => function.doc = python_doc!("trace"),
+            _ => {}
+        }
         simplify(&mut function.r#return);
         parameters(&mut function.parameters, |parameter| {
             simplify(&mut parameter.type_info);

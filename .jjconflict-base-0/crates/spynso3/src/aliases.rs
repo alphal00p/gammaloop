@@ -14,25 +14,23 @@ use crate::{ModuleInit, expression::TensorExpression, simplification::PyAlgebraS
 
 type Descriptor = (Option<Symbol>, Vec<Atom>);
 
-/// A typed root and literal tensor definitions, materialized only on request.
-/// Scalar results use this same class. `evaluator` consumes the DAG directly.
+/// A symbolic tensor whose repeated subexpressions have named definitions.
+///
+/// Tensor simplification uses this class to retain shared work instead of
+/// expanding large intermediate expressions. ``root`` uses those names and
+/// ``aliases`` supplies their definitions. Scalar results use the same class.
+/// Call ``to_expression()`` to resolve definitions into a TensorExpression,
+/// or ``expand()`` to resolve them and distribute the scalar algebra.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> from symbolica import E, S
-/// >>> x = S("docs::x")
-/// >>> handle = sp.TensorExpression(S("docs::handle"))
-/// >>> body = sp.TensorExpression((x + 1)**2)
-/// >>> value = sp.AliasedTensorExpression(handle, [(handle, body)])
-/// >>> resolved = value.to_expression()
-///
-/// Parameters
-/// ----------
-/// root : TensorExpression
-///     Tensor expression in which the alias handles occur.
-/// aliases : Sequence[tuple[TensorExpression, TensorExpression]]
-///     Sequence of (handle, body) TensorExpression pairs. Each body must have the same external interface as its handle.
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import AliasedTensorExpression
+/// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+/// >>> aliases.to_expression().rank
+/// 2
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -85,26 +83,32 @@ impl AliasedTensorExpression {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl AliasedTensorExpression {
-    /// Build a factored expression from a root and named subexpressions.
-    /// Each `(handle, body)` pair defines one reusable subexpression with the same tensor interface.
-    /// Definitions may refer to other handles, but cyclic definitions are rejected.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> handle = sp.TensorExpression(S("docs::handle"))
-    /// >>> body = sp.TensorExpression((x + 1)**2)
-    /// >>> value = sp.AliasedTensorExpression(handle, [(handle, body)])
-    /// >>> resolved = value.to_expression()
+    /// Build a tensor expression with explicitly supplied shared definitions.
     ///
     /// Parameters
     /// ----------
     /// root : TensorExpression
-    ///     Tensor expression in which the alias handles occur.
-    /// aliases : Sequence[tuple[TensorExpression, TensorExpression]]
-    ///     Sequence of (handle, body) TensorExpression pairs. Each body must have the same external interface as its handle.
+    ///     Expression containing the alias handles.
+    /// aliases : sequence of (TensorExpression, TensorExpression), default []
+    ///     Opaque handle and definition pairs, as returned by from_expression().
+    ///     A scalar alias may use a scalar variable. Each pair must have compatible tensor
+    ///     interfaces and the definitions must form a consistent dependency graph.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     The root and shared definitions, without eager substitution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> original = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> value = AliasedTensorExpression(original.root, original.aliases)
+    /// >>> value.to_expression().rank
+    /// 2
     #[new]
     #[pyo3(signature = (root, aliases=Vec::new()))]
     fn new(
@@ -140,21 +144,27 @@ impl AliasedTensorExpression {
         })
     }
 
-    /// Give a tensor one fresh opaque handle, retaining its original definition.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> body = sp.TensorExpression((x + 1)**2)
-    /// >>> value = sp.AliasedTensorExpression.from_expression(body)
-    /// >>> assert value.to_expression() == body
+    /// Name an entire tensor expression with one fresh alias.
     ///
     /// Parameters
     /// ----------
     /// expression : TensorExpression
-    ///     TensorExpression to store under one fresh alias handle.
+    ///     Tensor to retain as a shared definition.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     A fresh handle as the root and one definition containing expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> len(aliases.aliases)
+    /// 1
     #[staticmethod]
     fn from_expression(expression: PyRef<'_, TensorExpression>) -> PyResult<Self> {
         let body = TensorExpression::structured(&expression).clone();
@@ -178,45 +188,64 @@ impl AliasedTensorExpression {
         })
     }
 
-    /// Tensor expression in which the alias handles occur.
+    /// The tensor expression before substituting its shared definitions.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Root containing alias handles.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> result = value.root
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> aliases.root.rank
+    /// 2
     #[getter]
     fn root(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         Self::wrap(py, self.value.root(), &self.descriptor)
     }
 
-    /// Whether the metric/vector contractor certified completion.
-    /// False also covers an uncontracted value or an exact retained frontier
-    /// stopped by its budget; explicit materialization is a separate operation.
+    /// Whether symbolic metric/vector contraction is certified complete.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False also covers a value not yet contracted, or a contraction stopped
+    ///     before completion. It does not indicate whether aliases are resolved.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> result = value.contraction_complete
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> complete = aliases.contraction_complete
     #[getter]
     fn contraction_complete(&self) -> bool {
         self.value.contraction_complete()
     }
 
-    /// Sequence of (handle, body) TensorExpression pairs. Each body must have the same external interface as its handle.
+    /// The tensor handles and their shared definitions.
+    ///
+    /// Returns
+    /// -------
+    /// list of (TensorExpression, TensorExpression)
+    ///     Each pair maps a handle to its definition.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> result = value.aliases
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> len(aliases.aliases)
+    /// 1
     #[getter]
     fn aliases(
         &self,
@@ -238,17 +267,22 @@ impl AliasedTensorExpression {
             .collect()
     }
 
-    /// Replace every alias by its definition without expanding scalar products or powers.
-    /// The result is a TensorExpression with the same external indices.
+    /// Substitute the shared definitions into the root.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Materialized tensor algebra; this is not a raw Symbolica Expression.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> resolved = value.to_expression()
-    /// >>> assert resolved.to_expression() == (x + 1)**2
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> aliases.to_expression().rank
+    /// 2
     fn to_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         Self::wrap(
             py,
@@ -259,17 +293,22 @@ impl AliasedTensorExpression {
         )
     }
 
-    /// Resolve aliases and expand the resulting scalar algebra into explicit terms.
-    /// Use `.to_expression()` instead when you want to keep products and powers factored.
+    /// Resolve aliases and expand the resulting scalar algebra.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Expanded tensor algebra. This can be much larger than the shared form.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> expanded = value.expand()
-    /// >>> assert expanded.to_expression() == ((x + 1)**2).expand()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> aliases.expand().rank
+    /// 2
     fn expand(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         Self::wrap(
             py,
@@ -280,16 +319,23 @@ impl AliasedTensorExpression {
         )
     }
 
-    /// Report the storage size in bytes of the factored symbolic expression.
+    /// Measure the stored symbolic payload of the root and definitions.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Byte count of the symbolic payload; not the full Python allocation
+    ///     or total process memory.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> bytes_used = value.get_byte_size()
-    /// >>> assert bytes_used > 0
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> aliases.get_byte_size() > 0
+    /// True
     fn get_byte_size(&self) -> usize {
         self.value.expression().get_byte_size()
     }
@@ -312,20 +358,29 @@ impl AliasedTensorExpression {
         )
     }
 
-    /// Apply a Python callback once per definition, retaining its typed interface.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> mapped = value.map_aliases(lambda body: body.expand())
+    /// Transform each shared definition while retaining its tensor interface.
     ///
     /// Parameters
     /// ----------
-    /// callback : Any
-    ///     Function receiving one TensorExpression definition and returning its replacement. Keep its external interface unchanged; Python exceptions propagate to the caller.
+    /// callback : callable
+    ///     Receives a definition as TensorExpression and returns a
+    ///     TensorExpression with a compatible interface.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     Updated definitions under the same handles; the original is unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> mapped = aliases.map_aliases(lambda body: body.expand())
+    /// >>> mapped.to_expression().rank
+    /// 2
     fn map_aliases(&self, py: Python<'_>, callback: Py<PyAny>) -> PyResult<Self> {
         let mut callback_error = None;
         let mut descriptors = (*self.descriptors).clone();
@@ -357,21 +412,38 @@ impl AliasedTensorExpression {
         })
     }
 
-    /// Apply ordered tensor rules to a factored expression and its definitions.
-    /// Aliases remain factored; call `.to_expression()` or `.expand()` to materialize them.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> changed = value.replace(sp.TensorRule(x, E("2")))
+    /// Apply one rule or an ordered list of whole-tensor replacement rules.
     ///
     /// Parameters
     /// ----------
-    /// rules : Any
-    ///     One TensorRule or an ordered list of rules. The first matching rule wins; the replacement is checked against the matched tensor interface.
+    /// rules : TensorRule or list of TensorRule
+    ///     Rules in priority order. The first match at a source tensor is used;
+    ///     newly produced replacements are not matched again during this call.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     Rewritten value with a checked external interface and shared definitions.
+    ///
+    /// Notes
+    /// -----
+    /// The traversal follows tensor sums and products, leaving scalar key
+    /// arguments opaque. Matched tensors need explicit axes; unsupported tensor
+    /// powers and unresolved interfaces are rejected. Normalization/evaluation
+    /// callbacks remaining in a replacement are not supported. For scalar
+    /// component substitutions in a network, use TensorNetwork.replace instead.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import TensorRule
+    /// >>> indexed = A("i", "j")
+    /// >>> rule = TensorRule(indexed, 2 * indexed)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(indexed)
+    /// >>> replaced = aliases.replace(rule)
     #[pyo3(signature=(rules))]
     fn replace(&self, rules: &Bound<'_, PyAny>) -> PyResult<Self> {
         let rules = crate::tensor_rule::PyTensorRule::extract_rules(rules)?;
@@ -382,38 +454,55 @@ impl AliasedTensorExpression {
         Ok(self.with_value(value))
     }
 
-    /// Whether selected reduction work is complete, deferred, or budget-capped.
+    /// Report completion under the last reduction settings and budget.
+    ///
+    /// Returns
+    /// -------
+    /// ReductionStatus
+    ///     Complete, Deferred, or Capped. Unfinished results remain exact and can be
+    ///     passed to contract() or reduce_algebra() again.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> result = value.reduction_status
+    /// >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
+    /// >>> TensorExpression(3).contract().reduction_status == ReductionStatus.Complete
+    /// True
     #[getter]
     fn reduction_status(&self) -> crate::simplification::PyReductionStatus {
         self.value.reduction_status().into()
     }
 
-    /// Contract compatible indices, retaining shared subexpressions in the result.
-    /// Use `ContractSettings` to select representations or control chain and trace collection.
-    /// Call `.expand()` to materialize the factored result.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> metric = sp.TensorExpression.g(r)("i", "j")
-    /// >>> vector = sp.TensorName.vector("docs::p")(r("j"))
-    /// >>> value = sp.AliasedTensorExpression.from_expression(metric * vector)
-    /// >>> contracted = value.contract()
-    /// >>> explicit = contracted.expand()
+    /// Contract compatible indices and collect compact matrix products.
     ///
     /// Parameters
     /// ----------
     /// settings : ContractSettings, optional
-    ///     ContractSettings selecting contractions and collection. None enables the default contraction policy.
+    ///     Select representations, metrics, rank-one contractions, chain/trace collection,
+    ///     factor order, and transformation budget. Defaults to ContractSettings().
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     An exact result retaining shared definitions. Inspect reduction_status for
+    ///     unfinished work; to_expression() resolves definitions without distributing sums.
+    ///
+    /// Notes
+    /// -----
+    /// This performs symbolic structural contraction. Use reduce_algebra() for Dirac,
+    /// color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
+    /// Polynomial expansion remains an explicit operation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(3)
+    /// >>> p = TensorName.vector("p")(space)
+    /// >>> expression = TensorExpression.g(space)("i", "j") * p("j")
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> expression = AliasedTensorExpression.from_expression(expression)
+    /// >>> result = expression.contract()
+    /// >>> result.to_expression().rank
+    /// 1
     #[pyo3(signature=(settings=None))]
     fn contract(
         &self,
@@ -427,17 +516,26 @@ impl AliasedTensorExpression {
         Ok(self.with_value(value))
     }
 
-    /// Normalize scalar-product notation in the root and reachable definitions.
+    /// Write compact metric products using dot notation.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     An equivalent value in the requested notation; aliases remain shared.
+    ///
+    /// Notes
+    /// -----
+    /// This changes notation; it does not itself contract explicit vector indices.
+    /// Use contract() first when those contractions are needed.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> p = sp.TensorName.vector("docs::p")(r)
-    /// >>> q = sp.TensorName.vector("docs::q")(r)
-    /// >>> value = sp.dot(p, q)
-    /// >>> value = sp.AliasedTensorExpression.from_expression(value)
-    /// >>> rewritten = value.to_dots()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> converted = aliases.to_dots()
     fn to_dots(&self) -> PyResult<Self> {
         self.value
             .to_dots()
@@ -445,17 +543,26 @@ impl AliasedTensorExpression {
             .map_err(TensorExpression::inference_error)
     }
 
-    /// Open dots into indexed contractions without resolving the alias registry.
+    /// Write dot products as explicit indexed contractions.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     An equivalent value in the requested notation; aliases remain shared.
+    ///
+    /// Notes
+    /// -----
+    /// Other compact forms and factored sums are retained. This does not
+    /// evaluate component data or expand a polynomial.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> p = sp.TensorName.vector("docs::p")(r)
-    /// >>> q = sp.TensorName.vector("docs::q")(r)
-    /// >>> value = sp.dot(p, q)
-    /// >>> value = sp.AliasedTensorExpression.from_expression(value)
-    /// >>> rewritten = value.undo_dots()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
+    /// >>> converted = aliases.undo_dots()
     fn undo_dots(&self) -> PyResult<Self> {
         self.value
             .undo_dots()
@@ -465,14 +572,26 @@ impl AliasedTensorExpression {
 
     /// Expose collected chain factors with fresh compatible dummy indices.
     ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     Equivalent algebra in the requested notation, retaining shared definitions
+    ///     when called on an AliasedTensorExpression.
+    ///
+    /// Notes
+    /// -----
+    /// This changes notation without distributing polynomial sums or requesting
+    /// Dirac/color identities. Use undo_trace().undo_chain() to expose indexed trace factors.
+    ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> value = sp.chain(r("i"), r("j"), A, A)
-    /// >>> value = sp.AliasedTensorExpression.from_expression(value)
-    /// >>> opened = value.undo_chain()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, chain, trace
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> expression = chain(space("i"), space("j"), A, A)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> expression = AliasedTensorExpression.from_expression(expression)
+    /// >>> opened = expression.undo_chain()
     fn undo_chain(&self) -> PyResult<Self> {
         self.value
             .undo_chain()
@@ -480,16 +599,28 @@ impl AliasedTensorExpression {
             .map_err(TensorExpression::inference_error)
     }
 
-    /// Open traces as closed chains without evaluating them.
+    /// Open compact traces as closed chains without evaluating them.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     Equivalent algebra in the requested notation, retaining shared definitions
+    ///     when called on an AliasedTensorExpression.
+    ///
+    /// Notes
+    /// -----
+    /// This changes notation without distributing polynomial sums or requesting
+    /// Dirac/color identities. Use undo_trace().undo_chain() to expose indexed trace factors.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> value = sp.trace(r, A, A)
-    /// >>> value = sp.AliasedTensorExpression.from_expression(value)
-    /// >>> opened = value.undo_trace()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, chain, trace
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> expression = trace(space, A, A)
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> expression = AliasedTensorExpression.from_expression(expression)
+    /// >>> opened = expression.undo_trace()
     fn undo_trace(&self) -> PyResult<Self> {
         self.value
             .undo_trace()
@@ -497,23 +628,37 @@ impl AliasedTensorExpression {
             .map_err(TensorExpression::inference_error)
     }
 
-    /// Apply the selected tensor identities while keeping intermediate expressions factored.
-    /// Choose `AlgebraSettings.hep()` for gamma, color, and epsilon identities.
-    /// The result retains shared subexpressions; call `.expand()` when an explicit result is needed.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> gamma = sp.TensorExpression.gamma(4)
-    /// >>> trace = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(trace)
-    /// >>> reduced = value.reduce_algebra(sp.AlgebraSettings.hep())
-    /// >>> expanded = reduced.expand()
+    /// Apply selected tensor identities while retaining shared subexpressions.
     ///
     /// Parameters
     /// ----------
     /// settings : AlgebraSettings, optional
-    ///     AlgebraSettings selecting identity families. None uses the default settings with no optional gamma, color, or epsilon family enabled.
+    ///     Identity families and transformation budget. The default enables no optional
+    ///     families. AlgebraSettings.hep() enables Dirac, color, and Levi-Civita identities.
+    ///
+    /// Returns
+    /// -------
+    /// AliasedTensorExpression
+    ///     Exact reduced algebra with shared definitions and a reduction_status.
+    ///     to_expression() resolves definitions; expand() additionally distributes sums.
+    ///
+    /// Notes
+    /// -----
+    /// Each enabled family includes its necessary contractions. Brackets are transparent
+    /// and global polynomial expansion is not required. Use contract() for structural
+    /// contractions independent of an algebra family. A capped result retains exact
+    /// unfinished work and can be reduced again.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings, TensorExpression
+    /// >>> gamma = TensorExpression.dirac_gamma(4)
+    /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
+    /// >>> from symbolica.community.tensor import AliasedTensorExpression
+    /// >>> expression = AliasedTensorExpression.from_expression(expression)
+    /// >>> result = expression.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))
+    /// >>> result.to_expression().rank
+    /// 2
     #[pyo3(signature=(settings=None))]
     fn reduce_algebra(&self, settings: Option<&PyAlgebraSettings>) -> PyResult<Self> {
         let settings = settings.copied().unwrap_or_default();
@@ -524,27 +669,34 @@ impl AliasedTensorExpression {
         Ok(self.with_value(value))
     }
 
-    /// Build a scalar numerical evaluator directly from the factored expression.
-    /// Shared definitions remain available to the evaluator without first expanding
-    /// the expression. Input rows follow the order in `params`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-    /// >>> evaluator = value.evaluator([x])
-    /// >>> results = evaluator.evaluate([[2.0], [3.0]])
+    /// Prepare numerical evaluation of the symbolic algebra without component expansion.
     ///
     /// Parameters
     /// ----------
-    /// params : Sequence[Expression]
-    ///     Symbolica variables in the exact order expected in each numerical input row. Include every free numerical parameter that remains after substitutions.
-    /// iterations : int
-    ///     Number of optimization iterations when constructing the evaluator. More iterations can improve repeated evaluations at a higher setup cost.
-    /// n_cores : int
-    ///     Worker count used while optimizing the evaluator. Use 1 for serial setup.
+    /// params : sequence of Expression
+    ///     Symbolic leaves to treat as numerical inputs, in input-row order.
+    /// iterations : int, default 1
+    ///     Horner-optimization iterations.
+    /// n_cores : int, default 1
+    ///     Number of optimization cores.
+    ///
+    /// Returns
+    /// -------
+    /// symbolica.Evaluator
+    ///     Evaluator for the symbolic expression and its shared definitions.
+    ///
+    /// Notes
+    /// -----
+    /// This does not resolve tensor components from a TensorLibrary. To evaluate
+    /// component formulas, first use to_tensor() and then Tensor.evaluator().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorExpression, AliasedTensorExpression
+    /// >>> x = S("x")
+    /// >>> expression = AliasedTensorExpression.from_expression(TensorExpression(x**2 + 1))
+    /// >>> evaluator = expression.evaluator([x])
     #[pyo3(signature = (params, *, iterations=1, n_cores=1))]
     fn evaluator(
         &self,

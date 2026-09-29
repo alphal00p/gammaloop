@@ -189,71 +189,21 @@ impl PyStubType for SpensoSlotOrArgOrRep {
     }
 }
 
-/// Register or look up a symbolic tensor head. Calling it with Slots or
-/// Representations constructs a TensorExpression. Scalar arguments describe the
-/// tensor’s identity and are kept separate from its external axes.
+/// A registered function name for symbolic tensors of arbitrary index spaces.
 ///
-/// With only a name, an existing symbol keeps its attributes, callbacks, and printers.
-/// Use a fresh namespaced name when registering a different tensor convention.
-///
-/// The predefined accessors such as `TensorName.dirac_gamma()` and `TensorName.color_t()`
-/// return raw fixed heads for introspection and pattern construction; those
-/// reserved names cannot be called directly. Use the matching
-/// `TensorExpression` factory for concrete tensors or `TensorPattern` shortcut
-/// for rewrite patterns.
+/// Call a name with scalar arguments followed by Slots or Representations to
+/// create a TensorExpression. The latter leave axes unresolved for later indexing.
+/// Use ``vector`` for a rank-one name that also supports compact dot notation.
+/// Predefined accessors identify standard tensors; use TensorExpression factories
+/// to construct their correctly ordered axes and TensorPattern for matching.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::symmetric_A", is_symmetric=True)
-/// >>> tensor = A(r("i"), r("j"))
-///
-/// Parameters
-/// ----------
-/// name : str
-///     Registered function name. Use a namespace such as "my_model::A" to avoid collisions; reusing a name also reuses its Symbolica identity.
-/// rank : int, optional
-///     Optional rank declaration. Rank one enables vector-specific construction; omit it for a general tensor head.
-/// is_symmetric : bool, optional
-///     Declare symmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-/// is_antisymmetric : bool, optional
-///     Declare antisymmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-/// is_cyclesymmetric : bool, optional
-///     Declare invariance under cyclic argument permutations. None retains the existing or default Symbolica attribute.
-/// is_linear : bool, optional
-///     Declare a linear function so Symbolica can distribute it over supported sums. None retains the existing or default attribute.
-/// is_flat : bool, optional
-///     Flatten nested applications of the same function. None retains the existing or default Symbolica attribute.
-/// is_scalar : bool, optional
-///     Mark the registered function as scalar for Symbolica. This flag does not supply tensor component data.
-/// is_real : bool, optional
-///     Declare real-valued output for symbolic simplification. None retains the existing or default attribute.
-/// is_integer : bool, optional
-///     Declare integer-valued output for symbolic simplification. None retains the existing or default attribute.
-/// is_positive : bool, optional
-///     Declare positive output for symbolic simplification. None retains the existing or default attribute.
-/// tags : Sequence[str], optional
-///     Additional Symbolica tags. The required Spenso tensor or broadcast tag is attached automatically.
-/// aliases : Sequence[str], optional
-///     Alternative names registered for the same Symbolica symbol.
-/// normalization : Transformer | Callable[[Expression], Expression], optional
-///     Optional Transformer or callable that normalizes a Symbolica function application. The callable receives and returns an Expression.
-/// print : dict[str, str] | Callable[..., str | None], optional
-///     A mapping with "typst", "latex", and/or "plain" keys customizes the tensor name only, for example {"latex": r"\bar{J}"}. Values omit math delimiters. A Symbolica print callback instead controls the full display; returning None selects standard tensor notation.
-/// derivative : Any, optional
-///     Optional Symbolica differentiation callback for the registered function; it follows Expression.symbol’s callback contract.
-/// series : Any, optional
-///     Optional Symbolica series-expansion callback for the registered function; it follows Expression.symbol’s callback contract.
-/// eval : Any, optional
-///     Optional Symbolica numerical-evaluation callback for the registered function. Concrete broadcasts additionally use TensorFunctionLibrary.
-/// data : Expression or scalar | str | dict | list | bytes, optional
-///     Optional Symbolica metadata attached to the symbol, such as an expression, text, or structured data.
-///
-/// Returns
-/// -------
-/// TensorName
-///     A new TensorName with the specified properties
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(3)
+/// >>> A = TensorName("A")(space, space)
+/// >>> A("i", "j").rank
+/// 2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -346,65 +296,61 @@ impl SpensoName {
         crate::display::atom_to_latex(&self.to_expression().expr, false, None)
     }
 
-    /// Register or look up a symbolic tensor head. Calling it with Slots or
-    /// Representations constructs a TensorExpression. Scalar arguments describe the
-    /// tensor’s identity and are kept separate from its external axes.
-    ///
-    /// With only a name, an existing symbol keeps its attributes, callbacks, and printers.
-    /// Use a fresh namespaced name when registering a different tensor convention.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::symmetric_A", is_symmetric=True)
-    /// >>> tensor = A(r("i"), r("j"))
+    /// Register a tensor function name.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Registered function name. Use a namespace such as "my_model::A" to avoid collisions; reusing a name also reuses its Symbolica identity.
+    ///     Symbolica function name. Passing only a previously registered name
+    ///     reuses its attributes and printers.
     /// rank : int, optional
-    ///     Optional rank declaration. Rank one enables vector-specific construction; omit it for a general tensor head.
-    /// is_symmetric : bool, optional
-    ///     Declare symmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-    /// is_antisymmetric : bool, optional
-    ///     Declare antisymmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-    /// is_cyclesymmetric : bool, optional
-    ///     Declare invariance under cyclic argument permutations. None retains the existing or default Symbolica attribute.
+    ///     None permits arbitrary rank. Only rank=1 is supported as a fixed rank;
+    ///     it requires exactly one structural axis in each call.
+    /// is_symmetric, is_antisymmetric, is_cyclesymmetric : bool, optional
+    ///     Symmetry of the function arguments under all permutations, signed
+    ///     permutations, or cyclic rotations. These affect scalar arguments as
+    ///     well as index arguments. Repeated arguments in an antisymmetric call
+    ///     make that call zero.
     /// is_linear : bool, optional
-    ///     Declare a linear function so Symbolica can distribute it over supported sums. None retains the existing or default attribute.
+    ///     Distribute the function over sums in its arguments.
     /// is_flat : bool, optional
-    ///     Flatten nested applications of the same function. None retains the existing or default Symbolica attribute.
+    ///     Flatten nested calls with the same head.
     /// is_scalar : bool, optional
-    ///     Mark the registered function as scalar for Symbolica. This flag does not supply tensor component data.
-    /// is_real : bool, optional
-    ///     Declare real-valued output for symbolic simplification. None retains the existing or default attribute.
-    /// is_integer : bool, optional
-    ///     Declare integer-valued output for symbolic simplification. None retains the existing or default attribute.
-    /// is_positive : bool, optional
-    ///     Declare positive output for symbolic simplification. None retains the existing or default attribute.
-    /// tags : Sequence[str], optional
-    ///     Additional Symbolica tags. The required Spenso tensor or broadcast tag is attached automatically.
-    /// aliases : Sequence[str], optional
-    ///     Alternative names registered for the same Symbolica symbol.
-    /// normalization : Transformer | Callable[[Expression], Expression], optional
-    ///     Optional Transformer or callable that normalizes a Symbolica function application. The callable receives and returns an Expression.
-    /// print : dict[str, str] | Callable[..., str | None], optional
-    ///     A mapping with "typst", "latex", and/or "plain" keys customizes the tensor name only, for example {"latex": r"\bar{J}"}. Values omit math delimiters. A Symbolica print callback instead controls the full display; returning None selects standard tensor notation.
-    /// derivative : Any, optional
-    ///     Optional Symbolica differentiation callback for the registered function; it follows Expression.symbol’s callback contract.
-    /// series : Any, optional
-    ///     Optional Symbolica series-expansion callback for the registered function; it follows Expression.symbol’s callback contract.
-    /// eval : Any, optional
-    ///     Optional Symbolica numerical-evaluation callback for the registered function. Concrete broadcasts additionally use TensorFunctionLibrary.
-    /// data : Expression or scalar | str | dict | list | bytes, optional
-    ///     Optional Symbolica metadata attached to the symbol, such as an expression, text, or structured data.
+    ///     Declare calls scalar for Symbolica's algebra. Do not use True for a
+    ///     tensor head with free indices.
+    /// is_real, is_integer, is_positive : bool, optional
+    ///     Assumptions used by Symbolica for the registered symbol.
+    /// tags : sequence of str, optional
+    ///     Additional Symbolica tags; Spenso's required tags are included automatically.
+    /// aliases : sequence of str, optional
+    ///     Additional names for the same Symbolica symbol.
+    /// normalization : Transformer or callable, optional
+    ///     Normalize a newly constructed call. A callable receives an Expression
+    ///     and returns its normalized Expression; tensor interfaces must remain valid.
+    /// print : dict of str to str or callable, optional
+    ///     A mapping with keys "plain", "latex", or "typst" changes just the
+    ///     displayed tensor name. Values are source without math delimiters,
+    ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+    ///     A callable uses Symbolica's print callback convention and replaces
+    ///     the complete display; returning None selects the standard display.
+    /// derivative, series, eval : callable, optional
+    ///     Symbolica callbacks for differentiation, series expansion, and numerical
+    ///     evaluation. Their arguments and results follow ``symbolica.S``.
+    /// data : object, optional
+    ///     Symbolica user data attached to the symbol, such as a dict, list, or bytes.
     ///
     /// Returns
     /// -------
     /// TensorName
-    ///     A new TensorName with the specified properties
+    ///     A callable name for constructing symbolic tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> J = TensorName("Jbar", print={"typst": "macron(J)"})
+    /// >>> vector = J(Representation.euc(3))
+    /// >>> vector.rank
+    /// 1
     #[new]
     #[pyo3(signature = (name, *, rank=None, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     #[allow(clippy::too_many_arguments)]
@@ -529,53 +475,58 @@ impl SpensoName {
         })
     }
 
-    /// Create a rank-one tensor name; ``print`` accepts the same mappings and callbacks as ``TensorName``.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> p = sp.TensorName.vector("docs::p")
-    /// >>> vector = p(r("mu"))
+    /// Register a tensor function with exactly one axis.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Registered function name. Use a namespace such as "my_model::A" to avoid collisions; reusing a name also reuses its Symbolica identity.
-    /// is_symmetric : bool, optional
-    ///     Declare symmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-    /// is_antisymmetric : bool, optional
-    ///     Declare antisymmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
-    /// is_cyclesymmetric : bool, optional
-    ///     Declare invariance under cyclic argument permutations. None retains the existing or default Symbolica attribute.
+    ///     Symbolica function name. Passing only a previously registered name
+    ///     reuses its attributes and printers.
+    /// is_symmetric, is_antisymmetric, is_cyclesymmetric : bool, optional
+    ///     Symmetry of the function arguments under all permutations, signed
+    ///     permutations, or cyclic rotations. These affect scalar arguments as
+    ///     well as index arguments. Repeated arguments in an antisymmetric call
+    ///     make that call zero.
     /// is_linear : bool, optional
-    ///     Declare a linear function so Symbolica can distribute it over supported sums. None retains the existing or default attribute.
+    ///     Distribute the function over sums in its arguments.
     /// is_flat : bool, optional
-    ///     Flatten nested applications of the same function. None retains the existing or default Symbolica attribute.
+    ///     Flatten nested calls with the same head.
     /// is_scalar : bool, optional
-    ///     Mark the registered function as scalar for Symbolica. This flag does not supply tensor component data.
-    /// is_real : bool, optional
-    ///     Declare real-valued output for symbolic simplification. None retains the existing or default attribute.
-    /// is_integer : bool, optional
-    ///     Declare integer-valued output for symbolic simplification. None retains the existing or default attribute.
-    /// is_positive : bool, optional
-    ///     Declare positive output for symbolic simplification. None retains the existing or default attribute.
-    /// tags : Sequence[str], optional
-    ///     Additional Symbolica tags. The required Spenso tensor or broadcast tag is attached automatically.
-    /// aliases : Sequence[str], optional
-    ///     Alternative names registered for the same Symbolica symbol.
-    /// normalization : Transformer | Callable[[Expression], Expression], optional
-    ///     Optional Transformer or callable that normalizes a Symbolica function application. The callable receives and returns an Expression.
-    /// print : dict[str, str] | Callable[..., str | None], optional
-    ///     A mapping with "typst", "latex", and/or "plain" keys customizes the tensor name only, for example {"latex": r"\bar{J}"}. Values omit math delimiters. A Symbolica print callback instead controls the full display; returning None selects standard tensor notation.
-    /// derivative : Any, optional
-    ///     Optional Symbolica differentiation callback for the registered function; it follows Expression.symbol’s callback contract.
-    /// series : Any, optional
-    ///     Optional Symbolica series-expansion callback for the registered function; it follows Expression.symbol’s callback contract.
-    /// eval : Any, optional
-    ///     Optional Symbolica numerical-evaluation callback for the registered function. Concrete broadcasts additionally use TensorFunctionLibrary.
-    /// data : Expression or scalar | str | dict | list | bytes, optional
-    ///     Optional Symbolica metadata attached to the symbol, such as an expression, text, or structured data.
+    ///     Declare calls scalar for Symbolica's algebra. Do not use True for a
+    ///     tensor head with free indices.
+    /// is_real, is_integer, is_positive : bool, optional
+    ///     Assumptions used by Symbolica for the registered symbol.
+    /// tags : sequence of str, optional
+    ///     Additional Symbolica tags; Spenso's required tags are included automatically.
+    /// aliases : sequence of str, optional
+    ///     Additional names for the same Symbolica symbol.
+    /// normalization : Transformer or callable, optional
+    ///     Normalize a newly constructed call. A callable receives an Expression
+    ///     and returns its normalized Expression; tensor interfaces must remain valid.
+    /// print : dict of str to str or callable, optional
+    ///     A mapping with keys "plain", "latex", or "typst" changes just the
+    ///     displayed tensor name. Values are source without math delimiters,
+    ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+    ///     A callable uses Symbolica's print callback convention and replaces
+    ///     the complete display; returning None selects the standard display.
+    /// derivative, series, eval : callable, optional
+    ///     Symbolica callbacks for differentiation, series expansion, and numerical
+    ///     evaluation. Their arguments and results follow ``symbolica.S``.
+    /// data : object, optional
+    ///     Symbolica user data attached to the symbol, such as a dict, list, or bytes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     A callable name for constructing symbolic tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> J = TensorName.vector("Jbar_vector", print={"typst": "macron(J)"})
+    /// >>> vector = J(Representation.euc(3))
+    /// >>> vector.rank
+    /// 1
     #[staticmethod]
     #[pyo3(signature = (name, *, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     #[allow(clippy::too_many_arguments)]
@@ -632,27 +583,7 @@ impl SpensoName {
         )
     }
 
-    /// Build a symbolic tensor from scalar arguments and ordered ports.
-    /// A Slot fixes an index label; a Representation leaves a port unresolved. A rank-one
-    /// TensorExpression can bind a port. Repeated compatible explicit indices contract.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> name = sp.TensorName("docs::A")
-    /// >>> tensor = name(r("i"), r)
-    /// >>> indexed = tensor("j")
-    ///
-    /// Parameters
-    /// ----------
-    /// args : Slot | Representation | Expression or scalar
-    ///     Scalar arguments followed by structural ports, in logical order. Slots set explicit labels, Representations leave ports unresolved, and a rank-one tensor can bind a port.
-    ///
-    /// Returns
-    /// -------
-    /// TensorExpression
-    ///     A structured expression with explicit and/or unresolved ports
+    #[doc = python_doc!("TensorName.__call__")]
     #[pyo3(signature = (*args))]
     #[gen_stub(skip)]
     fn __call__(
@@ -764,7 +695,7 @@ impl SpensoName {
         format!("{}", self.name)
     }
 
-    /// Convert the tensor name to a symbolic expression.
+    /// Return this function name as a Symbolica symbol.
     ///
     /// Examples
     /// --------
@@ -775,24 +706,35 @@ impl SpensoName {
     /// Returns
     /// -------
     /// Expression
-    ///     A symbolic Expression representing this tensor name
+    ///     The bare function head, without arguments or tensor structure.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> name = TensorName("tagged_TensorName", tags=["example::example"])
+    /// >>> head = name.to_expression()
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(Atom::var(self.name))
     }
 
-    /// Check whether this tensor name carries `tag`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.TensorName("docs::A")
-    /// >>> tags = name.get_tags()
-    /// >>> assert all(name.has_tag(tag) for tag in tags)
+    /// Check whether the registered function carries a tag.
     ///
     /// Parameters
     /// ----------
     /// tag : str
-    ///     Tag name to test. Fully qualified names are unambiguous; unqualified names also match tags in the Python namespace.
+    ///     Exact tag name. An unqualified name also matches its "python::" form.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Whether the tag is present.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> name = TensorName("tagged_TensorName", tags=["example::example"])
+    /// >>> name.has_tag("example::example")
+    /// True
     fn has_tag(&self, tag: &str) -> bool {
         self.name.has_tag(tag)
             || (!tag.contains("::")
@@ -803,63 +745,128 @@ impl SpensoName {
                     .any(|candidate| candidate.strip_prefix("python::") == Some(tag)))
     }
 
-    /// Return all Symbolica tags carried by this tensor name.
+    /// List the tags attached to the registered function.
+    ///
+    /// Returns
+    /// -------
+    /// list of str
+    ///     Fully qualified tags, including the tags required by Spenso.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> name = sp.TensorName("docs::A")
-    /// >>> tags = name.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> name = TensorName("tagged_TensorName", tags=["example::example"])
+    /// >>> "example::example" in name.get_tags()
+    /// True
     fn get_tags(&self) -> Vec<String> {
         self.name.get_tags().to_vec()
     }
 
-    /// Predefined metric tensor name.
+    /// Return the registered name of the metric pairing.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.g`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.g`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.g()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.g().to_expression()
     #[staticmethod]
     fn g() -> SpensoName {
         SpensoName { name: ETS.metric }
     }
 
-    /// Predefined musical isomorphism tensor name. This enables dualizing self dual indices.
+    /// Return the registered name of the metric map for raising or lowering an index.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.flat`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.flat`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.flat()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.flat().to_expression()
     #[staticmethod]
     fn flat() -> SpensoName {
         SpensoName { name: ETS.flat }
     }
 
-    /// Predefined gamma matrix name for introspection and pattern construction.
+    /// Return the registered name of the Dirac gamma matrices for Clifford algebra.
     ///
-    /// The matching typed factories use storage order: bispinor-in,
-    /// bispinor-out, then Minkowski.
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.dirac_gamma`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.dirac_gamma`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.gamma()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.dirac_gamma().to_expression()
     #[staticmethod]
     fn dirac_gamma() -> SpensoName {
         SpensoName { name: AGS.gamma }
     }
 
-    /// Registered time-component gamma matrix head.
+    /// Return the registered name of the time-component Dirac matrix gamma^0.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.gamma0`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.gamma0`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.gamma0().to_expression()
     #[staticmethod]
     fn gamma0() -> SpensoName {
         SpensoName { name: AGS.gamma0 }
     }
 
-    /// Registered antisymmetric charge-conjugation matrix head.
+    /// Return the registered name of the Dirac charge-conjugation matrix.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.charge_conjugation`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.charge_conjugation`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.charge_conjugation().to_expression()
     #[staticmethod]
     fn charge_conjugation() -> SpensoName {
         SpensoName {
@@ -867,7 +874,23 @@ impl SpensoName {
         }
     }
 
-    /// Registered Levi-Civita tensor head, with its antisymmetric normalization.
+    /// Return the registered name of the totally antisymmetric Levi-Civita tensor.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.levi_civita`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.levi_civita`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.levi_civita().to_expression()
     #[staticmethod]
     fn levi_civita() -> SpensoName {
         SpensoName {
@@ -875,73 +898,133 @@ impl SpensoName {
         }
     }
 
-    /// Predefined gamma5 matrix name.
+    /// Return the registered name of the Dirac chirality matrix gamma^5.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.gamma5`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.gamma5`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.gamma5()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.gamma5().to_expression()
     #[staticmethod]
     fn gamma5() -> SpensoName {
         SpensoName { name: AGS.gamma5 }
     }
 
-    /// Predefined left chiral projector name.
+    /// Return the registered name of the left-chiral Dirac projector (I - gamma^5)/2.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.projm`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.projm`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.projm()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.projm().to_expression()
     #[staticmethod]
     fn projm() -> SpensoName {
         SpensoName { name: AGS.projm }
     }
 
-    /// Predefined right chiral projector name.
+    /// Return the registered name of the right-chiral Dirac projector (I + gamma^5)/2.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.projp`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.projp`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.projp()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.projp().to_expression()
     #[staticmethod]
     fn projp() -> SpensoName {
         SpensoName { name: AGS.projp }
     }
 
-    /// Predefined sigma matrix name.
+    /// Return the registered name of the antisymmetric Dirac sigma tensor.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.sigma`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.sigma`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.sigma()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.sigma().to_expression()
     #[staticmethod]
     fn sigma() -> SpensoName {
         SpensoName { name: AGS.sigma }
     }
 
-    /// Predefined color structure constant name.
+    /// Return the registered name of the antisymmetric color structure constants f^{abc}.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.color_f`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.color_f`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.f()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.color_f().to_expression()
     #[staticmethod]
     fn color_f() -> SpensoName {
         SpensoName { name: CS.f }
     }
 
-    /// Predefined color generator name.
+    /// Return the registered name of the fundamental color generators T^a.
+    ///
+    /// Returns
+    /// -------
+    /// TensorName
+    ///     The existing symbolic function head, including its tags and symmetries.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``TensorExpression.color_t`` to construct a tensor with distinct unresolved
+    /// axes, or ``TensorPattern.color_t`` to construct a rewrite pattern. The Python
+    /// accessor name does not change the underlying Symbolica symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> head = sp.TensorName.t()
-    /// >>> tags = head.get_tags()
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> head = TensorName.color_t().to_expression()
     #[staticmethod]
     fn color_t() -> SpensoName {
         SpensoName { name: CS.t }
@@ -996,6 +1079,21 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
     }
 }
 
+/// An index space with a dimension and a rule for pairing indices.
+///
+/// Use representations to distinguish axes that have the same size but different
+/// mathematical meanings. A self-dual space pairs with itself; a dualizable space
+/// pairs with its ``dual()``. Calling a representation assigns an index label.
+/// Built-in spaces include Euclidean and Minkowski vectors, Dirac spinors, and
+/// color representations; custom spaces work with the same tensor operations.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import Representation, TensorName
+/// >>> space = Representation.euc(3)
+/// >>> vector = TensorName.vector("v")(space)
+/// >>> vector("i").rank
+/// 1
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -1004,38 +1102,6 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
     module = "symbolica.community.tensor"
 )]
 #[derive(Clone, PartialEq, Eq)]
-/// A representation in the sense of group representation theory for tensor indices.
-///
-/// Representations define the transformation properties of tensor indices under group operations.
-/// They specify the dimension and duality structure, determining which indices can contract.
-///
-/// Key concepts:
-/// - **Self-dual**: Indices can contract with other indices of the same representation
-/// - **Dualizable**: Indices can only contract with their dual representation
-/// - **Dimension**: Size of the representation space
-///
-/// Predefined representations are available as class methods:
-/// - `Representation.euc(d)`: Euclidean space (self-dual)
-/// - `Representation.mink(d)`: Minkowski space (self-dual)
-/// - `Representation.bis(d)`: Bispinor (self-dual)
-/// - `Representation.cof(d)`: Color fundamental (dualizable)
-/// - `Representation.coad(d)`: Color adjoint (self-dual)
-/// - `Representation.cos(d)`: Color sextet (dualizable)
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> space = sp.Representation("docs::custom_space", 3)
-/// >>> slot = space("i")
-///
-/// Parameters
-/// ----------
-/// name : str
-///     Name of the custom representation. Use a namespace to distinguish it from built-in representations.
-/// dimension : int | Expression | str
-///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
-/// is_self_dual : bool
-///     Whether the representation pairs with itself. If False, .dual() identifies the distinct dual representation.
 pub struct SpensoRepresentation {
     pub representation: Representation<LibraryRep>,
 }
@@ -1175,24 +1241,34 @@ impl SpensoRepresentation {
         self.to_html()
     }
 
-    /// Compact name, dimension, duality, and canonical metric metadata.
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> html = r.to_html()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.euc(3)
+    /// >>> html = value.to_html()
     fn to_html(&self) -> String {
         crate::display::metadata::representation(self.representation)
     }
 
-    /// Dimension-independent representation identity, including duality.
+    /// The registered space identity and duality, without its dimension.
+    ///
+    /// Returns
+    /// -------
+    /// RepresentationName
+    ///     Metadata shared by this representation at different dimensions.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> result = r.name
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> Representation.euc(3).name == Representation.euc(5).name
+    /// True
     #[getter]
     fn name(&self) -> crate::metadata::SpensoRepresentationName {
         crate::metadata::SpensoRepresentationName {
@@ -1204,22 +1280,30 @@ impl SpensoRepresentation {
         crate::display::atom_to_latex(&self.to_expression().expr, false, None)
     }
 
-    /// Create and register a new representation with specified properties.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation("docs::custom_space", 3)
-    /// >>> slot = space("i")
+    /// Create or reuse a named index space.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Name of the custom representation. Use a namespace to distinguish it from built-in representations.
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
-    /// is_self_dual : bool
-    ///     Whether the representation pairs with itself. If False, .dual() identifies the distinct dual representation.
+    ///     Registered name distinguishing this space from other representations.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    /// is_self_dual : bool, default True
+    ///     Whether indices pair with the same space. False creates a space with
+    ///     a distinct dual; use ``dual()`` to obtain it.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The requested space, ready to use as an unresolved tensor axis.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation("Flavor", 5, is_self_dual=False)
+    /// >>> space.dual().dual() == space
+    /// True
     #[new]
     #[pyo3(signature =(name,dimension,is_self_dual=true))]
     pub fn register_new(
@@ -1239,43 +1323,60 @@ impl SpensoRepresentation {
         })
     }
 
-    /// Return the representation paired with this one under index contraction.
+    /// Return the space that pairs with this one under contraction.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The same space for a self-dual representation; its partner otherwise.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> fundamental = sp.Representation.cof(3)
-    /// >>> antifundamental = fundamental.dual()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> Representation.euc(3).dual() == Representation.euc(3)
+    /// True
+    /// >>> Representation.cof(3).dual().dual() == Representation.cof(3)
+    /// True
     fn dual(&self) -> Self {
         Self {
             representation: self.representation.dual(),
         }
     }
 
-    /// Return the dimension carried by this representation.
+    /// The dimension of this index space as a Symbolica expression.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     An integer-valued expression or a dimension symbol.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> result = r.dimension
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> Representation.euc(3).dimension == 3
+    /// True
     #[getter]
     fn dimension(&self) -> PythonExpression {
         self.representation.dim.to_symbolic().into()
     }
 
-    /// Build the degree-k Casimir eigenvalue for this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> fundamental = sp.Representation.cof(3)
-    /// >>> invariant = fundamental.casimir()
+    /// Construct the degree-dependent Casimir eigenvalue.
     ///
     /// Parameters
     /// ----------
-    /// degree : Expression or scalar
-    ///     Degree of the representation invariant. For Casimir and Dynkin indices, the default 2 selects the quadratic invariant.
+    /// degree : scalar expression, default 2
+    ///     Degree of the invariant. The default is the quadratic invariant.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A symbolic scalar invariant; constructing it does not evaluate a
+    ///     group-specific formula.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> invariant = Representation.cof(3).casimir()
     #[pyo3(
         signature = (degree = ConvertibleToInvariantDegree::quadratic()),
         text_signature = "($self, degree=2)"
@@ -1284,18 +1385,23 @@ impl SpensoRepresentation {
         CS.cas(degree.0, self.representation.to_symbolic([])).into()
     }
 
-    /// Build the degree-k Dynkin index for this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> fundamental = sp.Representation.cof(3)
-    /// >>> invariant = fundamental.dynkin_index()
+    /// Construct the degree-dependent Dynkin index.
     ///
     /// Parameters
     /// ----------
-    /// degree : Expression or scalar
-    ///     Degree of the representation invariant. For Casimir and Dynkin indices, the default 2 selects the quadratic invariant.
+    /// degree : scalar expression, default 2
+    ///     Degree of the invariant. The default is the quadratic invariant.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A symbolic scalar invariant; constructing it does not evaluate a
+    ///     group-specific formula.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> invariant = Representation.cof(3).dynkin_index()
     #[pyo3(
         signature = (degree = ConvertibleToInvariantDegree::quadratic()),
         text_signature = "($self, degree=2)"
@@ -1304,22 +1410,24 @@ impl SpensoRepresentation {
         CS.idx(degree.0, self.representation.to_symbolic([])).into()
     }
 
-    /// Build a degree-k Gram invariant with another representation.
-    ///
-    /// If `other` is omitted, both sides use this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> fundamental = sp.Representation.cof(3)
-    /// >>> invariant = fundamental.gram(2)
+    /// Construct a Gram invariant for two representations.
     ///
     /// Parameters
     /// ----------
-    /// degree : Expression or scalar
-    ///     Degree of the representation invariant. For Casimir and Dynkin indices, the default 2 selects the quadratic invariant.
+    /// degree : scalar expression
+    ///     Degree of the invariant.
     /// other : Representation, optional
-    ///     Second representation in the Gram invariant. None uses this representation.
+    ///     Second representation. Defaults to this representation.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A symbolic Gram invariant, without evaluating a group-specific formula.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> invariant = Representation.cof(3).gram(2)
     #[pyo3(signature = (degree, other = None))]
     fn gram(
         &self,
@@ -1335,19 +1443,7 @@ impl SpensoRepresentation {
         .into()
     }
 
-    /// Create a slot or symbolic expression from this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> mu = r("mu")
-    /// >>> nu = r(1)
-    ///
-    /// Parameters
-    /// ----------
-    /// aind : int | str
-    ///     Index label as an integer, string, or Symbolica expression. Equal compatible labels represent contracted indices.
+    #[doc = python_doc!("Representation.__call__")]
     #[gen_stub(skip)]
     fn __call__(&self, py: Python<'_>, aind: ConvertibleToAbstractIndex) -> PyResult<Py<PyAny>> {
         match aind {
@@ -1368,20 +1464,29 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a metric tensor for this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> tensor = r.g("mu", "nu")
+    /// Create the metric with two explicit index labels.
     ///
     /// Parameters
     /// ----------
-    /// i : int | Expression | str
-    ///     First index label, given as an integer, string, or Symbolica expression.
-    /// j : int | Expression | str
-    ///     Second index label; a repeated compatible label requests contraction.
+    /// i, j : int, str, or Expression
+    ///     Abstract index labels. Expressions must be individual symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     The indexed rank-two tensor, or its contraction when the labels pair.
+    ///
+    /// Notes
+    /// -----
+    /// Both ports belong to this representation. For a pairing between a space
+    /// and its dual, use ``id`` or ``TensorExpression.g(rep, rep.dual())``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> tensor = Representation.euc(3).g("i", "j")
+    /// >>> tensor.rank
+    /// 2
     fn g(
         &self,
         py: Python<'_>,
@@ -1402,20 +1507,29 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a musical isomorphism tensor for this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> tensor = r.flat("mu", "nu")
+    /// Create the metric map used to lower or raise an index.
     ///
     /// Parameters
     /// ----------
-    /// i : int | Expression | str
-    ///     First index label, given as an integer, string, or Symbolica expression.
-    /// j : int | Expression | str
-    ///     Second index label; a repeated compatible label requests contraction.
+    /// i, j : int, str, or Expression
+    ///     Abstract index labels. Expressions must be individual symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     The indexed rank-two tensor, or its contraction when the labels pair.
+    ///
+    /// Notes
+    /// -----
+    /// Both ports belong to this representation. The flat map accounts for the
+    /// metric signs when identifying vectors and covectors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> tensor = Representation.euc(3).flat("i", "j")
+    /// >>> tensor.rank
+    /// 2
     fn flat(
         &self,
         py: Python<'_>,
@@ -1436,20 +1550,28 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create an identity tensor for this representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> tensor = r.id("mu", "nu")
+    /// Create the identity pairing between this space and its dual.
     ///
     /// Parameters
     /// ----------
-    /// i : int | Expression | str
-    ///     First index label, given as an integer, string, or Symbolica expression.
-    /// j : int | Expression | str
-    ///     Second index label; a repeated compatible label requests contraction.
+    /// i, j : int, str, or Expression
+    ///     Abstract index labels. Expressions must be individual symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     The indexed rank-two tensor, or its contraction when the labels pair.
+    ///
+    /// Notes
+    /// -----
+    /// The first port is in ``self.dual()`` and the second in ``self``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> tensor = Representation.euc(3).id("i", "j")
+    /// >>> tensor.rank
+    /// 2
     fn id(
         &self,
         py: Python<'_>,
@@ -1495,29 +1617,46 @@ impl SpensoRepresentation {
         format!("{}", self.representation.to_symbolic([]))
     }
 
-    /// Convert the representation to a symbolic expression.
+    /// Return the symbolic encoding of the space and its dimension.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     Representation syntax without an index label. Use the Representation
+    ///     itself when constructing tensor axes.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.mink(4)
-    /// >>> symbolic_space = r.to_expression()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> encoded = Representation.euc(3).to_expression()
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(self.representation.to_symbolic([]))
     }
 
-    /// Create a bispinor representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.bis(4)
-    /// >>> slot = space("i")
+    /// Create the Dirac bispinor space.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// This is the self-dual spinor index space used by the Dirac-matrix helpers.
+    /// Its dimension counts spinor components, not space-time coordinates.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.bis(4)
+    /// >>> space.dimension == 4
+    /// True
     #[staticmethod]
     fn bis(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1527,18 +1666,29 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a Euclidean space representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.euc(3)
-    /// >>> slot = space("i")
+    /// Create the Euclidean vector space.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// The space is self-dual, with positive metric signs on every component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.euc(3)
+    /// >>> space.dimension == 3
+    /// True
     #[staticmethod]
     fn euc(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1548,18 +1698,30 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a Minkowski space representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.mink(4)
-    /// >>> slot = space("i")
+    /// Create the Minkowski vector space.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// The space is self-dual, with metric signature (+, -, ..., -).
+    /// Component zero is the time coordinate.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.mink(4)
+    /// >>> space.dimension == 4
+    /// True
     #[staticmethod]
     fn mink(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1569,18 +1731,30 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a color fundamental representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.cof(3)
-    /// >>> slot = space("i")
+    /// Create the fundamental color representation.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// For SU(N), the dimension is N. This space pairs with its distinct dual,
+    /// the antifundamental representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.cof(3)
+    /// >>> space.dimension == 3
+    /// True
     #[staticmethod]
     fn cof(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1590,18 +1764,29 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a color adjoint representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.coad(8)
-    /// >>> slot = space("i")
+    /// Create the adjoint color representation.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// For SU(N), pass N**2 - 1 (for example 8 for SU(3)). This space is self-dual.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.coad(8)
+    /// >>> space.dimension == 8
+    /// True
     #[staticmethod]
     fn coad(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1611,18 +1796,29 @@ impl SpensoRepresentation {
         }
     }
 
-    /// Create a color sextet representation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> space = sp.Representation.cos(6)
-    /// >>> slot = space("i")
+    /// Create the sextet color representation.
     ///
     /// Parameters
     /// ----------
-    /// dimension : int | Expression | str
-    ///     Positive concrete dimension or an atomic symbolic dimension. Built-in constructors reuse the registered representation identity.
+    /// dimension : int, Expression, or str
+    ///     Number of components in this index space, or a symbol naming that number.
+    ///     An Expression must be a single symbol, not a sum or product.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     The built-in index space with the supplied dimension.
+    ///
+    /// Notes
+    /// -----
+    /// The SU(3) sextet has dimension 6 and a distinct dual representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> space = Representation.cos(6)
+    /// >>> space.dimension == 6
+    /// True
     #[staticmethod]
     fn cos(dimension: ConvertibleToDimension) -> Self {
         let dim = dimension.0;
@@ -1633,27 +1829,17 @@ impl SpensoRepresentation {
     }
 }
 
-/// A tensor index slot combining a representation with an abstract index.
+/// One abstract tensor index together with its representation.
 ///
-/// Slots are the building blocks for tensor structures, pairing a representation
-/// (which defines transformation properties) with an abstract index identifier.
-/// Slots with matching representations and indices can be contracted.
+/// An index label identifies a possible contraction; it is not a component
+/// coordinate. Prefer ``space("i")`` to construct a slot for an existing space.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> slot = sp.Slot("docs::slot_space", 3, "i")
-///
-/// Parameters
-/// ----------
-/// name : str
-///     Name of the custom representation. Use a namespace to distinguish it from built-in representations.
-/// dimension : int
-///     Concrete dimension of the custom representation.
-/// aind : int | Expression | str
-///     Index label as an integer, string, or Symbolica expression. Equal compatible labels represent contracted indices.
-/// dual : bool
-///     Use the dual orientation of the named representation when True.
+/// >>> from symbolica.community.tensor import Representation
+/// >>> slot = Representation.euc(3)("i")
+/// >>> slot.representation == Representation.euc(3)
+/// True
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -1691,18 +1877,23 @@ impl SpensoSlot {
         self.to_html(py, None)
     }
 
-    /// Display the index label beside its representation and exact stored index.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Representation.mink(4)("mu")
-    /// >>> html = slot.to_html()
+    /// Render a compact HTML view of this tensor metadata.
     ///
     /// Parameters
     /// ----------
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.euc(3)("i")
+    /// >>> html = value.to_html()
     #[pyo3(signature = (*, settings=None))]
     fn to_html(
         &self,
@@ -1712,13 +1903,18 @@ impl SpensoSlot {
         crate::display::metadata::slot(py, self.slot, &settings.unwrap_or_default())
     }
 
-    /// Exact symbolic index, independently of its presentation label.
+    /// The abstract label carried by this slot.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     Symbolic label or integer; not a component coordinate.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Representation.mink(4)("mu")
-    /// >>> result = slot.index
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> slot = Representation.euc(3)("i")
+    /// >>> label = slot.index
     #[getter]
     fn index(&self) -> PythonExpression {
         Atom::from(self.slot.aind).into()
@@ -1750,13 +1946,18 @@ impl SpensoSlot {
         format!("{}", self.slot.to_atom())
     }
 
-    /// The representation carried by this slot, including its dimension and duality.
+    /// The dimensioned space to which this index belongs.
+    ///
+    /// Returns
+    /// -------
+    /// Representation
+    ///     Includes the duality of the slot.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Representation.mink(4)("mu")
-    /// >>> result = slot.representation
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> slot = Representation.euc(3)("i")
+    /// >>> space = slot.representation
     #[getter]
     fn representation(&self) -> SpensoRepresentation {
         SpensoRepresentation {
@@ -1764,36 +1965,53 @@ impl SpensoSlot {
         }
     }
 
-    /// Return this slot with its representation replaced by the dual representation.
+    /// Pair this index label with the dual representation.
+    ///
+    /// Returns
+    /// -------
+    /// Slot
+    ///     A new slot with the same label.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Representation.cof(3)("i")
-    /// >>> dual_slot = slot.dual()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> slot = Representation.euc(3)("i")
+    /// >>> paired = slot.dual()
     fn dual(&self) -> Self {
         SpensoSlot {
             slot: self.slot.dual(),
         }
     }
 
-    /// Create a new slot with a custom representation and index.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Slot("docs::slot_space", 3, "i")
+    /// Create a labeled index in a registered representation.
     ///
     /// Parameters
     /// ----------
     /// name : str
-    ///     Name of the custom representation. Use a namespace to distinguish it from built-in representations.
+    ///     Registered representation name.
     /// dimension : int
-    ///     Concrete dimension of the custom representation.
-    /// aind : int | Expression | str
-    ///     Index label as an integer, string, or Symbolica expression. Equal compatible labels represent contracted indices.
-    /// dual : bool
-    ///     Use the dual orientation of the named representation when True.
+    ///     Dimension of the index space.
+    /// aind : int, str, or Expression
+    ///     Abstract index label; an Expression must be a single symbol.
+    /// dual : bool, default False
+    ///     Whether to use the dual of the named representation.
+    ///
+    /// Returns
+    /// -------
+    /// Slot
+    ///     The representation and index label together.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``Representation.euc(3)("i")`` when working with representation objects.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, Slot
+    /// >>> space = Representation.euc(3)
+    /// >>> slot = Slot(space.name.name, 3, "i")
+    /// >>> slot == space("i")
+    /// True
     #[new]
     #[pyo3(signature =(name,dimension,aind,dual=false))]
     pub fn register_new(
@@ -1831,13 +2049,18 @@ impl SpensoSlot {
         }
     }
 
-    /// Convert the slot to a symbolic expression.
+    /// Return symbolic syntax for the representation and index.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     The encoded slot, for use in raw Symbolica expressions.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> slot = sp.Representation.mink(4)("mu")
-    /// >>> symbolic_slot = slot.to_expression()
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> slot = Representation.euc(3)("i")
+    /// >>> encoded = slot.to_expression()
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(self.slot.to_atom())
     }
@@ -1868,27 +2091,7 @@ submit! {
                 ],
                 r#type: MethodType::Instance,
                 r#return: TensorExpression::type_output,
-                doc:r##"Build a symbolic tensor from scalar arguments and ordered ports.
-A Slot fixes an index label; a Representation leaves a port unresolved. A rank-one
-TensorExpression can bind a port. Repeated compatible explicit indices contract.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> name = sp.TensorName("docs::A")
->>> tensor = name(r("i"), r)
->>> indexed = tensor("j")
-
-Parameters
-----------
-args : Slot | Representation | Expression or scalar
-    Scalar arguments followed by structural ports, in logical order. Slots set explicit labels, Representations leave ports unresolved, and a rank-one tensor can bind a port.
-
-Returns
--------
-TensorExpression
-    A structured expression with explicit and/or unresolved ports"##,
+                doc: python_doc!("TensorName.__call__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,

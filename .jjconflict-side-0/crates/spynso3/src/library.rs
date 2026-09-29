@@ -44,37 +44,27 @@ use crate::{
 
 use super::ModuleInit;
 
-/// A mapping from tensor signatures to stored component data.
+/// Reusable component definitions indexed by tensor name and signature.
 ///
-/// The TensorLibrary provides a centralized registry for tensor definitions that can be
-/// reused across tensor networks and expressions. It manages tensor structures with their
-/// associated names and can resolve symbolic references to registered tensors.
-/// Lookup returns an independent Tensor snapshot; call its expression() method
-/// for a symbolic reference. keys(), values(), items() and iteration enumerate
-/// stored entries, excluding dimension-dependent factories.
+/// Register a named Tensor, then use its symbolic expression in calculations
+/// with this library. A full signature includes the name, scalar arguments, and
+/// representations. A name alone is a shortcut when it identifies one entry.
 ///
-/// ```python
-/// from symbolica.community.tensor import Tensor, TensorLibrary, TensorName, Representation
-///
-/// lib = TensorLibrary()
-/// rep = Representation.euc(3)
-/// name = TensorName("my_tensor")
-/// structure = name(rep, rep)
-/// tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
-/// lib.register(tensor)
-/// stored = lib[structure]
-/// tensor_ref = stored.expression()
-/// ```
+/// Lookup returns independent component data. Enumeration lists stored entries;
+/// dimension-dependent factories, such as metrics, are resolved on demand.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> library = sp.TensorLibrary()
-///
-/// Returns
-/// -------
-/// TensorLibrary
-///     A new empty tensor library
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> from symbolica.community.tensor import TensorLibrary
+/// >>> library = TensorLibrary()
+/// >>> library.register(tensor)
+/// >>> library[A.name][1, 0]
+/// 3.0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "TensorLibrary", module = "symbolica.community.tensor")]
 pub struct SpensorLibrary {
@@ -83,17 +73,17 @@ pub struct SpensorLibrary {
     references: HashMap<ExplicitKey<AbstractIndex>, PartialStructure>,
 }
 
-/// A registry of elementwise tensor functions used during network evaluation.
+/// Numerical implementations of unary elementwise tensor functions.
+///
+/// Use with network execution to evaluate BroadcastFunction calls on numeric
+/// components. Complex conjugation is included by default. Symbolic function
+/// calls whose arguments are not numeric can remain symbolic.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> functions = sp.TensorFunctionLibrary()
-///
-/// Returns
-/// -------
-/// TensorFunctionLibrary
-///     A function library with built-in complex conjugation
+/// >>> from symbolica.community.tensor import TensorFunctionLibrary, BroadcastFunction
+/// >>> functions = TensorFunctionLibrary()
+/// >>> functions.register(BroadcastFunction("square"), lambda x: x * x)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.tensor")]
 pub struct SpensorFunctionLibrary {
@@ -177,18 +167,17 @@ impl SpensorFunctionLibrary {
         format!("TensorFunctionLibrary(functions={names:?})")
     }
 
-    /// Create a function library with built-in complex conjugation.
-    /// Register callbacks to add elementwise numerical operations for your own functions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> functions = sp.TensorFunctionLibrary()
+    /// Create a numerical function library with built-in conjugation.
     ///
     /// Returns
     /// -------
     /// TensorFunctionLibrary
-    ///     A function library with built-in complex conjugation
+    ///     Mutable library for BroadcastFunction implementations.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorFunctionLibrary
+    /// >>> functions = TensorFunctionLibrary()
     #[new]
     pub fn new() -> Self {
         let mut a = Self {
@@ -207,29 +196,34 @@ impl SpensorFunctionLibrary {
         a
     }
 
-    /// Register an elementwise callback for concrete tensor execution.
-    ///
-    /// The callback receives a Python `float` or `complex` matching each input value and
-    /// must return either type. The result uses complex storage if any returned value is
-    /// complex; otherwise it uses real storage.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> functions = sp.TensorFunctionLibrary()
-    /// >>> square = sp.BroadcastFunction("docs::square")
-    /// >>> functions.register(square, lambda value: value * value)
-    /// >>> tensor = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [2.0, 3.0])
-    /// >>> result = square(tensor).to_tensor(function_library=functions)
-    /// >>> assert result[:] == [4.0, 9.0]
+    /// Register a numerical implementation for an elementwise function.
     ///
     /// Parameters
     /// ----------
     /// function : BroadcastFunction
-    ///     BroadcastFunction whose elementwise numerical action the callback implements.
-    /// callback : Callable[[float | complex], float | complex]
-    ///     Numerical function accepting one float or complex value and returning a float or complex coefficient. It is applied elementwise during network execution.
+    ///     Function to implement; an existing implementation is replaced.
+    /// callback : callable
+    ///     Receives one float or complex value and returns a float or complex
+    ///     value. Results determine the numerical output type.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     Updates this function library.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorFunctionLibrary, BroadcastFunction
+    /// >>> square = BroadcastFunction("numeric_square")
+    /// >>> functions = TensorFunctionLibrary()
+    /// >>> functions.register(square, lambda value: value * value)
+    /// >>> square(tensor).to_tensor(function_library=functions)[0, 1]
+    /// 4.0
     pub fn register(
         &mut self,
         function: &SpensoBroadcastFunction,
@@ -589,26 +583,35 @@ impl SpensorLibrary {
         )
     }
 
-    /// Browse stored tensors as a compact mathematical catalogue.
-    ///
-    /// Select a signature to inspect its components. The collapsed Python panel
-    /// shows exact lookup, symbolic-expression and printing examples. Large
-    /// libraries and component arrays use bounded previews without changing data.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
-    /// >>> library.register(tensor)
-    /// >>> html = library.to_html()
+    /// Display stored tensors with on-demand component and construction details.
     ///
     /// Parameters
     /// ----------
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Notes
+    /// -----
+    /// Stored entries can be selected to inspect the same component explorer
+    /// as a standalone Tensor. On-demand factories are listed separately.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> value = library
+    /// >>> html = value.to_html()
     #[pyo3(signature = (*, settings=None))]
     fn to_html(
         &self,
@@ -622,10 +625,7 @@ impl SpensorLibrary {
         self.to_html(py, None).ok()
     }
 
-    /// Create a new empty tensor library.
-    ///
-    /// Initializes an empty library ready for registering tensor structures.
-    /// The library automatically manages internal tensor IDs.
+    /// Create an empty tensor component library.
     ///
     /// Examples
     /// --------
@@ -635,7 +635,14 @@ impl SpensorLibrary {
     /// Returns
     /// -------
     /// TensorLibrary
-    ///     A new empty tensor library
+    ///     Library ready to accept named tensors through register().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> len(library)
+    /// 0
     #[new]
     pub fn new() -> Self {
         let mut a = Self {
@@ -646,10 +653,7 @@ impl SpensorLibrary {
         a
     }
 
-    /// Create a new empty tensor library (static method).
-    ///
-    /// Initializes an empty library ready for registering tensor structures.
-    /// The library automatically manages internal tensor IDs.
+    /// Create an empty tensor component library.
     ///
     /// Examples
     /// --------
@@ -659,17 +663,20 @@ impl SpensorLibrary {
     /// Returns
     /// -------
     /// TensorLibrary
-    ///     A new empty tensor library
+    ///     Library ready to accept named tensors through register().
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary.construct()
+    /// >>> len(library)
+    /// 0
     #[staticmethod]
     pub fn construct() -> Self {
         Self::new()
     }
 
-    /// Register a tensor in the library.
-    ///
-    /// Adds a tensor template to the library that can be referenced by name
-    /// in tensor networks and symbolic expressions. The tensor must have a name
-    /// set in its structure.
+    /// Store an independent copy of a named tensor's components.
     ///
     /// Examples
     /// --------
@@ -684,7 +691,32 @@ impl SpensorLibrary {
     /// Parameters
     /// ----------
     /// tensor : Tensor
-    ///     Named Tensor whose components should be stored under its full signature.
+    ///     Tensor with a name, scalar key arguments, concrete dimensions, and
+    ///     fully unresolved external axes (no explicit index labels).
+    ///     Use tensor.with_name(...) if the tensor is unnamed.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     Adds or replaces the entry for this exact signature.
+    ///
+    /// Notes
+    /// -----
+    /// Changing the original tensor afterward does not change this library.
+    /// Register a modified tensor again to update its stored definition.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> len(library)
+    /// 1
     pub fn register(&mut self, tensor: PyRef<'_, Spensor>) -> PyResult<()> {
         let name = tensor.descriptor_name.ok_or_else(|| {
             exceptions::PyValueError::new_err(
@@ -707,33 +739,41 @@ impl SpensorLibrary {
         Ok(())
     }
 
-    /// Retrieve an independent copy of a tensor's stored component data.
-    ///
-    /// Use a fully unresolved TensorExpression signature to select its name,
-    /// scalar arguments and representations. A TensorName, symbol or string is
-    /// a shortcut when exactly one stored signature has that name. Exact lookup
-    /// also supports the library's dimension-dependent factories.
-    ///
-    /// The returned Tensor retains the requested logical axis order. Call
-    /// tensor.expression() for its symbolic reference. Edits to the Tensor do
-    /// not change the library; register it again to replace the stored value.
-    /// Missing or ambiguous keys raise KeyError.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
-    /// >>> library.register(tensor)
-    /// >>> stored = library[A]
-    /// >>> assert stored[:] == tensor[:]
+    /// Retrieve a tensor by exact signature or unambiguous name.
     ///
     /// Parameters
     /// ----------
-    /// key : TensorExpression | TensorName | Expression | str
-    ///     Full tensor signature or tensor name. A name alone must identify one stored signature; use a TensorExpression to disambiguate dimensions or scalar arguments.
+    /// key : TensorExpression, TensorName, Expression, or str
+    ///     A fully unresolved tensor expression selects an exact signature.
+    ///     A TensorName, symbol, or string selects a name only when exactly one
+    ///     stored signature has that name. Exact signatures also select factories.
+    ///     Strings without a namespace use "spenso_python"; prefer TensorName
+    ///     or a fully qualified string when the symbol uses another namespace.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     An independent copy in the requested logical axis order. Call its
+    ///     expression() method for a symbolic reference.
+    ///
+    /// Raises
+    /// ------
+    /// KeyError
+    ///     The key is missing or the name matches more than one stored signature.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> stored = library[A]
+    /// >>> stored[0, 1]
+    /// 2.0
     pub fn __getitem__(
         &self,
         py: Python<'_>,
@@ -751,49 +791,77 @@ impl SpensorLibrary {
         Py::new(py, self.stored_tensor(reference)?)
     }
 
-    /// Check whether the library contains a matching tensor signature.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
-    /// >>> library.register(tensor)
-    /// >>> assert A in library
+    /// Check whether a stored signature or factory can resolve a key.
     ///
     /// Parameters
     /// ----------
-    /// key : TensorExpression | TensorName | Expression | str
-    ///     Full tensor signature or tensor name. A name alone must identify one stored signature; use a TensorExpression to disambiguate dimensions or scalar arguments.
+    /// key : TensorExpression, TensorName, Expression, or str
+    ///     A fully unresolved tensor expression selects an exact signature.
+    ///     A TensorName, symbol, or string selects a name only when exactly one
+    ///     stored signature has that name. Exact signatures also select factories.
+    ///     Strings without a namespace use "spenso_python"; prefer TensorName
+    ///     or a fully qualified string when the symbol uses another namespace.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False for a missing key. Factories are checked without constructing
+    ///     their component data.
+    ///
+    /// Notes
+    /// -----
+    /// An ambiguous name or invalid key raises the same error as lookup.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> A in library
+    /// True
     fn __contains__(&self, key: ConvertibleToLibraryReference) -> PyResult<bool> {
         Ok(self.resolve_reference(key.0)?.is_some())
     }
 
-    /// Retrieve an independent Tensor snapshot, or default if the signature is missing.
-    ///
-    /// The default is None when omitted. Ambiguous names and invalid keys raise
-    /// the same errors as lookup; they do not return the default.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
-    /// >>> library.register(tensor)
-    /// >>> stored = library.get(A)
-    /// >>> missing = library.get("docs::missing")
-    /// >>> assert missing is None
+    /// Retrieve a tensor, returning a default when its signature is absent.
     ///
     /// Parameters
     /// ----------
-    /// key : TensorExpression | TensorName | Expression | str
-    ///     Full tensor signature or tensor name. A name alone must identify one stored signature; use a TensorExpression to disambiguate dimensions or scalar arguments.
-    /// default : None
-    ///     Value returned when no stored signature matches. Omit it to receive None. Ambiguous names still raise an error.
+    /// key : TensorExpression, TensorName, Expression, or str
+    ///     A fully unresolved tensor expression selects an exact signature.
+    ///     A TensorName, symbol, or string selects a name only when exactly one
+    ///     stored signature has that name. Exact signatures also select factories.
+    ///     Strings without a namespace use "spenso_python"; prefer TensorName
+    ///     or a fully qualified string when the symbol uses another namespace.
+    /// default : object, default None
+    ///     Value returned only when the signature is missing.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor or object
+    ///     Independent tensor snapshot, or the supplied default.
+    ///
+    /// Notes
+    /// -----
+    /// Ambiguous names and invalid keys still raise; they do not select the default.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> library.get("missing_tensor") is None
+    /// True
     #[pyo3(signature = (key, default=None))]
     fn get(
         &self,
@@ -807,34 +875,48 @@ impl SpensorLibrary {
         }
     }
 
-    /// Return the number of registered tensor signatures.
+    /// Count stored tensor definitions.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Number of stored entries; excludes on-demand factories.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
     /// >>> library.register(tensor)
-    /// >>> size = len(library)
+    /// >>> len(library)
+    /// 1
     fn __len__(&self) -> usize {
         self.library.explicit_len()
     }
 
-    /// Return a snapshot list of full, unresolved signatures in name/signature order.
-    /// Dimension-dependent factories are excluded because they have no stored value.
+    /// List the full unresolved signatures of stored tensors.
+    ///
+    /// Returns
+    /// -------
+    /// list of TensorExpression
+    ///     Snapshot in name/signature order, excluding on-demand factories.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
     /// >>> library.register(tensor)
-    /// >>> snapshot = library.keys()
-    /// >>> assert len(snapshot) == 1
+    /// >>> len(library.keys())
+    /// 1
     pub fn keys(&self, py: Python<'_>) -> PyResult<Vec<Py<TensorExpression>>> {
         self.stored_references()
             .into_iter()
@@ -844,18 +926,25 @@ impl SpensorLibrary {
             .collect()
     }
 
-    /// Return independent Tensor snapshots in the same order as keys().
+    /// List independent copies of the stored tensors.
+    ///
+    /// Returns
+    /// -------
+    /// list of Tensor
+    ///     Snapshot in the same order as keys(), excluding on-demand factories.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
     /// >>> library.register(tensor)
-    /// >>> snapshot = library.values()
-    /// >>> assert len(snapshot) == 1
+    /// >>> len(library.values())
+    /// 1
     pub fn values(&self, py: Python<'_>) -> PyResult<Vec<Py<Spensor>>> {
         self.stored_references()
             .into_iter()
@@ -863,18 +952,25 @@ impl SpensorLibrary {
             .collect()
     }
 
-    /// Return a snapshot list of (full signature, stored Tensor) pairs.
+    /// List stored tensor signatures together with their component data.
+    ///
+    /// Returns
+    /// -------
+    /// list of (TensorExpression, Tensor)
+    ///     Independent snapshots in the same order as keys().
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
     /// >>> library.register(tensor)
-    /// >>> snapshot = library.items()
-    /// >>> assert len(snapshot) == 1
+    /// >>> len(library.items())
+    /// 1
     pub fn items(&self, py: Python<'_>) -> PyResult<Vec<(Py<TensorExpression>, Py<Spensor>)>> {
         self.stored_references()
             .into_iter()
@@ -891,39 +987,55 @@ impl SpensorLibrary {
             .collect()
     }
 
-    /// Iterate over the registered tensor signatures.
+    /// Iterate over a snapshot of stored tensor signatures.
+    ///
+    /// Returns
+    /// -------
+    /// iterator of TensorExpression
+    ///     Same entries and ordering as keys().
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> library = sp.TensorLibrary()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
     /// >>> library.register(tensor)
-    /// >>> entries = list(library)
+    /// >>> len(list(library))
+    /// 1
     #[gen_stub(override_return_type(type_repr = "typing.Iterator[TensorExpression]", imports = ("typing",)))]
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
         PyList::new(py, self.keys(py)?)?.try_iter()
     }
 
-    /// Create a library pre-loaded with High Energy Physics tensor definitions.
-    ///
-    /// Returns a library containing standard HEP tensors such as gamma matrices,
-    /// color generators, metric tensors, and other commonly used structures in
-    /// particle physics calculations. They are floating point tensors with f64 precision.
+    /// Load standard Dirac and SU(3) tensors with floating-point components.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import tensor as sp
     /// >>> library = sp.TensorLibrary.hep_lib()
-    /// >>> gamma = sp.TensorExpression.gamma(4)
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4)
     /// >>> components = gamma.to_tensor(library)
     ///
     /// Returns
     /// -------
     /// TensorLibrary
-    ///     A TensorLibrary pre-populated with HEP tensor definitions
+    ///     Independent library with four-dimensional Dirac matrices in the Weyl
+    ///     basis, SU(3) color tensors, and dimension-dependent metric factories.
+    ///
+    /// Notes
+    /// -----
+    /// Values use double-precision real or complex numbers.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorLibrary, TensorExpression
+    /// >>> library = TensorLibrary.hep_lib()
+    /// >>> library[TensorExpression.dirac_gamma(4)].shape
+    /// (4, 4, 4)
     #[staticmethod]
     pub fn hep_lib() -> Self {
         Self {
@@ -932,23 +1044,32 @@ impl SpensorLibrary {
         }
     }
 
-    /// Create a library pre-loaded with High Energy Physics tensor definitions.
-    ///
-    /// Returns a library containing standard HEP tensors such as gamma matrices,
-    /// color generators, metric tensors, and other commonly used structures in
-    /// particle physics calculations. They are tensors with atom numeric entries.
+    /// Load standard Dirac and SU(3) tensors with exact symbolic components.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import tensor as sp
     /// >>> library = sp.TensorLibrary.hep_lib_atom()
-    /// >>> gamma = sp.TensorExpression.gamma(4)
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4)
     /// >>> components = gamma.to_tensor(library)
     ///
     /// Returns
     /// -------
     /// TensorLibrary
-    ///     A TensorLibrary pre-populated with HEP tensor definitions
+    ///     Independent library with four-dimensional Dirac matrices in the Weyl
+    ///     basis, SU(3) color tensors, and dimension-dependent metric factories.
+    ///
+    /// Notes
+    /// -----
+    /// Components are Symbolica Expressions, retaining exact rational and
+    /// algebraic constants for symbolic component calculations.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorLibrary, TensorExpression
+    /// >>> library = TensorLibrary.hep_lib_atom()
+    /// >>> library[TensorExpression.dirac_gamma(4)].shape
+    /// (4, 4, 4)
     #[staticmethod]
     pub fn hep_lib_atom() -> Self {
         Self {

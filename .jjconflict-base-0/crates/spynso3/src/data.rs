@@ -136,15 +136,22 @@ impl Spensor {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl Spensor {
-    /// Python component type: float, complex, or Expression.
+    /// Python type used for the stored components.
+    ///
+    /// Returns
+    /// -------
+    /// type
+    ///     One of float, complex, or Expression.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.dtype
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.dtype is float
+    /// True
     #[getter]
     #[gen_stub(override_return_type(type_repr = "type[float] | type[complex] | type[Expression]"))]
     fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyType> {
@@ -157,15 +164,22 @@ impl Spensor {
         }
     }
 
-    /// Component storage format, independent of tensor rank or expression type.
+    /// How components are stored.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     "dense" for all entries, or "sparse" for populated entries.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.storage
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.storage
+    /// 'dense'
     #[getter]
     #[gen_stub(override_return_type(type_repr="typing.Literal['dense', 'sparse']", imports=("typing")))]
     fn storage(&self) -> &'static str {
@@ -181,15 +195,22 @@ impl Spensor {
         if sparse { "sparse" } else { "dense" }
     }
 
-    /// Number of external axes.
+    /// Number of external tensor axes.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Zero for a scalar.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.rank
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.rank
+    /// 2
     #[getter]
     fn rank(&self) -> usize {
         self.descriptor.rank()
@@ -197,13 +218,20 @@ impl Spensor {
 
     /// Whether the tensor has no external axes.
     ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True exactly when rank is zero.
+    ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.is_scalar
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.is_scalar
+    /// False
     #[getter]
     fn is_scalar(&self) -> bool {
         self.descriptor.is_scalar()
@@ -211,13 +239,20 @@ impl Spensor {
 
     /// Dimensions in logical axis order.
     ///
+    /// Returns
+    /// -------
+    /// tuple of int
+    ///     Axis sizes in the order of structure.slots.
+    ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.shape
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.shape
+    /// (2, 2)
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int, ...]"))]
     fn shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
@@ -227,39 +262,58 @@ impl Spensor {
         )
     }
 
-    /// Independent copy of component storage and metadata.
+    /// Copy this tensor's components and metadata.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     An independent copy. Changes to it do not alter the original.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> independent = tensor.copy()
-    /// >>> independent[0] = 9.0
-    /// >>> assert tensor[0] == 1.0
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> copied = tensor.copy()
+    /// >>> copied.shape == tensor.shape
+    /// True
     fn copy(&self) -> Self {
         self.clone()
     }
 
-    /// Return a tensor obtained by applying a scalar function to every component.
-    /// The input tensor is unchanged. Sparse storage is retained when implicit zeros
-    /// stay zero; otherwise the result becomes dense.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> squared = tensor.map_components(lambda value: value * value)
+    /// Apply a scalar function to component values.
     ///
     /// Parameters
     /// ----------
-    /// callback : Callable[[Expression | float | complex], Expression | float | complex]
-    ///     Function called with each scalar component. Return a coefficient compatible with dtype. If implicit sparse zeros become nonzero, the result uses dense storage.
-    /// dtype : type[float] | type[complex] | type[Expression] | None
-    ///     Output component class: float, complex, or Expression. None retains the input component class.
+    /// callback : callable
+    ///     Function receiving one component and returning its replacement.
+    ///     The traversal order is unspecified.
+    /// dtype : type, optional
+    ///     Output component type: float, complex, or Expression. Defaults to
+    ///     the current type; callback results must convert to the selected type.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     An independent tensor with the same axes and mapped components.
+    ///
+    /// Notes
+    /// -----
+    /// Sparse storage remains sparse when the implicit zero maps to zero.
+    /// If it maps to a nonzero value, the result becomes dense. The implicit
+    /// zero is mapped once; avoid relying on callback invocation counts.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.map_components(lambda value: value * 2)[1, 0]
+    /// 6.0
     #[pyo3(signature = (callback, *, dtype=None))]
     fn map_components(
         &self,
@@ -322,17 +376,27 @@ impl Spensor {
         ))
     }
 
-    /// Copy numeric components into a NumPy array in logical axis order.
-    /// Imports NumPy only when called. Symbolic tensors must first be evaluated.
+    /// Copy numerical components into a NumPy array.
+    ///
+    /// Returns
+    /// -------
+    /// numpy.ndarray
+    ///     Array with the tensor's logical shape and dtype float64 or complex128.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     The tensor stores symbolic Expressions. Evaluate them first.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> array = tensor.to_numpy()
-    /// >>> assert array.shape == (2, 2)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.to_numpy().tolist()
+    /// [[1.0, 2.0], [3.0, 4.0]]
     #[gen_stub(override_return_type(type_repr="numpy.typing.NDArray[numpy.float64] | numpy.typing.NDArray[numpy.complex128]", imports=("numpy", "numpy.typing")))]
     fn to_numpy(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let dtype = match &self.tensor {
@@ -349,24 +413,29 @@ impl Spensor {
         Ok(array.call_method1("reshape", (self.shape(py)?,))?.unbind())
     }
 
-    /// Copy a numeric NumPy array into a named tensor, checking the full logical shape.
-    /// Real numeric arrays become float64 storage; complex arrays become complex128.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> import numpy as np
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> array = np.array([[1.0, 2.0], [3.0, 4.0]])
-    /// >>> tensor = sp.Tensor.from_numpy(A, array)
+    /// Copy a numerical array into a named tensor.
     ///
     /// Parameters
     /// ----------
     /// structure : TensorExpression
-    ///     Named TensorExpression defining the component dimensions, scalar arguments, and logical axis order.
-    /// array : numpy.ArrayLike
-    ///     Numeric NumPy-compatible array whose full shape matches structure.shape. The data is copied; later changes to the array do not affect the tensor.
+    ///     Named descriptor with concrete dimensions matching the array shape.
+    /// array : numpy.typing.ArrayLike
+    ///     Real or complex array-like data. Axes follow structure.slots.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     Dense tensor with float or complex components.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.from_numpy(A, [[1.0, 2.0], [3.0, 4.0]])
+    /// >>> tensor[1, 0]
+    /// 3.0
     #[staticmethod]
     fn from_numpy(
         structure: TensorDataDescriptor,

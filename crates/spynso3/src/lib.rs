@@ -1,3 +1,6 @@
+#[macro_use]
+mod documentation;
+
 use std::{cell::Cell, collections::HashMap, ops::Deref};
 
 use eyre::eyre;
@@ -106,6 +109,7 @@ macro_rules! define_spenso_python_surface {
         returned_opaque_classes: [$($opaque:ty),* $(,)?],
     ) => {
         pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            m.add("__doc__", python_doc!("module"))?;
             $($(#[$class_attr])* m.add_class::<$class>()?;)+
             // m.add_function(?)?;
             $(m.add_function(wrap_pyfunction!($function, m)?)?;)+
@@ -141,7 +145,17 @@ pub struct SpensoModule;
 #[cfg(feature = "python_stubgen")]
 mod stubs;
 
-/// Policy for Rayon operations that manipulate Symbolica expressions.
+/// Threading policy for operations on symbolic component expressions.
+///
+/// ``Auto`` permits parallel work when the Symbolica license supports it,
+/// with workload-size heuristics. ``Serial`` keeps symbolic work on the calling
+/// thread. ``Parallel`` requests parallel work without Auto's license check.
+/// This does not set the number of threads or force every operation to parallelize.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import SymbolicParallelism, set_symbolica_rayon_enabled
+/// >>> allowed = set_symbolica_rayon_enabled(SymbolicParallelism.Auto)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.tensor")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,24 +180,28 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
     }
 }
 
-/// Configure whether Spenso may use Rayon for Symbolica operations.
-///
-/// `Auto` checks the Symbolica license once during this call. When licensed,
-/// operations may use Rayon and apply workload heuristics where available;
-/// when unlicensed, symbolic operations remain serial. The returned boolean
-/// reports whether the resolved policy permits Rayon, not whether every
-/// operation will use it.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> sp.set_symbolica_rayon_enabled(sp.SymbolicParallelism.Serial)
-/// >>> sp.set_symbolica_rayon_enabled(sp.SymbolicParallelism.Auto)
+/// Set the threading policy for Spenso's Symbolica operations.
 ///
 /// Parameters
 /// ----------
 /// policy : SymbolicParallelism
-///     SymbolicParallelism.Auto uses licensing and workload checks; Serial stays on the calling thread; Parallel explicitly requests Rayon execution.
+///     Auto checks the license at this call; Serial disables symbolic
+///     parallelism; Parallel enables it without that automatic check.
+///
+/// Returns
+/// -------
+/// bool
+///     Whether the resolved policy permits parallel execution. Individual
+///     operations may still choose serial execution for small workloads.
+///
+/// Notes
+/// -----
+/// This changes the process-wide policy, not just one tensor or network.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import SymbolicParallelism, set_symbolica_rayon_enabled
+/// >>> allowed = set_symbolica_rayon_enabled(SymbolicParallelism.Auto)
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -302,18 +320,25 @@ define_spenso_python_surface! {
     returned_opaque_classes: [],
 }
 
-/// A tensor class that can be either dense or sparse with flexible data types.
+/// Tensor components together with their symbolic identity and ordered axes.
 ///
-/// The tensor can store data as floats, complex numbers, or symbolic expressions.
-/// Tensors have an associated structure that defines their shape and index properties.
+/// Use dense(), sparse(), or from_numpy() to construct one. Components can be
+/// real floats, complex floats, or Symbolica expressions. Square brackets access
+/// components; calling the tensor assigns abstract index labels and returns a
+/// lazy TensorNetwork. Arithmetic also builds networks, retaining component data.
+///
+/// The default notebook view is an interactive component explorer with a matrix
+/// toggle. ``to_typst()`` provides static mathematical source.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-/// >>> assert tensor[1, 0] == 3.0
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> tensor[1, 0]
+/// 3.0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.tensor")]
 #[derive(Clone)]
@@ -550,16 +575,27 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl Spensor {
-    /// Return the symbolic descriptor of this tensor, independently of its component data.
+    /// Return the symbolic descriptor for these components.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     A symbolic tensor with the same external axes.
+    ///
+    /// Notes
+    /// -----
+    /// The descriptor identifies the data but does not embed its components.
+    /// Register the tensor in a TensorLibrary to evaluate that symbolic reference.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> descriptor = tensor.expression()
-    /// >>> assert descriptor.shape == (2, 2)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.expression().rank
+    /// 2
     pub fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_known_parts(
             py,
@@ -570,15 +606,22 @@ impl Spensor {
         )
     }
 
-    /// Tensor identity, scalar arguments, and external ports in logical order.
+    /// Identity, scalar arguments, and ordered external axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorStructure
+    ///     Immutable metadata, separate from the component values or computation.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.structure
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.structure.rank
+    /// 2
     #[getter]
     fn structure(&self) -> metadata::SpensoTensorStructure {
         metadata::SpensoTensorStructure {
@@ -588,20 +631,29 @@ impl Spensor {
         }
     }
 
-    /// Return a copy with a new data identity while preserving its expression and interface.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> renamed = tensor.with_name("docs::B")
+    /// Assign a data identity without rewriting the symbolic computation.
     ///
     /// Parameters
     /// ----------
-    /// name : TensorName | str | Expression | TensorExpression
-    ///     New data identity, as a TensorName, name string, symbol, or named TensorExpression. The tensor’s mathematical expression and logical interface are retained.
+    /// name : TensorName, str, Expression, or TensorExpression
+    ///     New tensor name. A rank-zero atomic TensorExpression may also supply
+    ///     scalar key arguments, for example TensorName("B")(7).
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     A new value with the requested identity and the same axes and components.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> named = tensor.with_name("named_matrix")
+    /// >>> named.rank
+    /// 2
     fn with_name(&self, name: ConvertibleToSpensoName) -> Self {
         let ConvertibleToSpensoName(name, args) = name;
         let name = name.name;
@@ -616,29 +668,31 @@ impl Spensor {
         Self::from_storage_with_descriptor(storage, self.descriptor.clone(), Some(name), args)
     }
 
-    /// Create a tensor with zero-valued components and sparse storage.
-    /// The named structure determines the logical axes. Assign nonzero components with
-    /// `tensor[index] = value`; their coefficient type must match the chosen storage class.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.sparse(A, float)
-    /// >>> tensor[1, 1] = 5.0
+    /// Create an initially zero tensor using sparse component storage.
     ///
     /// Parameters
     /// ----------
     /// structure : TensorExpression
-    ///     Named TensorExpression defining the component dimensions, scalar arguments, and logical axis order.
+    ///     Named descriptor with concrete dimensions in logical axis order.
     /// type_info : type
-    ///     Storage coefficient class: float or symbolica.Expression. All sparse entries initially contain zero.
+    ///     Component type: float, complex, or Expression. Assigned values must
+    ///     match this type.
     ///
     /// Returns
     /// -------
     /// Tensor
-    ///     A new sparse tensor with all elements initially zero
+    ///     A zero tensor storing only explicitly populated entries.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.sparse(A, float)
+    /// >>> tensor[1, 0] = 3.0
+    /// >>> tensor[0, 0]
+    /// 0.0
     #[staticmethod]
     pub fn sparse(
         structure: TensorDataDescriptor,
@@ -678,29 +732,31 @@ impl Spensor {
         }
     }
 
-    /// Create a tensor from a flat list of components in logical row-major order.
-    /// The last axis varies fastest. The named structure fixes the complete shape;
-    /// the number of values must equal the product of its dimensions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> assert tensor[1, 0] == 3.0
+    /// Store every component of a named tensor.
     ///
     /// Parameters
     /// ----------
     /// structure : TensorExpression
-    ///     Named TensorExpression defining the component dimensions, scalar arguments, and logical axis order.
-    /// data : Sequence[Expression] | Sequence[float] | Sequence[complex]
-    ///     Flat sequence of coefficients in logical row-major order: the last axis varies fastest. Its length must equal the product of the axis dimensions.
+    ///     Named descriptor with concrete dimensions and the desired logical
+    ///     axis order. Use with_name() to give a composite expression a name.
+    /// data : sequence of float, complex, or Expression
+    ///     Flat component data in logical row-major order. The length must equal
+    ///     the product of the dimensions. Use a consistent component type.
     ///
     /// Returns
     /// -------
     /// Tensor
-    ///     A new dense tensor with the specified data
+    ///     A dense component tensor; the input descriptor remains symbolic.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.shape
+    /// (2, 2)
     #[staticmethod]
     pub fn dense(structure: TensorDataDescriptor, data: AtomsOrFloats) -> PyResult<Spensor> {
         let TensorDataDescriptor {
@@ -749,19 +805,26 @@ impl Spensor {
             args,
         ))
     }
-    /// Convert this tensor to dense storage format.
+    /// Copy the components into dense storage.
     ///
-    /// Returns an independent dense tensor; the original storage is unchanged.
-    /// This allocates memory for all tensor elements.
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     Independent dense tensor with the same values and logical axes.
+    ///
+    /// Notes
+    /// -----
+    /// Dense storage allocates space for every component.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> converted = tensor.to_dense()
-    /// >>> assert converted[:] == tensor[:]
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.to_dense().storage
+    /// 'dense'
     #[allow(clippy::wrong_self_convention)]
     fn to_dense(&self) -> Self {
         let mut result = self.clone();
@@ -769,19 +832,26 @@ impl Spensor {
         result
     }
 
-    /// Convert this tensor to sparse storage format.
+    /// Copy the components into sparse storage.
     ///
-    /// Returns an independent sparse tensor, only storing non-zero elements.
-    /// This can save memory for tensors with many zero elements.
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     Independent sparse tensor with the same values and logical axes.
+    ///
+    /// Notes
+    /// -----
+    /// Sparse storage retains nonzero entries and represents other entries by zero.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> converted = tensor.to_sparse()
-    /// >>> assert converted[:] == tensor[:]
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.to_sparse().storage
+    /// 'sparse'
     #[allow(clippy::wrong_self_convention)]
     fn to_sparse(&self) -> Self {
         let mut result = self.clone();
@@ -815,25 +885,37 @@ impl Spensor {
         display::format_concrete_tensor(self, false)
     }
 
-    /// Format this concrete tensor using compact Spenso notation.
-    ///
-    /// Values are read in logical interface order without transposing or densifying
-    /// the stored tensor. Large results show a bounded edge preview.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> text = tensor.format_tensor(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Produce compact plain-text tensor notation.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Readable tensor text, suitable for logs or terminal output.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// Components follow logical interface order (the order of structure.slots). Large static displays show a
+    /// bounded preview rather than every component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> output = tensor.format_tensor()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn format_tensor(
         &self,
@@ -847,25 +929,39 @@ impl Spensor {
         ))
     }
 
-    /// Format this concrete tensor as Typst math source.
-    ///
-    /// Values are read in logical interface order without transposing or densifying
-    /// the stored tensor. Large results show a bounded edge preview.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> typst_source = tensor.to_typst(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Produce static Typst math source.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst source without an enclosing document; no compilation is performed.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// Components follow logical interface order (the order of structure.slots). Large static displays show a
+    /// bounded preview rather than every component.
+    ///
+    /// Static Typst output remains available independently of the HTML explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> output = tensor.to_typst()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn to_typst(
         &self,
@@ -877,26 +973,37 @@ impl Spensor {
         Ok(display::concrete_tensor_to_typst(self, &settings))
     }
 
-    /// Build Symbolica's rich display wrapper for this concrete tensor.
-    ///
-    /// Its text, HTML, and LaTeX representations all use logical interface order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> display_value = tensor.formatted(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Create a rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// FormattedOutput
+    ///     Symbolica display wrapper with text and available rich representations.
+    ///
+    /// Notes
+    /// -----
+    /// Components follow logical axis order. Large static displays show a
+    /// bounded preview rather than every component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> output = tensor.formatted()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
@@ -909,28 +1016,46 @@ impl Spensor {
         display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
     }
 
-    /// Display concrete components in a self-contained interactive HTML explorer.
-    ///
-    /// Select matrix slices in the view control, or pass
-    /// `DisplaySettings(tensor_view="matrix")` for static mathematical HTML.
-    /// Uses the optional Typst renderer for symbolic component formulas.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> html = tensor.to_html(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Render the tensor as an HTML fragment.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Self-contained output fragment for an HTML-capable notebook or page.
+    ///
+    /// Notes
+    /// -----
+    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// string is not automatically displayed; pass it to the notebook's HTML
+    /// or SVG display facility.
+    ///
+    /// Components follow logical axis order. Large static displays show a
+    /// bounded preview rather than every component.
+    ///
+    /// The default is a responsive component explorer with a Memory grid /
+    /// Matrix toggle. Dark mode follows the surrounding page. The color scale
+    /// measures stored component payload bytes, not total process memory. Use
+    /// DisplaySettings(tensor_view="matrix") for static mathematical HTML.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> output = tensor.to_html()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_html(
         &self,
@@ -943,24 +1068,41 @@ impl Spensor {
         display::concrete_tensor_to_html(py, self, &settings, notation_source.as_deref())
     }
 
-    /// Compile this concrete tensor to SVG with the optional Typst renderer.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> svg = tensor.to_svg(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Render static mathematical tensor notation to SVG.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     SVG markup suitable for embedding or saving to a file.
+    ///
+    /// Notes
+    /// -----
+    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// string is not automatically displayed; pass it to the notebook's HTML
+    /// or SVG display facility.
+    ///
+    /// Components follow logical axis order. Large static displays show a
+    /// bounded preview rather than every component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> output = tensor.to_svg()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_svg(
         &self,
@@ -991,40 +1133,27 @@ impl Spensor {
         Ok(())
     }
 
-    /// Return the total number of component positions, including implicit sparse zeros.
+    /// Count all components in the tensor shape.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Product of the axis dimensions, including implicit zeros.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> size = len(tensor)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> len(tensor)
+    /// 4
     fn __len__(&self) -> usize {
         self.size().unwrap()
     }
 
-    /// Return tensor data in logical interface order.
-    ///
-    /// An integer is a flat logical row-major position. A list supplies one coordinate
-    /// per slot in `structure.slots`; slices likewise traverse flat logical order.
-    /// Canonical storage-axis order is never exposed through this API.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> first = tensor[0]
-    /// >>> last = tensor[-1]
-    /// >>> column = tensor[:, 1]
-    /// >>> assert column == [2.0, 4.0]
-    ///
-    /// Parameters
-    /// ----------
-    /// item : slice
-    ///     Flat position, slice, or coordinate selection. Negative indices count from the end. Coordinate tuples follow the logical axis order.
+    #[doc = python_doc!("Tensor.__getitem__")]
     #[gen_stub(skip)]
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
         let layout = tensor_data_layout(self.descriptor.structure())?;
@@ -1094,24 +1223,7 @@ impl Spensor {
         })
     }
 
-    /// Set tensor element(s) at the specified index or indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> tensor[0] = 9.0
-    /// >>> tensor[1, 1] = 5.0
-    /// >>> assert tensor[1, 1] == 5.0
-    ///
-    /// Parameters
-    /// ----------
-    /// item : int | Sequence[int]
-    ///     Flat integer position or coordinate list/tuple for one component. Negative coordinates count from the end.
-    /// value : Expression | complex | float
-    ///     New component value: float for real storage, complex for complex storage, or Expression for parametric storage.
+    #[doc = python_doc!("Tensor.__setitem__")]
     #[gen_stub(skip)]
     fn __setitem__<'py>(
         &mut self,
@@ -1169,41 +1281,39 @@ impl Spensor {
         }
     }
 
-    /// Create an optimized evaluator for symbolic tensor expressions.
-    ///
-    /// Compiles the symbolic expressions in this tensor into an optimized evaluation tree
-    /// that can efficiently compute numerical values for different parameter inputs.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> results = evaluator.evaluate([[2.0], [3.0]])
+    /// Prepare repeated numerical evaluation of symbolic component formulas.
     ///
     /// Parameters
     /// ----------
-    /// constants : Mapping[Expression, Expression]
-    ///     Exact scalar substitutions to apply before constructing the numerical evaluator.
-    /// funs : Mapping[tuple[Expression, str, Sequence[Expression]], Expression]
-    ///     Definitions for symbolic functions, keyed by (function_symbol, function_name, argument_list), as accepted by Symbolica’s evaluator.
-    /// params : Sequence[Expression]
-    ///     Symbolica variables in the exact order expected in each numerical input row. Include every free numerical parameter that remains after substitutions.
-    /// iterations : int
-    ///     Number of optimization iterations when constructing the evaluator. More iterations can improve repeated evaluations at a higher setup cost.
-    /// n_cores : int
-    ///     Worker count used while optimizing the evaluator. Use 1 for serial setup.
-    /// verbose : bool
-    ///     Print evaluator-optimization progress when True.
+    /// constants : mapping of Expression to Expression
+    ///     Fixed values that are exact rational real or complex numbers. Use
+    ///     parameters for values that cannot be represented this way.
+    /// funs : mapping
+    ///     Function definitions keyed by (function_symbol, name, argument_symbols),
+    ///     with Expression bodies. The name field is accepted but not used.
+    /// params : sequence of Expression
+    ///     Inputs in the exact order expected by every evaluation row.
+    /// iterations : int, default 100
+    ///     Horner-optimization iterations.
+    /// n_cores : int, default 4
+    ///     Number of cores for expression optimization.
+    /// verbose : bool, default False
+    ///     Print optimization progress.
     ///
     /// Returns
     /// -------
     /// TensorEvaluator
-    ///     An optimized evaluator for efficient numerical evaluation
+    ///     Optimized batch evaluator retaining this tensor's shape and identity.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.evaluate([[2.0]])[0][1]
+    /// 4.0
     #[pyo3(signature =
            (constants,
            funs,
@@ -1304,7 +1414,7 @@ impl Spensor {
         })
     }
 
-    /// Extract the scalar value from a rank-0 (scalar) tensor.
+    /// Extract the only component of a rank-zero tensor.
     ///
     /// Examples
     /// --------
@@ -1315,12 +1425,18 @@ impl Spensor {
     /// Returns
     /// -------
     /// Expression
-    ///     The scalar expression contained in this tensor
+    ///     Scalar value converted to a Symbolica expression, including numeric data.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the tensor is not a scalar
+    ///     The tensor has external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> TensorExpression(3).to_tensor().scalar() == 3
+    /// True
     fn scalar(&self) -> PyResult<PythonExpression> {
         self.tensor
             .clone()
@@ -1329,22 +1445,37 @@ impl Spensor {
             .ok_or_else(|| PyRuntimeError::new_err("No scalar found"))
     }
 
-    /// Reference this tensor with new abstract indices and return a lazy network.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> indexed = tensor.index("i", "j")
+    /// Assign labels to the unresolved external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing explicit labels are left in place. Use reindex to replace them.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> indexed = tensor.index("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn index(
         &self,
@@ -1354,23 +1485,37 @@ impl Spensor {
         SpensoNet::from_tensor_reference(self.clone())?.index_network(indices, cook_indices)
     }
 
-    /// Assign all external indices, producing a network if any contractions are requested.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> indexed = tensor("i", "j")
-    /// >>> renamed = indexed.reindex("mu", sp.AUTO)
+    /// Assign labels to all external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per external axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing labels are replaced as well as unresolved axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> indexed = tensor.reindex("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices=None))]
     fn reindex(
         &self,
@@ -1380,23 +1525,33 @@ impl Spensor {
         SpensoNet::from_tensor_reference(self.clone())?.reindex(indices, cook_indices)
     }
 
-    /// Rename external indices without changing component values or rank.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> indexed = tensor("i", "j")
-    /// >>> swapped = indexed.rename_indices({"i": "j", "j": "i"})
+    /// Rename selected external labels without changing the tensor rank.
     ///
     /// Parameters
     /// ----------
-    /// mapping : dict[int | str | Expression | Slot, index label, Slot, or AUTO]
-    ///     Old-to-new external index labels, applied simultaneously. Typed Slot keys disambiguate representations. Renaming cannot contract ports or capture dummy indices; use reindex() for contractions.
+    /// mapping : dict
+    ///     Old label to new label. A Slot key also restricts the representation.
+    ///     Keys must identify existing external axes. Each axis may be renamed
+    ///     once; renaming must preserve the external interface.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     A new value with renamed axes; the original is unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> indexed = Tensor.dense(A("i", "j"), [1.0, 2.0, 3.0, 4.0])
+    /// >>> indexed.rename_indices({"i": "k"}).rank
+    /// 2
     #[pyo3(signature = (mapping, *, cook_indices=None))]
     fn rename_indices(
         &self,
@@ -1408,56 +1563,91 @@ impl Spensor {
             .result_tensor(None)
     }
 
-    /// Return an independent tensor with permuted logical axes, preserving sparse storage.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> transposed = tensor.permute_axes([1, 0])
+    /// Reorder the external axes in logical component order.
     ///
     /// Parameters
     /// ----------
-    /// axes : Sequence[int]
-    ///     Permutation of all axis positions, starting at zero. For a matrix, [1, 0] transposes the logical axes.
+    /// axes : sequence of int
+    ///     Each current axis position exactly once, in the desired new order.
+    ///     For a matrix, [1, 0] exchanges the two axes.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     A new tensor view with the reordered interface and correspondingly
+    ///     reordered component access.
+    ///
+    /// Notes
+    /// -----
+    /// This permutes axes; it does not conjugate component values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> transposed = tensor.permute_axes([1, 0])
+    /// >>> transposed.shape
+    /// (2, 2)
     fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
         SpensoNet::from_tensor_reference(self.clone())?
             .permute_axes(axes)?
             .result_tensor(None)
     }
 
-    /// Copy the value and its tensor metadata without mutating the original.
+    /// Implement ``copy.copy`` using an independent Tensor copy.
+    ///
+    /// Returns
+    /// -------
+    /// Tensor
+    ///     Copy of the component data and metadata.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
     /// >>> import copy
-    /// >>> independent = copy.copy(tensor)
+    /// >>> copied = copy.copy(tensor)
     fn __copy__(&self) -> Self {
         self.clone()
     }
 
-    /// Reference this tensor with new abstract indices and return a lazy network.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> indexed = tensor("i", "j")
+    /// Assign labels to the unresolved external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Equivalent to ``index(*indices)``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> indexed = tensor("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn __call__(
         &self,
@@ -1467,201 +1657,322 @@ impl Spensor {
         self.index(indices, cook_indices)
     }
 
-    /// Negate every tensor coefficient, preserving the external axes.
+    /// Negate every tensor component.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     Negated symbolic algebra retaining component data lazily.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> negative = -tensor
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> negated = -tensor
     fn __neg__(&self) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.__neg__()
     }
 
-    /// Add compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor + tensor
+    /// Add tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor + tensor
     fn __add__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.add_network(rhs.to_net(), false)
     }
 
-    /// Add compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor + tensor
+    /// Implement reflected addition.
     ///
     /// Parameters
     /// ----------
-    /// lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor + tensor
     fn __radd__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         lhs.to_net()
             .add_network(SpensoNet::from_tensor(self.clone())?, false)
     }
 
-    /// Subtract compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor - tensor
+    /// Subtract tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor - tensor
     fn __sub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.add_network(rhs.to_net(), true)
     }
 
-    /// Subtract compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor - tensor
+    /// Implement reflected subtraction.
     ///
     /// Parameters
     /// ----------
-    /// lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor - tensor
     fn __rsub__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         lhs.to_net()
             .add_network(SpensoNet::from_tensor(self.clone())?, true)
     }
 
-    /// Multiply tensor operands, contracting repeated compatible explicit indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor * 2
+    /// Multiply tensors, contracting unambiguous compatible axes.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor * 2
     fn __mul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.multiply_network(rhs.to_net())
     }
 
-    /// Multiply tensor operands, contracting repeated compatible explicit indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = 2 * tensor
+    /// Implement reflected multiplication.
     ///
     /// Parameters
     /// ----------
-    /// lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = 2 * tensor
     fn __rmul__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         lhs.to_net()
             .multiply_network(SpensoNet::from_tensor(self.clone())?)
     }
 
-    /// Divide tensor coefficients by a scalar denominator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor / 2
+    /// Divide tensor components by a scalar expression.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor / 2
     fn __truediv__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.__truediv__(rhs)
     }
 
-    /// Divide a scalar by a rank-zero tensor, returning a TensorNetwork.
-    /// Call `.to_tensor().scalar()` to obtain its component value.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> scalar = sp.Tensor.dense(sp.TensorName("docs::scalar")(), [2.0])
-    /// >>> reciprocal = 1 / scalar
+    /// Implement reflected division.
     ///
     /// Parameters
     /// ----------
-    /// lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = 2 / TensorExpression(3).to_tensor()
     fn __rtruediv__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.__rtruediv__(lhs)
     }
 
-    /// Form a lazy outer product without contracting compatible ports.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.outer(tensor)
+    /// Form an outer product without implicit contractions between the operands.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor whose axes follow this tensor's axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy outer product retaining the operands' component data.
+    ///
+    /// Notes
+    /// -----
+    /// Use this when compatible unresolved axes should remain independent.
+    /// Choose explicit distinct labels if you need to refer to them separately.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> product = tensor.outer(tensor)
+    /// >>> product.rank
+    /// 4
     fn outer(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.outer(rhs)
     }
 
-    /// Contract one selected pair of ordered interface positions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.contract_ports(tensor, left=1, right=0)
+    /// Contract one chosen pair of axes between two tensors.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
-    /// left : int
-    ///     Zero-based axis position in this operand to contract.
-    /// right : int
-    ///     Zero-based axis position in rhs to contract with the selected left axis.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor to contract with this tensor.
+    /// left, right : int
+    ///     Zero-based axis positions in this tensor and rhs, respectively.
+    ///     The representations must be compatible under contraction.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy contraction retaining component data.
+    ///
+    /// Notes
+    /// -----
+    /// Other axes remain external. Axis numbers refer to ``structure.slots``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> contracted = tensor.contract_ports(tensor, left=1, right=0)
+    /// >>> contracted.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
     fn contract_ports(
         &self,
@@ -1672,24 +1983,32 @@ impl Spensor {
         SpensoNet::from_tensor(self.clone())?.contract_ports(rhs, left, right)
     }
 
-    /// Compose two selected `(input, output)` matrix channels.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> result = tensor.compose(tensor, left=(0, 1), right=(0, 1))
+    /// Multiply two tensors along explicitly selected matrix channels.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
-    /// left : tuple[int, int]
-    ///     (input_axis, output_axis) channel in this operand.
-    /// right : tuple[int, int]
-    ///     (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Next factor in the ordered matrix product.
+    /// left, right : tuple of int and int
+    ///     (input_axis, output_axis) in this tensor and rhs, respectively.
+    ///     The left output contracts with the right input. Other axes are
+    ///     retained as spectator axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy ordered matrix product retaining component data.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> product = tensor.compose(tensor, left=(0, 1), right=(0, 1))
+    /// >>> product.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
     fn compose(
         &self,
@@ -1700,58 +2019,73 @@ impl Spensor {
         SpensoNet::from_tensor(self.clone())?.compose(rhs, left, right)
     }
 
-    /// Contract two rank-one operands into the canonical dot form.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> vector = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1.0, 2.0])
-    /// >>> norm_squared = vector.dot(vector).to_tensor().scalar()
+    /// Contract two rank-one tensors using their representation pairing.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Rank-one tensor in a compatible space.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy scalar contraction, including the metric signs of the space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Tensor, TensorNetwork, Representation
+    /// >>> vector = Tensor.dense(TensorName.vector("dot_v")(Representation.euc(2)), [1.0, 2.0])
+    /// >>> vector.dot(vector).to_tensor().scalar() == 5
+    /// True
     fn dot(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.dot(rhs)
     }
 
-    /// Close `channel`, or the unique matrix channel when it is omitted.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> trace = tensor.trace(channel=(0, 1))
+    /// Close a pair of matrix axes on this tensor.
     ///
     /// Parameters
     /// ----------
-    /// channel : tuple[int, int], optional
-    ///     Pair (input_axis, output_axis) identifying the matrix channel to close. None selects the unique compatible channel; ambiguous tensors require an explicit pair.
+    /// channel : tuple of int and int, optional
+    ///     (input_axis, output_axis) to contract. If omitted, the matrix channel
+    ///     must be uniquely determined by the representations. Specify it when
+    ///     more than one pairing is possible.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     The traced tensor; spectator axes remain external.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> tensor.trace(channel=(0, 1)).is_scalar
+    /// True
     #[pyo3(signature = (*, channel = None))]
     fn trace(&self, channel: Option<(usize, usize)>) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor(self.clone())?.trace(channel)
     }
 }
 
-/// A reusable numerical evaluator for tensors with symbolic components.
-/// Create one with `Tensor.evaluator()`. Input rows follow `.parameters`; evaluation
-/// returns one Tensor per row, preserving the original logical axes.
+/// Optimized numerical evaluation of a tensor's component formulas.
+///
+/// Create this object with ``Tensor.evaluator``. Each input row supplies values
+/// for ``parameters`` and produces one Tensor with ``output_shape``. Real
+/// coefficients support both real and complex evaluation; complex coefficients
+/// require ``evaluate_complex``.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> from symbolica import E, S
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> x = S("docs::x")
-/// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-/// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-/// >>> results = evaluator.evaluate([[2.0], [3.0]])
-/// >>> assert len(results) == 2
+/// >>> from symbolica import S
+/// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+/// >>> x = S("x")
+/// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+/// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+/// >>> evaluator.evaluate([[2.0], [3.0]])[1][1]
+/// 9.0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -1789,52 +2123,64 @@ impl SpensoExpressionEvaluator {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
-    /// Parameters in the exact order expected by each evaluation input row.
+    /// Symbolic inputs in the required evaluation order.
+    ///
+    /// Returns
+    /// -------
+    /// list of Expression
+    ///     One entry for each value in an input row.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> result = evaluator.parameters
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.parameters == [x]
+    /// True
     #[getter]
     fn parameters(&self) -> Vec<PythonExpression> {
         self.parameters.iter().cloned().map(Into::into).collect()
     }
 
-    /// Number of parameter values required in each input row.
+    /// Number of values required in each evaluation row.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Length of parameters.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> result = evaluator.input_size
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.input_size
+    /// 1
     #[getter]
     fn input_size(&self) -> usize {
         self.parameters.len()
     }
 
-    /// Shape of each returned tensor in logical axis order.
+    /// Logical component shape of each result tensor.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of int
+    ///     Shape excluding the batch dimension.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> result = evaluator.output_shape
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.output_shape
+    /// (2,)
     #[getter]
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
@@ -1843,18 +2189,23 @@ impl SpensoExpressionEvaluator {
         )
     }
 
-    /// Whether the exact coefficients admit a real-valued evaluator.
+    /// Whether a real-valued evaluation path is available.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False when the formulas contain complex coefficients; use
+    ///     evaluate_complex in that case.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> result = evaluator.supports_real
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.supports_real
+    /// True
     #[getter]
     fn supports_real(&self) -> bool {
         self.eval.is_some()
@@ -1880,36 +2231,33 @@ impl SpensoExpressionEvaluator {
         )
     }
 
-    /// Evaluate a batch of real parameter rows and return one Tensor per row.
-    /// Use `.evaluate_complex()` if the expression has complex coefficients, even when
-    /// the supplied parameter values are real.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> results = evaluator.evaluate([[2.0], [3.0]])
-    /// >>> assert len(results) == 2
+    /// Evaluate a batch of real input rows.
     ///
     /// Parameters
     /// ----------
-    /// inputs : Sequence[Sequence[float]]
-    ///     Batch of parameter rows, each in the same order as .parameters. Every row must have exactly .input_size entries; an empty batch returns an empty list.
+    /// inputs : sequence of sequences of float
+    ///     One row per evaluation, with input_size entries in parameters order.
     ///
     /// Returns
     /// -------
     /// list of Tensor
-    ///     List of evaluated tensors, one for each input parameter set
+    ///     One real component tensor per input row, each with output_shape.
     ///
     /// Raises
     /// ------
     /// ValueError
-    ///     If the evaluator contains complex coefficients
+    ///     A row has the wrong size, or the formulas contain complex
+    ///     coefficients. Use evaluate_complex for those formulas.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.evaluate([[2.0]])[0][1]
+    /// 4.0
     fn evaluate(&mut self, inputs: Vec<Vec<f64>>) -> PyResult<Vec<Spensor>> {
         Self::validate_inputs(self.parameters.len(), &inputs)?;
         let eval = self.eval.as_mut().ok_or(exceptions::PyValueError::new_err(
@@ -1929,25 +2277,32 @@ impl SpensoExpressionEvaluator {
             .collect())
     }
 
-    /// Evaluate a batch of complex parameter rows and return one Tensor per row.
-    /// Real parameter values are accepted too; results use complex component storage.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> results = evaluator.evaluate_complex([[2.0 + 1.0j], [3.0 + 0.0j]])
-    /// >>> assert len(results) == 2
+    /// Evaluate a batch of complex input rows.
     ///
     /// Parameters
     /// ----------
-    /// inputs : Sequence[Sequence[complex]]
-    ///     Batch of parameter rows, each in the same order as .parameters. Every row must have exactly .input_size entries; an empty batch returns an empty list.
+    /// inputs : sequence of sequences of complex
+    ///     One row per evaluation, with input_size entries in parameters order.
+    ///
+    /// Returns
+    /// -------
+    /// list of Tensor
+    ///     One complex component tensor per input row, each with output_shape.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     A row has the wrong size.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator.evaluate_complex([[2.0]])[0][1]
+    /// (4+0j)
     fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> PyResult<Vec<Spensor>> {
         Self::validate_inputs(self.parameters.len(), &inputs)?;
         let eval = &mut self.eval_complex;
@@ -1973,47 +2328,48 @@ impl SpensoExpressionEvaluator {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
-    /// Generate C++ code and compile a numerical evaluator for repeated calls.
-    /// A C++ compiler must be installed. The returned evaluator accepts the same parameter
-    /// order and batches as this evaluator; keep the compiled library file available.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
-    /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
+    /// Compile and load native C++ code for repeated tensor evaluation.
     ///
     /// Parameters
     /// ----------
     /// function_name : str
-    ///     Name of the generated C++ evaluation function; use a valid C++ identifier.
+    ///     Exported C++ function name.
     /// filename : str
-    ///     Path at which to write the generated C++ source file.
+    ///     Path for generated complex-evaluation C++ source. When real evaluation
+    ///     is supported, an additional file with suffix .real.cpp is written.
     /// library_name : str
-    ///     Output path for the compiled shared library. Keep the file available while you use the compiled evaluator.
-    /// inline_asm : str
-    ///     Assembly backend: "default", "x64", "aarch64", or "none". Use "none" for portable C++ without inline assembly.
-    /// optimization_level : int
-    ///     C++ compiler optimization level from 0 to 3. Higher levels take longer to compile and can improve repeated evaluation speed.
+    ///     Output library path. A separate .real library is generated when supported.
+    /// inline_asm : str, default "default"
+    ///     Assembly mode: "default", "x64", "aarch64", or "none".
+    /// optimization_level : int, default 3
+    ///     Compiler optimization level.
     /// compiler_path : str, optional
-    ///     C++ compiler executable. None lets the evaluator use its default compiler; the compiler must be available on PATH.
+    ///     C++ compiler executable; omit to use Symbolica's default compiler.
     /// custom_header : str, optional
-    ///     Additional C++ declarations to include in the generated source, or None.
+    ///     Additional C++ header source included in the generated code.
     ///
     /// Returns
     /// -------
     /// CompiledTensorEvaluator
-    ///     A compiled evaluator for maximum performance evaluation
+    ///     Loaded native evaluator with the same input ordering and result shape.
+    ///
+    /// Notes
+    /// -----
+    /// This writes source and compiled library files to the supplied paths.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from tempfile import TemporaryDirectory
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.input_size
+    /// 1
+    /// >>> directory.cleanup()
     #[pyo3(signature =
         (function_name,
         filename,
@@ -2111,25 +2467,25 @@ impl SpensoExpressionEvaluator {
     }
 }
 
-/// A numerical tensor evaluator backed by a compiled C++ kernel.
-/// Create one with `TensorEvaluator.compile()`. Real coefficients support real and
-/// complex inputs; complex coefficients require `.evaluate_complex()`.
+/// A tensor evaluator compiled into a loaded native library.
+///
+/// Create this object with ``TensorEvaluator.compile``. Its input ordering,
+/// output shape, and real/complex evaluation rules match TensorEvaluator.
+/// Compilation requires a C++ compiler and writes source and library files.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> from symbolica import E, S
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> x = S("docs::x")
-/// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-/// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-/// >>> from pathlib import Path
+/// >>> from symbolica import S
+/// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+/// >>> x = S("x")
+/// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+/// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
 /// >>> from tempfile import TemporaryDirectory
-/// >>> with TemporaryDirectory() as directory:
-/// ...     folder = Path(directory)
-/// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-/// ...     results = compiled.evaluate([[2.0], [3.0]])
+/// >>> directory = TemporaryDirectory()
+/// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+/// >>> compiled.evaluate([[2.0]])[0][1]
+/// 4.0
+/// >>> directory.cleanup()
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -2154,70 +2510,76 @@ pub struct SpensoCompiledExpressionEvaluator {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
-    /// Parameters in the exact order expected by each evaluation input row.
+    /// Symbolic inputs in the required evaluation order.
+    ///
+    /// Returns
+    /// -------
+    /// list of Expression
+    ///     One entry for each value in an input row.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
     /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
-    /// ...     value = compiled.parameters
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.parameters == [x]
+    /// True
+    /// >>> directory.cleanup()
     #[getter]
     fn parameters(&self) -> Vec<PythonExpression> {
         self.parameters.iter().cloned().map(Into::into).collect()
     }
 
-    /// Number of parameter values required in each input row.
+    /// Number of values required in each evaluation row.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Length of parameters.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
     /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
-    /// ...     value = compiled.input_size
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.input_size
+    /// 1
+    /// >>> directory.cleanup()
     #[getter]
     fn input_size(&self) -> usize {
         self.parameters.len()
     }
 
-    /// Shape of each returned tensor in logical axis order.
+    /// Logical component shape of each result tensor.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of int
+    ///     Shape excluding the batch dimension.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
     /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
-    /// ...     value = compiled.output_shape
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.output_shape
+    /// (2,)
+    /// >>> directory.cleanup()
     #[getter]
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
@@ -2226,53 +2588,63 @@ impl SpensoCompiledExpressionEvaluator {
         )
     }
 
-    /// Whether a real-valued native kernel was compiled.
+    /// Whether a real-valued evaluation path is available.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False when the formulas contain complex coefficients; use
+    ///     evaluate_complex in that case.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
     /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
-    /// ...     value = compiled.supports_real
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.supports_real
+    /// True
+    /// >>> directory.cleanup()
     #[getter]
     fn supports_real(&self) -> bool {
         self.real.is_some()
     }
 
-    /// Evaluate real parameter rows using the compiled C++ kernel.
-    /// Returns one Tensor per row. Use `.evaluate_complex()` when the evaluator contains
-    /// complex coefficients.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
-    /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate([[2.0], [3.0]])
+    /// Evaluate a batch of real input rows.
     ///
     /// Parameters
     /// ----------
-    /// inputs : Sequence[Sequence[float]]
-    ///     Batch of parameter rows, each in the same order as .parameters. Every row must have exactly .input_size entries; an empty batch returns an empty list.
+    /// inputs : sequence of sequences of float
+    ///     One row per evaluation, with input_size entries in parameters order.
+    ///
+    /// Returns
+    /// -------
+    /// list of Tensor
+    ///     One real component tensor per input row, each with output_shape.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     A row has the wrong size, or the formulas contain complex
+    ///     coefficients. Use evaluate_complex for those formulas.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from tempfile import TemporaryDirectory
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.evaluate([[2.0]])[0][1]
+    /// 4.0
+    /// >>> directory.cleanup()
     fn evaluate(&mut self, inputs: Vec<Vec<f64>>) -> PyResult<Vec<Spensor>> {
         SpensoExpressionEvaluator::validate_inputs(self.parameters.len(), &inputs)?;
         let eval = self.real.as_mut().ok_or_else(|| {
@@ -2319,34 +2691,36 @@ impl SpensoCompiledExpressionEvaluator {
         )
     }
 
-    /// Evaluate complex parameter rows using the compiled C++ kernel.
-    /// Returns one Tensor per row, with the same logical axes as the original expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> x = S("docs::x")
-    /// >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-    /// >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    /// >>> from pathlib import Path
-    /// >>> from tempfile import TemporaryDirectory
-    /// >>> with TemporaryDirectory() as directory:
-    /// ...     folder = Path(directory)
-    /// ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-    /// ...     results = compiled.evaluate_complex([[2.0 + 1.0j], [3.0 + 0.0j]])
+    /// Evaluate a batch of complex input rows.
     ///
     /// Parameters
     /// ----------
-    /// inputs : Sequence[Sequence[complex]]
-    ///     Batch of parameter rows, each in the same order as .parameters. Every row must have exactly .input_size entries; an empty batch returns an empty list.
+    /// inputs : sequence of sequences of complex
+    ///     One row per evaluation, with input_size entries in parameters order.
     ///
     /// Returns
     /// -------
     /// list of Tensor
-    ///     List of evaluated tensors, one for each input parameter set
+    ///     One complex component tensor per input row, each with output_shape.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     A row has the wrong size.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from tempfile import TemporaryDirectory
+    /// >>> directory = TemporaryDirectory()
+    /// >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
+    /// >>> compiled.evaluate_complex([[2.0]])[0][1]
+    /// (4+0j)
+    /// >>> directory.cleanup()
     fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> PyResult<Vec<Spensor>> {
         SpensoExpressionEvaluator::validate_inputs(self.parameters.len(), &inputs)?;
         Ok(inputs
@@ -2388,24 +2762,7 @@ submit! {
                 ],
                 r#type: MethodType::Instance,
                 r#return: structure::SpensoSlot::type_output,
-                doc:r##"Create a slot from this representation, by specifying an index.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.mink(4)
->>> mu = r("mu")
->>> nu = r(1)
-
-Parameters
-----------
-aind : int | str
-    Index label as an integer, string, or Symbolica expression. Equal compatible labels represent contracted indices.
-
-Returns
--------
-Slot
-    A new Slot object with the specified index"##,
+                doc: python_doc!("Representation.__call__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -2423,24 +2780,7 @@ Slot
                 ],
                 r#type: MethodType::Instance,
                 r#return: || PythonExpression::type_output()| structure::SpensoSlot::type_output(),
-                doc:r##"Create a slot from this representation, by specifying an index.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.mink(4)
->>> mu = r("mu")
->>> nu = r(1)
-
-Parameters
-----------
-aind : int | str
-    Index label as an integer, string, or Symbolica expression. Equal compatible labels represent contracted indices.
-
-Returns
--------
-Slot
-    A new Slot object with the specified index"##,
+                doc: python_doc!("Representation.__call__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -2472,15 +2812,7 @@ submit! {
                     name: "typing.Iterator[Expression | float | complex]".into(),
                     import: std::collections::HashSet::new(),
                 },
-                doc:r##"Iterate over every component in logical row-major order, including sparse zeros.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> A = sp.TensorName("docs::A")(r, r)
->>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
->>> entries = list(tensor)"##,
+                doc: python_doc!("Tensor.__iter__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -2498,31 +2830,7 @@ Examples
                 ],
                 r#type: MethodType::Instance,
                 r#return: Vec::<TensorElements>::type_output,
-                doc:r##"Get tensor elements at the specified range of indices.
-
-Slices traverse the flat logical row-major order shown by `Tensor.structure.slots`;
-canonical storage-axis order is not exposed.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> A = sp.TensorName("docs::A")(r, r)
->>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
->>> first = tensor[0]
->>> last = tensor[-1]
->>> column = tensor[:, 1]
->>> assert column == [2.0, 4.0]
-
-Parameters
-----------
-item : slice
-    Flat position, slice, or coordinate selection. Negative indices count from the end. Coordinate tuples follow the logical axis order.
-
-Returns
--------
-list of float, complex, or Expression
-    The tensor elements at the specified range"##,
+                doc: python_doc!("Tensor.__getitem__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -2540,31 +2848,7 @@ list of float, complex, or Expression
                 ],
                 r#type: MethodType::Instance,
                 r#return: TensorElements::type_output,
-                doc:r##"Get tensor elements at the specified range of indices.
-
-Slices traverse the flat logical row-major order shown by `Tensor.structure.slots`;
-canonical storage-axis order is not exposed.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> A = sp.TensorName("docs::A")(r, r)
->>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
->>> first = tensor[0]
->>> last = tensor[-1]
->>> column = tensor[:, 1]
->>> assert column == [2.0, 4.0]
-
-Parameters
-----------
-item : slice
-    Flat position, slice, or coordinate selection. Negative indices count from the end. Coordinate tuples follow the logical axis order.
-
-Returns
--------
-list of float, complex, or Expression
-    The tensor elements at the specified range"##,
+                doc: python_doc!("Tensor.__getitem__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -2589,27 +2873,7 @@ list of float, complex, or Expression
                 ],
                 r#type: MethodType::Instance,
                 r#return: TypeInfo::none,
-                doc:r##"Set tensor element at the specified index.
-
-Integers are flat logical row-major positions. Coordinate lists follow
-`Tensor.structure.slots`; canonical storage-axis order is not exposed.
-
-Examples
---------
->>> from symbolica.community import tensor as sp
->>> r = sp.Representation.euc(2)
->>> A = sp.TensorName("docs::A")(r, r)
->>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
->>> tensor[0] = 9.0
->>> tensor[1, 1] = 5.0
->>> assert tensor[1, 1] == 5.0
-
-Parameters
-----------
-item : int | Sequence[int]
-    Flat integer position or coordinate list/tuple for one component. Negative coordinates count from the end.
-value : Expression | complex | float
-    New component value: float for real storage, complex for complex storage, or Expression for parametric storage."##,
+                doc: python_doc!("Tensor.__setitem__"),
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,

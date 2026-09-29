@@ -62,30 +62,25 @@ use super::ModuleInit;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*};
 
-/// Create an executable tensor computation from component data or a symbolic expression.
-/// Named symbolic tensors obtain their components from library. Construction does not
-/// execute contractions; call `.to_tensor()` for a result or `.step()` to inspect progress.
+/// An executable tensor calculation that retains component data.
+///
+/// Networks combine tensor contractions, sums, products, and elementwise
+/// functions. Arithmetic creates new networks. ``execute()`` advances a network
+/// in place; ``step()`` and ``to_tensor()`` work on copies. ``expression()``
+/// returns the symbolic source, while ``status`` reports remaining work.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import tensor as sp
-/// >>> r = sp.Representation.euc(2)
-/// >>> A = sp.TensorName("docs::A")(r, r)
-/// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-/// >>> network = sp.TensorNetwork(tensor)
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> from symbolica.community.tensor import TensorNetwork
+/// >>> network = TensorNetwork(tensor)
 /// >>> result = network.to_tensor()
-///
-/// Parameters
-/// ----------
-/// expr : Any
-///     Tensor, TensorNetwork, TensorExpression, or scalar expression to turn into an executable network.
-/// library : TensorLibrary, optional
-///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
-///
-/// Returns
-/// -------
-/// TensorNetwork
-///     A new TensorNetwork representing the parsed expression
+/// >>> result[0, 1]
+/// 2.0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -156,15 +151,24 @@ fn insert_function_values<'a>(
     Ok(())
 }
 
-/// Execution modes for tensor network evaluation.
+/// Choose how network execution schedules contractions.
 ///
-/// Controls how the tensor network execution engine processes the computational graph.
+/// ``All`` uses the default contraction schedule. ``Single`` selects one
+/// contraction at a time. ``Scalar`` restricts contraction to scalar work.
+/// Use ``execute(n_steps=...)`` to bound the number of execution rounds;
+/// the mode by itself does not bound the total number of rounds.
 ///
-/// Variants
+/// Examples
 /// --------
-/// Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
-/// Scalar : Only contract scalar operations, leaving tensor structure intact
-/// All : Execute all possible contractions for complete evaluation
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> from symbolica.community.tensor import TensorNetwork
+/// >>> network = TensorNetwork(tensor)
+/// >>> from symbolica.community.tensor import ExecutionMode
+/// >>> network.execute(n_steps=1, mode=ExecutionMode.Single)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     from_py_object,
@@ -785,30 +789,33 @@ impl SpensoNet {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoNet {
-    /// Create an executable tensor computation from component data or a symbolic expression.
-    /// Named symbolic tensors obtain their components from library. Construction does not
-    /// execute contractions; call `.to_tensor()` for a result or `.step()` to inspect progress.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> result = network.to_tensor()
+    /// Create a network from tensor components or symbolic algebra.
     ///
     /// Parameters
     /// ----------
-    /// expr : Any
-    ///     Tensor, TensorNetwork, TensorExpression, or scalar expression to turn into an executable network.
+    /// expr : Tensor, TensorNetwork, TensorExpression, or scalar expression
+    ///     Computation to represent. A Tensor retains its data; a TensorNetwork
+    ///     is copied with its execution progress.
     /// library : TensorLibrary, optional
-    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the parsed expression
+    ///     A new network with the corresponding external tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.shape
+    /// (2, 2)
     #[new]
     #[pyo3(signature = (expr, library=None))]
     pub fn from_expression(
@@ -829,7 +836,7 @@ impl SpensoNet {
         SpensoNet::from_arithmetic(expr, library)
     }
 
-    /// Create a tensor network representing the scalar value 1.
+    /// Construct the scalar 1 network.
     ///
     /// Examples
     /// --------
@@ -840,7 +847,13 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A TensorNetwork containing only the scalar 1
+    ///     A rank-zero multiplicative identity.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> TensorNetwork.one().result_scalar() == 1
+    /// True
     #[staticmethod]
     pub fn one() -> SpensoNet {
         let value = SymbolicTensor::new(
@@ -855,12 +868,24 @@ impl SpensoNet {
         }
     }
 
-    /// Return the symbolic head used for structured product brackets.
+    /// Return the symbolic function used to group a tensor subexpression.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A callable Symbolica head. Its argument is kept as a grouped tensor
+    ///     subexpression when parsed as a network.
+    ///
+    /// Notes
+    /// -----
+    /// This is useful when constructing raw Symbolica tensor syntax. Tensor-aware
+    /// operations and simplifiers already understand this grouping.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> bracket_head = sp.TensorNetwork.bracket()
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> grouped = TensorNetwork.bracket()(S("x") + 1)
     #[staticmethod]
     pub fn bracket() -> PythonExpression {
         PythonExpression {
@@ -868,24 +893,35 @@ impl SpensoNet {
         }
     }
 
-    /// Create a Symbolica function symbol tagged for elementwise tensor broadcasting.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> square_head = sp.TensorNetwork.broadcast("docs::legacy_square")
+    /// Register a raw Symbolica function for elementwise tensor application.
     ///
     /// Parameters
     /// ----------
     /// str : str
-    ///     Name of the Symbolica function to mark as elementwise. Prefer BroadcastFunction when registering a numerical callback.
+    ///     Function name to register with the broadcast tag.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A callable Symbolica function head.
+    ///
+    /// Notes
+    /// -----
+    /// Prefer BroadcastFunction when applying the function to TensorExpression,
+    /// Tensor, or TensorNetwork objects so the return type follows the operand.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> applied = TensorNetwork.broadcast("raw_function")(S("x"))
     #[staticmethod]
     pub fn broadcast(str: &str) -> PythonExpression {
         PythonExpression {
             expr: Atom::var(symbol!(str, tag = SPENSO_TAG.broadcast)),
         }
     }
-    /// Create a tensor network representing the scalar value 0.
+    /// Construct the scalar 0 network.
     ///
     /// Examples
     /// --------
@@ -896,7 +932,13 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A TensorNetwork containing only the scalar 0
+    ///     A rank-zero additive zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> TensorNetwork.zero().result_scalar() == 0
+    /// True
     #[staticmethod]
     pub fn zero() -> SpensoNet {
         let value = SymbolicTensor::new(
@@ -911,13 +953,7 @@ impl SpensoNet {
         }
     }
 
-    /// Replace patterns in stored symbolic network values.
-    ///
-    /// Rewrites scalar coefficients and symbolic elements of parametric tensors in
-    /// the execution store. Tensor identities, graph topology, the public interface,
-    /// and the semantic source expression returned by `structure()` are unchanged.
-    /// Rewrite a `TensorExpression` before constructing the network when the source
-    /// tensor expression itself should change.
+    /// Replace scalar expressions and symbolic component values in a copy.
     ///
     /// Examples
     /// --------
@@ -929,30 +965,44 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// pattern : Expression or scalar
-    ///     Expression or held expression to match, including Symbolica wildcards where needed.
-    /// rhs : replacement expression or callback
-    ///     Replacement expression, held expression, or callable receiving the wildcard match map.
-    /// cond : PatternRestriction | Condition, optional
-    ///     Optional Symbolica condition or pattern restriction. Only candidate matches satisfying it are replaced.
-    /// non_greedy_wildcards : Sequence[Expression], optional
-    ///     Wildcards that should prefer shorter matches during pattern matching. None uses Symbolica’s normal matching order.
-    /// level_range : tuple[int, Optional[int]], optional
-    ///     Optional (minimum, maximum) matching levels. An absent maximum leaves the upper bound unrestricted.
+    /// pattern : scalar expression
+    ///     Symbolica pattern to find in scalar algebra and component expressions.
+    /// rhs : scalar expression or HeldExpression
+    ///     Replacement expression. Python replacement callbacks are not supported
+    ///     by this network method; use TensorRule with TensorExpression for
+    ///     whole-tensor replacement.
+    /// cond : PatternRestriction or Condition, optional
+    ///     Restriction applied to candidate matches.
+    /// non_greedy_wildcards : sequence of Expression, optional
+    ///     Wildcards that should prefer shorter matches.
+    /// level_range : (int, int or None), optional
+    ///     Minimum and maximum matching level; defaults to (0, None).
     /// level_is_tree_depth : bool, optional
-    ///     Interpret level_range as expression-tree depth when True; otherwise use Symbolica’s default matching-level convention.
+    ///     Count tree depth rather than function nesting. Defaults to False.
     /// allow_new_wildcards_on_rhs : bool, optional
-    ///     Allow right-hand-side wildcards that do not occur on the left when True. Leave unset for Symbolica’s usual wildcard-closure checks.
+    ///     Permit unbound wildcard symbols in the replacement. Defaults to False.
     /// rhs_cache_size : int, optional
-    ///     Maximum cached right-hand-side callback results within one application. Use 0 for callbacks with side effects.
+    ///     Maximum cached right-hand-side substitutions. Defaults to 100.
     /// repeat : bool, optional
-    ///     Repeat replacements until stable when True. None uses Symbolica’s default single-pass behavior.
+    ///     Repeat replacements until unchanged. Defaults to False.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with matching stored values replaced and the same
-    ///     semantic source structure
+    ///     A copy with updated scalar/component expressions. Its external axes
+    ///     and symbolic source descriptor are unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(values).replace(x, 2)
+    /// >>> network.to_tensor()[0] == 2
+    /// True
     #[pyo3(signature = (pattern, rhs, cond = None, non_greedy_wildcards = None, level_range = None, level_is_tree_depth = None, allow_new_wildcards_on_rhs = None, rhs_cache_size = None, repeat = None))]
     #[allow(clippy::too_many_arguments)]
     pub fn replace(
@@ -1069,29 +1119,38 @@ impl SpensoNet {
         })
     }
 
-    /// Substitute numerical values into the network’s stored symbolic components.
-    /// Returns a numerical network; execute it separately to perform its contractions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> from symbolica import E, S
-    /// >>> x = S("docs::x")
-    /// >>> network = sp.TensorNetwork(sp.TensorExpression(x + 1))
-    /// >>> numeric = network.evaluate({x: 2.0}, {})
+    /// Numerically evaluate symbolic component values in a network copy.
     ///
     /// Parameters
     /// ----------
-    /// constants : Mapping[Expression, float]
-    ///     Map from symbolic variables to floating-point values for evaluating stored components.
-    /// functions : Mapping[Expression, Any]
-    ///     Map from Symbolica function symbols to numerical callbacks used to evaluate symbolic component values.
+    /// constants : mapping of Expression to float
+    ///     Real values for symbolic parameters.
+    /// functions : mapping of Expression to callable
+    ///     Symbolica function heads and real-valued Python implementations.
+    ///     A callback receives one list of evaluated argument values and
+    ///     returns a float; for example, lambda args: args[0] ** 2.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with stored tensor values evaluated and the same
-    ///     semantic source structure
+    ///     Network with evaluated component values; contractions are not executed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(values).evaluate({x: 2.0}, {})
+    /// >>> network.to_tensor()[1]
+    /// 4.0
+    /// >>> f = S("f_network")
+    /// >>> data = Tensor.dense(values.expression(), [f(x), x])
+    /// >>> network = TensorNetwork(data).evaluate({x: 2.0}, {f: lambda args: args[0] + 1})
+    /// >>> network.to_tensor()[0]
+    /// 3.0
     pub fn evaluate(
         &self,
         constants: HashMap<PythonExpression, f64>,
@@ -1135,30 +1194,45 @@ impl SpensoNet {
         })
     }
 
-    /// Advance this network in place, contracting tensors and applying available operations.
-    /// Use `.to_tensor()` to evaluate a copy instead. After execution, inspect `.status`
-    /// before extracting `.result_tensor()` or `.result_scalar()`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> network.execute()
-    /// >>> result = network.result_tensor()
+    /// Advance this network's computation in place.
     ///
     /// Parameters
     /// ----------
     /// library : TensorLibrary, optional
-    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
     /// function_library : TensorFunctionLibrary, optional
-    ///     Callbacks for custom elementwise functions during component evaluation. None uses only the available built-in functions.
+    ///     Numerical implementations of broadcast functions. Defaults to the
+    ///     built-in function library.
     /// n_steps : int, optional
-    ///     Maximum execution steps to perform in this call. None runs until no further selected operations are available.
-    /// mode : ExecutionMode
-    ///     ExecutionMode.All runs all available operations; Single selects one smallest-degree contraction per step; Scalar restricts execution to scalar operations.
+    ///     Number of execution rounds. None runs the selected strategy to completion.
+    /// mode : ExecutionMode, default ExecutionMode.All
+    ///     All contracts according to the default schedule. Single selects one
+    ///     contraction at a time. Scalar restricts contraction to scalar work.
+    ///     Preprocessing and ready operations may also run in an execution round.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     This network's execution progress and stored intermediate values change.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``to_tensor()`` to evaluate a copy, or ``step()`` for an intermediate
+    /// copy. ``result_tensor()`` extracts the result after execution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.execute()
+    /// >>> network.result_tensor()[1, 0]
+    /// 3.0
     #[pyo3(signature = (library=None,function_library=None, n_steps=None, mode=ExecutionMode::All))]
     pub(crate) fn execute(
         &mut self,
@@ -1213,33 +1287,41 @@ impl SpensoNet {
         }
         Ok(())
     }
-    /// Extract the tensor from a completed network.
-    /// Call `.execute()` first, or use `.to_tensor()` to execute a copy and return its result.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> network.execute()
-    /// >>> result = network.result_tensor()
+    /// Read the component tensor from a completed network.
     ///
     /// Parameters
     /// ----------
     /// library : TensorLibrary, optional
-    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
     ///
     /// Returns
     /// -------
     /// Tensor
-    ///     The computed tensor result
+    ///     Result components with the source computation's logical axis order.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the network execution resulted in an error
+    ///     Work remains that prevents extracting one result tensor.
+    ///
+    /// Notes
+    /// -----
+    /// This does not run pending operations. Call execute() first, or use
+    /// to_tensor() to execute a copy and extract the result in one operation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.execute()
+    /// >>> network.result_tensor().shape
+    /// (2, 2)
     #[pyo3(signature = (library=None))]
     pub(crate) fn result_tensor(&self, library: Option<&SpensorLibrary>) -> PyResult<Spensor> {
         let lib = library.map(|l| &l.library).unwrap_or(HEP_LIB.deref());
@@ -1287,25 +1369,25 @@ impl SpensoNet {
         )
     }
 
-    /// Extract a scalar from a completed rank-zero network.
-    /// The network must have finished executing and its result must have no free indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> network = sp.TensorNetwork(sp.TensorExpression(2))
-    /// >>> network.execute()
-    /// >>> value = network.result_scalar()
+    /// Read the scalar value of a completed rank-zero network.
     ///
     /// Returns
     /// -------
     /// Expression
-    ///     The computed scalar expression
+    ///     Scalar result as Symbolica algebra.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the network execution resulted in an error
+    ///     The network has not reduced to a scalar result.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(3)
+    /// >>> network.execute()
+    /// >>> network.result_scalar() == 3
+    /// True
     fn result_scalar(&self) -> PyResult<PythonExpression> {
         Ok(
             match self
@@ -1360,36 +1442,55 @@ impl SpensoNet {
         Ok(())
     }
 
-    /// Return the computational graph in Graphviz DOT format.
+    /// Export the current network graph in Graphviz DOT syntax.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Graph description containing the current tensor nodes and connections.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> graphviz_source = network.to_dot()
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> source = network.to_dot()
     fn to_dot(&self) -> String {
         self.network.dot_pretty()
     }
 
-    /// Export the current executable graph as Linnest/Typst source.
-    /// Requires the `linnet` Python package. The output can be saved or customized before rendering.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> typst_source = network.to_linnest()
+    /// Generate Typst/Linnest source for the network graph.
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig | None
-    ///     Optional linnet.RenderConfig controlling graph layout and appearance. None uses Spenso’s network rendering preset.
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst graph source produced by Linnet.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_linnest()
     #[pyo3(signature = (*, config=None))]
     fn to_linnest(
         &self,
@@ -1402,23 +1503,34 @@ impl SpensoNet {
             .extract()
     }
 
-    /// Render the current executable graph as an interactive SVG figure.
-    /// Requires the `linnet` Python package and its rendering dependencies. The figure
-    /// shows the current execution state; call `.step()` first to inspect a later state.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> figure = network.render()
+    /// Render the current network graph to SVG.
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig | None
-    ///     Optional linnet.RenderConfig controlling graph layout and appearance. None uses Spenso’s network rendering preset.
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     SVG graph, with notebook-theme styling.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.render()
     #[pyo3(signature = (*, config=None))]
     fn render(
         &self,
@@ -1433,23 +1545,39 @@ impl SpensoNet {
         Ok(display::network::svg_theme(&svg))
     }
 
-    /// Format the exact semantic structure using compact Spenso notation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> text = network.format_tensor(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Produce compact plain-text tensor notation.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Readable tensor text, suitable for logs or terminal output.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.format_tensor()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn format_tensor(
         &self,
@@ -1464,23 +1592,41 @@ impl SpensoNet {
         ))
     }
 
-    /// Format the semantic source structure as Typst math source.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> typst_source = network.to_typst(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Produce static Typst math source.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst source without an enclosing document; no compilation is performed.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Static Typst output remains available independently of the HTML explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_typst()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn to_typst(
         &self,
@@ -1495,25 +1641,39 @@ impl SpensoNet {
         ))
     }
 
-    /// Build Symbolica's rich display wrapper for the semantic source structure.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> display_value = network.formatted(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    /// Create a rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// FormattedOutput
+    ///     Symbolica display wrapper with text and available rich representations.
+    ///
+    /// Notes
+    /// -----
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.formatted()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
@@ -1531,23 +1691,34 @@ impl SpensoNet {
         )
     }
 
-    /// Render the current executable graph for an HTML notebook.
-    /// Requires `linnet` and its rendering dependencies. To display the symbolic formula
-    /// instead, use `.expression().to_html()`.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> figure = network.to_html()
+    /// Display the current network graph and execution status.
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig | None
-    ///     Optional linnet.RenderConfig controlling graph layout and appearance. None uses Spenso’s network rendering preset.
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Interactive HTML graph with its progress summary.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_html()
     #[pyo3(signature = (*, config=None))]
     fn to_html(
         &self,
@@ -1561,27 +1732,43 @@ impl SpensoNet {
         ))
     }
 
-    /// Render the network’s symbolic source expression as SVG.
-    /// For a picture of the executable graph, use `.render()` instead.
-    /// Rendering requires the optional Typst runtime.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> svg = network.to_svg()
+    /// Render static mathematical tensor notation to SVG.
     ///
     /// Parameters
     /// ----------
     /// show_dimensions : bool, optional
-    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
     /// settings : DisplaySettings, optional
-    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     SVG markup suitable for embedding or saving to a file.
+    ///
+    /// Notes
+    /// -----
+    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// string is not automatically displayed; pass it to the notebook's HTML
+    /// or SVG display facility.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_svg()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_svg(
         &self,
@@ -1598,22 +1785,29 @@ impl SpensoNet {
         self.to_html(py, None)
     }
 
-    /// Return the semantic source expression and its public tensor interface.
+    /// Return the symbolic source computation of this network.
     ///
-    /// This expression records the tensor-aware structure used for composition and
-    /// provenance. It is not reconstructed from the current execution store, so
-    /// `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
-    /// `result_scalar()` or `result_tensor()` to inspect the current computed value.
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     A symbolic tensor with the same external axes.
+    ///
+    /// Notes
+    /// -----
+    /// Execution progress and replacement of component values do not rewrite
+    /// this source expression. Use result_tensor after execution to inspect values.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> source = network.expression()
-    /// >>> assert source.shape == (2, 2)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.expression().rank
+    /// 2
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_known_parts(
             py,
@@ -1627,16 +1821,24 @@ impl SpensoNet {
         )
     }
 
-    /// Source tensor identity and ordered external ports, independent of execution.
+    /// Identity, scalar arguments, and ordered external axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorStructure
+    ///     Immutable metadata, separate from the component values or computation.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network.structure
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.structure.rank
+    /// 2
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
         crate::metadata::SpensoTensorStructure {
@@ -1650,26 +1852,39 @@ impl SpensoNet {
         }
     }
 
-    /// Fill the unresolved external ports with `indices` in interface order.
-    ///
-    /// Pass `AUTO` to leave a port unresolved. Pass `cook_indices=sp.CookSettings.reversible()` to reversibly encode nested
-    /// symbolic index payloads before insertion.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> indexed = network.index("i", "j")
+    /// Assign labels to the unresolved external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing explicit labels are left in place. Use reindex to replace them.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.index("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn index(
         &self,
@@ -1679,24 +1894,39 @@ impl SpensoNet {
         self.index_network(indices, cook_indices)
     }
 
-    /// Assign all external ports, retaining data and execution progress. AUTO leaves a port unchanged.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> indexed = network("i", "j")
-    /// >>> renamed = indexed.reindex("mu", sp.AUTO)
+    /// Assign labels to all external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per external axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing labels are replaced as well as unresolved axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.reindex("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices=None))]
     pub(crate) fn reindex(
         &self,
@@ -1713,24 +1943,36 @@ impl SpensoNet {
         self.set_port_indices(&replacements)
     }
 
-    /// Rename external indices simultaneously without changing rank or capturing dummy indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> indexed = network("i", "j")
-    /// >>> swapped = indexed.rename_indices({"i": "j", "j": "i"})
+    /// Rename selected external labels without changing the tensor rank.
     ///
     /// Parameters
     /// ----------
-    /// mapping : dict[int | str | Expression | Slot, index label, Slot, or AUTO]
-    ///     Old-to-new external index labels, applied simultaneously. Typed Slot keys disambiguate representations. Renaming cannot contract ports or capture dummy indices; use reindex() for contractions.
+    /// mapping : dict
+    ///     Old label to new label. A Slot key also restricts the representation.
+    ///     Keys must identify existing external axes. Each axis may be renamed
+    ///     once; renaming must preserve the external interface.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A new value with renamed axes; the original is unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.index("i", "j")
+    /// >>> renamed = indexed.rename_indices({"i": "k"})
+    /// >>> renamed.rank
+    /// 2
     #[pyo3(signature = (mapping, *, cook_indices=None))]
     pub(crate) fn rename_indices(
         &self,
@@ -1751,22 +1993,36 @@ impl SpensoNet {
         Ok(result)
     }
 
-    /// Return a copy with reordered external axes and the same execution progress.
-    /// Unresolved ports acquire fresh identities; reindex() can assign preferred labels.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> transposed = network.permute_axes([1, 0])
+    /// Reorder the external axes in logical component order.
     ///
     /// Parameters
     /// ----------
-    /// axes : Sequence[int]
-    ///     Permutation of all axis positions, starting at zero. For a matrix, [1, 0] transposes the logical axes.
+    /// axes : sequence of int
+    ///     Each current axis position exactly once, in the desired new order.
+    ///     For a matrix, [1, 0] exchanges the two axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A new tensor view with the reordered interface and correspondingly
+    ///     reordered component access.
+    ///
+    /// Notes
+    /// -----
+    /// This permutes axes; it does not conjugate component values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> transposed = network.permute_axes([1, 0])
+    /// >>> transposed.shape
+    /// (2, 2)
     pub(crate) fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
         let structure = self.structure.permuted(&axes).map_err(composition_error)?;
         let new_slots = structure.structure().logical_slots();
@@ -1795,38 +2051,61 @@ impl SpensoNet {
         Ok(result)
     }
 
-    /// Copy the value and its tensor metadata without mutating the original.
+    /// Implement ``copy.copy`` using an independent TensorNetwork copy.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     Copy of the component data and execution progress.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
     /// >>> import copy
-    /// >>> independent = copy.copy(network)
+    /// >>> copied = copy.copy(network)
     fn __copy__(&self) -> Self {
         self.clone()
     }
 
-    /// Fill the unresolved external ports with `indices` in interface order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> indexed = network("i", "j")
+    /// Assign labels to the unresolved external axes.
     ///
     /// Parameters
     /// ----------
-    /// indices : index label, Slot, or AUTO
-    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
     /// cook_indices : CookSettings, optional
-    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
+    ///     Encode compound index labels as symbols. Use CookSettings.indices()
+    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Equivalent to ``index(*indices)``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network("i", "j")
+    /// >>> indexed.rank
+    /// 2
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn __call__(
         &self,
@@ -1836,16 +2115,23 @@ impl SpensoNet {
         self.index_network(indices, cook_indices)
     }
 
-    /// Negate every tensor coefficient, preserving the external axes.
+    /// Negate every tensor component.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     Negated symbolic algebra retaining component data lazily.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> negative = -network
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> negated = -network
     pub fn __neg__(&self) -> PyResult<Self> {
         let structure = SymbolicTensor::new(
             Atom::num(-1) * self.structure.expression(),
@@ -1858,168 +2144,252 @@ impl SpensoNet {
         Self::finish(-self.network.clone(), structure, materialized)
     }
 
-    /// Add compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network + network
+    /// Add tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the sum
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network + network
     pub fn __add__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().add_network(rhs.to_net(), false)
     }
 
-    /// Add compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network + network
+    /// Implement reflected addition.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network + network
     pub fn __radd__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.__add__(rhs)
     }
 
-    /// Subtract compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network - network
+    /// Subtract tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the difference
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network - network
     pub fn __sub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().add_network(rhs.to_net(), true)
     }
 
-    /// Subtract compatible tensors, preserving their logical external axes.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network - network
+    /// Implement reflected subtraction.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
-    pub fn __rsub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
-        rhs.to_net().add_network(self.clone(), true)
-    }
-
-    /// Multiply tensor operands, contracting repeated compatible explicit indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network * 2
-    ///
-    /// Parameters
-    /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the product
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network - network
+    pub fn __rsub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        rhs.to_net().add_network(self.clone(), true)
+    }
+
+    /// Multiply tensors, contracting unambiguous compatible axes.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract_ports(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network * 2
     pub fn __mul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().multiply_network(rhs.to_net())
     }
 
-    /// Multiply tensor operands, contracting repeated compatible explicit indices.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = 2 * network
+    /// Implement reflected multiplication.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract_ports(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = 2 * network
     pub fn __rmul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         rhs.to_net().multiply_network(self.clone())
     }
 
-    /// Divide tensor coefficients by a scalar denominator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = tensor("i", "j") * tensor("j", "k")
-    /// >>> result = network / 2
+    /// Divide tensor components by a scalar expression.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network / 2
     pub fn __truediv__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().multiply_network(rhs.to_net().reciprocal()?)
     }
 
-    /// Divide a scalar by a rank-zero tensor, returning a TensorNetwork.
-    /// Call `.to_tensor().scalar()` to obtain its component value.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> scalar = sp.Tensor.dense(sp.TensorName("docs::scalar")(), [2.0])
-    /// >>> scalar = sp.TensorNetwork(scalar)
-    /// >>> reciprocal = 1 / scalar
+    /// Implement reflected division.
     ///
     /// Parameters
     /// ----------
-    /// lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = 2 / TensorNetwork(3)
     pub fn __rtruediv__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         if !lhs.0.structure.is_scalar() {
             return Err(PyTypeError::new_err(
@@ -2029,44 +2399,70 @@ impl SpensoNet {
         lhs.to_net().multiply_network(self.clone().reciprocal()?)
     }
 
-    /// Form an outer tensor product without contracting compatible ports.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> result = network.outer(network)
+    /// Form an outer product without implicit contractions between the operands.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor whose axes follow this tensor's axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy outer product retaining the operands' component data.
+    ///
+    /// Notes
+    /// -----
+    /// Use this when compatible unresolved axes should remain independent.
+    /// Choose explicit distinct labels if you need to refer to them separately.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> product = network.outer(network)
+    /// >>> product.rank
+    /// 4
     pub fn outer(&self, rhs: ConvertibleToSpensoNet) -> PyResult<Self> {
         self.clone().apply_product(rhs.to_net(), ProductPlan::Outer)
     }
 
-    /// Contract one selected pair of public interface positions.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> result = network.contract_ports(network, left=1, right=0)
+    /// Contract one chosen pair of axes between two tensors.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
-    /// left : int
-    ///     Zero-based axis position in this operand to contract.
-    /// right : int
-    ///     Zero-based axis position in rhs to contract with the selected left axis.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor to contract with this tensor.
+    /// left, right : int
+    ///     Zero-based axis positions in this tensor and rhs, respectively.
+    ///     The representations must be compatible under contraction.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy contraction retaining component data.
+    ///
+    /// Notes
+    /// -----
+    /// Other axes remain external. Axis numbers refer to ``structure.slots``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> contracted = network.contract_ports(network, left=1, right=0)
+    /// >>> contracted.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
     pub fn contract_ports(
         &self,
@@ -2080,25 +2476,34 @@ impl SpensoNet {
         )
     }
 
-    /// Compose two explicitly selected matrix channels.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> result = network.compose(network, left=(0, 1), right=(0, 1))
+    /// Multiply two tensors along explicitly selected matrix channels.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
-    /// left : tuple[int, int]
-    ///     (input_axis, output_axis) channel in this operand.
-    /// right : tuple[int, int]
-    ///     (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Next factor in the ordered matrix product.
+    /// left, right : tuple of int and int
+    ///     (input_axis, output_axis) in this tensor and rhs, respectively.
+    ///     The left output contracts with the right input. Other axes are
+    ///     retained as spectator axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy ordered matrix product retaining component data.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> product = network.compose(network, left=(0, 1), right=(0, 1))
+    /// >>> product.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
     pub fn compose(
         &self,
@@ -2121,20 +2526,24 @@ impl SpensoNet {
         )
     }
 
-    /// Contract two rank-one operands into the canonical dot form.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> vector = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1.0, 2.0])
-    /// >>> vector = sp.TensorNetwork(vector)
-    /// >>> norm_squared = vector.dot(vector).to_tensor().scalar()
+    /// Contract two rank-one tensors using their representation pairing.
     ///
     /// Parameters
     /// ----------
-    /// rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
-    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Rank-one tensor in a compatible space.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy scalar contraction, including the metric signs of the space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Tensor, TensorNetwork, Representation
+    /// >>> vector = Tensor.dense(TensorName.vector("dot_v")(Representation.euc(2)), [1.0, 2.0])
+    /// >>> TensorNetwork(vector).dot(vector).to_tensor().scalar() == 5
+    /// True
     pub fn dot(&self, rhs: ConvertibleToSpensoNet) -> PyResult<Self> {
         if self.structure.rank() != 1 || rhs.0.structure.rank() != 1 {
             return Err(PyValueError::new_err(format!(
@@ -2146,21 +2555,31 @@ impl SpensoNet {
         self.contract_ports(rhs, 0, 0)
     }
 
-    /// Close a selected or uniquely inferred propagation channel.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import tensor as sp
-    /// >>> r = sp.Representation.euc(2)
-    /// >>> A = sp.TensorName("docs::A")(r, r)
-    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
-    /// >>> network = sp.TensorNetwork(tensor)
-    /// >>> trace = network.trace(channel=(0, 1))
+    /// Close a pair of matrix axes on this tensor.
     ///
     /// Parameters
     /// ----------
-    /// channel : tuple[int, int], optional
-    ///     Pair (input_axis, output_axis) identifying the matrix channel to close. None selects the unique compatible channel; ambiguous tensors require an explicit pair.
+    /// channel : tuple of int and int, optional
+    ///     (input_axis, output_axis) to contract. If omitted, the matrix channel
+    ///     must be uniquely determined by the representations. Specify it when
+    ///     more than one pairing is possible.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     The traced tensor; spectator axes remain external.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.trace(channel=(0, 1)).is_scalar
+    /// True
     #[pyo3(signature = (*, channel = None))]
     pub fn trace(&self, channel: Option<(usize, usize)>) -> PyResult<Self> {
         let selected = match channel {
