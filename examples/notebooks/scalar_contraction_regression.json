@@ -1,0 +1,1700 @@
+{
+  "description": "Scalar contraction factorization regression and conditional collection fix",
+  "parent_commit": "d61ee2a6f68747f4ec4553a21a06315de99e305d",
+  "production_source_sha256": {
+    "crates/idenso/src/shorthands/schoonschip/analysis.rs": "612a987f2aab0be856471dea650a81067f4343cc8f6d7914a6157de4eda8bed3",
+    "crates/idenso/src/shorthands/schoonschip/slot_contraction/components/factorized.rs": "4c130237d362b08ba022a41c2ab6791c09a3daf5666806fdd608f270d8cc1718",
+    "crates/gammalooprs/src/utils/symbols.rs": "549e27d078df4fef4532601ae2f1035d29ee1b5bed2fdb10f5ede8cd9fb7bd04"
+  },
+  "symbolica_commit": "6a96c9d77b217ea394770524c119e0613d4d9ef5",
+  "fail_first_regressions": [
+    {
+      "test": "scalar_rational_sums_keep_their_factorization",
+      "command": [
+        "taskset",
+        "-c",
+        "24",
+        "/tmp/feynkit-tensor-review-checks/target/dev-optim/deps/idenso-8d26a489d620dff7",
+        "scalar_rational_sums_keep_their_factorization",
+        "--nocapture"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 0.0781099870800972,
+      "binary_sha256": "b5b31cccb6fec9bb2c884affaf89bfed21a20521a08788843f85d7e836a0b7b2"
+    },
+    {
+      "test": "fixed_component_scalar_sums_stay_closed",
+      "command": [
+        "taskset",
+        "-c",
+        "24",
+        "/tmp/feynkit-tensor-review-checks/target/dev-optim/deps/idenso-8d26a489d620dff7",
+        "fixed_component_scalar_sums_stay_closed",
+        "--nocapture"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 0.011618724092841148,
+      "binary_sha256": "b5b31cccb6fec9bb2c884affaf89bfed21a20521a08788843f85d7e836a0b7b2"
+    }
+  ],
+  "same_dependency_installed_probe": {
+    "78a0a22f": {
+      "q": "Q(0,cind(0))",
+      "input": "m*(1/(-x+Q(0,cind(0)))+1/(-y+Q(0,cind(0))))+n*(1/(x+Q(0,cind(0)))+1/(y+Q(0,cind(0))))",
+      "output": "m*(1/(-x+Q(0,cind(0)))+1/(-y+Q(0,cind(0))))+n*(1/(x+Q(0,cind(0)))+1/(y+Q(0,cind(0))))",
+      "preserves_factorization": true,
+      "contraction_complete": true,
+      "input_length": 85,
+      "output_length": 85
+    },
+    "73c246d1": {
+      "q": "Q(0,cind(0))",
+      "input": "m*(1/(-x+Q(0,cind(0)))+1/(-y+Q(0,cind(0))))+n*(1/(x+Q(0,cind(0)))+1/(y+Q(0,cind(0))))",
+      "output": "m/(-x+Q(0,cind(0)))+m/(-y+Q(0,cind(0)))+n/(x+Q(0,cind(0)))+n/(y+Q(0,cind(0)))",
+      "preserves_factorization": false,
+      "contraction_complete": true,
+      "input_length": 85,
+      "output_length": 77
+    }
+  },
+  "checks": {
+    "idenso-regressions": {
+      "command": [
+        "taskset",
+        "-c",
+        "24-27",
+        "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "nextest",
+        "run",
+        "-p",
+        "idenso",
+        "--lib",
+        "--cargo-profile",
+        "dev-optim",
+        "--profile",
+        "ci",
+        "--test-threads",
+        "4",
+        "--offline",
+        "--locked",
+        "--no-fail-fast",
+        "-E",
+        "test(shorthands::schoonschip) | test(tensor::contract) | test(tensor::simplification) | test(undo_dots)"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 214.76976713957265,
+      "log": "/tmp/feynkit-scalar-regression-checks/idenso-regressions.log",
+      "log_sha256": "e45040a3e3813503662879259d38f75a819f4cc7a78cfd02418a2d0789037f70",
+      "tests_passed": 170,
+      "tests_skipped": 652,
+      "nextest_run_id": "30b9c864-4921-4eb4-947f-900a1b740800"
+    },
+    "idenso-clippy": {
+      "command": [
+        "taskset",
+        "-c",
+        "24-27",
+        "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "clippy",
+        "-p",
+        "idenso",
+        "--lib",
+        "--tests",
+        "--profile",
+        "dev-optim",
+        "--offline",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 22.17252248013392,
+      "log": "/tmp/feynkit-scalar-regression-checks/idenso-clippy.log",
+      "log_sha256": "da62a34231152ae07cd82d3d944112e500565517f2d2d3b6efebf805c3f0baba"
+    },
+    "fmt-final": {
+      "command": [
+        "taskset",
+        "-c",
+        "24-27",
+        "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 7.2987538878805935,
+      "log": "/tmp/feynkit-scalar-regression-checks/fmt-final.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "native_cli_build": [
+      {
+        "label": "cli",
+        "command": [
+          "taskset",
+          "-c",
+          "28-31",
+          "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+          "build",
+          "-p",
+          "gammaloop-api",
+          "--bin",
+          "gammaloop",
+          "--profile",
+          "dev-optim",
+          "--locked",
+          "--offline",
+          "--message-format=json-render-diagnostics"
+        ],
+        "exit_code": 0,
+        "started_ns": 1790677706932738839,
+        "finished_ns": 1790678574492798706,
+        "log_sha256": "d5dcf4e510e2e70bf3080f8081b172f0e2734687bd7d275a93e24913e3c1561d",
+        "stdout_sha256": "326eb1cfb852d6a06661d901f42003fbe42a2ce9fae06bae2804e7ebb81baa4b",
+        "artifacts": [
+          {
+            "path": "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+            "sha256": "4d2e87b82dbab153cc939d7c1cd0257789bb71e770c864be50b42acd135edc98",
+            "package": "path+file:///tmp/feynkit-scalar-regression-production/source/crates/gammaloop-api#0.1.0"
+          }
+        ],
+        "source_drift": 0
+      }
+    ],
+    "orientation-native": {
+      "command": [
+        "taskset",
+        "-c",
+        "28-31",
+        "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "nextest",
+        "run",
+        "-p",
+        "gammalooprs",
+        "--lib",
+        "--cargo-profile",
+        "dev-optim",
+        "--profile",
+        "ci",
+        "--test-threads",
+        "4",
+        "--offline",
+        "--locked",
+        "-E",
+        "test(utils::symbols::tests::orientation_collection) | test(collected_residue_map_guards_preserve_lazy_values)"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 854.420417735,
+      "log": "/tmp/feynkit-scalar-regression-production/orientation-native.log",
+      "log_sha256": "a2ea0074b262b00ec163259bcd35e6ecd89d07c24a532729ec56f0a0075f67fd",
+      "source_manifest_sha256": "ebad9b3e6f8ebe3cf240b6120543f360b6ca1446c0a3589533db9440594e4164",
+      "source_drift": false,
+      "tests_passed": 7,
+      "tests_skipped": 779,
+      "nextest_run_id": "452ac21a-5197-475d-931e-4335b6005b46"
+    },
+    "gammalooprs-clippy": {
+      "command": [
+        "taskset",
+        "-c",
+        "28-31",
+        "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "clippy",
+        "-p",
+        "gammalooprs",
+        "--lib",
+        "--tests",
+        "--profile",
+        "dev-optim",
+        "--offline",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 53.379904724,
+      "log": "/tmp/feynkit-scalar-regression-production/gammalooprs-clippy.log",
+      "log_sha256": "34a432dfdbabdd11733698a2c52190704c4aef8bf8f103aac020f8b2d2385730",
+      "source_manifest_sha256": "ebad9b3e6f8ebe3cf240b6120543f360b6ca1446c0a3589533db9440594e4164",
+      "source_drift": false
+    }
+  },
+  "synthetic_conditional_collection": {
+    "scope": "Synthetic scalar conditional collection with four condition groups; each payload is body(index)*(a+b)^7 and one opaque reciprocal spectator. This does not reproduce the full production expression shape.",
+    "cpu": 20,
+    "timing_boundary": "Input construction measured separately. Whole routes include initial selector scan, unchanged theta/unary-IF normalizations, and final grouping. New grouping repeats the bulk bottom-up pass to exact stability to handle callbacks. Grouping-only explicitly supplemental and includes the fixed-point loop. Result equality checks, symbol registration and expected-result construction are outside clocks.",
+    "samples": "One warmup and three timed samples per route/size, all retained; old/new run order alternated.",
+    "median_ms": {
+      "64": {
+        "old_whole": 0.544822,
+        "new_whole": 0.232261,
+        "new_grouping": 0.05826
+      },
+      "512": {
+        "old_whole": 15.038436,
+        "new_whole": 1.632076,
+        "new_grouping": 0.432572
+      },
+      "3004": {
+        "old_whole": 493.703482,
+        "new_whole": 9.573156,
+        "new_grouping": 2.63079
+      }
+    },
+    "all_samples": [
+      {
+        "size": 64,
+        "iteration": 0,
+        "route": "input_construction",
+        "milliseconds": 0.809522,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 0,
+        "route": "old_whole",
+        "milliseconds": 3.062842,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 0,
+        "route": "new_whole",
+        "milliseconds": 0.712232,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 0,
+        "route": "new_grouping",
+        "milliseconds": 0.057221,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 1,
+        "route": "new_whole",
+        "milliseconds": 0.235861,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 1,
+        "route": "old_whole",
+        "milliseconds": 0.544822,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 1,
+        "route": "new_grouping",
+        "milliseconds": 0.05969,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 2,
+        "route": "old_whole",
+        "milliseconds": 0.760983,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 2,
+        "route": "new_whole",
+        "milliseconds": 0.232261,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 2,
+        "route": "new_grouping",
+        "milliseconds": 0.05599,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 3,
+        "route": "new_whole",
+        "milliseconds": 0.220361,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 3,
+        "route": "old_whole",
+        "milliseconds": 0.524652,
+        "exact_equal": true
+      },
+      {
+        "size": 64,
+        "iteration": 3,
+        "route": "new_grouping",
+        "milliseconds": 0.05826,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 0,
+        "route": "input_construction",
+        "milliseconds": 0.679832,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 0,
+        "route": "old_whole",
+        "milliseconds": 15.409577,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 0,
+        "route": "new_whole",
+        "milliseconds": 1.705046,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 0,
+        "route": "new_grouping",
+        "milliseconds": 0.402071,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 1,
+        "route": "new_whole",
+        "milliseconds": 1.637255,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 1,
+        "route": "old_whole",
+        "milliseconds": 15.038436,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 1,
+        "route": "new_grouping",
+        "milliseconds": 0.432572,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 2,
+        "route": "old_whole",
+        "milliseconds": 15.063386,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 2,
+        "route": "new_whole",
+        "milliseconds": 1.632076,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 2,
+        "route": "new_grouping",
+        "milliseconds": 0.406921,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 3,
+        "route": "new_whole",
+        "milliseconds": 1.594086,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 3,
+        "route": "old_whole",
+        "milliseconds": 15.022056,
+        "exact_equal": true
+      },
+      {
+        "size": 512,
+        "iteration": 3,
+        "route": "new_grouping",
+        "milliseconds": 0.435851,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 0,
+        "route": "input_construction",
+        "milliseconds": 4.172856,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 0,
+        "route": "old_whole",
+        "milliseconds": 520.825254,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 0,
+        "route": "new_whole",
+        "milliseconds": 9.723576,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 0,
+        "route": "new_grouping",
+        "milliseconds": 2.48058,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 1,
+        "route": "new_whole",
+        "milliseconds": 9.842586,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 1,
+        "route": "old_whole",
+        "milliseconds": 493.703482,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 1,
+        "route": "new_grouping",
+        "milliseconds": 2.63884,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 2,
+        "route": "old_whole",
+        "milliseconds": 493.699682,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 2,
+        "route": "new_whole",
+        "milliseconds": 9.573156,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 2,
+        "route": "new_grouping",
+        "milliseconds": 2.448339,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 3,
+        "route": "new_whole",
+        "milliseconds": 9.530126,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 3,
+        "route": "old_whole",
+        "milliseconds": 519.022467,
+        "exact_equal": true
+      },
+      {
+        "size": 3004,
+        "iteration": 3,
+        "route": "new_grouping",
+        "milliseconds": 2.63079,
+        "exact_equal": true
+      }
+    ],
+    "provenance": {
+      "new_source": "/tmp/feynkit-scalar-contraction-regression/crates/gammalooprs/src/utils/symbols.rs",
+      "new_source_sha256": "549e27d078df4fef4532601ae2f1035d29ee1b5bed2fdb10f5ede8cd9fb7bd04",
+      "old_source": "/tmp/feynkit-tensor-full-stack/crates/gammalooprs/src/utils/symbols.rs",
+      "old_source_sha256": "2bf86d8c0d945eba2a5e2520cd3c706c08ec9346c87242411980a07901bdcc13",
+      "symbolica_rlib": "/tmp/feynkit-tensor-review-checks/target/dev-optim/deps/libsymbolica-4c80cd5a578ac298.rlib",
+      "symbolica_rlib_sha256": "747b7aece04aff8214c4c1a0b3f73caab8134d4b1c4c3dc20bb3472ad441eb91",
+      "symbolica_commit": "6a96c9d",
+      "harness_source_sha256": "649e3b291dcf439fd30837e2778f324ba200daff506c22d296bd05982ced3908",
+      "builds": [
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "20",
+            "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+            "--edition=2024",
+            "-C",
+            "opt-level=3",
+            "-C",
+            "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc",
+            "-L",
+            "dependency=/tmp/feynkit-tensor-review-checks/target/dev-optim/deps",
+            "--extern",
+            "symbolica=/tmp/feynkit-tensor-review-checks/target/dev-optim/deps/libsymbolica-4c80cd5a578ac298.rlib",
+            "/tmp/feynkit-orientation-collection/compare.rs",
+            "-o",
+            "/tmp/feynkit-orientation-collection/tests",
+            "--test"
+          ],
+          "seconds": 5.964879307895899,
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "20",
+            "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+            "--edition=2024",
+            "-C",
+            "opt-level=3",
+            "-C",
+            "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc",
+            "-L",
+            "dependency=/tmp/feynkit-tensor-review-checks/target/dev-optim/deps",
+            "--extern",
+            "symbolica=/tmp/feynkit-tensor-review-checks/target/dev-optim/deps/libsymbolica-4c80cd5a578ac298.rlib",
+            "/tmp/feynkit-orientation-collection/compare.rs",
+            "-o",
+            "/tmp/feynkit-orientation-collection/compare"
+          ],
+          "seconds": 5.032750844024122,
+          "exit_code": 0
+        }
+      ],
+      "compare_binary_sha256": "0a35c40340c0eb4c1246b1dc9976da794c3ba8766afb8bd44007f900b2f84437",
+      "tests_binary_sha256": "a514f3567187ca25347ebc02f597b1e0ec5db6f4c9e2ccea0e7ce0712fb00cd5"
+    },
+    "standalone_tests": {
+      "command": [
+        "taskset",
+        "-c",
+        "20",
+        "/tmp/feynkit-orientation-collection/tests",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.11514667002484202
+    },
+    "supersedes": "v1/summary.json; original single-pass implementation lacked callback fixed-point behavior"
+  },
+  "native_gl000": {
+    "builds": {
+      "regressed73": {
+        "directory": "/tmp/feynkit-tensor-full-production/baseline",
+        "binary": {
+          "path": "/tmp/feynkit-tensor-full-production/baseline/target/dev-optim/gammaloop",
+          "sha256": "02e75d46a63f3a152110421a767dbb29424473843dcf13c0573d3804742e8a15",
+          "package": "path+file:///tmp/feynkit-tensor-full-production/baseline/source/crates/gammaloop-api#0.1.0"
+        }
+      },
+      "fixed": {
+        "directory": "/tmp/feynkit-scalar-regression-production",
+        "binary": {
+          "path": "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+          "sha256": "4d2e87b82dbab153cc939d7c1cd0257789bb71e770c864be50b42acd135edc98",
+          "package": "path+file:///tmp/feynkit-scalar-regression-production/source/crates/gammaloop-api#0.1.0"
+        }
+      }
+    },
+    "protocol": {
+      "shared_host_qualification": "Other users/CI jobs may run with unrestricted affinity; paired alternating samples use CPU12, diagnostics16-19, own builds28-31. CPU pinning is not exclusive CPU reservation.",
+      "cpu": 12,
+      "rounds": 3,
+      "warmups_per_build": 1,
+      "source_fixture": "/tmp/feynkit-tensor-full-production/baseline/source/examples/notebooks/fixtures/production/GL000.dot",
+      "clock": "complete fresh process CPU and wall, including startup; input checks excluded",
+      "samples": 20,
+      "seed": 1337,
+      "generation_cores": 1,
+      "integration_cores": 1,
+      "address_space_bytes": 68719476736,
+      "timeout_seconds": 900,
+      "symbolica": "6a96c9d77b217ea394770524c119e0613d4d9ef5",
+      "profile": "dev-optim",
+      "check": "integration summaries and max-weight coordinates, not every pointwise sample",
+      "relative_tolerance": 1e-09,
+      "absolute_tolerance": 1e-12
+    },
+    "records": [
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-tensor-full-production/baseline/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/00-warmup-regressed73/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 84858481721,
+        "cpu_ns": 82845822000,
+        "user_seconds": 50.468267,
+        "system_seconds": 32.377555,
+        "max_rss_kib": 2097696,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/00-warmup-regressed73/run.log",
+        "log_sha256": "4ab1b2e49b10b43c19d79713bfad67f48481357f647bca59d123d28b686ebe52",
+        "phase": "warmup",
+        "round": 0,
+        "label": "regressed73",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.947649884051208e-05,
+          "result_im": 1.5493409831688303e-05,
+          "error_re": 5.4470730858440776e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 6.6181e-05,
+          "avg_integrand_time_s": 3.4694e-05,
+          "avg_evaluator_time_s": 2.5627e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330924,
+          "max_weight_impact_re": 0.8917837996807387,
+          "rel_error_im_percent": 828.7697284148572,
+          "max_weight_impact_im": 5.667655864255059,
+          "max_weight_re_plus": 0.0005026815667689541,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816828,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345273,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975041,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "228.21 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/01-warmup-fixed/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 8088466151,
+        "cpu_ns": 7824063000,
+        "user_seconds": 4.502568,
+        "system_seconds": 3.321495,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/01-warmup-fixed/run.log",
+        "log_sha256": "a970caaa0fa512f8892a69281b9221db9863f8ab698e5557e3eac1341383c596",
+        "phase": "warmup",
+        "round": 0,
+        "label": "fixed",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.9476498840512123e-05,
+          "result_im": 1.5493409831688404e-05,
+          "error_re": 5.44707308584408e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 8.6952e-05,
+          "avg_integrand_time_s": 4.2964e-05,
+          "avg_evaluator_time_s": 2.4881e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330915,
+          "max_weight_impact_re": 0.8917837996807382,
+          "rel_error_im_percent": 828.7697284148518,
+          "max_weight_impact_im": 5.667655864255018,
+          "max_weight_re_plus": 0.0005026815667689542,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816832,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345282,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975028,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "178.33 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-tensor-full-production/baseline/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/02-measurement-regressed73/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 82111355662,
+        "cpu_ns": 80170144000,
+        "user_seconds": 49.238338,
+        "system_seconds": 30.931806,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/02-measurement-regressed73/run.log",
+        "log_sha256": "c000154b4547fbcd762b32934e3a72107e3b7ff8d05e404e68dcc7f054fc7ec8",
+        "phase": "measurement",
+        "round": 0,
+        "label": "regressed73",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.947649884051208e-05,
+          "result_im": 1.5493409831688303e-05,
+          "error_re": 5.4470730858440776e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 6.04e-05,
+          "avg_integrand_time_s": 3.1519e-05,
+          "avg_evaluator_time_s": 2.2779e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330924,
+          "max_weight_impact_re": 0.8917837996807387,
+          "rel_error_im_percent": 828.7697284148572,
+          "max_weight_impact_im": 5.667655864255059,
+          "max_weight_re_plus": 0.0005026815667689541,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816828,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345273,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975041,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "245.71 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/03-measurement-fixed/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 7803202549,
+        "cpu_ns": 7541944000,
+        "user_seconds": 4.412092,
+        "system_seconds": 3.129852,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/03-measurement-fixed/run.log",
+        "log_sha256": "793bd0e205f4cae4bb3f24bf00a8b62d1387e698a5c9c31f51d386b98e3f2f8b",
+        "phase": "measurement",
+        "round": 0,
+        "label": "fixed",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.9476498840512123e-05,
+          "result_im": 1.5493409831688404e-05,
+          "error_re": 5.44707308584408e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 5.7418e-05,
+          "avg_integrand_time_s": 3.0707e-05,
+          "avg_evaluator_time_s": 2.2472e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330915,
+          "max_weight_impact_re": 0.8917837996807382,
+          "rel_error_im_percent": 828.7697284148518,
+          "max_weight_impact_im": 5.667655864255018,
+          "max_weight_re_plus": 0.0005026815667689542,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816832,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345282,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975028,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "201.84 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/04-measurement-fixed/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 7898182256,
+        "cpu_ns": 7648766000,
+        "user_seconds": 4.396563,
+        "system_seconds": 3.252203,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/04-measurement-fixed/run.log",
+        "log_sha256": "078578eaf424978286a499b4f844d519ef5183a894a0196f29c7efcbef9c88f4",
+        "phase": "measurement",
+        "round": 1,
+        "label": "fixed",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.9476498840512123e-05,
+          "result_im": 1.5493409831688404e-05,
+          "error_re": 5.44707308584408e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 6.0041e-05,
+          "avg_integrand_time_s": 3.1292e-05,
+          "avg_evaluator_time_s": 2.303e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330915,
+          "max_weight_impact_re": 0.8917837996807382,
+          "rel_error_im_percent": 828.7697284148518,
+          "max_weight_impact_im": 5.667655864255018,
+          "max_weight_re_plus": 0.0005026815667689542,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816832,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345282,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975028,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "199.12 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-tensor-full-production/baseline/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/05-measurement-regressed73/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 81759732978,
+        "cpu_ns": 79892731000,
+        "user_seconds": 49.096801,
+        "system_seconds": 30.79593,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/05-measurement-regressed73/run.log",
+        "log_sha256": "b3044a7cbff8865fa049b7040838ebf5edc03c6b86d4a340ea8875a3087d9807",
+        "phase": "measurement",
+        "round": 1,
+        "label": "regressed73",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.947649884051208e-05,
+          "result_im": 1.5493409831688303e-05,
+          "error_re": 5.4470730858440776e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 6.0417e-05,
+          "avg_integrand_time_s": 3.1742e-05,
+          "avg_evaluator_time_s": 2.3033e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330924,
+          "max_weight_impact_re": 0.8917837996807387,
+          "rel_error_im_percent": 828.7697284148572,
+          "max_weight_impact_im": 5.667655864255059,
+          "max_weight_re_plus": 0.0005026815667689541,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816828,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345273,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975041,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "275.78 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-tensor-full-production/baseline/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/06-measurement-regressed73/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 81490974365,
+        "cpu_ns": 79478486000,
+        "user_seconds": 48.859534,
+        "system_seconds": 30.618952,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/06-measurement-regressed73/run.log",
+        "log_sha256": "be56c4ba70ae73317e8c120489004bd70dd0655d5b4d7e284a4272b946b6783f",
+        "phase": "measurement",
+        "round": 2,
+        "label": "regressed73",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.947649884051208e-05,
+          "result_im": 1.5493409831688303e-05,
+          "error_re": 5.4470730858440776e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 6.2627e-05,
+          "avg_integrand_time_s": 3.2274e-05,
+          "avg_evaluator_time_s": 2.348e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330924,
+          "max_weight_impact_re": 0.8917837996807387,
+          "rel_error_im_percent": 828.7697284148572,
+          "max_weight_impact_im": 5.667655864255059,
+          "max_weight_re_plus": 0.0005026815667689541,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816828,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345273,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975041,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "281.48 MiB"
+        },
+        "checks_pass": true
+      },
+      {
+        "command": [
+          "/run/current-system/sw/bin/prlimit",
+          "--as=68719476736:68719476736",
+          "--",
+          "/run/current-system/sw/bin/taskset",
+          "-c",
+          "12",
+          "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+          "--no-save-state",
+          "--clean-state",
+          "/tmp/feynkit-scalar-regression-production/gl000-paired/07-measurement-fixed/run.toml"
+        ],
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_ns": 7998718500,
+        "cpu_ns": 7745893000,
+        "user_seconds": 4.416037,
+        "system_seconds": 3.329856,
+        "max_rss_kib": 2098272,
+        "log": "/tmp/feynkit-scalar-regression-production/gl000-paired/07-measurement-fixed/run.log",
+        "log_sha256": "5495ec42462498e5fb8a6c439331c3faf8a229b44a77186372acc4a140759e47",
+        "phase": "measurement",
+        "round": 2,
+        "label": "fixed",
+        "result": {
+          "result_emitted": true,
+          "neval": 20,
+          "result_re": -3.9476498840512123e-05,
+          "result_im": 1.5493409831688404e-05,
+          "error_re": 5.44707308584408e-05,
+          "error_im": 0.00012840469058428394,
+          "avg_total_time_s": 5.7451e-05,
+          "avg_integrand_time_s": 3.0497e-05,
+          "avg_evaluator_time_s": 2.1977e-05,
+          "nan_or_unstable_percent": 0.0,
+          "rel_error_re_percent": 137.98267946330915,
+          "max_weight_impact_re": 0.8917837996807382,
+          "rel_error_im_percent": 828.7697284148518,
+          "max_weight_impact_im": 5.667655864255018,
+          "max_weight_re_plus": 0.0005026815667689542,
+          "max_weight_re_plus_coordinates": "graph: 0, orientation: 268, LMB channel: 0, xs: [\n8.3235394099254578e-01 7.2826380079447117e-01 8.7337506610800819e-01\n2.4184145282468617e-01 9.2761434620747718e-01 3.3386521872720554e-01\n9.0564770157210095e-02 2.7861319780355254e-01 3.7950213969149416e-01 ]",
+          "max_weight_re_minus": -0.0007040900426816832,
+          "max_weight_re_minus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_plus": 0.0017310378151345282,
+          "max_weight_im_plus_coordinates": "graph: 0, orientation: 322, LMB channel: 0, xs: [\n9.3944457536908832e-01 1.8807310318817838e-01 6.5520024363377360e-01\n3.8689505050174955e-01 8.2935161004967461e-01 3.3823655160768717e-01\n7.3659254495770310e-01 5.4126162037222780e-01 7.4513272529687158e-01 ]",
+          "max_weight_im_minus": -0.0017562263017975028,
+          "max_weight_im_minus_coordinates": "graph: 0, orientation: 199, LMB channel: 0, xs: [\n8.3267288582373244e-01 9.6260276916853094e-01 8.2942500254773888e-01\n2.2311930242602962e-01 8.1396066544331847e-02 4.6245477815420866e-01\n9.3500373559916083e-01 7.5289705498709703e-01 7.3355091126332139e-01 ]"
+        },
+        "log_summary": {
+          "generated": true,
+          "started_integration": true,
+          "generation_peak_ram": "199.49 MiB"
+        },
+        "checks_pass": true
+      }
+    ],
+    "completed": true,
+    "started_ns": 1790678616749054646,
+    "schedule": [
+      [
+        "warmup",
+        0,
+        "regressed73"
+      ],
+      [
+        "warmup",
+        0,
+        "fixed"
+      ],
+      [
+        "measurement",
+        0,
+        "regressed73"
+      ],
+      [
+        "measurement",
+        0,
+        "fixed"
+      ],
+      [
+        "measurement",
+        1,
+        "fixed"
+      ],
+      [
+        "measurement",
+        1,
+        "regressed73"
+      ],
+      [
+        "measurement",
+        2,
+        "regressed73"
+      ],
+      [
+        "measurement",
+        2,
+        "fixed"
+      ]
+    ],
+    "comparisons": [
+      {
+        "phase": "warmup",
+        "round": 0,
+        "integration_summaries_equal": true,
+        "max_weight_coordinates_equal": true,
+        "pass": true
+      },
+      {
+        "phase": "measurement",
+        "round": 0,
+        "integration_summaries_equal": true,
+        "max_weight_coordinates_equal": true,
+        "pass": true
+      },
+      {
+        "phase": "measurement",
+        "round": 1,
+        "integration_summaries_equal": true,
+        "max_weight_coordinates_equal": true,
+        "pass": true
+      },
+      {
+        "phase": "measurement",
+        "round": 2,
+        "integration_summaries_equal": true,
+        "max_weight_coordinates_equal": true,
+        "pass": true
+      }
+    ],
+    "checks_pass": true,
+    "finished_ns": 1790679189379317143,
+    "summary": {
+      "regressed73": {
+        "wall_ms": 81759.732978,
+        "cpu_ms": 79892.731
+      },
+      "fixed": {
+        "wall_ms": 7898.182256,
+        "cpu_ms": 7648.766
+      }
+    },
+    "full_report_sha256": "b9514944837b7980a2d4c52e42c2f2146528409d8696d3ae0dd6d590627c5414",
+    "full_report_path": "/tmp/feynkit-scalar-regression-production/gl000-paired/report.json",
+    "input_hashes": {
+      "/tmp/feynkit-tensor-full-production/baseline/source/examples/notebooks/fixtures/production/GL000.dot": "66ee4c77d83ffdd058a8deee6bb0f602d8a9344ca2628a8772438f25cc9879a6",
+      "/tmp/feynkit-scalar-regression-production/measure-gl000.py": "e9be318f5b5fca9e6dc25a0a24b247d6d2ee9fb23b85bf3fe463ec0f1a80f29e",
+      "/tmp/feynkit-tensor-full-production/baseline/source-manifest.json": "9b4449bf46c5af35a4d48eaaa5ef5b5cc7ad792e455047ec1ee712da13af5013",
+      "/tmp/feynkit-tensor-full-production/baseline/source/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot": "8443139cfcd889a867a97d88e89abca4d8befcc9d3fdd4ea980c41a52de1c4e4",
+      "/tmp/feynkit-tensor-full-production/baseline/source/examples/cli/aa_aa/3L/graphs_grouped/processes/amplitudes/aa_aa/3L/GL000.dot": "8443139cfcd889a867a97d88e89abca4d8befcc9d3fdd4ea980c41a52de1c4e4",
+      "/tmp/feynkit-scalar-regression-production/source-manifest.json": "ebad9b3e6f8ebe3cf240b6120543f360b6ca1446c0a3589533db9440594e4164",
+      "/tmp/feynkit-scalar-regression-production/source/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot": "8443139cfcd889a867a97d88e89abca4d8befcc9d3fdd4ea980c41a52de1c4e4",
+      "/tmp/feynkit-scalar-regression-production/source/examples/cli/aa_aa/3L/graphs_grouped/processes/amplitudes/aa_aa/3L/GL000.dot": "8443139cfcd889a867a97d88e89abca4d8befcc9d3fdd4ea980c41a52de1c4e4",
+      "/tmp/feynkit-scalar-regression-production/source/examples/notebooks/fixtures/production/GL000.dot": "66ee4c77d83ffdd058a8deee6bb0f602d8a9344ca2628a8772438f25cc9879a6"
+    },
+    "coarse_summary": {
+      "scope": "Original complete GL000 generation plus 20-sample integration, one warmup/build excluded, three alternating measured pairs, same CPU12/profile/dependency/input/seed. Shared host; source/binary verification excluded from clocks. Coarse stages are rounded console durations, not fine-grained profiles. Broad symbolica_eval stage includes Rust expression preparation. Numerical checks compare integration summaries and max-weight coordinates, not all pointwise samples.",
+      "summary": {
+        "regressed73": {
+          "wall_seconds": 81.759732978,
+          "cpu_seconds": 79.892731,
+          "coarse_stage_seconds": {
+            "expression_build": 5.68,
+            "spenso": 2.44,
+            "symbolica_eval_including_rust_preparation": 71.9,
+            "compile": 0.0
+          }
+        },
+        "fixed": {
+          "wall_seconds": 7.898182256,
+          "cpu_seconds": 7.648766,
+          "coarse_stage_seconds": {
+            "expression_build": 2.72,
+            "spenso": 0.996,
+            "symbolica_eval_including_rust_preparation": 2.79,
+            "compile": 0.0
+          }
+        }
+      },
+      "wall_speedup": 10.351715157736416,
+      "cpu_speedup": 10.445179130855879
+    }
+  },
+  "diagnostic_capture": {
+    "timing_boundary": "Separate generation/export diagnostic runs with retained expressions; stage timings are not parts of the paired whole-command samples.",
+    "full_report_path": "/tmp/feynkit-scalar-regression-production/capture-comparison.json",
+    "full_report_sha256": "12fc25f7fbc45f121849e42db12eecc91eee9e46574d2f92f98304ec7ceddf1c",
+    "diagnostic_affinity": {
+      "regressed": "24-27",
+      "fixed": "16-19",
+      "generation_cores": 1
+    },
+    "historical_recovery": {
+      "param_builder_params": true,
+      "fn_map_entries": true,
+      "orientations": true,
+      "roots_raw_equal": true,
+      "additional_fn_map_entries_raw_equal": true
+    },
+    "regressed_fixed_comparison": {
+      "graph_fn_map_entries_raw_equal": true,
+      "additional_fn_map_entries_raw_equal": true,
+      "roots_raw_equal": false,
+      "ordered_parameters_equal": true,
+      "orientations_equal": true,
+      "production_orientation_ids_equal": true,
+      "roots_alpha_equal": false,
+      "fn_map_entries": {
+        "only_old": [],
+        "only_new": [],
+        "same_keys": 63,
+        "changed_rhs": [],
+        "same_rhs": 63
+      }
+    },
+    "captures": {
+      "historical-m1": {
+        "archive": "/tmp/feynkit-tensor-full-production/capture-GL000-historical-m1/standalone/processes/amplitudes/aa_aa/3L/standalone_evaluators.json",
+        "archive_sha256": "3cbe15ebd28edbddd43f8f55db20a2ee14878177827089933249c2270bf06e98",
+        "parameters": 220,
+        "orientation_count": 434,
+        "root_count": 1,
+        "root_summaries": [
+          {
+            "characters": 1274783,
+            "sha256": "2d5057f31023f637fc885432f97fc2b138e08b4203f3e3650402a0a7198a0d33",
+            "alpha_sha256": "2d5057f31023f637fc885432f97fc2b138e08b4203f3e3650402a0a7198a0d33",
+            "syntactic_tokens": {
+              "-": 6433,
+              "/": 6307,
+              "*": 12538,
+              "+": 36084,
+              "^": 434
+            },
+            "function_calls": 61375,
+            "numerator_component_calls": 434,
+            "IF_calls": 434,
+            "OSE_calls": 43020
+          }
+        ],
+        "graph_fn_entries": 63,
+        "additional_fn_entries": 64,
+        "graph_rhs_characters": 4130,
+        "additional_rhs_characters": 229823,
+        "zero_argument_additional_entries": 60,
+        "stages": [
+          {
+            "atom_count": 1,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_start"
+          },
+          {
+            "atom_count": 1,
+            "stage": "evaluator_stack_parse_atoms_start"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 0.16603,
+            "stage": "evaluator_stack_parse_atom_simplify_skipped"
+          },
+          {
+            "elapsed_ms": 0.286281,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_before_network_parse"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_terms_start"
+          },
+          {
+            "elapsed_ms": 5.78787,
+            "stage": "evaluator_stack_parse_atom_net_done"
+          },
+          {
+            "elapsed_ms": 5.925510999999999,
+            "stage": "evaluator_stack_parse_atom_scalar_aliases_done"
+          },
+          {
+            "elapsed_ms": 0.221581,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 4.204294,
+            "stage": "evaluator_stack_parse_atom_parse_elapsed"
+          },
+          {
+            "elapsed_ms": 4.831897,
+            "stage": "evaluator_stack_parse_atom_execute_elapsed"
+          },
+          {
+            "elapsed_ms": 11.649151,
+            "stage": "evaluator_stack_parse_atom_execute_done"
+          },
+          {
+            "elapsed_ms": 12.556644,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 0.11943,
+            "stage": "evaluator_stack_parse_atom_simplify_skipped"
+          },
+          {
+            "elapsed_ms": 8.134949,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_before_network_parse"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_terms_start"
+          },
+          {
+            "elapsed_ms": 250.155283,
+            "stage": "evaluator_stack_parse_atom_net_done"
+          },
+          {
+            "elapsed_ms": 250.33775400000002,
+            "stage": "evaluator_stack_parse_atom_scalar_aliases_done"
+          },
+          {
+            "elapsed_ms": 0.02319,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 171.871487,
+            "stage": "evaluator_stack_parse_atom_parse_elapsed"
+          },
+          {
+            "elapsed_ms": 0.01686,
+            "stage": "evaluator_stack_parse_atom_execute_elapsed"
+          },
+          {
+            "elapsed_ms": 250.517084,
+            "stage": "evaluator_stack_parse_atom_execute_done"
+          },
+          {
+            "elapsed_ms": 0.00732,
+            "stage": "evaluator_stack_parse_atom_alias_retention_done"
+          },
+          {
+            "elapsed_ms": 250.774875,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "generated_definitions": 1,
+            "referenced_families": 1,
+            "retained_generated_definitions": 1,
+            "stage": "evaluator_stack_numerator_components_reachable",
+            "supplied_families": 1
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 493.30411200000003,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_parse_atoms_done"
+          },
+          {
+            "stage": "evaluator_expression_preparation_start"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 84.94946,
+            "stage": "evaluator_expression_preparation_done"
+          },
+          {
+            "atom_bytes": 716909,
+            "stage": "evaluator_symbolica_build_start"
+          },
+          {
+            "elapsed_ms": 1817.921578,
+            "stage": "evaluator_symbolica_build_done"
+          },
+          {
+            "stage": "evaluator_numeric_programs_start"
+          },
+          {
+            "elapsed_ms": 67.357777,
+            "stage": "evaluator_numeric_programs_done"
+          },
+          {
+            "elapsed_ms": 1971.013819,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_single_parametric_done"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 2464.4158909999996,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_done"
+          }
+        ]
+      },
+      "current73": {
+        "archive": "/tmp/feynkit-tensor-full-production/capture-GL000-current73/standalone/processes/amplitudes/aa_aa/3L/standalone_evaluators.json",
+        "archive_sha256": "d0cd311412fa3e7e9741e23d76bbaa38debfbf1e3c700e7f7017fa486357f2f5",
+        "parameters": 220,
+        "orientation_count": 434,
+        "root_count": 1,
+        "root_summaries": [
+          {
+            "characters": 2781338,
+            "sha256": "84fae5f4f1ad3cbe0a10ff3715e5d92daf34af7c02e95ce78bd6d10b8d7d1806",
+            "alpha_sha256": "84fae5f4f1ad3cbe0a10ff3715e5d92daf34af7c02e95ce78bd6d10b8d7d1806",
+            "syntactic_tokens": {
+              "-": 22175,
+              "/": 3861,
+              "*": 51416,
+              "+": 56817,
+              "^": 3004
+            },
+            "function_calls": 133723,
+            "numerator_component_calls": 3004,
+            "IF_calls": 434,
+            "OSE_calls": 88380
+          }
+        ],
+        "graph_fn_entries": 63,
+        "additional_fn_entries": 64,
+        "graph_rhs_characters": 4130,
+        "additional_rhs_characters": 229823,
+        "zero_argument_additional_entries": 60,
+        "stages": [
+          {
+            "atom_count": 1,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_start"
+          },
+          {
+            "atom_count": 1,
+            "stage": "evaluator_stack_parse_atoms_start"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 1.276725,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "elapsed_ms": 4.181585,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 10.268146,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 493.026231,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "elapsed_ms": 795.84029,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 0.388482,
+            "stage": "evaluator_stack_parse_atom_alias_retention_done"
+          },
+          {
+            "elapsed_ms": 796.534053,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "generated_definitions": 1,
+            "referenced_families": 1,
+            "retained_generated_definitions": 1,
+            "stage": "evaluator_stack_numerator_components_reachable",
+            "supplied_families": 1
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 1529.849731,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_parse_atoms_done"
+          },
+          {
+            "stage": "evaluator_expression_preparation_start"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 38914.478202,
+            "stage": "evaluator_expression_preparation_done"
+          },
+          {
+            "atom_bytes": 1583881,
+            "stage": "evaluator_symbolica_build_start"
+          },
+          {
+            "elapsed_ms": 1591.140109,
+            "stage": "evaluator_symbolica_build_done"
+          },
+          {
+            "stage": "evaluator_numeric_programs_start"
+          },
+          {
+            "elapsed_ms": 41.06265500000001,
+            "stage": "evaluator_numeric_programs_done"
+          },
+          {
+            "elapsed_ms": 40548.274911,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_single_parametric_done"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 42078.511442999996,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_done"
+          }
+        ]
+      },
+      "fixed": {
+        "archive": "/tmp/feynkit-scalar-regression-production/capture-GL000-fixed/standalone/processes/amplitudes/aa_aa/3L/standalone_evaluators.json",
+        "archive_sha256": "be595241c84b8c4834012efb0e00b63abfc166c7e6c62ec4450e00479a3ed006",
+        "parameters": 220,
+        "orientation_count": 434,
+        "root_count": 1,
+        "root_summaries": [
+          {
+            "characters": 1274783,
+            "sha256": "2d5057f31023f637fc885432f97fc2b138e08b4203f3e3650402a0a7198a0d33",
+            "alpha_sha256": "2d5057f31023f637fc885432f97fc2b138e08b4203f3e3650402a0a7198a0d33",
+            "syntactic_tokens": {
+              "-": 6433,
+              "/": 6307,
+              "*": 12538,
+              "+": 36084,
+              "^": 434
+            },
+            "function_calls": 61375,
+            "numerator_component_calls": 434,
+            "IF_calls": 434,
+            "OSE_calls": 43020
+          }
+        ],
+        "graph_fn_entries": 63,
+        "additional_fn_entries": 64,
+        "graph_rhs_characters": 4130,
+        "additional_rhs_characters": 229823,
+        "zero_argument_additional_entries": 60,
+        "stages": [
+          {
+            "atom_count": 1,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_start"
+          },
+          {
+            "atom_count": 1,
+            "stage": "evaluator_stack_parse_atoms_start"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 1.269245,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "elapsed_ms": 5.404451,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 11.856896,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "stage": "evaluator_stack_parse_atom_start"
+          },
+          {
+            "elapsed_ms": 219.60685999999998,
+            "stage": "evaluator_stack_parse_atom_normalization_done"
+          },
+          {
+            "elapsed_ms": 333.221464,
+            "stage": "evaluator_stack_parse_atom_tensor_boundaries_done"
+          },
+          {
+            "elapsed_ms": 0.21835100000000002,
+            "stage": "evaluator_stack_parse_atom_alias_retention_done"
+          },
+          {
+            "elapsed_ms": 333.700176,
+            "stage": "evaluator_stack_parse_atom_done"
+          },
+          {
+            "generated_definitions": 1,
+            "referenced_families": 1,
+            "retained_generated_definitions": 1,
+            "stage": "evaluator_stack_numerator_components_reachable",
+            "supplied_families": 1
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 572.757411,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_parse_atoms_done"
+          },
+          {
+            "stage": "evaluator_expression_preparation_start"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 46.591418000000004,
+            "stage": "evaluator_expression_preparation_done"
+          },
+          {
+            "atom_bytes": 716909,
+            "stage": "evaluator_symbolica_build_start"
+          },
+          {
+            "elapsed_ms": 1682.3944929999998,
+            "stage": "evaluator_symbolica_build_done"
+          },
+          {
+            "stage": "evaluator_numeric_programs_start"
+          },
+          {
+            "elapsed_ms": 61.225304,
+            "stage": "evaluator_numeric_programs_done"
+          },
+          {
+            "elapsed_ms": 1790.9224780000002,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_single_parametric_done"
+          },
+          {
+            "atom_count": 1,
+            "elapsed_ms": 2363.846099,
+            "orientation_count": 434,
+            "stage": "evaluator_stack_new_done"
+          }
+        ]
+      }
+    },
+    "fixed_capture_receipt": {
+      "command": [
+        "/run/current-system/sw/bin/prlimit",
+        "--as=68719476736:68719476736",
+        "--",
+        "/run/current-system/sw/bin/taskset",
+        "-c",
+        "16-19",
+        "/tmp/feynkit-scalar-regression-production/target/dev-optim/gammaloop",
+        "--no-save-state",
+        "--clean-state",
+        "/tmp/feynkit-scalar-regression-production/capture-GL000-fixed/run.toml"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "wall_ns": 4490286141,
+      "cpu_ns": 10093464000,
+      "user_seconds": 4.419182,
+      "system_seconds": 5.674282,
+      "max_rss_kib": 2097240,
+      "log": "/tmp/feynkit-scalar-regression-production/capture-GL000-fixed/run.log",
+      "log_sha256": "129f624588f5f3e3af43c31d89e426d0b25e28102a397aa3410bb4e437511f0c",
+      "source_drift": [],
+      "export_files": [
+        "standalone/processes/amplitudes/aa_aa/3L/standalone_evaluators.json",
+        "standalone/processes/amplitudes/aa_aa/3L/standalone_evaluators_rust.rs"
+      ],
+      "checks_pass": true
+    }
+  }
+}

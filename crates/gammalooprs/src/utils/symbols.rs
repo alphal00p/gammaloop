@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
@@ -275,7 +275,8 @@ impl GammaloopSymbols {
         {
             return arg.into_owned();
         }
-        arg.replace(self.sign_theta(W_.a_))
+        let mut expression = arg
+            .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
             // A generalized residue-map delta is represented as
             // IF(current_id-key, 0, 1). Move the selected branch body inside
@@ -291,15 +292,64 @@ impl GammaloopSymbols {
             .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            // Tensor contractions are complete here. Combine scalar contributions
-            // selected by the same key while keeping their complete bodies lazy.
-            .replace(
-                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
-                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
-            )
-            .repeat()
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]));
+        loop {
+            let collected = expression.replace_map_bottom_up(|node, _, output| {
+                if let Some(collected) = Self::merge_orientation_branches(node) {
+                    **output = collected;
+                }
+            });
+            if collected == expression {
+                return collected;
+            }
+            // Rebuilding a parent can invoke a normalizer that introduces new
+            // conditional sums after its children have already been visited.
+            expression = collected;
+        }
+    }
+
+    fn merge_orientation_branches(node: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Add(sum) = node else {
+            return None;
+        };
+        let mut groups = BTreeMap::<_, Vec<_>>::new();
+        let mut terms = Vec::<AtomOrView<'_>>::new();
+        for term in sum.iter() {
+            if let AtomView::Fun(branch) = term
+                && branch.get_symbol() == Symbol::IF
+                && branch.get_nargs() == 3
+                && branch.get(1).is_zero()
+            {
+                groups
+                    .entry(branch.get(0))
+                    .or_default()
+                    .push((term, branch.get(2)));
+            } else {
+                terms.push(term.into());
+            }
+        }
+        if groups.values().all(|group| group.len() == 1) {
+            return None;
+        }
+        // Tensor contractions are complete here. Group only direct scalar
+        // branches: coefficients, powers and unrelated factors stay outside.
+        // One bulk sum avoids repeated matching and rebuilding a growing body.
+        for (condition, group) in groups {
+            if group.len() == 1 {
+                terms.push(group[0].0.into());
+                continue;
+            }
+            let body = Atom::add_many(group.into_iter().map(|(_, body)| body));
+            // Joining bodies can expose another sum of conditionals. Its
+            // children were already visited; only collect this new sum root.
+            let body = Self::merge_orientation_branches(body.as_view()).unwrap_or(body);
+            terms.push(
+                Symbol::IF
+                    .call_args([condition, Atom::Zero.as_view(), body.as_view()])
+                    .into(),
+            );
+        }
+        Some(Atom::add_many(terms))
     }
 
     pub fn den<'a>(
@@ -1135,6 +1185,173 @@ mod tests {
         let collected = GS.collect_orientation_if(expression);
         assert_eq!(collected, expected);
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    fn pairwise_orientation_branches(expression: &Atom) -> Atom {
+        expression
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
+                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
+            )
+            .repeat()
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+    }
+
+    #[test]
+    fn orientation_collection_matches_pairwise_rule_for_nested_branches() {
+        let (key, nested, a, b, c, x, opaque) = symbol!(
+            "selector_nested_key",
+            "selector_nested_inner",
+            "selector_nested_a",
+            "selector_nested_b",
+            "selector_nested_c",
+            "selector_nested_x",
+            "selector_nested_opaque"
+        );
+        let branch =
+            |condition, body: Atom| Symbol::IF.call_args([Atom::var(condition), Atom::Zero, body]);
+        let inner = branch(nested, Atom::var(a)) + branch(nested, Atom::var(b));
+        let outer =
+            branch(key, branch(nested, Atom::var(a))) + branch(key, branch(nested, Atom::var(b)));
+        let spectators = Atom::var(x) * branch(key, Atom::var(a))
+            + 2 * branch(key, Atom::var(b))
+            + branch(key, Atom::var(c)).pow(2)
+            + Symbol::IF.call_args([Atom::var(key), Atom::var(a), Atom::Zero])
+            + Symbol::IF.call_args([Atom::var(key), Atom::var(b), Atom::var(c)]);
+        for expression in [
+            outer.clone(),
+            function!(opaque, &outer, &inner),
+            (Atom::var(x) + c).pow(7) * &outer,
+            outer.pow(3),
+            &inner + &spectators,
+            spectators,
+        ] {
+            let collected = GS.collect_orientation_if(&expression);
+            assert_eq!(collected, pairwise_orientation_branches(&expression));
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+    }
+
+    #[test]
+    fn orientation_collection_revisits_callback_created_branches() {
+        let (key, nested, a, b, c, d, wrapper) = symbol!(
+            "selector_callback_key",
+            "selector_callback_nested",
+            "selector_callback_a",
+            "selector_callback_b",
+            "selector_callback_c",
+            "selector_callback_d",
+            "selector_callback_wrapper"
+        );
+        let branch =
+            |condition, body: Atom| Symbol::IF.call_args([Atom::var(condition), Atom::Zero, body]);
+        let introduced = function!(
+            wrapper,
+            branch(nested, Atom::var(c)) + branch(nested, Atom::var(d))
+        );
+        let callback = symbol!(
+            "selector_callback_parent",
+            norm = move |node, output| {
+                if let AtomView::Fun(parent) = node
+                    && parent.get_nargs() == 1
+                    && let AtomView::Fun(argument) = parent.get(0)
+                    && argument.get_symbol() == Symbol::IF
+                {
+                    **output = introduced.clone();
+                }
+            }
+        );
+        // The callback leaves the original sum alone, then creates a new sum
+        // below a fresh wrapper when its argument becomes one collected IF.
+        let expression = function!(
+            callback,
+            branch(key, Atom::var(a)) + branch(key, Atom::var(b))
+        );
+        let expected = function!(wrapper, branch(nested, Atom::var(c) + d));
+        let collected = GS.collect_orientation_if(&expression);
+        assert_eq!(collected, expected);
+        assert_eq!(collected, pairwise_orientation_branches(&expression));
+        assert_eq!(GS.collect_orientation_if(&collected), collected);
+    }
+
+    #[test]
+    fn orientation_collection_preserves_repeated_and_cancelling_payloads() {
+        let (key, a, b, x) = symbol!(
+            "selector_cancel_key",
+            "selector_cancel_a",
+            "selector_cancel_b",
+            "selector_cancel_x"
+        );
+        let branch = |body: Atom| Symbol::IF.call_args([Atom::var(key), Atom::Zero, body]);
+        let first = (Atom::var(a) + b).pow(5);
+        let second = Atom::var(x).pow(-1);
+        for expression in [
+            branch(first.clone()) + branch(-&first),
+            branch(first.clone()) + branch(second.clone()) + branch(&first + &second),
+            2 * branch(first.clone()) + branch(second.clone()) + branch(-second),
+        ] {
+            let collected = GS.collect_orientation_if(&expression);
+            let previous = pairwise_orientation_branches(&expression);
+            // Pairwise normalization may turn two equal calls into 2*IF and
+            // stop matching them. Bulk collection can keep that 2 inside the
+            // selected body instead. Expand only these small synthetic scalar
+            // branches for an exact oracle, never a graph numerator.
+            let pattern = Symbol::IF
+                .call_args([Atom::var(key), Atom::var(W_.a_), Atom::var(W_.b_)])
+                .to_pattern();
+            for selected in [W_.a_, W_.b_] {
+                assert_eq!(
+                    collected
+                        .replace(&pattern)
+                        .with(Atom::var(selected))
+                        .expand(),
+                    previous
+                        .replace(&pattern)
+                        .with(Atom::var(selected))
+                        .expand(),
+                );
+            }
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+    }
+
+    #[test]
+    fn orientation_collection_bulk_groups_many_branches_without_expansion() {
+        let (key, body, a, b, spectator) = symbol!(
+            "selector_bulk_key",
+            "selector_bulk_body",
+            "selector_bulk_a",
+            "selector_bulk_b",
+            "selector_bulk_spectator"
+        );
+        let factor = (Atom::var(a) + b).pow(7);
+        let branches = (0..3004)
+            .map(|index| {
+                let condition = function!(key, index % 4);
+                let payload = function!(body, index) * &factor;
+                Symbol::IF.call_args([condition, Atom::Zero, payload])
+            })
+            .collect::<Vec<_>>();
+        let unrelated = function!(spectator, &factor).pow(-1);
+        let expected = Atom::add_many((0..4).map(|group| {
+            Symbol::IF.call_args([
+                function!(key, group),
+                Atom::Zero,
+                Atom::add_many(
+                    (group..3004)
+                        .step_by(4)
+                        .map(|index| function!(body, index) * &factor),
+                ),
+            ])
+        })) + &unrelated;
+        for expression in [
+            Atom::add_many(branches.iter()) + &unrelated,
+            Atom::add_many(branches.iter().rev()) + &unrelated,
+        ] {
+            let collected = GS.collect_orientation_if(expression);
+            assert_eq!(collected, expected);
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
     }
 
     #[test]

@@ -76,10 +76,13 @@ impl<const N: usize> SimplificationCandidates<N> {
                         candidates.intrinsic &= intrinsic;
                         if tagged && !candidates.dots {
                             let slots = vector_slots.get_or_insert_with(SlotMatcher::default);
-                            candidates.dots = !slots
-                                .vector_argument(function)
-                                .and_then(|argument| slots.compact_representation(argument))
-                                .is_some_and(|representation| representation.is_base());
+                            candidates.dots =
+                                !slots.vector_argument(function).is_some_and(|argument| {
+                                    slots
+                                        .compact_representation(argument)
+                                        .is_some_and(|representation| representation.is_base())
+                                        || matches!(slots.concrete_component(argument), Some(Ok(_)))
+                                });
                         }
                         match slot {
                             SlotMatch::Explicit(slot) => {
@@ -450,5 +453,49 @@ mod tests {
             SimplificationCandidates::scan(expression.as_view(), [SPENSO_TAG.trace], || true);
         assert!(!candidates.complete);
         assert!(candidates.dots);
+    }
+
+    #[test]
+    fn concrete_components_do_not_request_dot_normalization() {
+        crate::test_support::test_initialize();
+        SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_component_vector");
+        let callback = spenso::vector_symbol!(
+            "spenso::analysis_component_callback",
+            norm = |_value, _out| {}
+        );
+        for source in [
+            "analysis_component_vector(0,cind(0))",
+            "analysis_component_vector(1,find(3))^2",
+            "n*(1/(analysis_component_vector(0,cind(0))+x)+1/(analysis_component_vector(0,cind(0))+y))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            let candidates = SimplificationCandidates::scan(expression.as_view(), [], || true);
+            assert!(candidates.complete && candidates.intrinsic, "{source}");
+            assert!(!candidates.repeated_indices && !candidates.dots, "{source}");
+            assert_eq!(expression.normalize_dots(), expression, "{source}");
+        }
+        for source in [
+            "analysis_component_vector(cind())",
+            "analysis_component_vector(cind(-1))",
+            "analysis_component_vector(cind(0,1))",
+            "analysis_component_vector(find(x))",
+            "analysis_component_vector(meta(analysis_component_vector(mink(4,a))^2),cind(0))",
+            "analysis_component_vector(analysis_component_vector(mink(4)))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            assert!(
+                SimplificationCandidates::scan(expression.as_view(), [], || true).dots,
+                "{source}"
+            );
+        }
+        let expression = Atom::parse(
+            "analysis_component_callback(cind(0))",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        let candidates = SimplificationCandidates::scan(expression.as_view(), [callback], || true);
+        assert!(!candidates.intrinsic);
+        assert_eq!(candidates.symbols, [true]);
     }
 }
