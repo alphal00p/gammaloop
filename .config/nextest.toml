@@ -29,6 +29,15 @@ filter = "test(integration)"
 test-group = "integration"
 
 [[profile.default.overrides]]
+# All stages of this thermal acceptance use one worker. Allow generation and
+# compilation in addition to its approximately one-minute integration budget.
+filter = "test(=cool_qm_eos_nlo_matches_example_target)"
+test-group = "integration"
+threads-required = 1
+slow-timeout = { period = "5m", terminate-after = 2 }
+retries = 0
+
+[[profile.default.overrides]]
 # The numerical acceptances internally launch ten integration workers. Account for
 # those workers in nextest's scheduler and cap these acceptances with the
 # existing integration-test group.
