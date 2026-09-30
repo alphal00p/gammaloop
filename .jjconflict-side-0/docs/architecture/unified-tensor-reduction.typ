@@ -16,10 +16,10 @@ The Rust reduction operations are `contract(ContractSettings)` and
 returning the same typed carrier with an Atom payload. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
-the existing optional contraction order, and a per-domain change budget.
+the existing optional contraction order, and an opt-in per-domain change budget.
 `AlgebraSettings` independently carries optional `GammaSimplifySettings` and
 `ColorSimplifySettings`, the epsilon permission, `AlgebraContraction`, and its
-per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
+opt-in per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
 normalizes scalar-product notation, `Selected` limits additional connections by
 representation, and `None` retains identity prerequisites only. These lower to
 work in the same queue; they do not launch another whole-expression pipeline.
@@ -34,7 +34,7 @@ Python exposes both operations through explicit keyword-only parameters on
 The binding lowers those parameters into the existing Rust settings; it owns no
 planning or contraction logic. Family-specific options require the corresponding
 family to be enabled, and omitted options retain native defaults. The Python budget
-is named `max_steps_per_domain`; reusable configurations are ordinary dictionaries
+is named `max_steps_per_domain` and defaults to `None` (unlimited); reusable configurations are ordinary dictionaries
 passed with `**options`. Python settings classes are removed.
 
 `AlgebraSettings` does not contain contraction settings. Algebra identities authorize their
@@ -150,26 +150,109 @@ same typed carrier with an Atom payload, ordered interfaces, regional candidate
 observations and cached completed requests. `Complete`, `Deferred` and `Capped`
 remain distinct; unfinished results retain their exact expression.
 
-The generated quark notebook uses an explicit 128-step budget because its single
-root domain now accounts for work previously split across definitions. Its
-completed 525-term edge-momentum result exactly matches the preserved alias
-snapshot; routing gives 1,386 terms. The gluonic notebook resumes its exact
-result once after the contractor's 64 MiB frontier cap, then requires completion
-before explicit expansion. Its 6,001-term scalar agrees exactly with the saved
-alias result. The plain factored intermediate occupies about 70.6 MB when
-printed, so the notebook displays only a short preview of the final polynomial.
-Final installed-notebook smoke runs took 18.81 s and 15.46 s, respectively,
-including diagram generation, projection, algebra and materialization. These
-unpinned timings carry no speedup claim.
+Both Python operations default to `max_steps_per_domain=None`; Rust uses
+`max_passes: None`. An explicit limit remains available and returns an exact
+`Capped` result when exhausted. Automatic term-count, workspace and recursion-depth
+cutoffs have been removed from the shared arithmetic tape and reduction paths.
+Checked machine-arithmetic failures and repeated callback states retain exact
+`Deferred` results. A separate memoization-size bound may decline a cache entry;
+it never stops computation.
 
-Validation includes independent HEP component oracles, eight Higgs Monte Carlo
-and generated-ladder checks, 75 notebook/API checks, nine evaluator regressions
-and four staged-family Python checks. Python defaults enable gamma and colour;
-callers that isolate a family explicitly disable the other. The existing
-`installed_amplitude` dummy-label spelling assertion also fails before reduction
-on the preserved build. Three long trace-component checks exceeded the debug
-runner's 60-second limit and passed unchanged with the local algebra and tensor
-packages compiled at optimization level 2.
+The performance audit uses the original generated four-loop numerators with
+fully resolved structured indices, their complete scalar prefactors, symbolic
+Lorentz dimension and spinor trace unit four. There is no preliminary contraction,
+dummy relabelling or global numerator expansion. Source fingerprints beginning
+`63aa5a69` (quark) and `00ade8fe` (gluon), full hashes, settings, binary fingerprints,
+scripts and phase records are retained in
+`crates/idenso/benches/data/plain-ladder-performance.json`. The exact edge-momentum
+quark oracle has 525 terms; subsequent notebook routing gives 1,386. The generated
+gluon oracle has 6,001 terms. These inputs do not exercise AUTO-index inference.
+
+The final Python release `afa62f3b` completes both inputs in one call, including
+with the unlimited default. Every run matches the exact oracle, preserves the
+readmitted interface and has a stable completed rerun. Timings below are seconds
+from an admitted, projected numerator; explicit expansion is the requested final
+output operation.
+
+#table(
+  columns: (1fr, 1.6fr, 1fr, 1fr, 1fr),
+  [Input], [Build], [Reduction], [Expansion], [Total],
+  [Quark], [Archived `344a7942`], [31.201], [0.593], [31.794],
+  [Quark], [Baseline `87425e2b`], [10.904], [0.043], [10.947],
+  [Quark], [Final `afa62f3b`], [0.1069], [0.0468], [0.1537],
+  [Gluon], [Archived `344a7942`], [0.199], [7.959], [8.158],
+  [Gluon], [Baseline `87425e2b`], [14.585], [0.869], [15.453],
+  [Gluon], [Final `afa62f3b`], [0.2473], [0.0072], [0.2545],
+)
+
+Thus the archived gluon's 0.2 s alias result was not its fully materialized result.
+The old plain gluon required an exact continuation after an estimated frontier
+bound; its 64 MiB estimate was not a measured resident-memory limit. That
+15.45 s complete-output regression motivated the correction. Final timings are
+means of two warmed samples following a first run; a fourth run checks the
+unlimited default. Archived timings use one sample. Final completed reruns took
+at most 0.13 ms. Input admission plus dimension assignment took 1.37 ms for
+quark and 3.96 ms for gluon. Independent result readmission checks, roughly
+53 ms and 75 ms, are outside computation timings. Peak process RSS was
+71,244 KiB and 74,456 KiB, including all four samples, setup, oracles and checks.
+
+A controlled quark comparison isolated an unnecessary index-label shape check:
+original labels took 11.028 s, or 11.021 s after preliminary contraction; atomic
+labels took 0.104 s, or 0.096 s after contraction. All four routes matched the same
+525-term result, and their preprocessing costs were recorded separately. The
+kernel now treats every admitted index label as an opaque identity. The
+intermediate `5b8c459e` build already reduced the original source in 0.116 s and
+expanded it in 0.048 s, without a notebook workaround.
+
+The contraction engine now collects generated scalar coefficients with the
+existing polynomial implementation while retaining unrelated sums as opaque
+leaves. It passes scalar-closure facts forward instead of rediscovering them in
+the emitted expression. A native run after removing automatic limits completed
+the original gluon in one call: 0.357 s, with a stable 44.9 microsecond rerun.
+Its 906,202-byte Atom prints as 2,858,500 characters and matches the exact oracle.
+The separate instrumented call took 349.9 ms, including 279.4 ms contraction,
+168.6 ms coefficient merging and 16.6 ms emission; these nested measurements
+overlap. It recorded 106 candidate-scanner calls taking 0.870 ms. The maximum
+estimated live workspace was 8,486,320 bytes, not a resident-memory measurement.
+This native build uses optimization level two for Idenso and Spenso; it is
+reported separately from Python release-module measurements.
+
+Whole notebook time also includes rendering and additional calculations. With
+the final installed module, quark `app.run()` took 7.90 s: diagram rendering
+accounted for 6.64 s, while its two `simplify_algebra` calls together took
+0.142 s. The gluon app took 2.92 s, including 2.39 s across three algebra calls:
+it retains the additional full-numerator calculation as well as the projected
+benchmark route. The notebook results contain 1,386 and 6,001 terms, with colour
+factors $-1/54$ and $81$. Compilation and process startup are excluded from the
+operation timings above; the final release build took 313.76 s. Runs used an
+unpinned shared host; sample counts and measurement boundaries are preserved in
+the dataset.
+The separate full rank-four gluon reduction takes about 2.1 s and completes
+without a limit. Its projection matches exactly $81$ times the 6,001-term
+spacetime oracle when `color_substitute_cof_dimension_invariants=True` supplies
+the oracle's colour convention; logical port order and Lorentz dimensions are
+preserved. The timing probe retains symbolic colour invariants, so the convention
+matched projection check is recorded separately. These notebook timings and
+checks precede the concurrent community change `nqpkrrvpulko`, which adds typed
+projector construction and display cells; they do not validate those later edits.
+No new FORM timing was performed for these generated source fingerprints; the
+historical comparisons below use different authored reference inputs.
+
+Current validation passed 803 ordinary Idenso tests, seven optimized axial and
+reference checks, 125 Rust binding tests, six shared-tape tests, 103 installed
+Python tests, eight Higgs/generated-ladder tests, 75 selected notebook/API checks,
+both ladder apps and four installed production examples. The optimized suite
+includes the axial oracle that exceeded the ordinary runner's timeout. Strict
+Clippy, formatting, typing, generated-stub checks, this report's Typst compilation
+and dataset validation passed. The full documentation builder stops on an
+unrelated pre-existing provenance mismatch for `gammaloop-api/src/python.rs`;
+the working file and parent blob are identical, and no owner attestation was
+changed. The dataset records that limitation and all test-log paths.
+
+The preceding plain-carrier migration's independent tensor-component and
+evaluator regression runs remain separate from these current checks. Python
+defaults enable gamma and colour; callers that isolate a family explicitly
+disable the other.
 
 == Source and environment
 

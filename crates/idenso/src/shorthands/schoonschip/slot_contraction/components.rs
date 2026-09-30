@@ -20,7 +20,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
     domains::{
         Ring,
-        rational::{Q, Rational},
+        rational::{Q, Rational, RationalField},
     },
     poly::{PolyVariable, polynomial::MultivariatePolynomial},
 };
@@ -73,10 +73,12 @@ type TensorKey<'a> = (
 
 #[derive(PartialEq, Eq, Hash)]
 struct MonomialKey {
-    factors: Vec<(usize, u16)>,
+    factors: Vec<(usize, u32)>,
     tensors: Vec<usize>,
     connections: Vec<(usize, [(usize, usize); 2])>,
 }
+
+type ScalarPolynomial = MultivariatePolynomial<RationalField, u32>;
 
 // Leaves identify borrowed payloads or an opaque subtree of the existing graph.
 // Only explicit expansion admits Atom arithmetic directly.
@@ -117,7 +119,7 @@ struct ComponentSum<'a, 'b> {
     positions: AHashMap<Variable<'a>, usize>,
     nodes: Vec<Node<'a>>,
     occurrences: AHashMap<(usize, AtomView<'a>), usize>,
-    factors: Vec<(usize, u16)>,
+    factors: Vec<(usize, u32)>,
     coefficient: Rational,
     contracted: bool,
     inference: InterfaceInference,
@@ -128,14 +130,17 @@ struct ComponentSum<'a, 'b> {
     overrides: Vec<(AtomView<'a>, Argument<'a>)>,
     metrics: usize,
     alpha_tensors: AHashMap<TensorKey<'a>, usize>,
-    alpha_terms: AHashMap<MonomialKey, Vec<(usize, u16)>>,
+    alpha_terms: AHashMap<MonomialKey, Vec<(usize, u32)>>,
     alpha_bytes: usize,
     coefficients: Vec<Rational>,
-    monomials: Vec<Vec<(usize, u16)>>,
+    monomials: Vec<Vec<(usize, u32)>>,
     input: TermTape<InputLeaf<'a>>,
     scalar_spectators: AHashMap<AtomView<'a>, bool>,
     scalar_interfaces: AHashMap<AtomView<'a>, bool>,
     metadata_certificates: AHashMap<AtomView<'a>, bool>,
+    // Scalar notation facts established by selected scoped replacements. The
+    // source domain owns original-region facts; generated powers reuse these.
+    scalar_forms: AHashMap<AtomView<'a>, bool>,
 }
 
 impl SlotContraction {
@@ -151,10 +156,10 @@ impl SlotContraction {
             return None;
         }
         let mut state = ComponentSum::new(self, Intake::ScalarExpansion, slots);
-        let (node, _) = state.compile_input(value, 0)?;
+        let (node, _) = state.compile_input(value)?;
         state
             .input
-            .distribute(&mut vec![(node, 1)], &Rational::one(), 0)?;
+            .distribute(&mut vec![(node, 1)], &Rational::one())?;
         let terms = state.input.take_terms();
         state.coefficients.reserve(terms.len());
         state.monomials.reserve(terms.len());
@@ -214,11 +219,11 @@ impl SlotContraction {
             let mut count = (1usize, 0usize);
             let mut compiled = Vec::with_capacity(pending.len());
             for (factor, exponent) in pending {
-                let (node, next) = state.compile_input(factor, 0)?;
+                let (node, next) = state.compile_input(factor)?;
                 count = TermTape::<InputLeaf<'_>>::product_size(count, next)?;
                 compiled.push((node, exponent));
             }
-            state.input.distribute(&mut compiled, &Rational::one(), 0)?;
+            state.input.distribute(&mut compiled, &Rational::one())?;
             // Match expansion's exact collection before checking graph degree
             // or opaque powers. Cancelled terms cannot create incidences.
             let terms = state.input.take_terms();
@@ -281,7 +286,15 @@ impl SlotContraction {
 }
 
 impl<'a, 'b> ComponentSum<'a, 'b> {
-    fn emit_polynomial(self) -> Option<Atom> {
+    #[cfg(feature = "reference-cases")]
+    fn coefficient_bytes(polynomial: &ScalarPolynomial) -> usize {
+        std::mem::size_of::<ScalarPolynomial>()
+            + polynomial.exponents.capacity() * std::mem::size_of::<u32>()
+            + polynomial.coefficients.capacity() * std::mem::size_of::<Rational>()
+            + polynomial.variables().len() * std::mem::size_of::<PolyVariable>()
+    }
+
+    fn emit_polynomial(mut self) -> Option<Atom> {
         if !self.contracted && !self.input.distributed() {
             return None;
         }
@@ -294,52 +307,65 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         for factors in &self.monomials {
             factors
                 .iter()
-                .try_fold(0u16, |degree, (_, exponent)| degree.checked_add(*exponent))?;
-        }
-        // Dense polynomial exponents suit the few scalar variables in a ladder,
-        // but not high-entropy sums with a new variable in every monomial.
-        const MAX_EXPONENT_BYTES: usize = 64 * 1024 * 1024;
-        if self
-            .coefficients
-            .len()
-            .checked_mul(self.variables.len())?
-            .checked_mul(std::mem::size_of::<u16>())?
-            > MAX_EXPONENT_BYTES
-        {
-            return None;
+                .try_fold(0u32, |degree, (_, exponent)| degree.checked_add(*exponent))?;
         }
         // Admission has finished: no callback-bearing or unsupported factor can
         // reach a builder. Canonical Atom equality also merges any variable alias.
         let mut atoms = AHashMap::new();
         let mut variables: Vec<PolyVariable> = Vec::new();
         let mut remap = Vec::with_capacity(self.variables.len());
-        for variable in &self.variables {
+        for (index, variable) in self.variables.iter().enumerate() {
             let atom = self.emit_variable(variable)?;
             let next = variables.len();
             let position = *atoms.entry(atom.clone()).or_insert_with(|| {
-                variables.push(atom.try_into().unwrap());
+                variables.push(PolyVariable::Temporary(index));
                 next
             });
             remap.push(position);
         }
         let count = variables.len();
         let size = self.coefficients.len().checked_mul(count)?;
-        let mut exponents = vec![0u16; size];
+        let mut exponents = vec![0u32; size];
         for (term, factors) in self.monomials.iter().enumerate() {
             for &(factor, exponent) in factors {
                 let entry = &mut exponents[term * count + remap[factor]];
                 *entry = entry.checked_add(exponent)?;
             }
         }
-        Some(
-            MultivariatePolynomial::<_, u16>::from_coefficient_list(
-                self.coefficients,
-                exponents,
-                variables.into(),
-                &Q,
+        let polynomial = ScalarPolynomial::from_coefficient_list(
+            std::mem::take(&mut self.coefficients),
+            exponents,
+            variables.into(),
+            &Q,
+        );
+        self.emit_coefficient(&polynomial)
+    }
+
+    // The same emitter restores opaque source coefficients and generated dots.
+    // Temporary polynomial variables are numeric scratch IDs; they never become
+    // symbols, aliases or an intermediate expression exposed to a caller.
+    fn emit_coefficient(&self, polynomial: &ScalarPolynomial) -> Option<Atom> {
+        let variables = polynomial
+            .variables()
+            .iter()
+            .map(|variable| {
+                let PolyVariable::Temporary(index) = variable else {
+                    unreachable!()
+                };
+                self.emit_variable(&self.variables[*index])
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Atom::add_many(polynomial.into_iter().map(|term| {
+            Atom::mul_many(
+                std::iter::once(Atom::num(term.coefficient.clone())).chain(
+                    variables
+                        .iter()
+                        .zip(term.exponents)
+                        .filter(|(_, exponent)| **exponent != 0)
+                        .map(|(variable, exponent)| variable.pow(*exponent)),
+                ),
             )
-            .to_expression(),
-        )
+        })))
     }
 
     fn new(contractor: &'b SlotContraction, intake: Intake, slots: &'b mut SlotMatcher) -> Self {
@@ -378,6 +404,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             scalar_spectators: AHashMap::new(),
             scalar_interfaces: AHashMap::new(),
             metadata_certificates: AHashMap::new(),
+            scalar_forms: AHashMap::new(),
         }
     }
 
@@ -420,41 +447,31 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         })
     }
 
-    // Count borrowed factor occurrences, not expanded Atom bytes. Both the
-    // Cartesian work and the existing coefficient/exponent storage are bounded.
-    const MAX_GENERATED_TERMS: usize = 1_000_000;
-    const MAX_EXPANSION_DEPTH: usize = 256;
-
     fn compile_group(
         &mut self,
         children: impl ExactSizeIterator<Item = AtomView<'a>>,
         sum: bool,
-        depth: usize,
     ) -> Option<(usize, (usize, usize))> {
         let children = children
-            .map(|child| self.compile_input(child, depth + 1))
+            .map(|child| self.compile_input(child))
             .collect::<Option<Vec<_>>>()?;
         self.input.group(children.into_iter(), sum)
     }
 
-    fn compile_input(
-        &mut self,
-        value: AtomView<'a>,
-        depth: usize,
-    ) -> Option<(usize, (usize, usize))> {
-        if depth > Self::MAX_EXPANSION_DEPTH || value.needs_normalization() {
+    fn compile_input(&mut self, value: AtomView<'a>) -> Option<(usize, (usize, usize))> {
+        if value.needs_normalization() {
             return None;
         }
         match value {
-            AtomView::Add(sum) => self.compile_group(sum.iter(), true, depth),
-            AtomView::Mul(product) => self.compile_group(product.iter(), false, depth),
+            AtomView::Add(sum) => self.compile_group(sum.iter(), true),
+            AtomView::Mul(product) => self.compile_group(product.iter(), false),
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                let exponent = u16::try_from(i64::try_from(exponent).ok()?).ok()?;
+                let exponent = u32::try_from(i64::try_from(exponent).ok()?).ok()?;
                 if exponent == 0 {
                     return None;
                 }
-                let base = self.compile_input(base, depth + 1)?;
+                let base = self.compile_input(base)?;
                 self.input.power(base, exponent)
             }
             _ => {
@@ -566,11 +583,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         scalar
     }
 
-    // Bound both stored keys and transient signature work independently of the
-    // existing dense-polynomial cap. Exhaustion declines the entire sum before
-    // materialization; partial collection could expose more work on a rerun.
-    // Exercise saturation through the actual public pipeline with a small
-    // bounded fixture; no process-global mutable test configuration is needed.
+    // Bound optional alpha memoization, including transient signature work.
+    // A full cache leaves literal contraction intact; it never limits work.
     const MAX_ALPHA_BYTES: usize = if cfg!(test) {
         16 * 1024
     } else {
@@ -691,7 +705,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         connections.sort_unstable();
         let mut factors = self.factors.clone();
         factors.sort_unstable();
-        let mut combined: Vec<(usize, u16)> = Vec::with_capacity(factors.len());
+        let mut combined: Vec<(usize, u32)> = Vec::with_capacity(factors.len());
         for (factor, exponent) in factors {
             if let Some((last, power)) = combined.last_mut()
                 && *last == factor
@@ -750,19 +764,11 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         let vector = if let Some(&vector) = self.vector_positions.get(&key) {
             vector
         } else {
-            self.input.reserve_bytes(
-                key.1
-                    .capacity()
-                    .checked_mul(std::mem::size_of::<AtomView<'a>>())?
-                    .checked_add(4 * std::mem::size_of::<(Symbol, Vec<AtomView<'a>>, usize)>())?,
-            )?;
             let vector = self.vectors.len();
             self.vectors.push(function);
             self.vector_positions.insert(key, vector);
             vector
         };
-        self.input
-            .reserve_bytes(4 * std::mem::size_of::<(AtomView<'a>, usize)>())?;
         self.vector_sources.insert(function.as_view(), vector);
         Some(vector)
     }
@@ -859,8 +865,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         }
         let endpoint = Endpoint::parse(value, self.slots)?;
         if !Self::atomic(endpoint.index) {
-            // Named and scoped indices are explicit identities admitted by the
-            // shared slot grammar, not tensor payloads to distribute or rewrite.
+            // The shared slot grammar owns index syntax. Admitted labels are
+            // opaque identities, not tensor payloads to distribute or rewrite.
             let index = self
                 .slots
                 .parse::<LibraryRep, AbstractIndex>(value)
@@ -871,7 +877,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 base = scope.index();
             }
             if matches!(base, AbstractIndex::Open { .. })
-                || !matches!(index, AbstractIndex::Named(..) | AbstractIndex::Scoped(..))
                 || endpoint
                     .index
                     .get_all_symbols(true)
@@ -921,7 +926,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         node
     }
 
-    fn variable(&mut self, variable: Variable<'a>, exponent: u16) {
+    fn variable(&mut self, variable: Variable<'a>, exponent: u32) {
         let position = if let Some(&position) = self.positions.get(&variable) {
             position
         } else {
@@ -933,7 +938,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         self.factors.push((position, exponent));
     }
 
-    fn dot(&mut self, space: usize, first: usize, second: usize, exponent: u16) {
+    fn dot(&mut self, space: usize, first: usize, second: usize, exponent: u32) {
         let heads = if first <= second {
             [first, second]
         } else {
@@ -1011,7 +1016,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         Some(())
     }
 
-    fn factor(&mut self, value: AtomView<'a>, exponent: u16) -> Option<()> {
+    fn factor(&mut self, value: AtomView<'a>, exponent: u32) -> Option<()> {
         match value {
             AtomView::Num(_) => {
                 self.coefficient *= Q.pow(&Rational::try_from(value).ok()?, u64::from(exponent));
@@ -1021,7 +1026,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             }
             AtomView::Pow(power) if exponent == 1 => {
                 let (base, power) = power.get_base_exp();
-                let power = u16::try_from(i64::try_from(power).ok()?).ok()?;
+                let power = u32::try_from(i64::try_from(power).ok()?).ok()?;
                 if power == 0 {
                     return None;
                 }
@@ -1172,7 +1177,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         // Equal keys prove only a renaming of internal labels. Reusing the
         // first complete literal plan avoids fresh names, capture, and changes
         // to free labels or opaque metadata. All input admission still runs.
-        let key = self.monomial_key().ok()?;
+        let key = self.monomial_key().unwrap_or(None);
         if let Some(representative) = key.as_ref().and_then(|key| self.alpha_terms.get(key)) {
             self.factors.clone_from(representative);
             self.tensors.clear();
@@ -1188,7 +1193,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             let bytes = key
                 .factors
                 .capacity()
-                .checked_mul(std::mem::size_of::<(usize, u16)>())
+                .checked_mul(std::mem::size_of::<(usize, u32)>())
                 .and_then(|bytes| {
                     bytes.checked_add(
                         key.tensors
@@ -1207,14 +1212,15 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     bytes.checked_add(
                         self.factors
                             .len()
-                            .checked_mul(std::mem::size_of::<(usize, u16)>())?,
+                            .checked_mul(std::mem::size_of::<(usize, u32)>())?,
                     )
                 })
                 .and_then(|bytes| {
-                    bytes.checked_add(4 * std::mem::size_of::<(MonomialKey, Vec<(usize, u16)>)>())
+                    bytes.checked_add(4 * std::mem::size_of::<(MonomialKey, Vec<(usize, u32)>)>())
                 });
-            self.reserve_alpha(bytes?).ok()?;
-            self.alpha_terms.insert(key, self.factors.clone());
+            if bytes.is_some_and(|bytes| self.reserve_alpha(bytes).is_ok()) {
+                self.alpha_terms.insert(key, self.factors.clone());
+            }
         }
         Some(())
     }
@@ -1276,7 +1282,7 @@ mod tests {
     }
 
     #[test]
-    fn factorized_contraction_preserves_named_and_scoped_index_identity() {
+    fn factorized_contraction_preserves_admitted_index_identity() {
         let contractor = setup();
         let head = symbolica::symbol!(
             "closed_component_test::port",
@@ -1294,9 +1300,16 @@ mod tests {
              +2*g(p(mink(4)),s(mink(4)))*g(q(mink(4)),r(mink(4)))",
         );
         for (a, b) in [
+            (AbstractIndex::Normal(97361), AbstractIndex::Normal(97362)),
+            (AbstractIndex::Dualize(97361), AbstractIndex::Normal(97361)),
+            (AbstractIndex::Double(17, 3), AbstractIndex::Double(19, 3)),
             (first, second),
             (first.scoped(scope), second.scoped(scope)),
             (first, first.scoped(scope)),
+            (
+                AbstractIndex::Double(17, 3),
+                AbstractIndex::Double(17, 3).scoped(scope),
+            ),
         ] {
             use spenso::structure::slot::ParseableAind;
             let source = source
@@ -1304,15 +1317,13 @@ mod tests {
                 .with(a.to_atom())
                 .replace(input("b"))
                 .with(b.to_atom());
+            let admitted = SymbolicTensor::infer(source.clone()).unwrap();
             let result = contractor
                 .contract_factorized(source.as_view(), None, true)
                 .expect("registered explicit indices admit the same factorized frontier");
             assert!(result.status == ReductionStatus::Complete);
             assert_eq!(result.root, expected);
-            let result = SymbolicTensor::infer(source)
-                .unwrap()
-                .contract(Default::default())
-                .unwrap();
+            let result = admitted.contract(Default::default()).unwrap();
             assert!(
                 result.contraction_complete(),
                 "status={:?}, expression={}",
@@ -1674,17 +1685,14 @@ mod tests {
     }
 
     #[test]
-    fn scalar_expansion_no_work_powers_and_resource_refusal_keep_ordinary_fallback() {
+    fn scalar_expansion_no_work_and_unsupported_powers_keep_ordinary_fallback() {
         let contractor = setup();
         for source in [
             "1+x*g(p(mink(4)),q(mink(4)))",
             "1+(x+y)^-1",
             "1+(x+y)^(1/2)",
             "1+(x+y)^z",
-            "1+x^65536*(x+y)",
-            // Virtual Cartesian expansion would exceed its bound, although
-            // ordinary binomial expansion has only 21 terms.
-            "1+(x+y)^20",
+            "1+x^4294967295*(x+y)",
         ] {
             let source = input(source);
             assert!(
@@ -1845,7 +1853,7 @@ mod tests {
             "1+p(mink(4,spenso::cind(0)))*q(mink(4,spenso::cind(0)))",
             "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^-1",
             "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^(1/2)",
-            "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^65535",
+            "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^4294967295",
         ] {
             let source = input(source);
             assert!(
@@ -2597,84 +2605,42 @@ mod tests {
     }
 
     #[test]
-    fn component_sum_alpha_budget_retains_the_bounded_frontier_and_exact_reference() {
-        use crate::shorthands::schoonschip::SchoonschipSettings;
-
+    fn a_full_alpha_cache_keeps_exact_contraction_running() {
         let contractor = setup();
-        assert_eq!(ComponentSum::MAX_ALPHA_BYTES, 16 * 1024);
-        // These groups cancel only after the ordinary metric contraction. Their
-        // distinct tensor metadata exceeds the small compile-time test budget,
-        // even though the final fallback expression has only two small terms.
-        let a = input("mink(4,budget_a)");
-        let b = input("mink(4,budget_b)");
-        assert!(AtomView::cmp(&a.as_view(), &b.as_view()).is_lt());
-        let survivor = input("t(999,mink(4,c))*u(mink(4,c))-t(999,mink(4,d))*u(mink(4,d))");
-        let mut terms = vec![survivor.clone()];
-        for label in 0..64 {
-            terms.push(input(&format!(
-                "g(mink(4,budget_a),mink(4,budget_b))*t({label},mink(4,budget_a))*u(mink(4,budget_b))"
-            )));
-            terms.push(-input(&format!(
-                "t({label},mink(4,budget_b))*u(mink(4,budget_b))"
-            )));
+        let source = input("g(mink(4,a),mink(4,b))*t(mink(4,a))*u(mink(4,b))");
+        let mut slots = SlotMatcher::default();
+        let mut state = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        state.alpha_bytes = ComponentSum::MAX_ALPHA_BYTES;
+        let AtomView::Mul(factors) = source.as_view() else {
+            unreachable!()
+        };
+        for factor in factors.iter() {
+            state.factor(factor, 1).unwrap();
         }
-        let source = Atom::add_many(&terms);
-        assert!(
-            contractor
-                .materialize_test_sum(
-                    source.as_view(),
-                    &mut SlotMatcher::default(),
-                    Intake::ExpandedContraction
-                )
-                .is_none(),
-            "resource exhaustion must discard all partial alpha collection"
-        );
-        let fallback = Atom::add_many(
-            terms
-                .iter()
-                .map(|term| {
-                    SlotContraction::new()
-                        .run(term.as_view(), false, false)
-                        .normalize_dots()
-                })
-                .collect::<Vec<_>>(),
-        );
-        assert_eq!(
-            fallback, survivor,
-            "ordinary contractions actually shrink the declined sum"
-        );
-        assert_ne!(fallback, source);
-        assert_ne!(fallback, Atom::num(0));
-        // The public bounded frontier retains the exact source rather than
-        // restarting the declined work through an unbounded fallback.
-        let value = SymbolicTensor::infer(source.clone()).unwrap();
-        let pending = value.contract(Default::default()).unwrap();
-        assert!(!pending.contraction_complete());
-        assert_eq!(pending.expression, source);
-        let again = pending.contract(Default::default()).unwrap();
-        assert!(!again.contraction_complete());
-        assert_eq!(again, pending);
-        // Keep the exact zero oracle on the existing explicit per-term
-        // reference computed above; its mathematical expectation is unchanged.
-        assert_eq!(
-            crate::test_support::contracted_atom(fallback.as_view()).unwrap(),
-            Atom::num(0)
-        );
-        assert_eq!(
-            crate::test_support::contracted_atom(
-                crate::test_support::contracted_atom(fallback.as_view())
-                    .unwrap()
-                    .as_view()
-            )
-            .unwrap(),
-            Atom::num(0)
-        );
-        assert_eq!(
-            source
-                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
-            fallback,
-            "disabled rank-one mode keeps its existing route"
-        );
+        state.reduce_components().unwrap();
+        assert_eq!(state.alpha_bytes, ComponentSum::MAX_ALPHA_BYTES);
+        assert!(state.alpha_tensors.is_empty() && state.alpha_terms.is_empty());
+        state.coefficients.push(state.coefficient.clone());
+        state.monomials.push(state.factors.clone());
+        assert_eq!(state.emit_polynomial().unwrap(), source.schoonschip());
+
+        let source = Atom::add_many((0..64).flat_map(|label| {
+            [
+                input(&format!(
+                    "g(mink(4,a),mink(4,b))*t({label},mink(4,a))*u(mink(4,b))"
+                )),
+                -input(&format!("t({label},mink(4,b))*u(mink(4,b))")),
+            ]
+        }));
+        // Each positive term contracts to its explicit negative partner.
+        assert_eq!(source.schoonschip(), Atom::Zero);
+        let result = SymbolicTensor::infer(source)
+            .unwrap()
+            .contract(Default::default())
+            .unwrap();
+        assert!(result.contraction_complete());
+        assert_eq!(result.expression, Atom::Zero);
+        assert_eq!(result.contract(Default::default()).unwrap(), result);
     }
 
     #[test]
@@ -2850,8 +2816,7 @@ mod tests {
         assert_eq!(calls.load(Ordering::Relaxed), 0);
 
         for source in [
-            "(p(mink(4,a))+q(mink(4,a)))^20",
-            "(p(mink(4,a))^65535+q(mink(4,a)))*p(mink(4,a))",
+            "(p(mink(4,a))^4294967295+q(mink(4,a)))*p(mink(4,a))",
             "(t(mink(4,a))+u(mink(4,a)))^2",
             "(p(mink(4,a))+q(mink(4,a)))*t(routing(p(mink(4,b))*q(mink(4,b))),mink(4,a))",
             "(p(mink(4,a))+q(mink(4,a)))*t(mink(6,a))^2",

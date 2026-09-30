@@ -458,6 +458,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         settings: GammaSimplifySettings,
         settled: &mut crate::tensor::simplification::observation::SettledRegions,
+        max_passes: Option<usize>,
     ) -> Result<Self, TensorInferenceError> {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
@@ -505,26 +506,33 @@ impl SymbolicTensor<PartialStructure> {
                     // Finish this original selected atom context before typed
                     // publication. The shared scheduler remains the only owner
                     // of contractions and cross-domain fixed points.
-                    let limit = crate::tensor::AlgebraSettings::default().max_passes;
                     let mut current = expression;
-                    let mut finished = false;
-                    for _ in 0..limit {
+                    let mut seen = std::collections::HashSet::from([current.clone()]);
+                    let mut changes = 0;
+                    loop {
                         let next = settings.rewrite_expression(current.clone(), output);
                         if next == current {
-                            finished = true;
-                            break;
+                            break current;
+                        }
+                        // An intermediate callback result can temporarily lack a
+                        // port. Preserve the admitted input if a caller's limit
+                        // stops this context, or a callback recreates an earlier
+                        // state. A cycle is deferred work, not budget exhaustion.
+                        let status = if max_passes.is_some_and(|limit| changes >= limit) {
+                            Some(crate::tensor::ReductionStatus::Capped)
+                        } else if !seen.insert(next.clone()) {
+                            Some(crate::tensor::ReductionStatus::Deferred)
+                        } else {
+                            None
+                        };
+                        if let Some(status) = status {
+                            let mut unfinished = selected;
+                            unfinished.proofs.frontier = status;
+                            return Ok(unfinished);
                         }
                         current = next;
+                        changes += 1;
                     }
-                    if !finished {
-                        // An intermediate callback result can temporarily lack a
-                        // port. Retain the exact admitted input when this local
-                        // safety budget expires, rather than publishing that state.
-                        let mut unfinished = selected;
-                        unfinished.proofs.frontier = crate::tensor::ReductionStatus::Capped;
-                        return Ok(unfinished);
-                    }
-                    current
                 } else {
                     let simplifier = DiracSimplifier {
                         settings: &settings,
@@ -737,12 +745,14 @@ impl<'settings> DiracSimplifier<'settings> {
                     return None;
                 };
                 if slot.is_concrete_index()
-                    || (SCALAR_CONTEXT
-                        && (!Self::exact_scalar_leaf(slot.dimension())
-                            || !matches!(slot.index(), AtomView::Var(_))))
+                    || (SCALAR_CONTEXT && !Self::exact_scalar_leaf(slot.dimension()))
                 {
                     return None;
                 }
+                // The slot owns index syntax; the recurrence only compares
+                // complete labels and never performs arithmetic on them.
+                // Every admitted dummy label therefore uses the same
+                // recurrence, independently of its atom shape.
                 // More than two occurrences do not define an Einstein sum.
                 // Preserve the complete pass's existing ordered substitutions.
                 let occurrences = indices[..position].iter().filter(|&&i| i == index).count();
@@ -824,6 +834,17 @@ impl<'settings> DiracSimplifier<'settings> {
                 }
                 let mut slots = SlotMatcher::default();
                 if let SlotMatch::Explicit(slot) = slots.classify(index) {
+                    // Encoded unresolved ports are occurrence-local axes, not
+                    // summed labels, including when wrapped in a copy scope.
+                    let Ok(mut label) = AbstractIndex::try_from(slot.index()) else {
+                        return false;
+                    };
+                    while let AbstractIndex::Scoped(scope) = label {
+                        label = scope.index();
+                    }
+                    if matches!(label, AbstractIndex::Open { .. }) {
+                        return false;
+                    }
                     Self::exact_scalar_leaf(slot.dimension())
                 } else {
                     matches!(index, AtomView::Fun(vector)
@@ -2719,6 +2740,96 @@ mod tests {
     }
 
     #[test]
+    fn terminal_trace_does_not_certify_unresolved_ports_as_scalar() {
+        let r = test_initialize();
+        let open = AbstractIndex::Open {
+            owner: 97363,
+            axis: 0,
+        };
+        let scope = symbolica::symbol!("terminal_unresolved_copy");
+        for label in [open, open.scoped(scope)] {
+            let mu = r.mink4.to_symbolic([label.to_atom()]);
+            let word = trace!(r.bis4.to_symbolic([]); [gamma!(&mu), gamma!(&mu)]);
+            let settings = GammaSimplifySettings::default();
+            let simplifier = DiracSimplifier::new(&settings);
+            for facts in [
+                simplifier.evaluate_terminal_trace::<false>(word.as_view()),
+                simplifier.evaluate_terminal_trace::<true>(word.as_view()),
+            ] {
+                assert!(facts.is_some_and(|(_, observations)| observations.is_none()));
+            }
+        }
+    }
+
+    #[test]
+    fn scalar_trace_recurrence_preserves_admitted_dummy_label_forms() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
+        use spenso::structure::{
+            abstract_index::{AIND_SYMBOLS, AbstractIndex},
+            slot::{DummyAind, ParseableAind},
+        };
+
+        let r = test_initialize();
+        let named = symbolica::function!(
+            spenso::index_symbol!("idenso::terminal_dummy_edge"),
+            Atom::num(3),
+            Atom::num(7)
+        );
+        let scoped = symbolica::function!(
+            AIND_SYMBOLS.scope,
+            symbolica::symbol!("terminal_dummy_scope"),
+            &named
+        );
+        let labels = [
+            Atom::var(symbolica::symbol!("terminal_dummy_atomic")),
+            Atom::num(97361),
+            Atom::num(-97361),
+            Atom::num((7, 13)),
+            AbstractIndex::new_dummy_at(97367).to_atom(),
+            named,
+            scoped,
+        ];
+        let spectator = symbolica::parse_lit!((terminal_x + terminal_y) ^ 8);
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            contract: AlgebraContraction::Dots,
+            ..Default::default()
+        };
+        for mink in [&r.mink4, &r.mink_d] {
+            let compact = mink.to_symbolic([]);
+            let dimension = minkowski_dimension(compact.as_view()).unwrap().to_owned();
+            let p = spenso::p!(&compact);
+            let q = spenso::q!(&compact);
+            // Independent Clifford identity: tr(gamma^mu p/ gamma_mu q/)
+            // = 4 (2-D) p.q for a four-component spinor representation.
+            let expected = &spectator
+                * (Atom::num(8) - Atom::num(4) * dimension)
+                * symbolica::function!(T.dot, &p, &q);
+            for label in &labels {
+                let mu = mink.to_symbolic([label.clone()]);
+                let word = trace!(r.bis4.to_symbolic([]);
+                    [&mu, &p, &mu, &q].map(|argument| gamma!(argument)));
+                let source = SymbolicTensor::infer(&spectator * &word).unwrap();
+                let (_, observations) = DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<true>(word.as_view())
+                    .expect("admitted dummy labels share the terminal recurrence");
+                assert!(observations.is_some_and(|facts| facts.is_closed_scalar()));
+                let reduced = source.simplify_algebra(&settings).unwrap();
+                assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+                assert_eq!(
+                    ((&reduced.expression / &spectator) - (&expected / &spectator)).expand(),
+                    Atom::Zero
+                );
+                assert!(
+                    matches!(reduced.expression.as_view(), AtomView::Mul(product)
+                    if product.iter().any(|factor| factor == spectator.as_view()))
+                );
+                assert_eq!(reduced.simplify_algebra(&settings).unwrap(), reduced);
+            }
+        }
+    }
+
+    #[test]
     fn scalar_trace_products_preserve_component_callback_order() {
         let r = test_initialize();
         fn component(value: AtomView<'_>, out: &mut Settable<Atom>) {
@@ -2922,7 +3033,62 @@ mod tests {
     }
 
     #[test]
-    fn contextual_callback_kernel_retains_exact_input_at_its_safety_bound() {
+    fn contextual_callback_reductions_have_only_opt_in_limits() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
+
+        let r = test_initialize();
+        let word = trace!(
+            r.bis4.to_symbolic([]),
+            gamma!(slot!(r.mink4, 95311)),
+            gamma!(slot!(r.mink4, 95311))
+        );
+        let next_word = word.clone();
+        let callback = symbolica::symbol!("gamma_callback_countdown"; Scalar;
+            norm = move |node, output| {
+                if let AtomView::Fun(function) = node
+                    && !node.contains_symbol(T.trace)
+                {
+                    let mut arguments = function.iter();
+                    let remaining = arguments.next().unwrap().to_owned();
+                    **output = if remaining.is_zero() {
+                        arguments.next().unwrap().to_owned()
+                    } else {
+                        FunctionBuilder::new(function.get_symbol())
+                            .add_arg(remaining - Atom::one())
+                            .add_arg(&next_word)
+                            .finish()
+                    };
+                }
+            }
+        );
+        let source = SymbolicTensor::<PartialStructure>::infer(symbolica::function!(
+            callback,
+            Atom::num(32),
+            word
+        ))
+        .unwrap();
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        let completed = source.simplify_algebra(&settings).unwrap();
+        // Each evaluated trace is tr(gamma^mu gamma_mu) = 4 * 4.
+        assert_eq!(completed.expression, Atom::num(16));
+        assert_eq!(completed.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(completed.simplify_algebra(&settings).unwrap(), completed);
+        let limited = source
+            .simplify_algebra(&AlgebraSettings {
+                max_passes: Some(1),
+                ..settings
+            })
+            .unwrap();
+        assert_eq!(limited.reduction_status(), ReductionStatus::Capped);
+        assert_eq!(limited, source);
+    }
+
+    #[test]
+    fn contextual_callback_cycle_retains_exact_input() {
         use std::sync::{
             Arc, OnceLock,
             atomic::{AtomicUsize, Ordering},
@@ -2966,13 +3132,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             result.reduction_status(),
-            crate::tensor::ReductionStatus::Capped
+            crate::tensor::ReductionStatus::Deferred
         );
         assert_eq!(result, source);
-        assert_eq!(
-            calls.load(Ordering::Relaxed),
-            crate::tensor::AlgebraSettings::default().max_passes
-        );
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
     }
 
     #[test]

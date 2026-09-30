@@ -5,7 +5,7 @@
 //! substitutions remain port bindings until a distinct output variable is emitted.
 
 use super::*;
-use crate::tensor::SymbolicNet;
+use crate::tensor::{SymbolicNet, simplification::observation::DomainObservations};
 use linnet::{
     half_edge::{
         NodeIndex,
@@ -34,21 +34,36 @@ use symbolica::{atom::AtomOrView, coefficient::CoefficientView};
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Remaining<'a> {
     factors: Vec<(usize, Vec<Argument<'a>>)>,
-    residual: Vec<(usize, u16)>,
+    residual: Vec<(usize, u32)>,
 }
 
-type FactorTerm = (Vec<(usize, u16)>, Rational);
+impl Remaining<'_> {
+    #[cfg(feature = "reference-cases")]
+    fn storage_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.factors.capacity() * std::mem::size_of::<(usize, Vec<Argument<'_>>)>()
+            + self
+                .factors
+                .iter()
+                .map(|(_, arguments)| arguments.capacity() * std::mem::size_of::<Argument<'_>>())
+                .sum::<usize>()
+            + self.residual.capacity() * std::mem::size_of::<(usize, u32)>()
+    }
+}
+
+type FactorTerm = (Vec<(usize, u32)>, Rational);
 // Selected expression/interface and retained factors.
 type PrerequisiteFactors = (Atom, PartialStructure, Vec<Atom>);
 
 pub(crate) use crate::tensor::simplification::ReductionStatus;
 
-/// Exact output may retain pending contractions when a frontier budget is met.
+/// Exact output may retain unsupported contractions for subsequent operations.
 /// Algebraic validity and completion are separate facts.
 #[derive(Clone)]
 pub(crate) struct FactorizedContraction<Root = Atom> {
     pub(crate) root: Root,
     pub(crate) status: ReductionStatus,
+    pub(crate) observations: Option<DomainObservations>,
 }
 
 // A parse belongs to one arithmetic scope. Opening an occurrence is cached on
@@ -545,6 +560,9 @@ impl SlotContraction {
                     return Some(FactorizedContraction {
                         root: scope.literal(node)?.to_owned(),
                         status: ReductionStatus::Complete,
+                        observations: self.observations.as_ref().and_then(|observed| {
+                            observed.certify_scalar_region(scope.literal(node)?)
+                        }),
                     });
                 }
                 // Contract a closed base once in its own scope before applying the
@@ -654,6 +672,12 @@ impl SlotContraction {
                     {
                         scoped.insert((scope as *const _ as usize, node), result);
                     }
+                    if let Some(observed) = &result.observations {
+                        sum.scalar_forms.insert(
+                            result.root.as_view(),
+                            observed.needs_dot_normalization(),
+                        );
+                    }
                     return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
                 }
                 if !matches!(value, NetworkNode::Leaf(_)) {
@@ -707,6 +731,7 @@ impl SlotContraction {
         if self.power_scope(scope, root).is_some() {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
+        let scalar_boundary = scope.ports[&root].0.is_empty();
         let nodes = scope.factors(root);
         let selected = nodes
             .iter()
@@ -754,6 +779,7 @@ impl SlotContraction {
         };
         let mut roots = Vec::new();
         let mut status = ReductionStatus::Complete;
+        let mut scalar_form = Some(false);
         for component in components {
             sum.alpha_terms.clear();
             let component = component
@@ -766,6 +792,14 @@ impl SlotContraction {
                 .filter(|position| component.contains(position))
                 .collect::<Vec<_>>();
             if selected.is_empty() {
+                for &position in &component {
+                    scalar_form = scalar_form
+                        .zip(sum.scalar_form(sum.opaque_factors[position].0))
+                        .map(|(first, second)| first || second);
+                    if !sum.opaque_factors[position].1.is_empty() {
+                        scalar_form = None;
+                    }
+                }
                 roots.push(Atom::mul_many(
                     component
                         .iter()
@@ -787,6 +821,9 @@ impl SlotContraction {
             )?;
             roots.push(result.root);
             status = status.max(result.status);
+            scalar_form = scalar_form
+                .zip(result.observations.as_ref())
+                .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
         }
         for result in scoped.values() {
             status = status.max(result.status);
@@ -802,16 +839,109 @@ impl SlotContraction {
             } else {
                 source.to_owned()
             };
-            return Some(FactorizedContraction { root, status });
+            return Some(FactorizedContraction {
+                root,
+                status,
+                observations: scalar_form
+                    .filter(|_| scalar_boundary)
+                    .map(DomainObservations::closed_scalar),
+            });
         }
         Some(FactorizedContraction {
             root: Atom::mul_many(roots),
             status,
+            observations: scalar_form
+                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
+                .map(DomainObservations::closed_scalar),
         })
     }
 }
 
 impl<'a> ComponentSum<'a, '_> {
+    /// Reuse the admitted inventory; never inspect a completed coefficient to
+    /// rediscover whether its source contains an identity or an index.
+    fn scalar_form(&self, value: AtomView<'a>) -> Option<bool> {
+        if let Some(&needs_dots) = self.scalar_forms.get(&value) {
+            return Some(needs_dots);
+        }
+        if matches!(value, AtomView::Num(_)) {
+            return Some(false);
+        }
+        if let AtomView::Var(variable) = value {
+            let head = variable.get_symbol();
+            let tags = self.contractor.tags;
+            if head.get_wildcard_level() == 0
+                && !head.has_tag(&tags.tensor)
+                && !head.has_tag(&tags.rank1)
+                && !head.has_tag(&tags.representation)
+                && head != tags.chain_in
+                && head != tags.chain_out
+            {
+                return Some(false);
+            }
+        }
+        let observed = self.contractor.observations.as_ref();
+        let known = observed.is_some_and(|observed| observed.region(value).is_some());
+        if known {
+            observed
+                .and_then(|observed| observed.certify_scalar_region(value))
+                .map(|observed| observed.needs_dot_normalization())
+        } else {
+            // The shallow parser can compose scalar coefficients that were
+            // separate factors at admission. Combine only these new arithmetic
+            // connectors, stopping at every already-observed subtree.
+            match value {
+                AtomView::Add(sum) => sum.iter().try_fold(false, |needs_dots, term| {
+                    self.scalar_form(term).map(|next| needs_dots || next)
+                }),
+                AtomView::Mul(product) => product.iter().try_fold(false, |needs_dots, factor| {
+                    self.scalar_form(factor).map(|next| needs_dots || next)
+                }),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    self.scalar_form(base)
+                        .zip(self.scalar_form(exponent))
+                        .map(|(base, exponent)| base || exponent)
+                }
+                _ => None,
+            }
+        }
+    }
+
+    fn variable_scalar_form(&mut self, variable: &Variable<'a>) -> Option<bool> {
+        match variable {
+            Variable::Scalar(value @ AtomView::Fun(function))
+                if self.scalar_form(*value).is_none() =>
+            {
+                // A compact dot can come from the shallow parser's scalar
+                // store, after notation normalization changed its source key.
+                // Reuse the same admitted vector/space parser as dot emission.
+                let (space, first, second) = self.compact_dot(*function)?;
+                let needs_dots =
+                    self.variable_scalar_form(&Variable::Dot(space, [first, second]))?;
+                self.scalar_forms.insert(*value, needs_dots);
+                Some(needs_dots)
+            }
+            Variable::Scalar(value) => self.scalar_form(*value),
+            Variable::Subtree(position) if self.opaque_factors[*position].1.is_empty() => {
+                self.scalar_form(self.opaque_factors[*position].0)
+            }
+            Variable::Dot(_, vectors) => {
+                // Vector admission already proved intrinsic heads, compatible
+                // atomic dimensions and scalar metadata. Require the stronger
+                // identity-free certificate before skipping future family work.
+                for &vector in vectors {
+                    let source = self.vectors[vector];
+                    for argument in source.iter().take(source.get_nargs() - 1) {
+                        self.scalar_form(argument)?;
+                    }
+                }
+                Some(true)
+            }
+            _ => None,
+        }
+    }
+
     fn register_factor(
         &mut self,
         scope: &'a ContractionScope<'_>,
@@ -855,7 +985,7 @@ impl<'a> ComponentSum<'a, '_> {
         Some(())
     }
 
-    fn residual_factor(&mut self, variable: usize, exponent: u16) -> Option<()> {
+    fn residual_factor(&mut self, variable: usize, exponent: u32) -> Option<()> {
         match self.variables[variable].clone() {
             Variable::Vector(head, slot) => {
                 let (space, index) = self.resolve_endpoint(slot)?;
@@ -916,7 +1046,7 @@ impl<'a> ComponentSum<'a, '_> {
         let node = self.factor_roots.get(position).copied().flatten()?;
         self.input.clear_terms();
         self.input
-            .distribute(&mut vec![(node, 1)], &Rational::one(), 0)?;
+            .distribute(&mut vec![(node, 1)], &Rational::one())?;
         Some(self.input.take_terms())
     }
 
@@ -926,54 +1056,66 @@ impl<'a> ComponentSum<'a, '_> {
         order: &[usize],
         compile: &mut impl FnMut(&mut Self, usize) -> Option<usize>,
     ) -> Option<FactorizedContraction> {
-        let mut states = vec![(remaining, Atom::num(1))];
+        #[cfg(feature = "reference-cases")]
+        let _states_timing = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::ContractionStates,
+        );
+        let mut states = vec![(remaining, ScalarPolynomial::new_one(&Q))];
         let mut emitted: AHashMap<usize, Atom> = AHashMap::new();
+        #[cfg(feature = "reference-cases")]
+        let mut emitted_bytes = 0usize;
+        let mut scalar_variables: AHashMap<Atom, usize> = AHashMap::new();
+        let mut scalar_form = Some(false);
+        #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
-        let mut complete = true;
         for &selected in order {
             if self.factor_roots[selected].is_none() {
                 self.factor_roots[selected] = Some(compile(self, selected)?);
             }
             let terms = self.factor_terms(selected)?;
-            // Predict growth of the whole frontier, not just the local
-            // template's term iterator. This includes graph-state storage and
-            // existing coefficient payloads, not a hard heap bound on Atom buffers.
-            // Flush exact remaining factors before an exponential next level;
-            // explicit materialization may expand them.
+            // Measure generated coefficient storage without placing an
+            // automatic work limit on the selected contraction.
+            #[cfg(feature = "reference-cases")]
             let state_bytes = states
                 .iter()
                 .map(|(remaining, coefficient)| {
-                    coefficient.as_view().get_byte_size()
-                        + std::mem::size_of::<Remaining<'a>>()
-                        + remaining
-                            .factors
-                            .iter()
-                            .map(|(_, arguments)| {
-                                std::mem::size_of::<(usize, Vec<Argument<'a>>)>()
-                                    + arguments.len() * std::mem::size_of::<Argument<'a>>()
-                            })
-                            .sum::<usize>()
-                        + remaining.residual.len() * std::mem::size_of::<(usize, u16)>()
+                    Self::coefficient_bytes(coefficient) + remaining.storage_bytes()
                 })
-                .max()
-                .unwrap_or(0);
-            let count = states.len().saturating_mul(terms.len());
-            let predicted = count.saturating_mul(state_bytes.saturating_mul(4).saturating_add(256));
-            const MAX_FRONTIER_BYTES: usize = if cfg!(test) {
-                64 * 1024
-            } else {
-                64 * 1024 * 1024
-            };
-            if generated.saturating_add(count) > Self::MAX_GENERATED_TERMS
-                || predicted > MAX_FRONTIER_BYTES
+                .fold(0usize, usize::saturating_add);
+            #[cfg(feature = "reference-cases")]
+            let count = states
+                .iter()
+                .map(|(_, weight)| weight.nterms())
+                .fold(0usize, usize::saturating_add)
+                .saturating_mul(terms.len());
+            #[cfg(feature = "reference-cases")]
+            let predicted = state_bytes.saturating_add(emitted_bytes.saturating_mul(2));
+            #[cfg(feature = "reference-cases")]
+            crate::reference_cases::timing::frontier(crate::reference_cases::timing::Frontier {
+                selected,
+                states: states.len(),
+                local_terms: terms.len(),
+                generated,
+                predicted_bytes: predicted,
+                coefficient_bytes: states
+                    .iter()
+                    .map(|(_, coefficient)| Self::coefficient_bytes(coefficient))
+                    .sum(),
+                max_coefficient_bytes: states
+                    .iter()
+                    .map(|(_, coefficient)| Self::coefficient_bytes(coefficient))
+                    .max()
+                    .unwrap_or(0),
+            });
+            #[cfg(feature = "reference-cases")]
             {
-                complete = false;
-                break;
+                generated = generated.saturating_add(count);
             }
-            generated += count;
             let mut positions: AHashMap<Remaining<'a>, usize> = AHashMap::new();
-            let mut next: Vec<(Remaining<'a>, Vec<Atom>)> = Vec::new();
-            for (remaining, weight) in states {
+            let mut next: Vec<(Remaining<'a>, ScalarPolynomial)> = Vec::new();
+            #[cfg(feature = "reference-cases")]
+            let mut next_bytes = 0usize;
+            for (remaining, weight) in &states {
                 let source = remaining
                     .factors
                     .iter()
@@ -1026,11 +1168,13 @@ impl<'a> ComponentSum<'a, '_> {
                         factors: Vec::new(),
                         residual: Vec::new(),
                     };
-                    let mut coefficient = vec![Atom::num(self.coefficient.clone()), weight.clone()];
-                    for &(variable, exponent) in &self.factors {
-                        match &self.variables[variable] {
+                    let mut variables = Vec::new();
+                    let mut exponents: Vec<u32> = Vec::new();
+                    for factor in 0..self.factors.len() {
+                        let (variable, exponent) = self.factors[factor];
+                        match self.variables[variable].clone() {
                             Variable::Tensor(TensorSource::Factor(position), arguments) => {
-                                key.factors.push((*position, arguments.clone()));
+                                key.factors.push((position, arguments));
                             }
                             value @ (Variable::Scalar(_)
                             | Variable::Subtree(_)
@@ -1038,49 +1182,145 @@ impl<'a> ComponentSum<'a, '_> {
                                 let atom = if let Some(value) = emitted.get(&variable) {
                                     value.clone()
                                 } else {
-                                    let atom = self.emit_variable(value)?;
+                                    scalar_form = scalar_form
+                                        .zip(self.variable_scalar_form(&value))
+                                        .map(|(first, second)| first || second);
+                                    let atom = self.emit_variable(&value)?;
+                                    #[cfg(feature = "reference-cases")]
+                                    {
+                                        emitted_bytes = emitted_bytes
+                                            .saturating_add(atom.as_view().get_byte_size());
+                                    }
                                     emitted.insert(variable, atom.clone());
                                     atom
                                 };
-                                coefficient.push(atom.pow(exponent));
+                                let index = *scalar_variables.entry(atom).or_insert(variable);
+                                let variable = PolyVariable::Temporary(index);
+                                if let Some(position) =
+                                    variables.iter().position(|entry| entry == &variable)
+                                {
+                                    exponents[position] =
+                                        exponents[position].checked_add(exponent)?;
+                                } else {
+                                    variables.push(variable);
+                                    exponents.push(exponent);
+                                }
                             }
                             _ => key.residual.push((variable, exponent)),
                         }
                     }
                     key.factors.sort_unstable_by_key(|(position, _)| *position);
                     key.residual.sort_unstable();
-                    let coefficient = Atom::mul_many(coefficient);
+                    for (variable, exponent) in variables.iter().zip(&exponents) {
+                        if let Some(position) = weight
+                            .variables()
+                            .iter()
+                            .position(|entry| entry == variable)
+                        {
+                            // Machine exponent capacity is not a work budget.
+                            // A decline preserves the caller's exact source.
+                            weight.degree(position).checked_add(*exponent)?;
+                        }
+                    }
+                    #[cfg(feature = "reference-cases")]
+                    let incoming_bytes = weight.nterms().saturating_mul(
+                        std::mem::size_of::<Rational>()
+                            + (weight.nvars() + variables.len()) * std::mem::size_of::<u32>(),
+                    );
+                    let position = positions.get(&key).copied();
+                    // The position map and frontier both own a key.
+                    #[cfg(feature = "reference-cases")]
+                    let key_bytes = if position.is_none() {
+                        key.storage_bytes().saturating_mul(2)
+                    } else {
+                        0
+                    };
+                    #[cfg(feature = "reference-cases")]
+                    let target_bytes = position.map_or(0, |position| {
+                        let target = &next[position].1;
+                        target.nterms().saturating_mul(
+                            std::mem::size_of::<Rational>()
+                                + (target.nvars() + weight.nvars() + variables.len())
+                                    * std::mem::size_of::<u32>(),
+                        )
+                    });
+                    // Existing polynomial addition owns the only workspace:
+                    // two unified inputs and the merged output.
+                    #[cfg(feature = "reference-cases")]
+                    let live_bytes = state_bytes
+                        .saturating_add(next_bytes)
+                        .saturating_add(key_bytes)
+                        .saturating_add(emitted_bytes.saturating_mul(2))
+                        .saturating_add(
+                            incoming_bytes
+                                .saturating_add(target_bytes)
+                                .saturating_mul(2),
+                        );
+                    #[cfg(feature = "reference-cases")]
+                    crate::reference_cases::timing::frontier_workspace(live_bytes);
+                    let monomial = ScalarPolynomial::new(&Q, Some(1), Arc::new(variables))
+                        .monomial(self.coefficient.clone(), exponents);
+                    let coefficient = weight * &monomial;
                     if coefficient.is_zero() {
                         continue;
                     }
-                    if let Some(&position) = positions.get(&key) {
-                        next[position].1.push(coefficient);
+                    #[cfg(feature = "reference-cases")]
+                    let _merge_timing = crate::reference_cases::timing::scope(
+                        crate::reference_cases::timing::Phase::CoefficientMerge,
+                    );
+                    if let Some(position) = position {
+                        let old = std::mem::replace(
+                            &mut next[position].1,
+                            ScalarPolynomial::new_zero(&Q),
+                        );
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes -= Self::coefficient_bytes(&old);
+                        }
+                        let merged = old + coefficient;
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes += Self::coefficient_bytes(&merged);
+                        }
+                        next[position].1 = merged;
                     } else {
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes += Self::coefficient_bytes(&coefficient) + key_bytes;
+                        }
                         positions.insert(key.clone(), next.len());
-                        next.push((key, vec![coefficient]));
+                        next.push((key, coefficient));
                     }
                 }
             }
             self.overrides.clear();
-            states = Vec::with_capacity(next.len());
-            for (key, coefficients) in next {
-                let body = Atom::add_many(coefficients);
-                if body.is_zero() {
-                    continue;
-                }
-                states.push((key, body));
-            }
+            states = next
+                .into_iter()
+                .filter(|(_, weight)| !weight.is_zero())
+                .collect();
         }
+        self.overrides.clear();
+        #[cfg(feature = "reference-cases")]
+        let _emission_timing = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::ContractionEmission,
+        );
         let mut terms = Vec::with_capacity(states.len());
         for (remaining, weight) in states {
-            let mut factors = vec![weight];
+            let mut factors = vec![self.emit_coefficient(&weight)?];
             for (position, arguments) in remaining.factors {
+                scalar_form = scalar_form
+                    .zip(self.scalar_form(self.opaque_factors[position].0))
+                    .filter(|_| self.opaque_factors[position].1.is_empty())
+                    .map(|(first, second)| first || second);
                 factors.push(self.emit_factor(position, &arguments)?);
             }
             for (variable, exponent) in remaining.residual {
                 let atom = if let Some(value) = emitted.get(&variable) {
                     value.clone()
                 } else {
+                    scalar_form = scalar_form
+                        .zip(self.variable_scalar_form(&self.variables[variable].clone()))
+                        .map(|(first, second)| first || second);
                     let atom = self.emit_variable(&self.variables[variable])?;
                     emitted.insert(variable, atom.clone());
                     atom
@@ -1091,11 +1331,8 @@ impl<'a> ComponentSum<'a, '_> {
         }
         Some(FactorizedContraction {
             root: Atom::add_many(terms),
-            status: if complete {
-                ReductionStatus::Complete
-            } else {
-                ReductionStatus::Capped
-            },
+            status: ReductionStatus::Complete,
+            observations: scalar_form.map(DomainObservations::closed_scalar),
         })
     }
 
@@ -1153,7 +1390,7 @@ impl<'a> ComponentSum<'a, '_> {
         &mut self,
         first: Argument<'a>,
         second: Argument<'a>,
-        exponent: u16,
+        exponent: u32,
     ) -> Option<()> {
         match (first, second) {
             (Argument::Vector(space, a), Argument::Vector(other, b)) => {
@@ -1317,7 +1554,78 @@ mod tests {
     }
 
     #[test]
-    fn factorized_frontier_budget_retains_an_exact_unexpanded_remainder() {
+    fn polynomial_exponents_beyond_u16_remain_exact_and_complete() {
+        let contractor = setup();
+        let x = input("x");
+        let spectator = input("(y+z)^17");
+        let first = &spectator * x.pow(u16::MAX);
+        let second = x.clone();
+        let mut slots = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        let leaf = sum.input.leaf(InputLeaf::Scalar(x.as_view())).unwrap();
+        let power = sum.input.power(leaf, u32::from(u16::MAX)).unwrap();
+        let scalar = sum
+            .input
+            .leaf(InputLeaf::Scalar(spectator.as_view()))
+            .unwrap();
+        let weighted = sum.input.group([power, scalar].into_iter(), false).unwrap();
+        sum.opaque_factors = vec![
+            (
+                first.as_view(),
+                Vec::new(),
+                PartialStructure::from_logical_slots([]),
+            ),
+            (
+                second.as_view(),
+                Vec::new(),
+                PartialStructure::from_logical_slots([]),
+            ),
+        ];
+        sum.factor_roots = vec![Some(weighted.0), Some(leaf.0)];
+        let result = sum
+            .contract_states(
+                Remaining {
+                    factors: vec![(0, Vec::new()), (1, Vec::new())],
+                    residual: Vec::new(),
+                },
+                &[0, 1],
+                &mut |_, _| unreachable!("the two selected factors are already compiled"),
+            )
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(result.root, &spectator * x.pow(u32::from(u16::MAX) + 1));
+        assert!(result.observations.is_some());
+        assert!(sum.overrides.is_empty());
+    }
+
+    #[test]
+    fn skewed_frontier_counts_each_opaque_coefficient_once() {
+        let contractor = setup();
+        let scalar = Atom::add_many(
+            (0..512).map(|i| Atom::var(symbolica::symbol!(&format!("skewed_frontier::s{i}")))),
+        );
+        let source = (&scalar * input("p(mink(4,a))") + input("q(mink(4,a))"))
+            * input(
+                "(p(mink(4,b))+q(mink(4,b)))*(p(mink(4,c))+q(mink(4,c)))*t(mink(4,a),mink(4,b),mink(4,c))",
+            );
+        let result = contractor
+            .contract_factorized(source.as_view(), None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        let mut expected = Vec::new();
+        for a in ["p", "q"] {
+            for b in ["p", "q"] {
+                for c in ["p", "q"] {
+                    let tensor = input(&format!("t({a}(mink(4)),{b}(mink(4)),{c}(mink(4)))"));
+                    expected.push(if a == "p" { &scalar * tensor } else { tensor });
+                }
+            }
+        }
+        assert_eq!(result.root, Atom::add_many(expected));
+    }
+
+    #[test]
+    fn factorized_frontier_completes_all_selected_contractions() {
         let contractor = setup();
         let slots = (0..9).map(|i| format!("mink(4,a{i})")).collect::<Vec<_>>();
         let source = input(&format!(
@@ -1333,11 +1641,11 @@ mod tests {
             .contract_factorized(source.as_view(), None, true)
             .unwrap();
         assert!(!contracted.root.is_zero());
-        assert!(contracted.status == ReductionStatus::Capped);
+        assert_eq!(contracted.status, ReductionStatus::Complete);
         use spenso::network::parsing::AtomStructureExt;
         assert!(
-            contracted.root.has_repeated_explicit_indices(),
-            "the bounded frontier must keep its unprocessed contractions"
+            !contracted.root.has_repeated_explicit_indices(),
+            "all selected connections must be contracted"
         );
         let result = contracted.root;
         assert_eq!(

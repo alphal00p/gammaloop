@@ -22,9 +22,12 @@ pub(crate) enum Phase {
     DummyReservation,
     Materialization,
     OutputNormalization,
+    ContractionStates,
+    CoefficientMerge,
+    ContractionEmission,
 }
 
-const PHASES: [&str; 13] = [
+const PHASES: [&str; 16] = [
     "admission",
     "interface_discovery",
     "validation",
@@ -38,7 +41,23 @@ const PHASES: [&str; 13] = [
     "dummy_reservation",
     "materialization",
     "output_normalization",
+    "contraction_states",
+    "coefficient_merge",
+    "contraction_emission",
 ];
+
+/// Storage and branching at one selected contraction factor. Byte sizes describe
+/// stored coefficient buffers and estimated workspace, not resident memory.
+#[derive(Clone, Copy)]
+pub(crate) struct Frontier {
+    pub selected: usize,
+    pub states: usize,
+    pub local_terms: usize,
+    pub generated: usize,
+    pub predicted_bytes: usize,
+    pub coefficient_bytes: usize,
+    pub max_coefficient_bytes: usize,
+}
 
 #[derive(Clone, Copy, Default)]
 struct Entry {
@@ -52,6 +71,7 @@ struct Entry {
 struct Capture {
     entries: [Entry; PHASES.len()],
     outcomes: Vec<(&'static str, ReductionStatus)>,
+    frontiers: Vec<Frontier>,
 }
 
 thread_local! {
@@ -62,6 +82,25 @@ pub(crate) fn outcome(operation: &'static str, status: ReductionStatus) {
     CAPTURE.with_borrow_mut(|capture| {
         if let Some(capture) = capture {
             capture.outcomes.push((operation, status));
+        }
+    });
+}
+
+pub(crate) fn frontier(observation: Frontier) {
+    CAPTURE.with_borrow_mut(|capture| {
+        if let Some(capture) = capture {
+            capture.frontiers.push(observation);
+        }
+    });
+}
+
+pub(crate) fn frontier_workspace(bytes: usize) {
+    CAPTURE.with_borrow_mut(|capture| {
+        if let Some(frontier) = capture
+            .as_mut()
+            .and_then(|capture| capture.frontiers.last_mut())
+        {
+            frontier.predicted_bytes = frontier.predicted_bytes.max(bytes);
         }
     });
 }
@@ -107,6 +146,7 @@ pub struct Measurements {
     elapsed_ns: u128,
     entries: [Entry; PHASES.len()],
     outcomes: Vec<(&'static str, ReductionStatus)>,
+    frontiers: Vec<Frontier>,
 }
 
 impl fmt::Display for Measurements {
@@ -134,6 +174,23 @@ impl fmt::Display for Measurements {
             write!(
                 f,
                 "{{\"operation\":\"{operation}\",\"status\":\"{status:?}\"}}"
+            )?;
+        }
+        f.write_str("],\"frontiers\":[")?;
+        for (index, frontier) in self.frontiers.iter().enumerate() {
+            if index != 0 {
+                f.write_str(",")?;
+            }
+            write!(
+                f,
+                "{{\"selected\":{},\"states\":{},\"local_terms\":{},\"generated\":{},\"predicted_bytes\":{},\"coefficient_bytes\":{},\"max_coefficient_bytes\":{} }}",
+                frontier.selected,
+                frontier.states,
+                frontier.local_terms,
+                frontier.generated,
+                frontier.predicted_bytes,
+                frontier.coefficient_bytes,
+                frontier.max_coefficient_bytes,
             )?;
         }
         f.write_str("]}")
@@ -169,6 +226,7 @@ pub fn measure<T>(label: &str, operation: impl FnOnce() -> T) -> (T, Measurement
             elapsed_ns,
             entries: capture.entries,
             outcomes: capture.outcomes,
+            frontiers: capture.frontiers,
         },
     )
 }
@@ -223,7 +281,7 @@ mod tests {
                 owner.contract(settings).unwrap(),
                 source
                     .contract(ContractSettings {
-                        max_passes: 0,
+                        max_passes: Some(0),
                         ..settings
                     })
                     .unwrap(),

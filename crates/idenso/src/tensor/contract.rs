@@ -38,8 +38,8 @@ pub struct ContractSettings<'a> {
     pub collect_chains: bool,
     /// Close compatible matrix chains into trace notation without evaluating it.
     pub collect_traces: bool,
-    /// Maximum successful planning rounds per domain; unfinished results stay exact.
-    pub max_passes: usize,
+    /// Optional limit on successful planning rounds per domain. `None` is unlimited.
+    pub max_passes: Option<usize>,
 }
 
 impl Default for ContractSettings<'_> {
@@ -51,7 +51,7 @@ impl Default for ContractSettings<'_> {
             rank_one: true,
             collect_chains: true,
             collect_traces: true,
-            max_passes: 16,
+            max_passes: None,
         }
     }
 }
@@ -198,9 +198,10 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
                 root: self.clone(),
                 status: ReductionStatus::Complete,
+                observations: None,
             });
         }
-        self.contract_prerequisite_scopes(settings, &mut selected, &allowed_vector, 0)
+        self.contract_prerequisite_scopes(settings, &mut selected, &allowed_vector)
     }
 
     fn contract_prerequisite_scopes(
@@ -208,21 +209,11 @@ impl SymbolicTensor<PartialStructure> {
         settings: ContractSettings<'_>,
         selected: &mut dyn FnMut(AtomView<'_>) -> bool,
         allowed_vector: &dyn Fn(LibraryRep) -> bool,
-        depth: usize,
     ) -> Result<crate::shorthands::schoonschip::FactorizedContraction<Self>, TensorInferenceError>
     {
         use super::inference::InterfaceInference;
-        use crate::shorthands::schoonschip::FactorizedContraction;
         use spenso::structure::TensorStructure;
-        let mut result = FactorizedContraction {
-            root: self.clone(),
-            status: ReductionStatus::Complete,
-        };
-        if depth >= spenso::shadowing::TermTape::<usize>::MAX_EXPANSION_DEPTH {
-            result.status = ReductionStatus::Deferred;
-            return Ok(result);
-        }
-        result = self.contract_prerequisite_boundary(settings, selected, allowed_vector)?;
+        let mut result = self.contract_prerequisite_boundary(settings, selected, allowed_vector)?;
         if result.root != *self || result.status == ReductionStatus::Capped {
             // Let the shared planner reconsider the changed outer boundary
             // before any selected child is opened.
@@ -251,12 +242,7 @@ impl SymbolicTensor<PartialStructure> {
                 Self::checked_parts(value.to_owned(), interface)?
             };
             domain.observe_replacement(self);
-            let nested = domain.contract_prerequisite_scopes(
-                settings,
-                selected,
-                allowed_vector,
-                depth + 1,
-            )?;
+            let nested = domain.contract_prerequisite_scopes(settings, selected, allowed_vector)?;
             result.status = result.status.max(nested.status);
             Ok(nested.root.expression)
         };
@@ -308,6 +294,7 @@ impl SymbolicTensor<PartialStructure> {
         let mut result = crate::shorthands::schoonschip::FactorizedContraction {
             root: self.clone(),
             status: ReductionStatus::Complete,
+            observations: None,
         };
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
             .observed(result.root.reduction_observations());
@@ -484,6 +471,7 @@ impl SymbolicTensor<PartialStructure> {
                     }),
                 )?,
                 status: ReductionStatus::Complete,
+                observations: None,
             });
         }
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
@@ -500,8 +488,9 @@ impl SymbolicTensor<PartialStructure> {
             contractor.contract_factorized(source.as_view(), order, settings.rank_one)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root, None)?,
+                root: self.with_identity_result(contracted.root, contracted.observations)?,
                 status: contracted.status,
+                observations: None,
             });
         }
         // Callback-sensitive leaves retain the existing ordered rewrite and
@@ -530,8 +519,9 @@ impl SymbolicTensor<PartialStructure> {
                 contractor.contract_factorized(rewritten.as_view(), None, settings.rank_one)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root, None)?,
+                root: self.with_identity_result(contracted.root, contracted.observations)?,
                 status: contracted.status,
+                observations: None,
             });
         }
         let root = self.with_identity_result(rewritten, None)?;
@@ -540,8 +530,8 @@ impl SymbolicTensor<PartialStructure> {
         // collector. Repeated gamma ports or compact slash vectors are not
         // structural source endpoints. Their existing regional observations can
         // certify completion without a new walk; explicit metric/vector sources
-        // inside unresolved sums remain pending. An incomplete collector frontier
-        // returned above retains its budget.
+        // inside unsupported sums remain pending. An incomplete collector frontier
+        // returned above retains its exact remaining factors.
         let complete = !root.structural_work_permitted(settings)
             || root
                 .reduction_observations()
@@ -549,6 +539,7 @@ impl SymbolicTensor<PartialStructure> {
             || (root.expression != self.expression && root.contraction_is_noop());
         Ok(crate::shorthands::schoonschip::FactorizedContraction {
             root,
+            observations: None,
             status: if complete {
                 ReductionStatus::Complete
             } else {
@@ -1007,7 +998,7 @@ mod completion_tests {
                 );
                 let zero_budget = explicit
                     .contract(ContractSettings {
-                        max_passes: 0,
+                        max_passes: Some(0),
                         ..settings
                     })
                     .unwrap();
@@ -1163,7 +1154,7 @@ mod policy_tests {
         ] {
             let source = SymbolicTensor::infer(expression.clone()).unwrap();
             assert_eq!(source.structure.logical_slots().len(), 2);
-            for max_passes in [0, 16] {
+            for max_passes in [Some(0), Some(16), None] {
                 let result = source
                     .contract(ContractSettings {
                         max_passes,

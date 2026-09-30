@@ -160,6 +160,8 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertEqual(full.to_expression(), nc)
         self.assertEqual(full.reduction_status, sp.ReductionStatus.Complete)
         self.assertEqual(full.simplify_algebra(), full)
+        self.assertEqual(source.simplify_algebra(max_steps_per_domain=None), full)
+        self.assertEqual(source.contract(max_steps_per_domain=None).to_expression(), nc)
         for mode, options in (
             ("none", {}),
             ("selected", {"representations": []}),
@@ -264,6 +266,7 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertIs(defaults["epsilon"].default, False)
         for operation in (tensor.contract, tensor.simplify_algebra):
             signature = inspect.signature(operation)
+            self.assertIsNone(signature.parameters["max_steps_per_domain"].default)
             self.assertTrue(
                 all(
                     p.kind == inspect.Parameter.KEYWORD_ONLY

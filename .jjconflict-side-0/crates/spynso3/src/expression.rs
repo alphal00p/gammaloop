@@ -1693,10 +1693,9 @@ impl TensorExpression {
     ///     Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
     /// color_substitute_cof_dimension_invariants : bool, optional
     ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
-    /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations in the expression; zero is allowed.
-    ///     Capped results retain exact unfinished work. Family-specific options require
-    ///     the corresponding family to be enabled. None selects its native default.
+    /// max_steps_per_domain : int or None, default None
+    ///     Optional limit on successful transformations; None imposes no limit.
+    ///     Zero is allowed. Capped results retain exact unfinished work.
     ///
     /// Returns
     /// -------
@@ -1710,7 +1709,8 @@ impl TensorExpression {
     /// Closed color deltas produce their dimension even when color identities are off.
     /// Each enabled family includes its necessary contractions, including with
     /// contract="none". Unrelated sums stay factored. A capped result retains exact
-    /// unfinished work and can be simplified again.
+    /// unfinished work and can be simplified again. Family-specific options require
+    /// the corresponding family to be enabled; None selects its native default.
     ///
     /// Examples
     /// --------
@@ -1720,7 +1720,7 @@ impl TensorExpression {
     /// >>> result = expression.simplify_algebra()
     /// >>> result.rank
     /// 2
-    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
         &self,
@@ -1743,7 +1743,7 @@ impl TensorExpression {
         color_evaluate_traces: Option<bool>,
         color_expand_fierz: Option<bool>,
         color_substitute_cof_dimension_invariants: Option<bool>,
-        max_steps_per_domain: usize,
+        max_steps_per_domain: Option<usize>,
     ) -> PyResult<Py<Self>> {
         let settings = crate::simplification::algebra_settings(
             gamma,
@@ -2865,9 +2865,9 @@ impl TensorExpression {
     ///     Collect closed chains without evaluating traces. False preserves indexed closure.
     /// order : sequence of int, optional
     ///     Requested factor contraction order; None uses the planner's default.
-    /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations in the expression; zero is allowed.
-    ///     Inspect reduction_status for exact unfinished work.
+    /// max_steps_per_domain : int or None, default None
+    ///     Optional limit on successful transformations; None imposes no limit.
+    ///     Zero is allowed. Inspect reduction_status for exact unfinished work.
     ///
     /// Returns
     /// -------
@@ -2890,7 +2890,7 @@ impl TensorExpression {
     /// >>> result = expression.contract()
     /// >>> result.rank
     /// 1
-    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=16))]
+    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
@@ -2902,7 +2902,7 @@ impl TensorExpression {
         collect_chains: bool,
         collect_traces: bool,
         order: Option<Vec<usize>>,
-        max_steps_per_domain: usize,
+        max_steps_per_domain: Option<usize>,
     ) -> PyResult<Py<Self>> {
         let representations = crate::simplification::contraction_representations(representations)?;
         let settings = idenso::tensor::ContractSettings {

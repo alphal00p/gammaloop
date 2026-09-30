@@ -654,10 +654,10 @@ impl SettledRegions {
                     .len()
                     .saturating_mul(std::mem::size_of::<PartialSlot>()),
             );
-            if self.bytes.saturating_add(bytes)
-                <= spenso::shadowing::TermTape::<usize>::MAX_GENERATED_FACTOR_BYTES
-                && self.inputs.insert(key)
-            {
+            // This bounds only memoization. Larger unchanged inputs still run
+            // normally; omitting a cache entry never stops reduction.
+            const MAX_CACHED_BYTES: usize = 64 * 1024 * 1024;
+            if self.bytes.saturating_add(bytes) <= MAX_CACHED_BYTES && self.inputs.insert(key) {
                 self.bytes += bytes;
             }
         }

@@ -267,7 +267,7 @@ fn free_trace_results_discharge_cleanup_without_entering_contraction() {
             gamma: Some(GammaSimplifySettings::default()),
             // The trace identity uses this budget. Its free-port result
             // requires no additional contraction.
-            max_passes: 1,
+            max_passes: Some(1),
             ..Default::default()
         })
         .unwrap();
@@ -277,6 +277,92 @@ fn free_trace_results_discharge_cleanup_without_entering_contraction() {
         CONTRACT_DOMAIN_CALLS.with(|count| count.get()),
         0,
         "free-port results must use their observations before contraction setup"
+    );
+}
+
+#[test]
+fn contracted_scalar_results_reuse_producer_observations() {
+    use observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+    use spenso::network::tags::SPENSO_TAG;
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("contracted_scalar_observation_vector");
+    let spectator = symbolica::parse_lit!((contracted_scalar_x + contracted_scalar_y) ^ 20);
+    for representation in [&reps.mink4, &reps.mink_d] {
+        let compact = representation.to_symbolic([]);
+        let indexed = representation.to_symbolic([Atom::num(99731)]);
+        let component = |index, port: &Atom| symbolica::function!(vector, Atom::num(index), port);
+        let coefficient = &spectator
+            * symbolica::function!(
+                SPENSO_TAG.dot,
+                component(4, &compact),
+                component(5, &compact)
+            );
+        let source = SymbolicTensor::infer(
+            &coefficient
+                * (component(0, &indexed) + component(1, &indexed))
+                * (component(2, &indexed) + component(3, &indexed)),
+        )
+        .unwrap();
+        source.reduction_observations();
+        let scans = INITIAL_SCANS.with(|count| count.get());
+        REPLACEMENT_SCANS.with(|count| count.set(0));
+
+        let contracted = source.contract(Default::default()).unwrap();
+        assert_eq!(contracted.reduction_status(), ReductionStatus::Complete);
+        assert!(contracted.reduction_observations().is_closed_scalar());
+        let dotted = contracted.to_dots().unwrap();
+        assert!(dotted.reduction_observations().is_closed_scalar());
+        assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+        assert!(Arc::ptr_eq(
+            dotted.reduction_observations(),
+            dotted
+                .contract(Default::default())
+                .unwrap()
+                .reduction_observations()
+        ));
+
+        // Bilinearity supplies four pairings; the unrelated scalar power is
+        // cancelled before comparing the small tensor-dependent polynomial.
+        let mut pairings = Vec::with_capacity(4);
+        for left in 0..2 {
+            for right in 2..4 {
+                pairings.push(symbolica::function!(
+                    SPENSO_TAG.dot,
+                    component(left, &compact),
+                    component(right, &compact)
+                ));
+            }
+        }
+        let expected = Atom::add_many(pairings);
+        assert_eq!((&dotted.expression / &coefficient).expand(), expected);
+    }
+}
+
+#[test]
+fn contraction_certificates_preserve_unselected_trace_candidates() {
+    let reps = crate::test_support::test_initialize();
+    let word = trace!(reps.bis4.to_symbolic([]);
+        [gamma!(p!(mink!(4))), gamma!(q!(mink!(4)))]);
+    let mu = mink!(4, 99732);
+    let source = SymbolicTensor::infer(&word * p!(&mu) * q!(&mu)).unwrap();
+    let contracted = source.contract(Default::default()).unwrap();
+    assert_eq!(
+        contracted.expression,
+        &word * g!(p!(mink!(4)), q!(mink!(4)))
+    );
+    assert!(!contracted.reduction_observations().is_closed_scalar());
+    let reduced = contracted
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(
+        reduced.expression,
+        Atom::num(4) * g!(p!(mink!(4)), q!(mink!(4))).pow(2)
     );
 }
 
@@ -582,7 +668,7 @@ fn a_capped_algebra_result_retains_its_unprocessed_trace() {
     let source = SymbolicTensor::infer(expression).unwrap();
     let settings = AlgebraSettings {
         gamma: Some(GammaSimplifySettings::default()),
-        max_passes: 0,
+        max_passes: Some(0),
         ..Default::default()
     };
     let capped = source.simplify_algebra(&settings).unwrap();
@@ -590,7 +676,7 @@ fn a_capped_algebra_result_retains_its_unprocessed_trace() {
     assert_eq!(source, capped);
     let finished = capped
         .simplify_algebra(&AlgebraSettings {
-            max_passes: 16,
+            max_passes: Some(16),
             ..settings
         })
         .unwrap();
@@ -635,7 +721,7 @@ fn zero_budget_is_complete_when_no_permitted_work_exists() {
     crate::test_support::test_initialize();
     let constant = SymbolicTensor::infer(Atom::num(7)).unwrap();
     let settings = ContractSettings {
-        max_passes: 0,
+        max_passes: Some(0),
         ..Default::default()
     };
     assert_eq!(

@@ -45,7 +45,7 @@ pub(crate) fn algebra_settings(
     color_evaluate_traces: Option<bool>,
     color_expand_fierz: Option<bool>,
     color_substitute_cof_dimension_invariants: Option<bool>,
-    max_steps_per_domain: usize,
+    max_steps_per_domain: Option<usize>,
 ) -> PyResult<AlgebraSettings> {
     let representations = contraction_representations(representations)?;
     let contract = match (contract, representations) {
@@ -168,8 +168,8 @@ pub(crate) fn algebra_settings(
 /// Completion of a tensor reduction under its selected settings.
 ///
 /// Complete means no eligible work remains. Deferred means exact eligible work
-/// remains for another operation. Capped means the transformation budget stopped
-/// processing. A partial result still represents the exact original tensor;
+/// remains for another operation. Capped means an explicitly requested work limit
+/// stopped processing. A partial result still represents the exact original tensor;
 /// completion is relative to the requested operations, not every possible identity.
 ///
 /// Examples
@@ -196,7 +196,7 @@ pub(crate) enum PyReductionStatus {
     Complete,
     /// Exact eligible work remains for a subsequent operation.
     Deferred,
-    /// The work budget stopped processing; the remaining expression is exact.
+    /// An explicit work limit stopped processing; the remaining expression is exact.
     Capped,
 }
 

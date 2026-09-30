@@ -419,11 +419,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         network: &SymbolicNet<AbstractIndex, E>,
         tree: &CollectionTree,
         root: NodeIndex,
-        depth: usize,
     ) -> Result<Option<(usize, (usize, usize))>> {
-        if depth >= TermTape::<usize>::MAX_EXPANSION_DEPTH {
-            return Ok(None);
-        }
         let (owned, interfaces) = self.analyze(network, tree, root)?;
         let mut failure = None;
         let mut refused = false;
@@ -484,7 +480,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                             let opened = self.open(value.as_view())?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                             let root = opened.graph.graph.node_id(opened.graph.head());
-                            return self.compile(tape, &opened, &tree, root, depth + 1)
+                            return self.compile(tape, &opened, &tree, root)
                                 .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                         }
                     }
@@ -499,7 +495,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                         let root = graph.graph.graph.node_id(graph.graph.head());
                         let Some(copy) =
-                            self.compile(tape, &graph, &tree, root, depth + 2)?
+                            self.compile(tape, &graph, &tree, root)?
                         else {
                             refused = true;
                             return Ok(None);
@@ -523,7 +519,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                     let opened_root = opened.graph.graph.node_id(opened.graph.head());
                     if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
-                        return self.compile(tape, &opened, &opened_tree, opened_root, depth + 1)
+                        return self.compile(tape, &opened, &opened_tree, opened_root)
                             .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                     }
                 }
@@ -770,9 +766,9 @@ impl SymbolicTensor<PartialStructure> {
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let scoped_root = graph.graph.graph.node_id(graph.graph.head());
-                input.compile(&mut tape, &graph, &scoped_tree, scoped_root, 0)?
+                input.compile(&mut tape, &graph, &scoped_tree, scoped_root)?
             } else {
-                input.compile(&mut tape, &network, &tree, node, 0)?
+                input.compile(&mut tape, &network, &tree, node)?
             };
             let Some((compiled, _)) = compiled else {
                 // No domain callback has run; discard all refused tape scratch.
@@ -786,58 +782,19 @@ impl SymbolicTensor<PartialStructure> {
         let scalar = PartialStructure::from_logical_slots([]);
         let one = Self::from_validated_parts(Atom::one(), scalar);
         let mut states = vec![(one.clone(), one)];
-        let mut generated = 0usize;
         let mut remaining = Vec::new();
         let mut frontier = super::simplification::ReductionStatus::Complete;
         for (level, &(_, factor)) in factors.iter().enumerate() {
             tape.clear_terms();
             if tape
-                .distribute(&mut vec![(factor, 1)], &Rational::one(), 0)
+                .distribute(&mut vec![(factor, 1)], &Rational::one())
                 .is_none()
             {
+                frontier = frontier.max(super::simplification::ReductionStatus::Deferred);
                 remaining.extend(factors[level..].iter().map(|(node, _)| *node));
                 break;
             }
             let rows = tape.take_terms();
-            let count = states.len().saturating_mul(rows.len());
-            let state_bytes = states
-                .iter()
-                .map(|(selected, coefficient)| {
-                    selected
-                        .expression
-                        .as_atom_view()
-                        .get_byte_size()
-                        .saturating_add(coefficient.expression.as_atom_view().get_byte_size())
-                        .saturating_add(2 * std::mem::size_of::<Self>())
-                })
-                .max()
-                .unwrap_or(0);
-            let row_bytes = rows
-                .iter()
-                .map(|(powers, _)| {
-                    powers
-                        .iter()
-                        .map(|(position, _)| {
-                            values[tape.leaves()[*position]]
-                                .0
-                                .expression
-                                .as_atom_view()
-                                .get_byte_size()
-                        })
-                        .fold(0usize, usize::saturating_add)
-                })
-                .max()
-                .unwrap_or(0);
-            // Predict the next exact frontier before distributing it. Atom
-            // allocator overhead is not a hard heap bound.
-            if generated.saturating_add(count) > TermTape::<usize>::MAX_GENERATED_TERMS
-                || count.saturating_mul(state_bytes.saturating_add(row_bytes).saturating_mul(4))
-                    > TermTape::<usize>::MAX_GENERATED_FACTOR_BYTES
-            {
-                remaining.extend(factors[level..].iter().map(|(node, _)| *node));
-                break;
-            }
-            generated += count;
             let mut next = Vec::<(Self, Vec<Self>)>::new();
             let mut keys = HashMap::new();
             for (selected, coefficient) in states {
@@ -947,7 +904,6 @@ impl SymbolicTensor<PartialStructure> {
         let mut facts = Self::collection_observations(&terms);
         let mut output = vec![Atom::add_many(terms.iter().map(|value| &value.expression))];
         if !remaining.is_empty() {
-            frontier = super::simplification::ReductionStatus::Capped;
             facts = None;
         }
         for node in remaining {
@@ -1513,10 +1469,9 @@ mod tests {
     }
 
     #[test]
-    fn coefficient_zero_proof_preserves_large_foreign_factors_and_refuses_capped_selection() {
+    fn coefficient_zero_proof_preserves_large_foreign_factors() {
         crate::test_support::test_initialize();
-        let t = tensor(spenso::tensor_symbol!("capped_proof_t"), &[]);
-        let u = tensor(spenso::tensor_symbol!("capped_proof_u"), &[]);
+        let t = tensor(spenso::tensor_symbol!("opaque_proof_t"), &[]);
         let spectator = Atom::mul_many((0..30).map(|index| {
             Atom::var(symbolica::symbol!(&format!("zero_spectator_{index}"))) + Atom::one()
         }));
@@ -1544,13 +1499,6 @@ mod tests {
                 .unwrap(),
             ConditionResult::Inconclusive,
         );
-        let capped = SymbolicTensor::infer((t + u).pow(32)).unwrap();
-        assert_eq!(
-            capped
-                .coefficients_are_zero(TensorCollectFilter::<0>::TaggedTensors)
-                .unwrap(),
-            ConditionResult::Inconclusive,
-        );
     }
 
     #[test]
@@ -1569,7 +1517,7 @@ mod tests {
         let mut tape = TermTape::<usize>::default();
         assert!(
             input
-                .compile(&mut tape, &network, &tree, root, 0)
+                .compile(&mut tape, &network, &tree, root)
                 .unwrap()
                 .is_some()
         );
@@ -1709,7 +1657,7 @@ mod tests {
     }
 
     #[test]
-    fn coefficient_list_preserves_empty_selection_and_refuses_incomplete_rows() {
+    fn coefficient_list_preserves_empty_selection() {
         crate::test_support::test_initialize();
         let x = Atom::var(symbolica::symbol!("coefficient_output_scalar"));
         let source = SymbolicTensor::checked_parts(
@@ -1723,13 +1671,6 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].0.expression.is_one());
         assert_eq!(rows[0].1, source);
-        let t = tensor(spenso::tensor_symbol!("coefficient_output_capped_t"), &[]);
-        let u = tensor(spenso::tensor_symbol!("coefficient_output_capped_u"), &[]);
-        let capped = SymbolicTensor::infer((t + u).pow(32)).unwrap();
-        let error = capped
-            .coefficient_list(TensorCollectFilter::<0>::TaggedTensors)
-            .unwrap_err();
-        assert!(error.to_string().contains("did not complete"));
     }
 
     #[test]

@@ -24,7 +24,7 @@ enum InputFactor {
     Number(usize),
     Add(usize, usize),
     Mul(usize, usize),
-    Pow(usize, u16),
+    Pow(usize, u32),
 }
 
 /// An admitted leaf of the existing graph, or its exact numeric coefficient.
@@ -34,11 +34,11 @@ pub enum TermLeaf<L> {
     Value(L),
     Number(L, Rational),
     /// A previously compiled subtree of this same tape. This permits literal
-    /// alias bodies to reuse the existing arithmetic owner without Atom expansion.
+    /// subtrees to reuse the existing arithmetic owner without Atom expansion.
     Reference(usize, (usize, usize)),
 }
 
-/// One operation's bounded arithmetic tape, with caller-owned leaf semantics.
+/// One operation's arithmetic tape, with caller-owned leaf semantics.
 /// Discard the tape after any refused operation: partial scratch state may remain.
 pub struct TermTape<L> {
     nodes: Vec<InputFactor>,
@@ -46,11 +46,10 @@ pub struct TermTape<L> {
     positions: AHashMap<L, usize>,
     leaves: Vec<L>,
     numbers: Vec<Rational>,
-    powers: Vec<u16>,
+    powers: Vec<u32>,
     active: Vec<usize>,
     numeric_depth: usize,
-    terms: AHashMap<Vec<(usize, u16)>, (usize, Rational)>,
-    bytes: usize,
+    terms: AHashMap<Vec<(usize, u32)>, (usize, Rational)>,
     distributed: bool,
 }
 
@@ -66,17 +65,12 @@ impl<L> Default for TermTape<L> {
             active: Vec::new(),
             numeric_depth: 0,
             terms: AHashMap::new(),
-            bytes: 0,
             distributed: false,
         }
     }
 }
 
 impl<L: Copy + Eq + Hash> TermTape<L> {
-    pub const MAX_GENERATED_TERMS: usize = 1_000_000;
-    pub const MAX_GENERATED_FACTOR_BYTES: usize = 64 * 1024 * 1024;
-    pub const MAX_EXPANSION_DEPTH: usize = 256;
-
     /// Compile an existing parsed subtree directly into this arithmetic tape.
     ///
     /// The caller owns leaf admission and can stop at an entire scalar/foreign
@@ -91,7 +85,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         root: NodeIndex,
         leaf: &mut impl FnMut(&mut Self, NodeIndex, &NetworkNode<K, F, Aind>) -> Option<TermLeaf<L>>,
     ) -> Option<(usize, (usize, usize))> {
-        self.compile_graph_node(graph, tree, root, leaf, 0)
+        self.compile_graph_node(graph, tree, root, leaf)
     }
 
     fn compile_graph_node<K: Debug, F: Debug, Aind: AbsInd>(
@@ -100,18 +94,14 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         tree: &SimpleTraversalTree<ChildVecStore<()>>,
         node: NodeIndex,
         leaf: &mut impl FnMut(&mut Self, NodeIndex, &NetworkNode<K, F, Aind>) -> Option<TermLeaf<L>>,
-        depth: usize,
     ) -> Option<(usize, (usize, usize))> {
-        if depth > Self::MAX_EXPANSION_DEPTH {
-            return None;
-        }
         let data = &graph.graph[node];
         if let Some(value) = leaf(self, node, data) {
             return match value {
                 TermLeaf::Value(value) => self.leaf(value),
                 TermLeaf::Number(value, coefficient) => self.number(value, coefficient),
                 TermLeaf::Reference(node, size) => {
-                    (node < self.nodes.len()).then_some((node, Self::bounded_size(size.0, size.1)?))
+                    (node < self.nodes.len()).then_some((node, Self::checked_size(size.0, size.1)?))
                 }
             };
         }
@@ -119,7 +109,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
             NetworkNode::Op(NetworkOp::Sum | NetworkOp::Product) => {
                 let children = tree
                     .iter_children(node, &graph.graph)
-                    .map(|child| self.compile_graph_node(graph, tree, child, leaf, depth + 1))
+                    .map(|child| self.compile_graph_node(graph, tree, child, leaf))
                     .collect::<Option<Vec<_>>>()?;
                 self.group(
                     children.into_iter(),
@@ -132,8 +122,8 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
                 if children.next().is_some() {
                     return None;
                 }
-                let base = self.compile_graph_node(graph, tree, child, leaf, depth + 1)?;
-                self.power(base, u16::try_from(*power).ok()?)
+                let base = self.compile_graph_node(graph, tree, child, leaf)?;
+                self.power(base, u32::try_from(*power).ok()?)
             }
             // Nonlinear/broadcast scopes are admitted as an opaque leaf by the
             // domain owner, after any requested inner operation has completed.
@@ -154,7 +144,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
     }
 
     /// Preserve the first generated occurrence order after exact coalescence.
-    pub fn take_terms(&mut self) -> Vec<(Vec<(usize, u16)>, Rational)> {
+    pub fn take_terms(&mut self) -> Vec<(Vec<(usize, u32)>, Rational)> {
         let mut terms = std::mem::take(&mut self.terms)
             .into_iter()
             .filter(|(_, (_, coefficient))| !coefficient.is_zero())
@@ -166,34 +156,23 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
             .collect()
     }
 
-    pub fn bounded_size(terms: usize, factors: usize) -> Option<(usize, usize)> {
-        (terms <= Self::MAX_GENERATED_TERMS
-            && factors.checked_mul(std::mem::size_of::<(L, u16)>())?
-                <= Self::MAX_GENERATED_FACTOR_BYTES)
-            .then_some((terms, factors))
+    /// Check representable storage sizes without imposing a work budget.
+    pub fn checked_size(terms: usize, factors: usize) -> Option<(usize, usize)> {
+        factors.checked_mul(std::mem::size_of::<(L, u32)>())?;
+        Some((terms, factors))
     }
     pub fn product_size(left: (usize, usize), right: (usize, usize)) -> Option<(usize, usize)> {
-        Self::bounded_size(
+        Self::checked_size(
             left.0.checked_mul(right.0)?,
             left.1
                 .checked_mul(right.0)?
                 .checked_add(right.1.checked_mul(left.0)?)?,
         )
     }
-    /// Account for leaf-recognition scratch under the same operation budget.
-    pub fn reserve_bytes(&mut self, bytes: usize) -> Option<()> {
-        let total = self.bytes.checked_add(bytes)?;
-        if total > Self::MAX_GENERATED_FACTOR_BYTES {
-            return None;
-        }
-        self.bytes = total;
-        Some(())
-    }
-    fn node(&mut self, factor: InputFactor) -> Option<usize> {
-        self.reserve_bytes(4 * std::mem::size_of::<InputFactor>())?;
+    fn node(&mut self, factor: InputFactor) -> usize {
         let position = self.nodes.len();
         self.nodes.push(factor);
-        Some(position)
+        position
     }
     pub fn known_leaf(&self, value: &L) -> Option<usize> {
         self.positions.get(value).copied()
@@ -202,14 +181,10 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         if let Some(node) = self.known_leaf(&value) {
             return Some((node, (1, 1)));
         }
-        self.reserve_bytes(
-            4 * std::mem::size_of::<(L, usize)>()
-                + std::mem::size_of::<(L, Rational, u16, usize)>(),
-        )?;
         let position = self.leaves.len();
         self.leaves.push(value);
         self.powers.push(0);
-        let node = self.node(InputFactor::Leaf(position))?;
+        let node = self.node(InputFactor::Leaf(position));
         self.positions.insert(value, node);
         Some((node, (1, 1)))
     }
@@ -217,13 +192,9 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         if let Some(node) = self.known_leaf(&value) {
             return Some((node, (1, 1)));
         }
-        self.reserve_bytes(
-            4 * std::mem::size_of::<(L, usize)>()
-                + std::mem::size_of::<(L, Rational, u16, usize)>(),
-        )?;
         let position = self.numbers.len();
         self.numbers.push(coefficient);
-        let node = self.node(InputFactor::Number(position))?;
+        let node = self.node(InputFactor::Number(position));
         self.positions.insert(value, node);
         Some((node, (1, 1)))
     }
@@ -232,16 +203,11 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         children: impl ExactSizeIterator<Item = (usize, (usize, usize))>,
         sum: bool,
     ) -> Option<(usize, (usize, usize))> {
-        self.reserve_bytes(
-            children
-                .len()
-                .checked_mul(2 * std::mem::size_of::<usize>())?,
-        )?;
         let mut nodes = Vec::with_capacity(children.len());
         let mut size: (usize, usize) = if sum { (0, 0) } else { (1, 0) };
         for (node, next) in children {
             size = if sum {
-                Self::bounded_size(size.0.checked_add(next.0)?, size.1.checked_add(next.1)?)?
+                Self::checked_size(size.0.checked_add(next.0)?, size.1.checked_add(next.1)?)?
             } else {
                 Self::product_size(size, next)?
             };
@@ -254,13 +220,13 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
             InputFactor::Add(start, end)
         } else {
             InputFactor::Mul(start, end)
-        })?;
+        });
         Some((node, size))
     }
     pub fn power(
         &mut self,
         base: (usize, (usize, usize)),
-        exponent: u16,
+        exponent: u32,
     ) -> Option<(usize, (usize, usize))> {
         if exponent == 0 {
             return None;
@@ -277,18 +243,14 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
                 factor = Self::product_size(factor, factor)?;
             }
         }
-        Some((self.node(InputFactor::Pow(base, exponent))?, size))
+        Some((self.node(InputFactor::Pow(base, exponent)), size))
     }
 
     pub fn distribute(
         &mut self,
-        pending: &mut Vec<(usize, u16)>,
+        pending: &mut Vec<(usize, u32)>,
         coefficient: &Rational,
-        depth: usize,
     ) -> Option<()> {
-        if depth > Self::MAX_EXPANSION_DEPTH {
-            return None;
-        }
         let Some((node, exponent)) = pending.pop() else {
             let mut key: Vec<_> = self
                 .active
@@ -299,13 +261,6 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
             if let Some((_, existing)) = self.terms.get_mut(key.as_slice()) {
                 *existing += coefficient;
             } else {
-                self.reserve_bytes(
-                    key.capacity()
-                        .checked_mul(std::mem::size_of::<(usize, u16)>())?
-                        .checked_add(
-                            4 * std::mem::size_of::<(Vec<(usize, u16)>, (usize, Rational))>(),
-                        )?,
-                )?;
                 let order = self.terms.len();
                 self.terms.insert(key, (order, coefficient.clone()));
             }
@@ -325,7 +280,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
                 }
                 for position in start..end {
                     pending.push((self.children[position], 1));
-                    self.distribute(pending, coefficient, depth + 1)?;
+                    self.distribute(pending, coefficient)?;
                     pending.pop();
                 }
                 pending.truncate(length);
@@ -334,19 +289,19 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
                 for position in start..end {
                     pending.push((self.children[position], exponent));
                 }
-                self.distribute(pending, coefficient, depth + 1)?;
+                self.distribute(pending, coefficient)?;
                 pending.truncate(length);
             }
             InputFactor::Pow(base, power) => {
                 pending.push((base, power.checked_mul(exponent)?));
-                self.distribute(pending, coefficient, depth + 1)?;
+                self.distribute(pending, coefficient)?;
                 pending.pop();
             }
             InputFactor::Number(position) => {
                 let mut next = coefficient.clone();
                 next *= Q.pow(&self.numbers[position], u64::from(exponent));
                 self.numeric_depth += 1;
-                let result = self.distribute(pending, &next, depth + 1);
+                let result = self.distribute(pending, &next);
                 self.numeric_depth -= 1;
                 result?;
             }
@@ -356,7 +311,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
                 if previous == 0 {
                     self.active.push(factor);
                 }
-                self.distribute(pending, coefficient, depth + 1)?;
+                self.distribute(pending, coefficient)?;
                 self.powers[factor] = previous;
                 if previous == 0 {
                     self.active.pop();
@@ -383,6 +338,19 @@ mod tests {
     type Graph = NetworkGraph<i8, Symbol, AbstractIndex>;
 
     #[test]
+    fn scalar_powers_retain_exponents_beyond_u16() {
+        let mut tape = TermTape::default();
+        let scalar = tape.leaf(0usize).unwrap();
+        let (power, _) = tape.power(scalar, 70_000).unwrap();
+        tape.distribute(&mut vec![(power, 1)], &Rational::one())
+            .unwrap();
+        assert_eq!(
+            tape.take_terms(),
+            vec![(vec![(0, 70_000)], Rational::one())]
+        );
+    }
+
+    #[test]
     fn parsed_arithmetic_coalesces_equal_leaves_before_emission() {
         // (x + 2) (x - y); source graph occurrences of x share one tape leaf.
         let left = Graph::scalar(0).n_add([Graph::scalar(2)]);
@@ -405,7 +373,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(size.0, 4);
-        tape.distribute(&mut vec![(node, 1)], &Rational::one(), 0)
+        tape.distribute(&mut vec![(node, 1)], &Rational::one())
             .unwrap();
         let x = Atom::var(symbol!("term_tape_test::x"));
         let y = Atom::var(symbol!("term_tape_test::y"));
@@ -464,7 +432,7 @@ mod tests {
                     .then_some(TermLeaf::Reference(definition, size))
             })
             .unwrap();
-        tape.distribute(&mut vec![(product, 1)], &Rational::one(), 0)
+        tape.distribute(&mut vec![(product, 1)], &Rational::one())
             .unwrap();
         let rows = tape.take_terms();
         assert_eq!(tape.leaves().len(), 2);
@@ -517,7 +485,7 @@ mod tests {
             3,
             "root, opaque function, and visible scalar only"
         );
-        tape.distribute(&mut vec![(node, 1)], &Rational::one(), 0)
+        tape.distribute(&mut vec![(node, 1)], &Rational::one())
             .unwrap();
         assert_eq!(tape.take_terms().len(), 1);
         // Follow the graph's established product traversal order.
@@ -525,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_powers_coalesce_and_refuse_excessive_distribution() {
+    fn graph_powers_coalesce_with_checked_arithmetic() {
         let sum = Graph::scalar(0).n_add([Graph::scalar(1)]);
         let graph = sum.clone().pow(2);
         let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
@@ -543,7 +511,7 @@ mod tests {
             .compile_graph(&graph, &tree, root, &mut { leaf })
             .unwrap();
         assert_eq!(size, (4, 8));
-        tape.distribute(&mut vec![(node, 1)], &Rational::one(), 0)
+        tape.distribute(&mut vec![(node, 1)], &Rational::one())
             .unwrap();
         let rows = tape.take_terms();
         assert_eq!(rows.len(), 3);
@@ -556,7 +524,19 @@ mod tests {
         tape.clear_terms();
         assert!(tape.take_terms().is_empty());
 
-        for exponent in [-1, 32] {
+        // The arithmetic template has no fixed term or storage budget. Its
+        // alternatives are still lazy: this check does not distribute them.
+        let large = sum.clone().pow(20);
+        let tree = large.expr_tree().cast::<ChildVecStore<()>>();
+        let root = large.graph.node_id(large.head());
+        let (_, size) = TermTape::default()
+            .compile_graph(&large, &tree, root, &mut { leaf })
+            .unwrap();
+        assert_eq!(size, (1 << 20, 20 << 20));
+
+        // Nonpositive powers require an opaque scope decision. Unrepresentable
+        // machine sizes likewise decline without constructing partial terms.
+        for exponent in [-1, 64] {
             let graph = sum.clone().pow(exponent);
             let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
             let root = graph.graph.node_id(graph.head());
@@ -567,5 +547,20 @@ mod tests {
             );
             assert!(tape.take_terms().is_empty());
         }
+    }
+
+    #[test]
+    fn distribution_keeps_every_factor_in_a_long_product() {
+        let mut tape = TermTape::default();
+        let factors = (0..300)
+            .map(|index| tape.leaf(index).unwrap())
+            .collect::<Vec<_>>();
+        let (product, _) = tape.group(factors.into_iter(), false).unwrap();
+        tape.distribute(&mut vec![(product, 1)], &Rational::one())
+            .unwrap();
+        assert_eq!(
+            tape.take_terms(),
+            vec![((0..300).map(|index| (index, 1)).collect(), Rational::one())]
+        );
     }
 }

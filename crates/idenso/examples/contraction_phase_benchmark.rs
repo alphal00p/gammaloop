@@ -148,6 +148,13 @@ fn batch(method: Method, input: &Atom, repetitions: usize) -> f64 {
 
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
+    if arguments
+        .get(1)
+        .is_some_and(|mode| mode == "--reduce-input")
+    {
+        reduce_input(&arguments[2..]);
+        return;
+    }
     let input_directory = Path::new(&arguments[1]);
     let output_directory = Path::new(&arguments[2]);
     let samples: usize = arguments.get(3).map_or(5, |s| s.parse().unwrap());
@@ -292,5 +299,86 @@ fn main() {
             repetitions[index],
             timings[index]
         );
+    }
+}
+
+/// Diagnose an exact production input without distributing its numerator.
+/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma]` records admission and each
+/// exact continuation separately; optional gamma uses the public default family.
+fn reduce_input(arguments: &[String]) {
+    use idenso::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
+
+    idenso::representations::initialize();
+    let _ = *idenso::epsilon::EPSILON_SYMBOL;
+    let output = Path::new(&arguments[1]);
+    std::fs::create_dir_all(output).unwrap();
+    let atom = if Path::new(&arguments[0])
+        .extension()
+        .is_some_and(|extension| extension == "raw")
+    {
+        Atom::import(&mut std::fs::File::open(&arguments[0]).unwrap(), None).unwrap()
+    } else {
+        for head in ["gammalooprs::K", "gammalooprs::Q", "gammalooprs::P"] {
+            SPENSO_TAG.rank_one_tensor_symbol(head);
+        }
+        let _ = spenso::index_symbol!("gammalooprs::hedge");
+        let source = std::fs::read_to_string(&arguments[0]).unwrap();
+        Atom::parse(
+            &source,
+            "spenso",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    let (input, clocks) = idenso::reference_cases::timing::measure("admission", || {
+        SymbolicTensor::infer(atom).unwrap()
+    });
+    std::fs::write(output.join("admission.json"), clocks.to_string()).unwrap();
+    let settings = AlgebraSettings {
+        gamma: arguments
+            .get(2)
+            .filter(|flag| *flag == "gamma")
+            .map(|_| Default::default()),
+        contract: AlgebraContraction::Dots,
+        max_passes: Some(128),
+        ..Default::default()
+    };
+    let mut current = input;
+    for step in 1..=8 {
+        let start = Instant::now();
+        let reduced = current.simplify_algebra(&settings).unwrap();
+        let elapsed = start.elapsed().as_secs_f64();
+        println!(
+            "step={step} seconds={elapsed:.9} status={:?} atom_bytes={}",
+            reduced.reduction_status(),
+            reduced.expression().as_view().get_byte_size()
+        );
+        let (diagnostic, clocks) =
+            idenso::reference_cases::timing::measure("production reduction", || {
+                current.simplify_algebra(&settings).unwrap()
+            });
+        assert_eq!(diagnostic.expression(), reduced.expression());
+        assert_eq!(diagnostic.reduction_status(), reduced.reduction_status());
+        std::fs::write(output.join(format!("step-{step}.json")), clocks.to_string()).unwrap();
+        std::fs::write(
+            output.join(format!("step-{step}.expr")),
+            reduced.expression().to_plain_string(),
+        )
+        .unwrap();
+        if reduced.reduction_status() == ReductionStatus::Complete {
+            let start = Instant::now();
+            let rerun = reduced.simplify_algebra(&settings).unwrap();
+            println!(
+                "rerun_seconds={:.9} stable={}",
+                start.elapsed().as_secs_f64(),
+                rerun.expression() == reduced.expression()
+            );
+            break;
+        }
+        assert!(
+            reduced.expression() != current.expression(),
+            "unfinished result made no progress"
+        );
+        current = reduced;
     }
 }

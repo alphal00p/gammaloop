@@ -474,10 +474,10 @@ fn powered_open_vector_base_preserves_internal_scalar_pair() {
 }
 
 #[test]
-fn budget_limited_contraction_preserves_the_exact_unfinished_expression() {
+fn default_contraction_completes_the_selected_product() {
     setup();
     let slots = (0..9)
-        .map(|i| format!("spenso::mink(4,budget_port_{i})"))
+        .map(|i| format!("spenso::mink(4,product_port_{i})"))
         .collect::<Vec<_>>();
     let expression = input(&format!(
         "t({})*{}",
@@ -490,14 +490,12 @@ fn budget_limited_contraction_preserves_the_exact_unfinished_expression() {
     ));
     let body = SymbolicTensor::infer(expression).unwrap();
     let direct = body.contract(Default::default()).unwrap();
-    assert!(
-        !direct.contraction_complete(),
-        "the fixed test frontier budget must expose its incomplete status"
-    );
-    assert_eq!(direct.reduction_status(), ReductionStatus::Capped);
+    assert!(direct.contraction_complete());
+    assert_eq!(direct.reduction_status(), ReductionStatus::Complete);
     assert_eq!(direct.structure, body.structure);
     assert_eq!(
-        direct.expression.expand().schoonschip().expand(),
+        direct.expression.expand(),
         body.expression.expand().schoonschip().expand()
     );
+    assert_eq!(direct.contract(Default::default()).unwrap(), direct);
 }

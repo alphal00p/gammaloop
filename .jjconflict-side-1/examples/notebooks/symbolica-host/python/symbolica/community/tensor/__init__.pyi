@@ -1563,8 +1563,8 @@ class ReductionStatus:
     Completion of a tensor reduction under its selected settings.
 
     Complete means no eligible work remains. Deferred means exact eligible work
-    remains for another operation. Capped means the transformation budget stopped
-    processing. A partial result still represents the exact original tensor;
+    remains for another operation. Capped means an explicitly requested work limit
+    stopped processing. A partial result still represents the exact original tensor;
     completion is relative to the requested operations, not every possible identity.
 
     Examples
@@ -1584,7 +1584,7 @@ class ReductionStatus:
     """
     Capped: typing.ClassVar[ReductionStatus]
     r"""
-    The work budget stopped processing; the remaining expression is exact.
+    An explicit work limit stopped processing; the remaining expression is exact.
     """
     def __int__(self) -> builtins.int:
         r"""
@@ -4815,7 +4815,7 @@ class TensorExpression:
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def simplify_algebra(self, *, gamma: builtins.bool = True, color: builtins.bool = True, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> TensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = True, color: builtins.bool = True, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
         r"""
         Apply selected tensor identities while preserving unrelated factorization.
 
@@ -4852,10 +4852,9 @@ class TensorExpression:
             Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
         color_substitute_cof_dimension_invariants : bool, optional
             Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations in the expression; zero is allowed.
-            Capped results retain exact unfinished work. Family-specific options require
-            the corresponding family to be enabled. None selects its native default.
+        max_steps_per_domain : int or None, default None
+            Optional limit on successful transformations; None imposes no limit.
+            Zero is allowed. Capped results retain exact unfinished work.
 
         Returns
         -------
@@ -4869,7 +4868,8 @@ class TensorExpression:
         Closed color deltas produce their dimension even when color identities are off.
         Each enabled family includes its necessary contractions, including with
         contract="none". Unrelated sums stay factored. A capped result retains exact
-        unfinished work and can be simplified again.
+        unfinished work and can be simplified again. Family-specific options require
+        the corresponding family to be enabled; None selects its native default.
 
         Examples
         --------
@@ -5448,7 +5448,7 @@ class TensorExpression:
         >>> A = sp.TensorName("docs::A")(r, r)
         >>> nonzero = bool(A)
         """
-    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: builtins.int = 16) -> TensorExpression:
+    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
         r"""
         Contract compatible indices and collect compact matrix products.
 
@@ -5468,9 +5468,9 @@ class TensorExpression:
             Collect closed chains without evaluating traces. False preserves indexed closure.
         order : sequence of int, optional
             Requested factor contraction order; None uses the planner's default.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations in the expression; zero is allowed.
-            Inspect reduction_status for exact unfinished work.
+        max_steps_per_domain : int or None, default None
+            Optional limit on successful transformations; None imposes no limit.
+            Zero is allowed. Inspect reduction_status for exact unfinished work.
 
         Returns
         -------

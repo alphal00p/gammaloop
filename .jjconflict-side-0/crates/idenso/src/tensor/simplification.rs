@@ -45,8 +45,8 @@ pub struct AlgebraSettings {
     pub color: Option<ColorSimplifySettings>,
     pub epsilon: bool,
     pub contract: AlgebraContraction,
-    /// Maximum successful transformations of each domain in this invocation.
-    pub max_passes: usize,
+    /// Optional limit on successful transformations per domain. `None` is unlimited.
+    pub max_passes: Option<usize>,
 }
 
 impl Default for AlgebraSettings {
@@ -56,7 +56,7 @@ impl Default for AlgebraSettings {
             color: None,
             epsilon: false,
             contract: AlgebraContraction::Fully,
-            max_passes: 16,
+            max_passes: None,
         }
     }
 }
@@ -82,7 +82,7 @@ pub(crate) enum ReductionPolicy {
         collect_chains: bool,
         collect_traces: bool,
         order: Option<Vec<usize>>,
-        max_passes: usize,
+        max_passes: Option<usize>,
     },
 }
 
@@ -122,7 +122,7 @@ impl ReductionRequest<'_> {
         }
     }
 
-    fn budget(self) -> usize {
+    fn budget(self) -> Option<usize> {
         match self {
             Self::Algebra(settings) => settings.max_passes,
             Self::Contract(settings) => settings.max_passes,
@@ -282,7 +282,7 @@ impl SymbolicTensor<PartialStructure> {
             if eligible == 0 {
                 break;
             }
-            if plan.changes >= request.budget() {
+            if request.budget().is_some_and(|limit| plan.changes >= limit) {
                 plan.status = ReductionStatus::Capped;
                 break;
             }
@@ -348,7 +348,7 @@ impl SymbolicTensor<PartialStructure> {
                             (prerequisites.root, prerequisites.status)
                         } else {
                             let value = match operation {
-                                GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default())?,
+                                GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default(), settings.max_passes.map(|limit| limit.saturating_sub(plan.changes)))?,
                                 COLOR => before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
                                 EPSILON if observed.epsilon_degree < 2 => before.clone(),
                                 EPSILON => before.collect_with_map(None,
@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(source.simplify_algebra(&selected).unwrap(), source);
         let capped = source
             .simplify_algebra(&AlgebraSettings {
-                max_passes: 0,
+                max_passes: Some(0),
                 ..Default::default()
             })
             .unwrap();
@@ -680,12 +680,12 @@ mod tests {
             rerun.reduction_observations()
         ));
         assert_eq!(rerun, result);
-        settings.max_passes = 1;
+        settings.max_passes = Some(1);
         let partial = source.contract(settings).unwrap();
         assert_eq!(partial.reduction_status(), ReductionStatus::Complete);
         assert_eq!(partial.expression, p!(mink!(4, mu)));
         assert_eq!(partial.structure, source.structure);
-        settings.max_passes = 0;
+        settings.max_passes = Some(0);
         let untouched = source.contract(settings).unwrap();
         assert_eq!(untouched.reduction_status(), ReductionStatus::Capped);
         assert_eq!(untouched, source);

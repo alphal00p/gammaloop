@@ -196,10 +196,15 @@ def check_types(
     assert_type(int(policy), int)
     assert_type(
         expression.simplify_algebra(
-            gamma=True, gamma_ordering="canonical", gamma0=True, gamma_conjugate=True
+            gamma=True,
+            gamma_ordering="canonical",
+            gamma0=True,
+            gamma_conjugate=True,
+            max_steps_per_domain=None,
         ),
         sp.TensorExpression,
     )
+    assert_type(expression.contract(max_steps_per_domain=None), sp.TensorExpression)
     assert_type(
         expression.contract(
             representations=[representation],

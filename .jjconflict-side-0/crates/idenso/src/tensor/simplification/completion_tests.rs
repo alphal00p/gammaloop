@@ -76,7 +76,7 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
     .unwrap();
     let settings = AlgebraSettings {
         gamma: Some(GammaSimplifySettings::default()),
-        max_passes: 0,
+        max_passes: Some(0),
         ..Default::default()
     };
     let disabled = AlgebraSettings {
