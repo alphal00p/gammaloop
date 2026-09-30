@@ -656,6 +656,66 @@ fn qualified_typst_index(
     ))
 }
 
+/// Open ports are occurrence-local placeholders, never Einstein index labels.
+/// Number them by tensor axis (excluding scalar parameters), only when several
+/// axes of the same tensor are unresolved. Do not apply this to compact vectors
+/// inside dot products or slashes: their representation describes a contraction.
+fn open_port_columns(
+    arguments: &[AtomView<'_>],
+    options: &PrintOptions,
+) -> Option<Vec<Option<(String, IndexRow)>>> {
+    let resolved = SpensoPrintSettings::resolve(options)?;
+    let open = |argument| {
+        representation_value(argument).is_some()
+            || tensor_slot(argument).is_some_and(|slot| {
+                matches!(slot.index, AtomView::Fun(index)
+                    if index.get_symbol() == AIND_SYMBOLS.openind && index.get_nargs() == 2)
+            })
+    };
+    let numbered = arguments.iter().filter(|arg| open(**arg)).count() > 1;
+    let mut axis = 0;
+    arguments
+        .iter()
+        .map(|&argument| {
+            let slot = tensor_slot(argument);
+            let rep = representation_value(argument);
+            let position = axis;
+            if slot.is_some() || rep.is_some() {
+                axis += 1;
+            }
+            if !open(argument) {
+                return Some(None);
+            }
+            let mut source = match resolved.backend {
+                SpensoPrintBackend::Plain if numbered => {
+                    format!("□{}", crate::utils::to_subscript(position as isize))
+                }
+                SpensoPrintBackend::Plain => "□".to_owned(),
+                SpensoPrintBackend::Latex if numbered => format!(r"\square_{{{position}}}"),
+                SpensoPrintBackend::Latex => r"\square".to_owned(),
+                SpensoPrintBackend::Typst if numbered => {
+                    format!("attach(square.stroked,b:{position})")
+                }
+                SpensoPrintBackend::Typst => "square.stroked".to_owned(),
+            };
+            let (symbol, dimension, row) = if let Some(slot) = slot {
+                (slot.representation, slot.dimension, slot.row)
+            } else {
+                let rep = rep?;
+                (rep.symbol, rep.dimension, rep.row)
+            };
+            if resolved.backend == SpensoPrintBackend::Typst && resolved.presentation.with_dim {
+                let label = RepresentationMetadata::from_symbol(symbol)?
+                    .label
+                    .to_typst_source();
+                let dimension = typst_source(dimension, options)?;
+                source = format!("attach({source},t:attach({label},b:{dimension}))");
+            }
+            Some(Some((source, row)))
+        })
+        .collect()
+}
+
 /// Component coordinates belong to the tensor head, not to its scalar arguments.
 /// Keep the `cind` payload intact and change only its presentation.
 fn tensor_component_print(
@@ -826,8 +886,12 @@ pub fn tensor_print(
     {
         return Some(component);
     }
+    let arguments = function.iter().collect::<Vec<_>>();
+    let open_columns = open_port_columns(&arguments, options)?;
+    let has_open = open_columns.iter().any(Option::is_some);
     if symbol.has_tag(&SPENSO_TAG.tensor)
         && symbol.has_tag(&SPENSO_TAG.rank1)
+        && !has_open
         && let Some(label) = symbol
             .get_tags()
             .iter()
@@ -836,10 +900,20 @@ pub fn tensor_print(
         return crate::spenso_print_scripted_indexed!(atom, options, label);
     }
     if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
-        let head = tensor_head_print(symbol, resolved.backend)?;
+        let head = tensor_head_print(symbol, resolved.backend).or_else(|| {
+            has_open.then(|| match (symbol.get_name(), resolved.backend) {
+                ("spenso::gamma", SpensoPrintBackend::Latex) => r"\gamma".to_owned(),
+                ("spenso::gamma", _) => "γ".to_owned(),
+                _ => symbol.get_stripped_name().to_owned(),
+            })
+        })?;
         let arguments = function
             .iter()
-            .map(|argument| {
+            .zip(&open_columns)
+            .map(|(argument, open)| {
+                if let Some((source, _)) = open {
+                    return Some(source.clone());
+                }
                 let mut source = String::new();
                 argument
                     .format(&mut source, options, PrintState::new())
@@ -868,14 +942,15 @@ pub fn tensor_print(
     let mut ordinary_arguments = Vec::new();
     let mut bras = Vec::new();
     let mut kets = Vec::new();
-    let arguments = function.iter().collect::<Vec<_>>();
     let markers = chain_markers(&arguments);
 
     for (position, argument) in arguments.into_iter().enumerate() {
         if markers.is_some_and(|markers| position == markers.input || position == markers.output) {
             continue;
         }
-        if let Some(slot) = tensor_slot(argument) {
+        if let Some(column) = &open_columns[position] {
+            columns.push(column.clone());
+        } else if let Some(slot) = tensor_slot(argument) {
             let source = typst_index_source(slot.representation, slot.index, options)?;
             let source = if settings.with_dim {
                 qualified_typst_index(slot, source, options)?
@@ -966,8 +1041,11 @@ fn gamma_typst_print(
         arguments
     };
     let mut columns = Vec::new();
-    for argument in selected {
-        if let Some(slot) = tensor_slot(argument) {
+    let open_columns = open_port_columns(&selected, options)?;
+    for (argument, open) in selected.into_iter().zip(open_columns) {
+        if let Some(column) = open {
+            columns.push(column);
+        } else if let Some(slot) = tensor_slot(argument) {
             let source = typst_index_source(slot.representation, slot.index, options)?;
             let source = if settings.with_dim {
                 qualified_typst_index(slot, source, options)?
@@ -1493,6 +1571,7 @@ impl SpensoTags {
             is_chain_marker(value, SPENSO_TAG.chain_in)
                 || is_chain_marker(value, SPENSO_TAG.chain_out)
         };
+        let open_columns = open_port_columns(&[*start, *end], opt)?;
 
         if matches!(resolved.backend, SpensoPrintBackend::Typst) {
             let factor_source = factors
@@ -1513,6 +1592,8 @@ impl SpensoTags {
                 // Internal wiring markers are never part of the rendered endpoint.
             } else if let Some(compact) = compact_vector(*start, settings, opt) {
                 prefix = Some(compact.label);
+            } else if let Some(column) = &open_columns[0] {
+                columns.push(column.clone());
             } else if let Some(slot) = tensor_slot(*start) {
                 let source = typst_index_source(slot.representation, slot.index, opt)?;
                 let source = if settings.with_dim {
@@ -1529,6 +1610,8 @@ impl SpensoTags {
                 // Internal wiring markers are never part of the rendered endpoint.
             } else if let Some(compact) = compact_vector(*end, settings, opt) {
                 suffix = Some(compact.label);
+            } else if let Some(column) = &open_columns[1] {
+                columns.push(column.clone());
             } else if let Some(slot) = tensor_slot(*end) {
                 let source = typst_index_source(slot.representation, slot.index, opt)?;
                 let source = if settings.with_dim {
@@ -1552,7 +1635,9 @@ impl SpensoTags {
         }
 
         let mut output = String::new();
-        if !is_reserved_marker(*start) {
+        if let Some((source, _)) = &open_columns[0] {
+            output.push_str(source);
+        } else if !is_reserved_marker(*start) {
             start.format(&mut output, opt, PrintState::new()).ok()?;
         }
         if settings.parens {
@@ -1564,7 +1649,9 @@ impl SpensoTags {
         if settings.parens {
             output.push(']');
         }
-        if !is_reserved_marker(*end) {
+        if let Some((source, _)) = &open_columns[1] {
+            output.push_str(source);
+        } else if !is_reserved_marker(*end) {
             end.format(&mut output, opt, PrintState::new()).ok()?;
         }
         Some(output)

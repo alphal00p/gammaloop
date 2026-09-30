@@ -381,6 +381,41 @@
     t: math.attach(_head(ctx, slot.node), b: _visual(ctx, slot.dimension)),
   )
 }
+// A representation without an index and an occurrence-local open_index both
+// denote unresolved axes. The numbers below are local axis positions, not
+// contraction labels. Keep the original portable Atom tree untouched.
+#let _open-port(node, ctx) = {
+  let rep = _representation-value(node, ctx)
+  if rep != none { return rep }
+  let slot = _slot(node, ctx)
+  if (slot != none and _is-function(slot.index)
+    and _name(slot.index) == "spenso::open_index"
+    and slot.index.arguments.len() == 2) { slot } else { none }
+}
+#let _open-port-columns(arguments, ctx, settings) = {
+  let numbered = arguments.filter(arg => _open-port(arg, ctx) != none).len() > 1
+  let axis = 0
+  let columns = ()
+  for argument in arguments {
+    let rep = _open-port(argument, ctx)
+    let position = axis
+    if rep != none or _slot(argument, ctx) != none { axis += 1 }
+    if rep == none { columns.push(none); continue }
+    let source = sym.square.stroked
+    if numbered { source = math.attach(source, b: $ #position $) }
+    source = _qualified-index(rep, source, ctx, settings)
+    let dimension = rep.dimension.at("source", default: rep.dimension.at("text", default: "?"))
+    let title = ("Unresolved axis " + str(position) + " · " + rep.identity
+      + "(" + dimension + ")" + if rep.dual { " · dual" } else { "" })
+    let visual = source
+    source = context if target() == "html" {
+      html.elem("mrow", attrs: (title: title, "data-spenso-open-axis": str(position)), visual)
+    } else { visual }
+    columns.push((source: source, row: rep.row))
+  }
+  columns
+}
+
 #let _qualified-port(rep, ctx, settings) = {
   let port = if rep.class == "inline-metric" {
     sym.square.stroked.small
@@ -514,18 +549,18 @@
       return if ctx.power-base { _parentheses(body) } else { body }
     }
   }
-  if _has-tag(node, "rank1") {
-    let compact = _compact-vector(node, ctx, settings)
-    if compact != none { return compact.label }
-  }
-
   let columns = ()
   let ordinary = ()
   let bras = ()
   let kets = ()
   let markers = _chain-markers(node.arguments)
+  let open-columns = _open-port-columns(node.arguments, ctx, settings)
   for (position, argument) in node.arguments.enumerate() {
     if markers != none and position in (markers.input, markers.output) { continue }
+    if open-columns.at(position) != none {
+      columns.push(open-columns.at(position))
+      continue
+    }
     let slot = _slot(argument, ctx)
     if slot != none {
       columns.push((
@@ -577,7 +612,9 @@
 // `mink(4, 1)`. The structured `arguments` remain untouched for callers that
 // need the exact tree.
 #let _tensor-document-context(ctx, settings) = {
-  let visual-arguments = ctx.arguments.map(argument => {
+  let open-columns = _open-port-columns(ctx.arguments, ctx, settings)
+  let visual-arguments = ctx.arguments.enumerate().map(((position, argument)) => {
+    if open-columns.at(position) != none { return open-columns.at(position).source }
     let slot = _slot(argument, ctx)
     if slot != none {
       return _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings)
@@ -614,7 +651,12 @@
 
   let selected = if forward or transposed { (lorentz,) } else { node.arguments }
   let columns = ()
-  for argument in selected {
+  let open-columns = _open-port-columns(selected, ctx, settings)
+  for (position, argument) in selected.enumerate() {
+    if open-columns.at(position) != none {
+      columns.push(open-columns.at(position))
+      continue
+    }
     let slot = _slot(argument, ctx)
     if slot == none {
       columns.push((source: _visual(ctx, argument), row: "bottom"))
@@ -659,10 +701,13 @@
   let columns = ()
   let prefix = none
   let suffix = none
+  let open-columns = _open-port-columns((start, end), ctx, settings)
   let compact = _compact-vector(start, ctx, settings)
   let slot = _slot(start, ctx)
   if compact != none {
     prefix = compact.label
+  } else if open-columns.at(0) != none {
+    columns.push(open-columns.at(0))
   } else if slot != none {
     columns.push((
       source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
@@ -676,6 +721,8 @@
   slot = _slot(end, ctx)
   if compact != none {
     suffix = compact.label
+  } else if open-columns.at(1) != none {
+    columns.push(open-columns.at(1))
   } else if slot != none {
     columns.push((
       source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),

@@ -10912,6 +10912,10 @@ class _AutoIndex:
     Use the exported singleton ``AUTO`` (also available as ``_``), rather than
     constructing this type. During index() or reindex(), AUTO leaves that axis
     unchanged. It is not a wildcard and not a component coordinate.
+    Unresolved axes display as hollow squares. When several axes of a tensor
+    are unresolved, their squares carry zero-based axis numbers, excluding
+    scalar parameters. These local numbers do not imply contractions. Hover
+    over a square in HTML output to see its axis and representation.
 
     Examples
     --------

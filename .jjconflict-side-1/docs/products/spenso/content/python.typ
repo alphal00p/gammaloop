@@ -424,6 +424,10 @@ T_aij = generator("a", "i", "j")
 Gamma's public argument order is its stored interface: bispinor-in, bispinor-out, then
 Minkowski. `_` (also exported as `AUTO`) leaves a local port unresolved; it is not a shared
 Einstein index. Calling a partially indexed expression assigns only its remaining open ports.
+Unresolved axes display as hollow squares; several unresolved axes on one tensor carry
+zero-based axis numbers. Scalar parameters do not count as axes, and matching square
+numbers on different tensors do not imply contraction. Hover over a square in HTML output
+to see its axis and representation. Assigned indices retain their usual alphabet notation.
 Raw predefined `TensorName` accessors expose heads for inspection and matching, not concrete
 construction.
 
