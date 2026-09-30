@@ -1,0 +1,52 @@
+{
+  "source_revision": "f1a1351271eba2d5f7900c4b5d44afccbba6f1f8",
+  "community_revision": "66a55d50a4bd5d60a4f76d4fd331da925aa7ebde",
+  "kernel": "Linux-6.18.45-x86_64-with-glibc2.42",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "build_profile": "release",
+  "features": [
+    "native"
+  ],
+  "symbolica": "3.0.1",
+  "dimension": "symbolic D; spinor trace unit 4",
+  "algebra_settings": {
+    "gamma": "true for quark, false for gluon",
+    "color": false,
+    "epsilon": false,
+    "contract": "dots",
+    "max_steps_per_domain": 16
+  },
+  "stages": "SM generation; graph numerator; Lorentz D; metric/color projection; separate spacetime factors; simplify; explicit expansion. Color factor and routing excluded.",
+  "core_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+  "cargo_lock_sha256": "2f6fc8a654e76e5d3eec21cb325d495462a3781cd1a1164322b042eb77a2987b",
+  "diagnostic_build": {
+    "command": [
+      "/nix/store/z3qwljip4pf9nzyx7w5ri6942ifsrkys-maturin-1.15.0/bin/maturin",
+      "build",
+      "--release",
+      "--no-default-features",
+      "--features",
+      "native",
+      "--offline",
+      "--config",
+      "paths=[\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-core\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-order\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-feynkit\"]",
+      "--interpreter",
+      "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+      "--out",
+      "/tmp/alias-ladder/no-alias-wheels"
+    ],
+    "exit_code": 0,
+    "seconds": 372.46501792920753
+  },
+  "diagnostic_extension": {
+    "wheel": "/tmp/alias-ladder/no-alias-wheels/symbolica-3.0.1-cp311-abi3-linux_x86_64.whl",
+    "core": "/tmp/alias-ladder/no-alias-python/symbolica/core.abi3.so",
+    "sha256": "6637ebe0a934a90bf836fba5b3b41237e330d92508d90023fc937eef096bf71e"
+  },
+  "affinity_ranges_inclusive": [
+    [
+      0,
+      383
+    ]
+  ]
+}

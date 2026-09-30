@@ -1,0 +1,18 @@
+{
+  "alias_factory_trap": "verified by explicit attempted construction in isolated release extension",
+  "complete_exact_comparisons": [
+    "gluon-reference",
+    "gluon-no-alias",
+    "quark-reference",
+    "quark-no-alias",
+    "quark-symbol-reference",
+    "quark-symbol-no-alias"
+  ],
+  "quark_budget16": "Capped, zero aliases",
+  "quark_resumed_budget128": "Complete, zero aliases, exact equality with baseline",
+  "shared_subtrace_audit": "576 definitions; one 278-byte four-gamma polynomial has 27 immediate parents and a 9-byte handle",
+  "independent_quark_components": "three exact integer Clifford-basis evaluations at D=4, summing all 256 dummy-index assignments; all agree",
+  "walkthrough_symbolic_comparison": "exact equality against quark-symbol-no-alias.bin at symbolic D",
+  "production_sources_restored": true,
+  "notebook_extension_unchanged": true
+}
