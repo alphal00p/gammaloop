@@ -1979,32 +1979,48 @@
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let overlap = (left, right, label-pair: false) => {
-    let padding = if label-pair { _label-collision-padding.labels } else { _label-collision-padding.obstacles }
-    let other-padding = if label-pair { label-padding } else { 0 }
+  let expanded = box => (
+    left: box.left - label-padding, right: box.right + label-padding,
+    bottom: box.bottom - label-padding, top: box.top + label-padding,
+  )
+  let overlap = (left, right, padding) => {
     // Inflate label bounds before intersecting, including when one box contains
     // the other; adding extra padding to the overlap would miscount that case.
-    (
-      calc.max(0, calc.min(left.right + label-padding, right.right + other-padding) - calc.max(left.left - label-padding, right.left - other-padding) + padding)
-        * calc.max(0, calc.min(left.top + label-padding, right.top + other-padding) - calc.max(left.bottom - label-padding, right.bottom - other-padding) + padding)
-    )
+    let width = calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + padding)
+    if width == 0 { return 0 }
+    width * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + padding)
   }
+  let boxes = placements.map(label => label.candidates.map(candidate => expanded(candidate.bounds)))
+  let areas = placements.map(label => label.candidates.map(candidate => {
+    let box = candidate.bounds
+    (box.right - box.left) * (box.top - box.bottom)
+  }))
+  let extents = boxes.map(candidates => (
+    left: calc.min(..candidates.map(box => box.left)),
+    right: calc.max(..candidates.map(box => box.right)),
+    bottom: calc.min(..candidates.map(box => box.bottom)),
+    top: calc.max(..candidates.map(box => box.top)),
+  ))
   let choices = placements.map(_ => 0)
   for i in range(placements.len()) {
     let edge = placements.at(i).at("edge", default: none)
+    let extent = extents.at(i)
+    // The union only rejects obstacles whose contribution is zero for every
+    // candidate. Retain obstacle order for identical floating-point sums.
     // Normal clearance already constrains the label against its own carrier.
     // Keep self-loop obstacles: a different part of the loop can approach it.
     let relevant = obstacles.filter(obstacle => (
-      edge == none or obstacle.at("edge", default: none) != edge
-        or obstacle.at("self-loop", default: false)
+      (edge == none or obstacle.at("edge", default: none) != edge
+        or obstacle.at("self-loop", default: false))
+        and overlap(extent, obstacle, _label-collision-padding.obstacles) > 0
     ))
     let candidates = placements.at(i).candidates
     for j in range(candidates.len()) {
-      let box = candidates.at(j).bounds
-      let area = calc.max(1e-9, (box.right - box.left) * (box.top - box.bottom))
+      let box = boxes.at(i).at(j)
+      let area = calc.max(1e-9, areas.at(i).at(j))
       let cost = candidates.at(j).cost
       for obstacle in relevant {
-        cost += overlap(box, obstacle) / area
+        cost += overlap(box, obstacle, _label-collision-padding.obstacles) / area
       }
       candidates.at(j).cost = cost
     }
@@ -2023,28 +2039,31 @@
       random = calc.rem(1664525 * random + 1013904223, 4294967296)
       // Use upper bits so interleaved side candidates both receive proposals.
       let proposals = if sweep < 80 { (calc.rem(calc.floor(random / 65536), candidates.len()),) } else { range(candidates.len()) }
+      // Other labels stay fixed throughout this label's proposals. Reuse their
+      // selected geometry and the current score, preserving summation order.
+      let others = range(placements.len()).filter(j => j != i).map(j => (
+        box: boxes.at(j).at(choices.at(j)), area: areas.at(j).at(choices.at(j)),
+      )).filter(other => overlap(extents.at(i), other.box, _label-collision-padding.labels) > 0)
+      let score = choice => {
+        let box = boxes.at(i).at(choice)
+        let area = areas.at(i).at(choice)
+        let cost = candidates.at(choice).cost
+        for other in others {
+          // Repel nearby labels before their text boxes touch.
+          cost += 4 * overlap(box, other.box, _label-collision-padding.labels) / calc.max(1e-9, calc.min(area, other.area))
+        }
+        cost
+      }
+      let current-score = score(choices.at(i))
       for proposal in proposals {
         if proposal == choices.at(i) { continue }
-        let scores = ()
-        for choice in (choices.at(i), proposal) {
-          let candidate = candidates.at(choice)
-          let box = candidate.bounds
-          let area = (box.right - box.left) * (box.top - box.bottom)
-          let cost = candidate.cost
-          for j in range(placements.len()) {
-            if i == j { continue }
-            let other = placements.at(j).candidates.at(choices.at(j)).bounds
-            let other-area = (other.right - other.left) * (other.top - other.bottom)
-            // Repel nearby labels before their text boxes touch.
-            cost += 4 * overlap(box, other, label-pair: true) / calc.max(1e-9, calc.min(area, other-area))
-          }
-          scores.push(cost)
-        }
-        let delta = scores.last() - scores.first()
+        let proposal-score = score(proposal)
+        let delta = proposal-score - current-score
         random = calc.rem(1664525 * random + 1013904223, 4294967296)
         let temperature = 0.15 * calc.pow(0.9, sweep)
         if delta < -1e-12 or (sweep < 80 and random / 4294967296 < calc.exp(-calc.max(0, delta) / temperature)) {
           choices.at(i) = proposal
+          current-score = proposal-score
           energy += delta
           if energy < best-energy - 1e-12 {
             best-energy = energy
