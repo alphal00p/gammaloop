@@ -17,12 +17,15 @@ where
     /// Contract the tensor with itself, i.e. trace over all matching indices.
     fn internal_contract(&self) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
-        for trace in self.traces() {
-            let mut new_structure = self.structure.clone();
+        // Trace positions refer to the structure being traced, so each pair is
+        // located only after the previous trace has been applied.
+        while let Some(&trace) = result.traces().first() {
+            let mut new_structure = result.structure.clone();
             new_structure.trace(trace[0], trace[1]);
 
-            let mut new_result = DenseTensor::from_storage_data_coerced(&self.data, new_structure)
-                .unwrap_or_else(|_| unreachable!());
+            let mut new_result =
+                DenseTensor::from_storage_data_coerced(&result.data, new_structure)
+                    .unwrap_or_else(|_| unreachable!());
             for (idx, t) in result.iter_trace(trace) {
                 new_result.set(&idx, t).unwrap_or_else(|_| unreachable!());
             }
@@ -79,5 +82,84 @@ where
             DataTensor::Dense(d) => DataTensor::Dense(d.internal_contract()),
             DataTensor::Sparse(s) => DataTensor::Sparse(s.internal_contract()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        contraction::{Contract, Trace},
+        structure::{
+            Canonicalized, HasStructure, OrderedStructure, TensorStructure,
+            representation::{Euclidean, LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot},
+        },
+        tensors::data::{DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    };
+
+    #[test]
+    fn dense_trace_contracts_every_pair() {
+        // Pairs of different dimensions make each trace depend on the structure
+        // left behind by the previous one.
+        let euclidean = Euclidean {}.new_slot(2, 0).to_lib();
+        let lorentz = Lorentz {}.new_slot(3, 1).to_lib();
+        let structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([euclidean, euclidean, lorentz, lorentz.dual()])
+                .into_canonical();
+        let tensor =
+            DenseTensor::from_storage_data((1..=36).map(f64::from).collect(), structure).unwrap();
+
+        // The row-major diagonal components T[e, e, l, l] are 1 + 27 e + 4 l.
+        let expected = (0..2)
+            .flat_map(|e| (0..3).map(move |l| f64::from(1 + 27 * e + 4 * l)))
+            .sum::<f64>();
+        assert_eq!(tensor.internal_contract().scalar(), Some(expected));
+        assert_eq!(
+            tensor.to_sparse().internal_contract().scalar(),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn sparse_trace_preserves_dual_partitions_for_subsequent_contraction() {
+        let [up0, up1, up2] = [0, 1, 2].map(|index| Lorentz {}.new_slot(2, index).to_lib());
+        let structure: OrderedStructure<LibraryRep> =
+            OrderedStructure::new(vec![up0, up2, up0.dual(), up1.dual()]).into_canonical();
+        let mut b = SparseTensor::<i32, _>::empty(structure, 0);
+        for (indices, value) in [
+            ([0, 0, 0, 0], 2),
+            ([1, 0, 1, 0], 3),
+            ([0, 0, 0, 1], 7),
+            ([1, 1, 1, 0], -11),
+            ([0, 1, 0, 1], 13),
+            ([1, 1, 1, 1], 17),
+            // Unequal coordinates on the traced slots must not contribute.
+            ([0, 1, 1, 0], 101),
+        ] {
+            b.set(&indices, value).unwrap();
+        }
+
+        let traced = b.internal_contract();
+        assert_eq!(
+            traced.external_structure_iter().collect::<Vec<_>>(),
+            [up2, up1.dual()]
+        );
+        assert_eq!(traced.structure.n_base(), 1);
+        assert_eq!(traced.structure.n_dual(), 1);
+        for (indices, value) in [([0, 0], 5), ([0, 1], 7), ([1, 0], -11), ([1, 1], 30)] {
+            assert_eq!(*traced.get_ref(indices).unwrap(), value);
+        }
+
+        let structure: OrderedStructure<LibraryRep> =
+            OrderedStructure::new(vec![up1, up2.dual()]).into_canonical();
+        let mut a = SparseTensor::<i32, _>::empty(structure, 0);
+        for (indices, value) in [([0, 0], 19), ([0, 1], 23), ([1, 0], -29), ([1, 1], 31)] {
+            a.set(&indices, value).unwrap();
+        }
+
+        let result = a.contract(&traced).unwrap();
+        assert!(result.is_scalar());
+        // A's slot order is the reverse of the remaining B coordinates.
+        assert_eq!(result.scalar(), Some(19 * 5 + 23 * -11 - 29 * 7 + 31 * 30));
     }
 }
