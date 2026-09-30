@@ -588,6 +588,10 @@
 
 #let length(path, accuracy: 0.001) = _length(path, accuracy: accuracy)
 
+#let frames(path, distances, accuracy: 0.001) = cbor(_plugin.curve_path_frames(cbor.encode((
+  path: _path-value(path), distances: distances, accuracy: accuracy,
+))))
+
 /// Find transverse crossings between two paths.
 ///
 /// Results are sorted by arc distance along `a`. Each result contains `point`,

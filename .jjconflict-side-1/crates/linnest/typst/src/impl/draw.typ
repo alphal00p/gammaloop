@@ -1916,10 +1916,12 @@
       positions += range(3, 30).map(i => calc.clamp(total * i / 32, low, high))
         .dedup().filter(at => calc.abs(at - preferred) > accuracy)
     }
-    for at in positions {
-      let frame = if fixed-position != none { frame } else {
-        _path-mid-frame(candidate-path, accuracy, shift: at - total / 2)
-      }
+    // Batch the unchanged prefix trims in Kurvst instead of serializing the
+    // carrier and decoding its segments for every candidate in Typst.
+    let frames = if fixed-position != none { (frame,) } else {
+      curve-api.frames(candidate-path, positions.map(at => total / 2 + (at - total / 2)), accuracy: accuracy)
+    }
+    for (at, frame) in positions.zip(frames) {
       let tangent-length = _point-length(frame.tangent)
       let normal = if tangent-length <= 1e-9 { (0, candidate-side) } else {
         _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)

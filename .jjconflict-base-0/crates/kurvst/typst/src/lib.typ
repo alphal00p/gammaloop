@@ -5,6 +5,11 @@
 
 #import "impl.typ" as _impl
 
+/// Sample points and tangent directions at arc distances, clamped to the path.
+/// Uses the same prefix trimming as trim; empty paths return none per sample.
+/// Tangents are not normalized. -> array
+#let frames(path, distances, accuracy: 0.001) = _impl.frames(path, distances, accuracy: accuracy)
+
 /// Build a numeric point tuple.
 /// -> array
 #let point(

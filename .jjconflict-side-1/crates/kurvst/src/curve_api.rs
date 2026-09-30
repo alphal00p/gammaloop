@@ -596,6 +596,94 @@ pub fn curve_path_length_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+#[derive(Deserialize)]
+struct PathFramesSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    path: BezPath,
+    distances: Vec<F64OrInt>,
+    #[serde(default = "default_arclen_accuracy", deserialize_with = "deserialize_f64")]
+    accuracy: f64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct PathFrame {
+    point: CurvePoint,
+    tangent: CurvePoint,
+}
+
+impl CubicBezierSpec {
+    // Match Typst's segments() conversions and de Casteljau arithmetic exactly:
+    // equivalent rearrangements can perturb the label optimizer's tie-breaking.
+    fn drawable(segment: PathSeg) -> Self {
+        let lerp_third = |a: Point, b: Point, twice: bool| CurvePoint {
+            x: a.x + if twice { (b.x - a.x) * 2.0 / 3.0 } else { (b.x - a.x) / 3.0 },
+            y: a.y + if twice { (b.y - a.y) * 2.0 / 3.0 } else { (b.y - a.y) / 3.0 },
+        };
+        match segment {
+            PathSeg::Cubic(cubic) => cubic.into(),
+            PathSeg::Line(line) => Self {
+                start: line.p0.into(), end: line.p1.into(),
+                control_start: lerp_third(line.p0, line.p1, false),
+                control_end: lerp_third(line.p0, line.p1, true),
+            },
+            PathSeg::Quad(quad) => Self {
+                start: quad.p0.into(), end: quad.p2.into(),
+                control_start: lerp_third(quad.p0, quad.p1, true),
+                control_end: lerp_third(quad.p2, quad.p1, true),
+            },
+        }
+    }
+
+    fn endpoint_frame(self, at_end: bool) -> PathFrame {
+        let t = if at_end { 1.0 } else { 0.0 };
+        let lerp = |a: CurvePoint, b: CurvePoint| CurvePoint {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+        };
+        let ab = lerp(self.start, self.control_start);
+        let bc = lerp(self.control_start, self.control_end);
+        let cd = lerp(self.control_end, self.end);
+        let abc = lerp(ab, bc);
+        let bcd = lerp(bc, cd);
+        PathFrame {
+            point: if at_end { self.end } else { self.start },
+            tangent: CurvePoint { x: bcd.x - abc.x, y: bcd.y - abc.y },
+        }
+    }
+}
+
+impl PathFramesSpec {
+    fn frames(self) -> Result<Vec<Option<PathFrame>>, String> {
+        let accuracy = validate_positive_accuracy(self.accuracy)?;
+        let segments: Vec<_> = self.path.segments().collect();
+        let total: f64 = segments.iter().map(|segment| segment.arclen(accuracy)).sum();
+        self.distances.into_iter().map(|distance| {
+            let Some(first) = segments.first() else { return Ok(None) };
+            if distance.0.is_nan() {
+                return Err("frame distance must not be NaN".to_owned());
+            }
+            let at = distance.0.clamp(0.0, total);
+            let (segment, at_end) = if at == 0.0 {
+                (*first, false)
+            } else if at == total {
+                (*segments.last().unwrap(), true)
+            } else if total <= accuracy {
+                (*first, false)
+            } else {
+                let prefix = trim_path_segments(segments.iter().copied(), 0.0, total - at, accuracy)?;
+                (*prefix.last().unwrap_or(first), !prefix.is_empty())
+            };
+            Ok(Some(CubicBezierSpec::drawable(segment).endpoint_frame(at_end)))
+        }).collect()
+    }
+}
+
+pub fn curve_path_frames_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PathFramesSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path frames spec: {err}"))?;
+    encode_cbor(&spec.frames()?)
+}
+
 pub fn curve_path_intersections_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: PathIntersectionsSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize path intersections spec: {err}"))?;
