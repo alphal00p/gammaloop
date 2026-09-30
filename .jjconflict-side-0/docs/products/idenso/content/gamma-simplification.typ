@@ -26,7 +26,7 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
-`reduce_algebra(gamma=True)` returns an `AliasedTensorExpression`: both ordinary and axial
+`simplify_algebra(gamma=True)` returns an `AliasedTensorExpression`: both ordinary and axial
 trace identities retain factored definitions. `to_expression()` resolves the
 literal aliases, while `expand()` explicitly materializes the full polynomial.
 Rust uses the same shared result through `resolved()` and `expanded()`.
@@ -531,7 +531,7 @@ opaque scalar parameters, and the chain-like and rank-one settings are retained.
 The repeated-index scan still guards this work, and substitutions preserve sums
 and powers rather than distributing them.
 
-Epsilon cleanup remains a separate `reduce_algebra(epsilon=True)` operation. When epsilon
+Epsilon cleanup remains a separate `simplify_algebra(epsilon=True)` operation. When epsilon
 is present, it retains one initial whole-expression Schoonschip pass. Candidate
 selection directly distinguishes powers, products and epsilon function heads.
 It no longer runs Schoonschip at every visited node: another whole-expression

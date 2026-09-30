@@ -48,11 +48,11 @@ kin = fk.Kinematics.mandelstam(
 contracted = (
     (
         TensorExpression(incoming)
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         * TensorExpression(outgoing)
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
@@ -100,11 +100,11 @@ right_current = chain(
 projected = (incoming * outgoing).replace(pattern, right_current)
 traces = (
     TensorExpression(projected)
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
 )
 contracted = (
-    traces.reduce_algebra(epsilon=True)
+    traces.simplify_algebra(epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_dots()
     .to_expression()

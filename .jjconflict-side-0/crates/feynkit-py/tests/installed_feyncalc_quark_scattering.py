@@ -124,7 +124,7 @@ for name, pdgs in [
         )
         colored = (
             TensorExpression(generic, intern="flattened")
-            .reduce_algebra(color=True)
+            .simplify_algebra(color=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
@@ -132,14 +132,16 @@ for name, pdgs in [
         )
         colored = (
             TensorExpression(colored)
-            .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+            .simplify_algebra(
+                color=True, color_substitute_cof_dimension_invariants=True
+            )
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
         )
         scalar = (
             TensorExpression(colored * spins, intern="flattened")
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()

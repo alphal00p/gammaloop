@@ -128,7 +128,7 @@ def _():
     gamma = lib[TensorName.dirac_gamma()]
     expr = (Jbar(s1).to_expression() *
             gamma("s2", "s1", "mu") * J(s2).to_expression())
-    expr = TensorExpression(expr).reduce_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression()
+    expr = TensorExpression(expr).simplify_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression()
     net = TensorNetwork(expr, lib)
     net.execute(library=lib)
     K = net.result_tensor(lib)
@@ -207,7 +207,7 @@ def _():
     data can instead be registered when required. Repeated compatible indices
     are contracted, while unmatched indices form the result's tensor interface.
     The Idenso operations exposed through `TensorExpression`, including
-    `contract` and `reduce_algebra`, can reduce metric, Dirac and colour identities
+    `contract` and `simplify_algebra`, can reduce metric, Dirac and colour identities
     before component evaluation [@SymbolicaSoftware].
 
     For example, the Standard Model UFO expression `Gamma(3,1,2)` denotes
@@ -503,7 +503,7 @@ def _(AUTO, Representation, TensorExpression, mo, trace):
         _gamma(AUTO, AUTO, lorentz("nu")),
     )
     reduced_trace = (
-        gamma_trace.reduce_algebra(gamma=True, epsilon=True)
+        gamma_trace.simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )

@@ -25,19 +25,21 @@ for colors in (2, 3, 5):
         - identity.to_expression() * adjoint.g("b", "c").to_expression() / (4 * colors)
     )
     reduced = (
-        mixed.reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        mixed.simplify_algebra(
+            color=True, color_substitute_cof_dimension_invariants=True
+        )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert reduced.to_expression().expand() == (
-        expected.reduce_algebra(color=True)
+        expected.simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .expand()
     )
     assert (
-        reduced.reduce_algebra(color=True)
+        reduced.simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -45,13 +47,13 @@ for colors in (2, 3, 5):
     )
     disabled = dict(color=True, color_evaluate_traces=False, color_expand_fierz=False)
     preserved = (
-        mixed.reduce_algebra(**disabled)
+        mixed.simplify_algebra(**disabled)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert preserved.to_expression() != reduced.to_expression()
     assert (
-        preserved.reduce_algebra(
+        preserved.simplify_algebra(
             color=True, color_substitute_cof_dimension_invariants=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -64,7 +66,7 @@ for colors in (2, 3, 5):
     other_trace = trace.dirac_adjoint()
     closed = TensorExpression(trace.to_expression() * other_trace.to_expression())
     trace_norm = (
-        closed.reduce_algebra(
+        closed.simplify_algebra(
             color=True, color_substitute_cof_dimension_invariants=True
         )
         .contract(collect_chains=False, collect_traces=False)

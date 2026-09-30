@@ -96,7 +96,7 @@ generic = (
 )
 contracted = (
     TensorExpression(generic)
-    .reduce_algebra(
+    .simplify_algebra(
         color=True,
         color_substitute_cof_dimension_invariants=True,
         gamma=True,

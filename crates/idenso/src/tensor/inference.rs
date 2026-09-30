@@ -4357,7 +4357,7 @@ pub(crate) mod tests {
                             (source.expression).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                             epsilon: true,
                             ..Default::default()
@@ -4376,7 +4376,7 @@ pub(crate) mod tests {
                             (expected.expression).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                             epsilon: true,
                             ..Default::default()
@@ -4621,7 +4621,7 @@ pub(crate) mod tests {
                         (value.expression).as_atom_view().to_owned(),
                     )
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -4843,7 +4843,7 @@ pub(crate) mod tests {
         assert_eq!(*calls.lock().unwrap(), before_validation);
         assert!(
             value
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(settings),
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()

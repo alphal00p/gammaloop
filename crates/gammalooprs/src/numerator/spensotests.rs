@@ -61,7 +61,7 @@ fn algebra() {
             .log_print(Some(120))
     );
     let simplified = contracted
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
             epsilon: true,
             ..Default::default()

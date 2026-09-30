@@ -245,7 +245,7 @@ mod tests {
         let norm = crate::tensor::SymbolicTensor::infer(
             (crate::tensor::SymbolicTensor::infer((generator * adjoint).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -328,7 +328,7 @@ mod tests {
                 (explicit.spenso_conj()).as_atom_view().to_owned()
             )
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -346,7 +346,7 @@ mod tests {
         let norm = crate::tensor::SymbolicTensor::infer(
             (crate::tensor::SymbolicTensor::infer((chain * conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -414,7 +414,7 @@ mod tests {
                 (explicit.spenso_conj()).as_atom_view().to_owned()
             )
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })

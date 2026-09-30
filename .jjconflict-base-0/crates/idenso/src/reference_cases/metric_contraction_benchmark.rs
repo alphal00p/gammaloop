@@ -478,7 +478,7 @@ impl Method {
                 .resolved()?
                 .into_expression(),
             Self::EpsilonCleanup => SymbolicTensor::infer(expression.to_owned())?
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     epsilon: true,
                     ..Default::default()
                 })?
@@ -490,7 +490,7 @@ impl Method {
                 .resolved()?
                 .into_expression(),
             Self::FullGamma => SymbolicTensor::infer(expression.to_owned())?
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()

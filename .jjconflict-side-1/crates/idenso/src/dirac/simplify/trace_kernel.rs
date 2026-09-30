@@ -1458,7 +1458,7 @@ pub(super) mod tests {
         reduced = reduced.normalize_dots();
         let result = crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()

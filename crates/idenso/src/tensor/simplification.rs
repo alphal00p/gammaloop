@@ -182,7 +182,7 @@ impl DomainPlan {
 
 impl SymbolicTensor<PartialStructure> {
     /// Reduce only the selected identity families, keeping scalar sums factored.
-    pub fn reduce_algebra(
+    pub fn simplify_algebra(
         &self,
         settings: &AlgebraSettings,
     ) -> Result<Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>, TensorInferenceError> {
@@ -193,7 +193,7 @@ impl SymbolicTensor<PartialStructure> {
 }
 
 impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
-    pub fn reduce_algebra(
+    pub fn simplify_algebra(
         self: &Arc<Self>,
         settings: &AlgebraSettings,
     ) -> Result<Arc<Self>, TensorInferenceError> {
@@ -219,7 +219,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
         #[cfg(feature = "reference-cases")]
         let diagnostic_operation = match request {
             ReductionRequest::Contract(_) => "contract",
-            ReductionRequest::Algebra(_) => "reduce_algebra",
+            ReductionRequest::Algebra(_) => "simplify_algebra",
         };
         let policy = request.policy();
         if let Some(record) = &self.proofs.reduction
@@ -682,7 +682,7 @@ mod tests {
                 INFERENCE_CALLS.with(|count| count.set(0));
                 SCOPE_VALIDATIONS.with(|count| count.set(0));
                 let result = source
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -692,7 +692,7 @@ mod tests {
                 assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
                 assert_eq!(result.root().structure, source.structure);
                 let repeated = result
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -747,7 +747,7 @@ mod tests {
                 let source =
                     SymbolicTensor::<PartialStructure>::infer(&scalar_dot * expression).unwrap();
                 let collected = source
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings {
                             output: GammaOutput::Chains,
                             ..GammaSimplifySettings::default()
@@ -757,7 +757,7 @@ mod tests {
                     .unwrap();
                 assert_eq!(collected.root().structure, source.structure);
                 let result = source
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -776,7 +776,7 @@ mod tests {
                         .unwrap(),
                 );
                 let alias_result = aliased
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -788,7 +788,7 @@ mod tests {
                     result.resolved().unwrap().expression
                 );
                 let repeated = collected
-                    .reduce_algebra(&AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -812,9 +812,9 @@ mod tests {
         )
         .unwrap();
         let settings = AlgebraSettings::hep();
-        assert_eq!(source.reduce_algebra(&settings).unwrap().root(), source);
+        assert_eq!(source.simplify_algebra(&settings).unwrap().root(), source);
         let zero = source.with_rewritten_expression(Atom::Zero).unwrap();
-        assert_eq!(zero.reduce_algebra(&settings).unwrap().root(), zero);
+        assert_eq!(zero.simplify_algebra(&settings).unwrap().root(), zero);
     }
 
     #[test]
@@ -824,7 +824,9 @@ mod tests {
             g!(mink!(4, mu), mink!(4, nu)) * p!(mink!(4, nu)),
         )
         .unwrap();
-        let disabled = source.reduce_algebra(&AlgebraSettings::default()).unwrap();
+        let disabled = source
+            .simplify_algebra(&AlgebraSettings::default())
+            .unwrap();
         assert_eq!(disabled.root(), source);
         assert_eq!(disabled.reduction_status(), ReductionStatus::Complete);
         let mut settings = ContractSettings::default();
@@ -862,7 +864,7 @@ mod tests {
             slots[..4].iter().map(|slot| gamma!(slot)));
         let traced = SymbolicTensor::<PartialStructure>::infer(trace.clone())
             .unwrap()
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -878,7 +880,7 @@ mod tests {
                 .unwrap(),
         );
         let result = source
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -892,7 +894,7 @@ mod tests {
             .unwrap();
         let reference_input = SymbolicTensor::<PartialStructure>::infer(metric * trace).unwrap();
         let reference = reference_input
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -962,7 +964,7 @@ mod tests {
             gamma: Some(GammaSimplifySettings::default()),
             ..Default::default()
         };
-        let result = source.reduce_algebra(&settings).unwrap();
+        let result = source.simplify_algebra(&settings).unwrap();
         // The trace of one gamma matrix vanishes independently of its momentum.
         assert_eq!(
             result.resolved().unwrap().expression,
@@ -971,7 +973,7 @@ mod tests {
         assert_eq!(result.reduction_status(), ReductionStatus::Complete);
         assert!(Arc::ptr_eq(
             &result,
-            &result.reduce_algebra(&settings).unwrap()
+            &result.simplify_algebra(&settings).unwrap()
         ));
     }
 
@@ -999,7 +1001,7 @@ mod tests {
         .unwrap();
         let source = Arc::new(root.clone().with_aliases([(handle, body)]).unwrap());
         let collected = source
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings {
                     output: GammaOutput::Chains,
                     ..GammaSimplifySettings::default()
@@ -1009,7 +1011,7 @@ mod tests {
             .unwrap();
         assert_eq!(collected.root().structure, root.structure);
         let result = collected
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -1036,7 +1038,7 @@ mod tests {
         .unwrap();
         let source = Arc::new(root.clone().with_aliases([(handle, body)]).unwrap());
         let result = source
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 color: Some(ColorSimplifySettings {
                     substitute_cof_dimension_invariants: true,
                     ..ColorSimplifySettings::default()
@@ -1122,7 +1124,7 @@ mod tests {
             let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
             assert_eq!(source.structure.logical_slots().len(), rank, "{name}");
             let result = source
-                .reduce_algebra(&AlgebraSettings {
+                .simplify_algebra(&AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()

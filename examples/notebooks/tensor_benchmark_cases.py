@@ -473,7 +473,7 @@ class FreeTrace:
 
     def reduce(self):
         return (
-            self.source.reduce_algebra(**self.settings, epsilon=True)
+            self.source.simplify_algebra(**self.settings, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_expression()
@@ -481,7 +481,7 @@ class FreeTrace:
 
     def phases(self, expected):
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        algebra = self.source.simplify_algebra(**self.settings, epsilon=True)
         reduced = algebra.contract(collect_chains=False, collect_traces=False)
         after_gamma = process_time_ns()
         expanded = reduced.expand()
@@ -490,7 +490,7 @@ class FreeTrace:
         end = process_time_ns()
         assert result == expected
         return {
-            "completion": completed(reduce_algebra=algebra, contract=reduced),
+            "completion": completed(simplify_algebra=algebra, contract=reduced),
             "gamma_reduction_cpu_ns": after_gamma - start,
             "trace_materialization_cpu_ns": after_expansion - after_gamma,
             "atom_extraction_cpu_ns": end - after_expansion,
@@ -668,7 +668,7 @@ class AxialTrace(FreeTrace):
         )
 
     def reduce(self):
-        reduced = self.source.reduce_algebra(**self.settings, epsilon=True).contract(
+        reduced = self.source.simplify_algebra(**self.settings, epsilon=True).contract(
             collect_chains=False, collect_traces=False
         )
         # M1 and FORM materialize the trace while retaining the scalar factor.
@@ -679,7 +679,7 @@ class AxialTrace(FreeTrace):
 
     def phases(self, expected):
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        algebra = self.source.simplify_algebra(**self.settings, epsilon=True)
         reduced = algebra.contract(collect_chains=False, collect_traces=False)
         after_gamma = process_time_ns()
         trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
@@ -690,7 +690,7 @@ class AxialTrace(FreeTrace):
         end = process_time_ns()
         assert result == expected
         return {
-            "completion": completed(reduce_algebra=algebra, contract=reduced),
+            "completion": completed(simplify_algebra=algebra, contract=reduced),
             "gamma_reduction_cpu_ns": after_gamma - start,
             "spectator_interface_cpu_ns": after_interface - after_gamma,
             "trace_materialization_cpu_ns": after_expansion - after_interface,
@@ -747,7 +747,7 @@ class ProductionNumerator:
 
     def reduce(self):
         return (
-            self.source.reduce_algebra(gamma=True, epsilon=True, color=True)
+            self.source.simplify_algebra(gamma=True, epsilon=True, color=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
@@ -896,7 +896,7 @@ class ProductionNumerator:
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.reduce_algebra(gamma=True, color=True, epsilon=True)
+        reduced = self.source.simplify_algebra(gamma=True, color=True, epsilon=True)
         after_algebra = process_time_ns()
         contracted = reduced.contract(collect_chains=False, collect_traces=False)
         after_contract = process_time_ns()
@@ -904,7 +904,7 @@ class ProductionNumerator:
         end = process_time_ns()
         assert result == expected
         return {
-            "completion": completed(reduce_algebra=reduced, contract=contracted),
+            "completion": completed(simplify_algebra=reduced, contract=contracted),
             "stages": [
                 {
                     "phase": "combined_algebra",
@@ -959,16 +959,16 @@ class ColourFierz:
 
     def reduce(self):
         return atom(
-            self.source.reduce_algebra(**self.settings).contract(
+            self.source.simplify_algebra(**self.settings).contract(
                 collect_chains=False, collect_traces=False
             )
         ).replace(self.trace_index, E("1/2"))
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.reduce_algebra(**self.settings)
+        reduced = self.source.simplify_algebra(**self.settings)
         after_color = process_time_ns()
-        repeated = reduced.reduce_algebra(**self.settings)
+        repeated = reduced.simplify_algebra(**self.settings)
         after_rerun = process_time_ns()
         assert atom(repeated) == atom(reduced)
         start_contract = process_time_ns()
@@ -979,7 +979,7 @@ class ColourFierz:
         assert result == expected
         return {
             "completion": completed(
-                reduce_algebra=reduced, completed_rerun=repeated, contract=contracted
+                simplify_algebra=reduced, completed_rerun=repeated, contract=contracted
             ),
             "color_reduction_cpu_ns": after_color - start,
             "completed_color_rerun_cpu_ns": after_rerun - after_color,
@@ -1030,14 +1030,14 @@ class MixedColourTrace(FreeTrace):
         )
 
     def reduce(self):
-        value = self.source.reduce_algebra(
+        value = self.source.simplify_algebra(
             **self.settings, **self.color.settings, epsilon=True
         ).contract(collect_chains=False, collect_traces=False)
         return atom(value.expand()).replace(self.color.trace_index, E("1/2"))
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.reduce_algebra(
+        reduced = self.source.simplify_algebra(
             **self.settings, **self.color.settings, epsilon=True
         )
         after_algebra = process_time_ns()
@@ -1047,7 +1047,7 @@ class MixedColourTrace(FreeTrace):
         end = process_time_ns()
         assert result == expected
         return {
-            "completion": completed(reduce_algebra=reduced, contract=contracted),
+            "completion": completed(simplify_algebra=reduced, contract=contracted),
             "combined_algebra_cpu_ns": after_algebra - start,
             "contraction_cpu_ns": after_contraction - after_algebra,
             "materialization_and_normalization_cpu_ns": end - after_contraction,

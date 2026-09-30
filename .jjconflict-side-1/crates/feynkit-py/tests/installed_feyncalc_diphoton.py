@@ -73,7 +73,9 @@ operator = TensorExpression(amplitude)
 assert len(operator.structure.slots) == 4
 adjoint = (
     operator.dirac_adjoint()
-    .reduce_algebra(gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True)
+    .simplify_algebra(
+        gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
+    )
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
@@ -91,7 +93,7 @@ spins = model.particle_by_pdg(11).spin_sum(
 )
 spin_summed = (
     TensorExpression(operator.to_expression() * adjoint * spins, intern="flattened")
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )

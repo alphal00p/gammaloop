@@ -69,21 +69,21 @@ impl ReferenceCase {
         let tensor = SymbolicTensor::infer(expression.clone()).expect("valid reference tensor");
         let result = match self.simplification {
             ReferenceSimplification::GammaDefault => {
-                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
                 })
             }
             ReferenceSimplification::GammaCanonical => {
-                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::canonical()),
                     epsilon: true,
                     ..Default::default()
                 })
             }
             ReferenceSimplification::ColorDefault => {
-                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
                 })

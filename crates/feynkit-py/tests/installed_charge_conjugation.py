@@ -41,7 +41,7 @@ square = TensorExpression.charge_conjugation(4)(
     i, k
 ) * TensorExpression.charge_conjugation(4)(k, j)
 assert (
-    square.reduce_algebra(gamma=True, epsilon=True)
+    square.simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
@@ -54,10 +54,10 @@ transposed_mu = g_head(outgoing, incoming, mink_mu)
 transposed_nu = g_head(outgoing, incoming, mink_nu)
 sandwich = TensorExpression(chain_head(bis_i, bis_j, c, gamma_mu, c))
 transposed_sandwich = TensorExpression(chain_head(bis_i, bis_j, c, transposed_mu, c))
-assert sandwich.reduce_algebra(gamma=True, epsilon=True).contract(
+assert sandwich.simplify_algebra(gamma=True, epsilon=True).contract(
     collect_chains=False, collect_traces=False
 ).to_expression().to_expression() == chain_head(bis_i, bis_j, transposed_mu)
-assert transposed_sandwich.reduce_algebra(gamma=True, epsilon=True).contract(
+assert transposed_sandwich.simplify_algebra(gamma=True, epsilon=True).contract(
     collect_chains=False, collect_traces=False
 ).to_expression().to_expression() == chain_head(bis_i, bis_j, gamma_mu)
 
@@ -75,13 +75,13 @@ word = scalar * chain(
 )
 expected = -scalar * chain_head(bis_i, bis_j, transposed_mu, transposed_nu)
 reduced = (
-    word.reduce_algebra(gamma=True, epsilon=True)
+    word.simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )
 assert reduced.to_expression() == expected
 assert (
-    reduced.reduce_algebra(gamma=True, epsilon=True)
+    reduced.simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
@@ -99,7 +99,7 @@ for dim in (E("4"), dimension):
             bis_i, bis_j, g_head(outgoing, incoming, momentum(7, mink_head(dim)))
         )
         assert (
-            compact.reduce_algebra(gamma=True, epsilon=True)
+            compact.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
@@ -107,7 +107,7 @@ for dim in (E("4"), dimension):
         )
     else:
         assert (
-            compact.reduce_algebra(gamma=True, epsilon=True)
+            compact.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
@@ -117,7 +117,7 @@ for dim in (E("4"), dimension):
     ordinary_word = TensorExpression(chain_head(bis_i, bis_j, c, ordinary, c))
     if dim == dimension:
         assert (
-            ordinary_word.reduce_algebra(gamma=True, epsilon=True)
+            ordinary_word.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()

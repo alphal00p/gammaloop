@@ -170,7 +170,7 @@ for diagram in result.diagrams:
     uv = uv.replace(uv_mass, zero)
     traced = (
         TensorExpression(uv.expand())
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()
@@ -377,7 +377,7 @@ for label, inserted, powers, weight in insertions:
     selective = uv.replace(uv_mass, zero)
     trace = (
         TensorExpression(selective.expand())
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()

@@ -2043,7 +2043,7 @@ mod tests {
                     }
                     let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
                     let result = source
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(settings),
                             epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                             ..Default::default()
@@ -2053,7 +2053,7 @@ mod tests {
                     assert_eq!(result.resolved().unwrap().into_expression(), expected);
                     assert_eq!(
                         result
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(settings),
                                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                                 ..Default::default()
@@ -2131,7 +2131,7 @@ mod tests {
             let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
             calls.lock().unwrap().clear();
             let output = source
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2192,7 +2192,7 @@ mod tests {
             let source = SymbolicTensor::<PartialStructure>::infer(&spectator * input).unwrap();
             calls.lock().unwrap().clear();
             let result = source
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2264,7 +2264,7 @@ mod tests {
                         );
                         let expected = SymbolicTensor::<PartialStructure>::infer(forward)
                             .unwrap()
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(settings),
                                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                                 ..Default::default()
@@ -2275,7 +2275,7 @@ mod tests {
                             .into_expression();
                         let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
                         let output = source
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(settings),
                                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                                 ..Default::default()
@@ -2285,7 +2285,7 @@ mod tests {
                         assert_eq!(output.resolved().unwrap().into_expression(), expected);
                         assert_eq!(
                             output
-                                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                .simplify_algebra(&crate::tensor::AlgebraSettings {
                                     gamma: Some(settings),
                                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                                     ..Default::default()
@@ -2397,7 +2397,7 @@ mod tests {
             let input = &spectator * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
             let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
             let result = source
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2444,7 +2444,7 @@ mod tests {
             gamma!(reps.mink_d.to_symbolic([Atom::num(93200 + index)]))));
         let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
         let result = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -2476,7 +2476,7 @@ mod tests {
         let source = SymbolicTensor::infer(&spectator * input).unwrap();
         let settings = GammaSimplifySettings::default();
         let chains = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings {
                     output: GammaOutput::Chains,
                     ..settings
@@ -2490,7 +2490,7 @@ mod tests {
             if product.iter().any(|factor| factor == spectator.as_view()))
         );
         let expected = chains
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -2498,7 +2498,7 @@ mod tests {
             .unwrap();
         assert!(expected.resolved().unwrap().expression.is_zero());
         let result = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -2508,7 +2508,7 @@ mod tests {
         assert_eq!(result.root().structure, source.structure);
         assert_eq!(result.resolved().unwrap(), expected.resolved().unwrap());
         let completed = result
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -2536,7 +2536,7 @@ mod tests {
             (&spectator
                 * crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -2555,7 +2555,7 @@ mod tests {
             .to_owned(),
         )
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
             epsilon: true,
             ..Default::default()
@@ -2572,7 +2572,7 @@ mod tests {
         .into_expression();
         let output = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -2593,7 +2593,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2613,7 +2613,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
                     epsilon: true,
                     ..Default::default()
@@ -2747,7 +2747,7 @@ mod tests {
         let output =
             crate::tensor::SymbolicTensor::infer((&spectator * &input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2766,7 +2766,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -2787,7 +2787,7 @@ mod tests {
             ((&output / &spectator)
                 - crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -2916,7 +2916,7 @@ mod tests {
             (Atom::num(4) * g!(&a, &b)).as_view()
         );
         let actual = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -2966,7 +2966,7 @@ mod tests {
                 .unwrap();
         calls.store(0, Ordering::Relaxed);
         let result = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -3039,7 +3039,7 @@ mod tests {
             * g!(
                 crate::tensor::SymbolicTensor::infer((inner).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -3083,7 +3083,7 @@ mod tests {
         assert!(crate::tensor::SymbolicTensor::infer(output).is_err());
         assert!(
             source
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(settings),
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
@@ -3161,7 +3161,7 @@ mod tests {
                 );
                 let complete = crate::tensor::SymbolicTensor::infer(fallback)
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -3190,7 +3190,7 @@ mod tests {
                 );
                 let standalone = crate::tensor::SymbolicTensor::infer(input.clone())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -3209,7 +3209,7 @@ mod tests {
                 assert_eq!(
                     crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                         .unwrap()
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(
                                 GammaSimplifySettings::default().without_trace_evaluation()
                             ),
@@ -3271,7 +3271,7 @@ mod tests {
                         (&inert * &trace).as_atom_view().to_owned(),
                     )
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(settings),
                         epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                         ..Default::default()
@@ -3293,7 +3293,7 @@ mod tests {
                             (decorated).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(settings),
                             epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                             ..Default::default()
@@ -3311,7 +3311,7 @@ mod tests {
                                 (result).as_atom_view().to_owned()
                             )
                             .unwrap()
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(settings),
                                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                                 ..Default::default()
@@ -3385,7 +3385,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((rounded_input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(settings),
                         epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                         ..Default::default()
@@ -3398,7 +3398,7 @@ mod tests {
                     (&inert * &rounded_input).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(settings),
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
@@ -3432,7 +3432,7 @@ mod tests {
             let reference =
                 crate::tensor::SymbolicTensor::infer((&inert * &input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(settings),
                         epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                         ..Default::default()
@@ -3446,7 +3446,7 @@ mod tests {
             assert!(!expected_calls.is_empty());
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(settings),
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
@@ -3500,7 +3500,7 @@ mod tests {
             let expected = pairing.as_view() * unit;
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3526,7 +3526,7 @@ mod tests {
                     (&spectator * input).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3547,7 +3547,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -3585,7 +3585,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -3609,7 +3609,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3629,7 +3629,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
                     epsilon: true,
                     ..Default::default()
@@ -3654,7 +3654,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((symbolic_spin).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3687,7 +3687,7 @@ mod tests {
         let input = g!(&slots[0], &slots[1]) * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -3705,7 +3705,7 @@ mod tests {
         let tail = trace!(&spin; slots[2..].iter().map(|slot| gamma!(slot)));
         let expected = crate::tensor::SymbolicTensor::infer((tail).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -3734,7 +3734,7 @@ mod tests {
                 + g!(&p, &slots[3]) * g!(&q, &slots[2]));
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -3770,7 +3770,7 @@ mod tests {
                 assert_eq!(
                     crate::tensor::SymbolicTensor::infer((paired).as_atom_view().to_owned())
                         .unwrap()
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                             epsilon: true,
                             ..Default::default()
@@ -3799,7 +3799,7 @@ mod tests {
                     let result =
                         crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                             .unwrap()
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                                 epsilon: true,
                                 ..Default::default()
@@ -3818,7 +3818,7 @@ mod tests {
                     assert_eq!(
                         crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                             .unwrap()
-                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                                 epsilon: true,
                                 ..Default::default()
@@ -3861,7 +3861,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3882,7 +3882,7 @@ mod tests {
         assert!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -3932,7 +3932,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
                     epsilon: true,
                     ..Default::default()
@@ -3990,7 +3990,7 @@ mod tests {
         assert!(
             (crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -4007,7 +4007,7 @@ mod tests {
                 .into_expression()
                 - crate::tensor::SymbolicTensor::infer((expected_first).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -4065,7 +4065,7 @@ mod tests {
                         assert_eq!(
                             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                                 .unwrap()
-                                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                .simplify_algebra(&crate::tensor::AlgebraSettings {
                                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                                     epsilon: true,
                                     ..Default::default()
@@ -4153,7 +4153,7 @@ mod tests {
                 .to_owned(),
         )
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
             epsilon: true,
             ..Default::default()
@@ -4172,7 +4172,7 @@ mod tests {
             + (dimension.to_owned() - Atom::num(4)) * reduced;
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -4201,7 +4201,7 @@ mod tests {
         );
         let complete = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -4361,7 +4361,7 @@ mod tests {
             .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -4380,7 +4380,7 @@ mod tests {
             (&result
                 - crate::tensor::SymbolicTensor::infer((contracted).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -4401,7 +4401,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -4436,7 +4436,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(settings),
                         epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                         ..Default::default()
@@ -4454,7 +4454,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -4490,7 +4490,7 @@ mod tests {
         let expected = 4 * chain!(&start, &end; [gamma!(&c), gamma!(&d)]);
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -4509,7 +4509,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -4544,7 +4544,7 @@ mod tests {
             let expected = 4 * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -4563,7 +4563,7 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()

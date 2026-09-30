@@ -18,7 +18,7 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
         ].map(|argument| gamma!(argument)));
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -31,7 +31,7 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(settings),
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
@@ -155,7 +155,7 @@ fn contracted_sixteen_mixed_components_keep_normalizer_semantics() {
     // Keep its raw kernel oracle while rejecting the changed typed interface.
     assert!(
         source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -228,7 +228,7 @@ fn sixteen_trace_preserves_open_words_and_metadata() {
     assert_eq!(
         crate::tensor::SymbolicTensor::infer((open).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
@@ -242,7 +242,7 @@ fn sixteen_trace_preserves_open_words_and_metadata() {
     assert_eq!(
         crate::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(settings.without_trace_evaluation()),
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()

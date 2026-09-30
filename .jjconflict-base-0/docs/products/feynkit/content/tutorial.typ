@@ -182,7 +182,7 @@ operator = amplitude.expression()
 adjoint = amplitude.conjugate().expression()
 squared = amplitude.squared()
 unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
-tensor = unpolarized.expression().reduce_algebra(gamma=True, color=True, epsilon=True)
+tensor = unpolarized.expression().simplify_algebra(gamma=True, color=True, epsilon=True)
 tensor = tensor.contract(collect_chains=False, collect_traces=False)
 ```
 

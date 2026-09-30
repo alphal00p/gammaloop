@@ -178,7 +178,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings {
                     ..Default::default()
                 }),
@@ -262,7 +262,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings {
                     ..Default::default()
                 }),
@@ -554,7 +554,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                     ..Default::default()
                 })?

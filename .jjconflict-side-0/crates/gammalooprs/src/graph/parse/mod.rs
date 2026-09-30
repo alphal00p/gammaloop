@@ -651,7 +651,7 @@ impl Graph {
                 .try_cook(full_num.as_view())
                 .map_err(|error| eyre!("{error}"))?,
         )?
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
             ..Default::default()
         })?

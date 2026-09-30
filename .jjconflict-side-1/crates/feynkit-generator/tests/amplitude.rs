@@ -28,7 +28,7 @@ fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
         .unwrap()
         .resolved()
         .unwrap()
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
             epsilon: true,
             ..Default::default()

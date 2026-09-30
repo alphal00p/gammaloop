@@ -99,7 +99,7 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
             .into_expression(),
         Epsilon => SymbolicTensor::infer(view.to_owned())
             .unwrap()
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 epsilon: true,
                 ..Default::default()
             })
@@ -117,7 +117,7 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
         TypedGammaChainsResolve => {
             idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings {
                         output: idenso::dirac::GammaOutput::Chains,
                         ..Default::default()
@@ -133,7 +133,7 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
         TypedGammaResolve => {
             idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()

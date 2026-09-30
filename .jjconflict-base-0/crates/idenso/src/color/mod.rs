@@ -617,7 +617,7 @@ impl ColorCasimirSettings {
 
 /// Rewrite color dimensions and scalar invariants between SU(N) conventions.
 /// Indexed generator, structure-constant and trace reduction belongs to
-/// `reduce_algebra` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
+/// `simplify_algebra` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
 pub trait ColorSimplifier {
     /// Replace concrete QCD fundamental and adjoint dimensions by their
     /// parametric SU(Nc) expressions while preserving all color indices.

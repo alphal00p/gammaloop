@@ -179,7 +179,7 @@ explicit lower-level boundaries.
 
 == Rewrite families and execution flow
 
-`contract(ContractSettings)` and `reduce_algebra(AlgebraSettings)` lower into one
+`contract(ContractSettings)` and `simplify_algebra(AlgebraSettings)` lower into one
 domain scheduler. Their settings are independent: structural permissions and
 connection filters belong to contraction, while identity families, conventions
 and algebraic output forms belong to algebra reduction. An enabled identity

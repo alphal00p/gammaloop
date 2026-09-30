@@ -97,7 +97,7 @@ for operator in basis + [vertex]:
     for probe in probes:
         trace = (
             TensorExpression((operator * incoming * probe * outgoing).expand())
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()

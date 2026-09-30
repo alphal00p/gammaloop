@@ -94,7 +94,7 @@ tree_probe = gamma(
 ) / (4 * D)
 tree_coupling = (
     TensorExpression((tree_num * tree_probe).expand())
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .expand()
     .to_expression()
@@ -152,7 +152,7 @@ terms_by_structure, targets, traced_coefficients = [], set(), []
 for projector, independent in zip(probes, independent_numerators, strict=True):
     trace = (
         TensorExpression((numerator * projector).expand())
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()

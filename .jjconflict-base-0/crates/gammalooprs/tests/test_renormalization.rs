@@ -58,7 +58,7 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with_representation_payloads(true, true);
     let color = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
         .unwrap()
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -83,7 +83,7 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .unwrap()
         .resolved()
         .unwrap()
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
             color: Some(ColorSimplifySettings::default()),
             epsilon: true,
@@ -170,7 +170,7 @@ fn scalar_pole_part() {
             .with_representation_payloads(true, true);
         let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
             .unwrap()
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -362,7 +362,7 @@ fn finite_part_ghost_2loop() {
                 .unwrap()
                 .to_dots()
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
                 })

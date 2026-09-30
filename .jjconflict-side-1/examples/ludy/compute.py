@@ -126,7 +126,7 @@ for process in ("dy", "dis") if args.process == "both" else (args.process,):
                     chain *= vector(lorentz(label)).to_expression()
             scalar = (
                 TensorExpression(chain)
-                .reduce_algebra(
+                .simplify_algebra(
                     AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
                 )
                 .contract(ContractSettings(collect_chains=False, collect_traces=False))

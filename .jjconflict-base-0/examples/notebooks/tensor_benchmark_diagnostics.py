@@ -215,11 +215,11 @@ def keep_rest():
             if branches == 2:
                 gamma_value = gamma_value + gam(*indices, rep(S("r3rest::nu")))
             source = metric(rep(S("r3rest::mu")), rep(S("r3rest::nu"))) * gamma_value
-            for method in ("contract", "reduce_algebra"):
+            for method in ("contract", "simplify_algebra"):
                 settings = dict(gamma=True, epsilon=True)
                 operation = lambda value: (
-                    value.reduce_algebra(**settings)
-                    if method == "reduce_algebra"
+                    value.simplify_algebra(**settings)
+                    if method == "simplify_algebra"
                     else value.contract(collect_chains=False, collect_traces=False)
                 )
                 output, row = observe(lambda: operation(source))
@@ -235,10 +235,10 @@ def keep_rest():
                 if output is not None:
                     row["output"] = atom(output).format_plain()
                     expected_gamma = (
-                        gamma_value.reduce_algebra(gamma=True, epsilon=True).contract(
+                        gamma_value.simplify_algebra(gamma=True, epsilon=True).contract(
                             collect_chains=False, collect_traces=False
                         )
-                        if method == "reduce_algebra"
+                        if method == "simplify_algebra"
                         else gamma_value
                     )
                     expected = atom(expected_gamma).replace(

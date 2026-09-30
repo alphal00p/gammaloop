@@ -823,12 +823,12 @@ fn compact_epsilon_powers_simplify_without_repeated_explicit_indices() {
                 epsilon: true,
                 ..Default::default()
             };
-            let reduced = source.reduce_algebra(&settings).unwrap();
+            let reduced = source.simplify_algebra(&settings).unwrap();
             let simplified = reduced.resolved().unwrap().into_expression();
             assert_ne!(expression, simplified);
             assert_eq!(
                 reduced
-                    .reduce_algebra(&settings)
+                    .simplify_algebra(&settings)
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -859,12 +859,12 @@ fn disjoint_epsilon_pairs_simplify_before_closing_their_indices() {
             epsilon: true,
             ..Default::default()
         };
-        let reduced = source.reduce_algebra(&settings).unwrap();
+        let reduced = source.simplify_algebra(&settings).unwrap();
         let simplified = reduced.resolved().unwrap().into_expression();
         assert_ne!(expression, simplified);
         assert_eq!(
             reduced
-                .reduce_algebra(&settings)
+                .simplify_algebra(&settings)
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -893,7 +893,7 @@ fn metric_induced_epsilon_zero_preserves_an_unaffected_summand() {
         let expression = zero + &unaffected;
         let simplified = SymbolicTensor::infer(expression.clone())
             .unwrap()
-            .reduce_algebra(&AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 epsilon: true,
                 ..Default::default()
             })

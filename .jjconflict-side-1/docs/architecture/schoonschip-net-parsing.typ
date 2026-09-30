@@ -32,7 +32,7 @@ The same admitted depth-one Spenso parser supplies this shallow graph. Exact
 leaf-interface observations survive trusted replacements, so unchanged large
 leaves do not repeat interface discovery. Selected scope opening and callback
 invalidation follow the ordinary parser boundaries rather than a second
-contraction path. `contract` and `reduce_algebra` schedule this implementation;
+contraction path. `contract` and `simplify_algebra` schedule this implementation;
 the latter permits prerequisite connections only for its selected identity.
 Representation filters select compatible connections and preserve other ports.
 Chain and trace collection share notation primitives, and collecting a trace

@@ -77,7 +77,7 @@ for count in (1, 3, 5):
         # routings inside a ten-gamma trace would needlessly multiply its terms.
         tensor = (
             TensorExpression(numerator.expand())
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .contract(collect_chains=False, collect_traces=False)

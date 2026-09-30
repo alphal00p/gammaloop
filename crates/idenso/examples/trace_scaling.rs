@@ -51,7 +51,7 @@ fn main() {
         let input = trace!(&spin; indices.iter().map(|mu| gamma!(mu)));
         let terms = idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -76,7 +76,7 @@ fn main() {
                         (black_box(&input)).as_atom_view().to_owned(),
                     )
                     .unwrap()
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()

@@ -272,7 +272,7 @@ for variant, lorentz, local_coupling in [
                 for label, projector in probes:
                     trace = (
                         TensorExpression((numerator * projector).expand())
-                        .reduce_algebra(gamma=True, epsilon=True)
+                        .simplify_algebra(gamma=True, epsilon=True)
                         .contract(collect_chains=False, collect_traces=False)
                         .expand()
                         .to_dots()

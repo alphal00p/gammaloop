@@ -81,7 +81,7 @@ for pdg in (11, -11):
     assert len(operator.structure.slots) == 4
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -118,7 +118,7 @@ for pdg in (11, -11):
             TensorExpression(
                 operator.to_expression() * adjoint * density, intern="flattened"
             )
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()

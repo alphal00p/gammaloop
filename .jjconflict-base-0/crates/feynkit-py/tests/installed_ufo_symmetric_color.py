@@ -39,7 +39,7 @@ assert color.dirac_adjoint().to_expression() == color.to_expression()
 # The Symbolica product contracts all three matching explicit adjoint indices.
 norm = (
     TensorExpression(color.to_expression() * color.dirac_adjoint().to_expression())
-    .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )

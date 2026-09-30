@@ -43,7 +43,7 @@ fn one_generator_trace_vanishes() {
     );
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -87,7 +87,7 @@ fn two_generator_trace_normalizes_to_tr_metric() {
     );
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -131,7 +131,7 @@ fn fierz_generator_contraction() {
     );
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -176,7 +176,7 @@ fn separated_generator_casimir_shortcut() {
     );
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -236,7 +236,7 @@ fn chain_one_generator_trace_vanishes() {
         color_t!(slot!(r.coad_da, a)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
 }
 
 #[test]
@@ -250,7 +250,7 @@ fn chain_two_generator_trace_normalizes() {
         color_t!(slot!(r.coad_da, b)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"g(coad(dA,a),coad(dA,b))*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"g(coad(dA,a),coad(dA,b))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
 }
 
 #[test]
@@ -279,7 +279,7 @@ fn adjacent_generator_casimir_chain() {
         color_t!(slot!(r.coad_da, a)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,k)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,k)))");
 }
 
 #[test]
@@ -294,7 +294,7 @@ fn separated_generator_casimir_trace() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+cas(2,cof(Nc))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+cas(2,cof(Nc))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn two_f_loop_contracts_to_ca_metric() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
 }
 
 #[test]
@@ -353,7 +353,7 @@ fn metric_contraction_respects_antisymmetric_normalization() {
     assert_eq!(
         crate::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -406,7 +406,7 @@ fn three_f_loop_contracts_to_ca_f() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"1/2*cas(2,coad(dA))*f(coad(dA,e),coad(dA,f_),coad(dA,g_))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"1/2*cas(2,coad(dA))*f(coad(dA,e),coad(dA,f_),coad(dA,g_))");
 }
 
 #[test]
@@ -429,7 +429,7 @@ fn three_f_loop_preserves_antisymmetric_orientation() {
     assert_eq!(
         crate::tensor::SymbolicTensor::infer((triangle).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -452,7 +452,7 @@ fn three_f_loop_preserves_antisymmetric_orientation() {
             (&triangle * &closing_structure).as_atom_view().to_owned()
         )
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -469,7 +469,7 @@ fn three_f_loop_preserves_antisymmetric_orientation() {
         crate::tensor::SymbolicTensor::infer(
             (crate::tensor::SymbolicTensor::infer((triangle).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -488,7 +488,7 @@ fn three_f_loop_preserves_antisymmetric_orientation() {
                 .to_owned()
         )
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -530,7 +530,7 @@ fn six_f_k33_odd_automorphism_simplifies_to_zero() {
     assert!(
         crate::tensor::SymbolicTensor::infer((contraction).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -575,7 +575,7 @@ fn six_f_k33_with_structured_indices_simplifies_to_zero() {
     assert!(
         crate::tensor::SymbolicTensor::infer(cooking.cook_indices(contraction.as_view()))
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -601,7 +601,7 @@ fn six_f_k33_with_structured_indices_simplifies_to_zero() {
     let input = (contraction + Atom::one()) * &surviving;
     let simplified = crate::tensor::SymbolicTensor::infer(cooking.cook_indices(input.as_view()))
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -650,7 +650,7 @@ fn signed_pruning_reenters_color_simplification() {
         (surviving_factor.clone().pow(2)).as_atom_view().to_owned(),
     )
     .unwrap()
-    .reduce_algebra(&crate::tensor::AlgebraSettings {
+    .simplify_algebra(&crate::tensor::AlgebraSettings {
         color: Some(crate::color::ColorSimplifySettings::default()),
         ..Default::default()
     })
@@ -672,7 +672,7 @@ fn signed_pruning_reenters_color_simplification() {
                 .to_owned()
         )
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -702,7 +702,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
     let color = fco!(r, x, y, z);
     let expected = crate::tensor::SymbolicTensor::infer((color).as_atom_view().to_owned())
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -722,7 +722,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
     assert_eq!(
         crate::tensor::SymbolicTensor::infer((color * &odd_lorentz).as_atom_view().to_owned())
             .unwrap()
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -782,7 +782,7 @@ fn four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
     assert_eq!(cooking.uncook(admitted.as_view()), expr);
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -829,7 +829,7 @@ fn factored_four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
     assert_eq!(cooking.uncook(admitted.as_view()), expr);
     let result = crate::tensor::SymbolicTensor::infer(admitted)
         .unwrap()
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -863,7 +863,7 @@ fn mixed_trace_structure_contraction() {
         slot!(r.coad_da, c),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -875,7 +875,7 @@ fn symmetric_invariant_d33_partial_contraction() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d_))*gram(3,sym_x,sym_y)");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d_))*gram(3,sym_x,sym_y)");
 }
 
 #[test]
@@ -890,7 +890,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, d)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's
@@ -983,7 +983,7 @@ fn form_github_color_tloop_q10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_q10(&r);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out),t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out),t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
 }
 
 #[test]
@@ -993,7 +993,7 @@ fn form_github_color_tloop_g10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_g10(&r);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i10),coad(dA,j5))*f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i10),coad(dA,i9),coad(dA,j4))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,i5),coad(dA,i6),coad(dA,j5))*f(coad(dA,i6),coad(dA,i7),coad(dA,j1))*f(coad(dA,i7),coad(dA,i8),coad(dA,j2))*f(coad(dA,i8),coad(dA,i9),coad(dA,j3))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i10),coad(dA,j5))*f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i10),coad(dA,i9),coad(dA,j4))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,i5),coad(dA,i6),coad(dA,j5))*f(coad(dA,i6),coad(dA,i7),coad(dA,j1))*f(coad(dA,i7),coad(dA,i8),coad(dA,j2))*f(coad(dA,i8),coad(dA,i9),coad(dA,j3))");
 }
 
 #[test]
@@ -1003,7 +1003,7 @@ fn form_github_color_tloop_qq5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qq5(&r);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out))))^2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out))))^2");
 }
 
 #[test]
@@ -1013,7 +1013,7 @@ fn form_github_color_tloop_qg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qg5(&r);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))*trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))*trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
 }
 
 #[test]
@@ -1023,7 +1023,7 @@ fn form_github_color_tloop_gg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_gg5(&r);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i1),coad(dA,i5),coad(dA,j5))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i1),coad(dA,i5),coad(dA,j5))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))");
 }
 
 #[test]
@@ -1037,7 +1037,7 @@ fn simpli_contracts_projected_f_pair() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"CA*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"CA*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
 }
 
 #[test]

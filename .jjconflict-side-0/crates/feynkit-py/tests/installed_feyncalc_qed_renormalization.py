@@ -167,7 +167,7 @@ for kind, incoming, outgoing, loops in [
     for label, projector in probes:
         trace = (
             TensorExpression((numerator * projector).expand())
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
@@ -422,7 +422,7 @@ for kind, incoming, outgoing, count, qed_order in [
         for label, projector in probes:
             trace = (
                 TensorExpression((numerator * projector).expand())
-                .reduce_algebra(gamma=True, epsilon=True)
+                .simplify_algebra(gamma=True, epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
                 .expand()
                 .to_dots()
@@ -672,7 +672,7 @@ for kind, incoming, outgoing in [
         routed = diagram.momentum_basis().route_expression(numerator)
         traced = (
             TensorExpression((routed * projector).expand())
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
@@ -744,7 +744,7 @@ for kind, incoming, outgoing in [
                 expression
                 if scheme == "direct_irr"
                 else TensorExpression((expression * projector).expand())
-                .reduce_algebra(gamma=True, epsilon=True)
+                .simplify_algebra(gamma=True, epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
                 .expand()
                 .to_dots()

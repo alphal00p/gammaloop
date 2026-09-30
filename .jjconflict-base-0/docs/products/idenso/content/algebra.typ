@@ -91,7 +91,7 @@ Minkowski expansion selective to avoid distributing unrelated scalar factors.
 
 Dirac passes simplify gamma chains, traces, slashes, and spinor-compatible contractions. Color
 passes handle fundamental/adjoint deltas, generators, structure constants, and registered
-group parameters. Select the required families explicitly with `reduce_algebra(gamma=True, color=True, epsilon=True)`; the shared planner chooses
+group parameters. Select the required families explicitly with `simplify_algebra(gamma=True, color=True, epsilon=True)`; the shared planner chooses
 their order and revisits only affected domains. Inspect intermediate output when comparing
 conventions, without prescribing a global pass pipeline.
 
@@ -104,7 +104,7 @@ need explicit assumptions or substitutions for unevaluated conjugations.
 Compact fundamental chains and ordered traces of these Hermitian generators
 use the same conjugation: reverse the generator sequence and, for open chains,
 exchange and dualize the endpoints. Color simplification with
-`reduce_algebra(color=True, color_evaluate_traces=False, color_expand_fierz=False)`
+`simplify_algebra(color=True, color_evaluate_traces=False, color_expand_fierz=False)`
 collects explicit generator words while retaining compact chains and traces;
 this commutes with conjugating an explicit SU(3) network. If both operands
 remain explicit, scope their internal dummies before multiplying a word by

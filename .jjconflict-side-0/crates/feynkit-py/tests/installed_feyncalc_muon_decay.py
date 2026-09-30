@@ -65,7 +65,9 @@ operator = TensorExpression(
 )
 adjoint = (
     operator.dirac_adjoint()
-    .reduce_algebra(gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True)
+    .simplify_algebra(
+        gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
+    )
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
@@ -83,9 +85,9 @@ projector = (
 )
 contracted = (
     TensorExpression(operator.to_expression() * adjoint * projector, intern="flattened")
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
-    .reduce_algebra(epsilon=True)
+    .simplify_algebra(epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .contract(collect_chains=False, collect_traces=False)

@@ -67,7 +67,7 @@ for sign in (1, -1):
     assert conjugate.dirac_adjoint().to_expression() == color.to_expression()
     norm = (
         TensorExpression(color.to_expression() * conjugate.to_expression())
-        .reduce_algebra(epsilon=True)
+        .simplify_algebra(epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )

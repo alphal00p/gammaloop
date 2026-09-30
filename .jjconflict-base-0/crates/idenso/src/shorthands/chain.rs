@@ -540,7 +540,7 @@ mod tests {
                 let chainified = expression.chainify(Bispinor {}.into());
                 assert!(!chainified.contains_symbol(T.dot));
                 let result = source
-                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -563,7 +563,7 @@ mod tests {
                         .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                     source
-                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(GammaSimplifySettings {
                                 output: crate::dirac::GammaOutput::Chains,
                                 ..Default::default()
@@ -576,7 +576,7 @@ mod tests {
                     source
                         .undo_dots()
                         .and_then(
-                            |value| value.reduce_algebra(&crate::tensor::AlgebraSettings {
+                            |value| value.simplify_algebra(&crate::tensor::AlgebraSettings {
                                 gamma: Some(GammaSimplifySettings::default()),
                                 epsilon: true,
                                 ..Default::default()
@@ -593,7 +593,7 @@ mod tests {
                         .unwrap(),
                 );
                 assert_eq!(
-                    dag.reduce_algebra(&crate::tensor::AlgebraSettings {
+                    dag.simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -709,7 +709,7 @@ mod tests {
                 source.structure
             );
             let actual = source
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(GammaSimplifySettings::canonical()),
                     epsilon: true,
                     ..Default::default()
@@ -813,7 +813,7 @@ mod tests {
                 .unwrap(),
         );
         let collected = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(crate::dirac::GammaSimplifySettings {
                     output: crate::dirac::GammaOutput::Chains,
                     ..Default::default()
@@ -1137,7 +1137,7 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer(input)
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     color: Some(crate::color::ColorSimplifySettings {
                         ..Default::default()
                     }),

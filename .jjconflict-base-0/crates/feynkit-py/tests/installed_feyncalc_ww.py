@@ -125,7 +125,7 @@ for pdg, term in diagram_terms.items():
     operator = TensorExpression(term)
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -146,9 +146,9 @@ for left, left_operator in operators.items():
             intern="flattened",
         )
         traced = (
-            paired.reduce_algebra(gamma=True, epsilon=True)
+            paired.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .reduce_algebra(epsilon=True)
+            .simplify_algebra(epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
         )
@@ -173,7 +173,7 @@ for left, left_operator in operators.items():
         result = (
             kin.apply(
                 TensorExpression(conserved)
-                .reduce_algebra(epsilon=True)
+                .simplify_algebra(epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()

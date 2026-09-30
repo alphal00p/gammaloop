@@ -379,9 +379,9 @@ the returned network, or execute it to completion.
 
 `expression.contract(...)` performs structural contractions and optional
 chain or trace collection without evaluating algebraic identities. Independently,
-`expression.reduce_algebra(...)` selects gamma, color, and epsilon families
+`expression.simplify_algebra(...)` selects gamma, color, and epsilon families
 with their existing dimension and gamma5 conventions. Its default enables none;
-`reduce_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
+`simplify_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
 contractions. No nested contraction settings or implicit global expansion is involved.
 The result retains aliases and reports `Complete`, `Deferred`, or `Capped` through
 `reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
@@ -704,7 +704,7 @@ from symbolica.community.tensor import Representation, TensorExpression, TensorN
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.contract().reduce_algebra(gamma=True, gamma_output='chains').to_expression()
+pslash = indexed.contract().simplify_algebra(gamma=True, gamma_output='chains').to_expression()
 pslash.formatted()
 ```
 

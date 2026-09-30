@@ -38,7 +38,7 @@ for colors in (2, 3, 5):
     explicit_norm = ket * bra
     color_settings = dict(color=True, color_substitute_cof_dimension_invariants=True)
     assert explicit_norm.rank == 0
-    assert explicit_norm.reduce_algebra(**color_settings).contract(
+    assert explicit_norm.simplify_algebra(**color_settings).contract(
         collect_chains=False, collect_traces=False
     ).to_expression().to_expression() == E(str((colors**2 - 1) ** 2)) / (4 * colors)
     if colors == 3:
@@ -62,18 +62,18 @@ for colors in (2, 3, 5):
     assert conjugate.to_expression() == expected.to_expression()
     assert conjugate.dirac_adjoint().to_expression() == word.to_expression()
     assert word.dirac_adjoint().to_expression() == conjugate.to_expression()
-    assert conjugate.reduce_algebra(color=True).contract(
+    assert conjugate.simplify_algebra(color=True).contract(
         collect_chains=False, collect_traces=False
     ).to_expression().to_expression() == (
         explicit.dirac_adjoint()
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
     norm = (
         (word * conjugate)
-        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .contract(collect_chains=False, collect_traces=False)
@@ -90,11 +90,11 @@ for colors in (2, 3, 5):
     )
     conjugate_trace = trace.dirac_adjoint()
     assert conjugate_trace.dirac_adjoint().to_expression() == trace.to_expression()
-    assert conjugate_trace.reduce_algebra(color=True).contract(
+    assert conjugate_trace.simplify_algebra(color=True).contract(
         collect_chains=False, collect_traces=False
     ).to_expression().to_expression() == (
         loop.dirac_adjoint()
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -114,37 +114,37 @@ for colors in (2, 3, 5):
         symmetric_trace.dirac_adjoint().to_expression()
         == symmetric_trace.to_expression()
     )
-    assert (antisymmetric_trace.dirac_adjoint() + antisymmetric_trace).reduce_algebra(
+    assert (antisymmetric_trace.dirac_adjoint() + antisymmetric_trace).simplify_algebra(
         color=True
     ).contract(
         collect_chains=False, collect_traces=False
     ).to_expression().to_expression() == E("0")
     assert (
-        symmetric_trace.reduce_algebra(color=True)
+        symmetric_trace.simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         == ((trace + conjugate_trace) / 2)
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
     antisymmetric = (
-        antisymmetric_trace.reduce_algebra(color=True)
+        antisymmetric_trace.simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     expected_antisymmetric = (
         ((trace - conjugate_trace) / 2)
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     # Factored half-differences need not have the same literal Atom form.
     assert (
         (antisymmetric - expected_antisymmetric)
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()

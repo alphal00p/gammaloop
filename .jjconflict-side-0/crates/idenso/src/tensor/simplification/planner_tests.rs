@@ -20,7 +20,7 @@ fn free_trace_definitions_discharge_cleanup_without_entering_contraction() {
     .unwrap();
     CONTRACT_DOMAIN_CALLS.with(|count| count.set(0));
     let reduced = source
-        .reduce_algebra(&AlgebraSettings {
+        .simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
             // The trace identity uses this budget. Its free-port definitions
             // require no additional contraction, even at their own boundaries.
@@ -114,7 +114,7 @@ fn gamma_prerequisites_do_not_enable_epsilon_identities() {
         gamma: Some(GammaSimplifySettings::default()),
         ..Default::default()
     };
-    let result = source.reduce_algebra(&gamma_only).unwrap();
+    let result = source.simplify_algebra(&gamma_only).unwrap();
     assert!(
         result
             .resolved()
@@ -125,7 +125,7 @@ fn gamma_prerequisites_do_not_enable_epsilon_identities() {
     assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
         &result,
-        &result.reduce_algebra(&gamma_only).unwrap()
+        &result.simplify_algebra(&gamma_only).unwrap()
     ));
 }
 
@@ -142,12 +142,12 @@ fn a_capped_algebra_result_retains_its_unprocessed_trace_and_aliases() {
         max_passes: 0,
         ..Default::default()
     };
-    let capped = source.reduce_algebra(&settings).unwrap();
+    let capped = source.simplify_algebra(&settings).unwrap();
     assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
     assert_eq!(source.root(), capped.root());
     assert_eq!(source.aliases().unwrap(), capped.aliases().unwrap());
     let finished = capped
-        .reduce_algebra(&AlgebraSettings {
+        .simplify_algebra(&AlgebraSettings {
             max_passes: 16,
             ..settings
         })
@@ -172,7 +172,7 @@ fn gamma_identity_contracts_its_prerequisite_without_opening_scalar_spectators()
     )
     .unwrap();
     let result = source
-        .reduce_algebra(&AlgebraSettings {
+        .simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
             ..Default::default()
         })
@@ -247,7 +247,7 @@ fn unchanged_kernel_regions_are_reused_after_an_independent_family_changes() {
     let source = SymbolicTensor::infer(&matrix * epsilon.pow(2)).unwrap();
     REUSED_KERNEL_REGIONS.with(|count| count.set(0));
     let result = source
-        .reduce_algebra(&AlgebraSettings {
+        .simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
             epsilon: true,
             ..Default::default()

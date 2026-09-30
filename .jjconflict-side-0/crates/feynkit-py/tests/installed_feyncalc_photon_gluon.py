@@ -78,7 +78,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     operator = TensorExpression(sum(terms, E("0")))
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -130,7 +130,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     )
     colored = (
         TensorExpression(generic, intern="flattened")
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -138,7 +138,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     )
     colored = (
         TensorExpression(colored)
-        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
@@ -157,7 +157,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
         )
     traced = (
         TensorExpression(colored.to_expression() * spins, intern="flattened")
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )

@@ -36,7 +36,7 @@ for pdg, sign, ket_name, bra_name in (
     density = particle.spin_sum(p, i, j, spin_vector=spin)
     ordinary = particle.spin_sum(p, i, j)
     opposite = density.replace(spin(slot), -spin(slot))
-    assert TensorExpression((density + opposite - ordinary).expand()).reduce_algebra(
+    assert TensorExpression((density + opposite - ordinary).expand()).simplify_algebra(
         gamma=True, gamma_ordering="canonical", epsilon=True
     ).contract(
         collect_chains=False, collect_traces=False
@@ -44,7 +44,7 @@ for pdg, sign, ket_name, bra_name in (
     assert particle.spin_sum(p, i, j, spin_vector=None) == ordinary
     traced = (
         TensorExpression(density.replace(j, i))
-        .reduce_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
+        .simplify_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -65,7 +65,7 @@ for pdg, sign, ket_name, bra_name in (
     ):
         reduced = (
             TensorExpression(identity.expand())
-            .reduce_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
+            .simplify_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
@@ -80,7 +80,7 @@ for pdg, sign, ket_name, bra_name in (
     # Test the substitution itself without multiplying separate terms that
     # reuse the same explicit spinor indices into a tensor network.
     output = particle.sum_spins(pair, p, edge=7, spin_vector=spin)
-    assert TensorExpression((output - density).expand()).reduce_algebra(
+    assert TensorExpression((output - density).expand()).simplify_algebra(
         gamma=True, gamma_ordering="canonical", epsilon=True
     ).contract(
         collect_chains=False, collect_traces=False

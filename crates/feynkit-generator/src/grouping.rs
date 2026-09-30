@@ -406,7 +406,7 @@ pub(crate) fn group_diagrams(
         })?;
         let simplified = SymbolicTensor::infer(cooked)
             .and_then(|tensor| {
-                tensor.reduce_algebra(&idenso::tensor::AlgebraSettings {
+                tensor.simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                     ..Default::default()
                 })

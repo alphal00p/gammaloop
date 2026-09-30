@@ -461,7 +461,7 @@ impl AliasedTensorExpression {
     /// -------
     /// ReductionStatus
     ///     Complete, Deferred, or Capped. Unfinished results remain exact and can be
-    ///     passed to contract() or reduce_algebra() again.
+    ///     passed to contract() or simplify_algebra() again.
     ///
     /// Examples
     /// --------
@@ -503,7 +503,7 @@ impl AliasedTensorExpression {
     ///
     /// Notes
     /// -----
-    /// This performs symbolic structural contraction. Use reduce_algebra() for Dirac,
+    /// This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
     /// color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
     /// Polynomial expansion remains an explicit operation.
     ///
@@ -710,12 +710,12 @@ impl AliasedTensorExpression {
     /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
     /// >>> from symbolica.community.tensor import AliasedTensorExpression
     /// >>> expression = AliasedTensorExpression.from_expression(expression)
-    /// >>> result = expression.reduce_algebra(gamma=True)
+    /// >>> result = expression.simplify_algebra(gamma=True)
     /// >>> result.to_expression().rank
     /// 2
     #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
     #[allow(clippy::too_many_arguments)]
-    fn reduce_algebra(
+    fn simplify_algebra(
         &self,
         gamma: bool,
         color: bool,
@@ -750,7 +750,7 @@ impl AliasedTensorExpression {
         )?;
         let value = self
             .value
-            .reduce_algebra(&settings)
+            .simplify_algebra(&settings)
             .map_err(TensorExpression::inference_error)?;
         Ok(self.with_value(value))
     }

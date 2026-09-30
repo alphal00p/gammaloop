@@ -831,7 +831,7 @@ impl EvaluatorStack {
         )?;
         let network_input = if settings.do_algebra {
             input
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                     gamma: Some(GammaSimplifySettings::default()),
                     epsilon: true,

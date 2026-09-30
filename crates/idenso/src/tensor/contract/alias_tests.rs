@@ -389,7 +389,7 @@ fn alias_contraction_exposes_two_independent_dirac_traces() {
         };
         let source = SymbolicTensor::infer(trace(95200) * trace(95300)).unwrap();
         let result = source
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 gamma: Some(Default::default()),
                 epsilon: true,
                 ..Default::default()
@@ -696,7 +696,7 @@ fn deferred_epsilon_alias_frontier_finishes_in_the_shared_fixed_point() {
             .unwrap(),
     );
     let result = value
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             gamma: Some(Default::default()),
             epsilon: true,
             ..Default::default()
@@ -767,7 +767,7 @@ fn epsilon_context_exposes_symmetric_and_epsilon_aliases() {
     let root = SymbolicTensor::infer(&epsilon * &handle.expression).unwrap();
     let value = Arc::new(root.with_aliases([(handle, symmetric)]).unwrap());
     let result = value
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             epsilon: true,
             ..Default::default()
         })
@@ -786,7 +786,7 @@ fn epsilon_context_exposes_symmetric_and_epsilon_aliases() {
             .unwrap(),
     );
     let result = value
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             epsilon: true,
             ..Default::default()
         })
@@ -814,7 +814,7 @@ fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
             .unwrap(),
     );
     let result = value
-        .reduce_algebra(&crate::tensor::AlgebraSettings {
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
             epsilon: true,
             ..Default::default()
         })
@@ -825,7 +825,7 @@ fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
     assert!(Arc::ptr_eq(
         &result,
         &result
-            .reduce_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
                 epsilon: true,
                 ..Default::default()
             })

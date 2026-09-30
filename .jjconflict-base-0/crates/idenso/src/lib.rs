@@ -707,7 +707,7 @@ impl IndexTooling for AtomView<'_> {
         let tensor = tensor::SymbolicTensor::infer(cooked.chainify(Bispinor {}.into()))?;
         let resolved = if preserve_indices {
             tensor
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(dirac::GammaSimplifySettings {
                         gamma0: true,
                         evaluate_traces: false,
@@ -800,7 +800,7 @@ pub mod test {
                 .unwrap();
             let result = crate::tensor::SymbolicTensor::infer(adjoint)
                 .unwrap()
-                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
                     gamma: Some(Default::default()),
                     epsilon: true,
                     ..Default::default()

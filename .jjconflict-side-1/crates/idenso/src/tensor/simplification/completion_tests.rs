@@ -12,7 +12,7 @@ fn alternating_completed_policies_reuse_the_shared_carrier_and_contraction_proof
     let value = Arc::new(root.with_aliases([(handle, body)]).unwrap());
     let contracted = value.contract(Default::default()).unwrap();
     let settings = AlgebraSettings::hep();
-    let completed = contracted.reduce_algebra(&settings).unwrap();
+    let completed = contracted.simplify_algebra(&settings).unwrap();
     assert_eq!(completed.root(), contracted.root());
     assert_eq!(completed.aliases().unwrap(), contracted.aliases().unwrap());
     assert!(completed.contraction_complete());
@@ -20,7 +20,7 @@ fn alternating_completed_policies_reuse_the_shared_carrier_and_contraction_proof
     for _ in 0..3 {
         let structural = completed.contract(Default::default()).unwrap();
         assert!(Arc::ptr_eq(&completed, &structural));
-        let algebra = structural.reduce_algebra(&settings).unwrap();
+        let algebra = structural.simplify_algebra(&settings).unwrap();
         assert!(Arc::ptr_eq(&completed, &algebra));
         assert_eq!(algebra.reduction_status(), ReductionStatus::Complete);
     }
@@ -59,7 +59,7 @@ fn root_or_definition_changes_invalidate_previously_completed_policies() {
     for value in values {
         let contracted = value.contract(Default::default()).unwrap();
         assert!(contracted.contraction_complete());
-        let reduced = contracted.reduce_algebra(&settings).unwrap();
+        let reduced = contracted.simplify_algebra(&settings).unwrap();
         assert_eq!(
             reduced.expanded().unwrap().expression,
             Atom::num(4) * g!(&mu, &nu)
@@ -93,9 +93,9 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
         ..Default::default()
     };
     let disabled = AlgebraSettings::default();
-    let completed = body.reduce_algebra(&disabled).unwrap();
-    let capped = completed.reduce_algebra(&settings).unwrap();
-    let repeated = capped.reduce_algebra(&settings).unwrap();
+    let completed = body.simplify_algebra(&disabled).unwrap();
+    let capped = completed.simplify_algebra(&settings).unwrap();
+    let repeated = capped.simplify_algebra(&settings).unwrap();
     assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
     assert_eq!(repeated.reduction_status(), ReductionStatus::Capped);
     assert!(!Arc::ptr_eq(&capped, &repeated));
@@ -105,11 +105,11 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
         repeated.proofs.reduction.as_ref().unwrap().completed.len(),
         1
     );
-    let restored = repeated.reduce_algebra(&disabled).unwrap();
+    let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
         &restored,
-        &restored.reduce_algebra(&disabled).unwrap()
+        &restored.simplify_algebra(&disabled).unwrap()
     ));
 }
 
@@ -129,7 +129,7 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
         collect_traces: false,
         ..Default::default()
     };
-    let completed = source.reduce_algebra(&disabled).unwrap();
+    let completed = source.simplify_algebra(&disabled).unwrap();
     let deferred = completed.contract(settings).unwrap();
     let repeated = deferred.contract(settings).unwrap();
     assert_eq!(deferred.reduction_status(), ReductionStatus::Deferred);
@@ -140,10 +140,10 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
         repeated.proofs.reduction.as_ref().unwrap().completed.len(),
         1
     );
-    let restored = repeated.reduce_algebra(&disabled).unwrap();
+    let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
         &restored,
-        &restored.reduce_algebra(&disabled).unwrap()
+        &restored.simplify_algebra(&disabled).unwrap()
     ));
 }

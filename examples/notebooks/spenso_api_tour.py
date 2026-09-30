@@ -302,9 +302,9 @@ def _(mo):
     - `replace` applies a reusable `TensorRule` or an ordered rule list.
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
     - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
-    - Dirac algebra: `reduce_algebra`, with `gamma=True, gamma_output="chains"` for collected words, gamma conjugation and `dirac_adjoint`.
-    - Color algebra: `reduce_algebra`, with dimension-invariant substitution selected by `color_substitute_cof_dimension_invariants=True`.
-    - Index algebra: `contract`, `reduce_algebra`, `with_lorentz_dimension`, cooking and canonicalization.
+    - Dirac algebra: `simplify_algebra`, with `gamma=True, gamma_output="chains"` for collected words, gamma conjugation and `dirac_adjoint`.
+    - Color algebra: `simplify_algebra`, with dimension-invariant substitution selected by `color_substitute_cof_dimension_invariants=True`.
+    - Index algebra: `contract`, `simplify_algebra`, `with_lorentz_dimension`, cooking and canonicalization.
     - Compact notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`. Shared `contract` handles indexed contractions and chain or trace collection.
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.
       `TensorExpression(raw)` validates and wraps an ordinary expression.

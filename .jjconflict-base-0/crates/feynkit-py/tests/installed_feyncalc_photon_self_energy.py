@@ -41,7 +41,7 @@ for edge in diagram.external_edges:
 numerator = numerator.replace(mink(4, index), mink(D, index))
 trace = (
     TensorExpression(numerator.expand())
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .expand()
     .to_dots()

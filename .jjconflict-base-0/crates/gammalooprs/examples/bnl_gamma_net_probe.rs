@@ -56,7 +56,7 @@ fn main() -> Result<()> {
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
     let simplified = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings::default()),
             gamma: Some(GammaSimplifySettings::default()),
             epsilon: true,

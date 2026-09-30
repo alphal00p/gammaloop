@@ -83,7 +83,7 @@ Keep transformations observable while developing:
 - call `list_dangling` before and after a pass to catch accidental contractions;
 - use `wrap_indices(scope, dummies_only=True)` before multiplying expressions built in independent index namespaces;
 - use typed `collect` to select the Minkowski, bispinor, or color sector needed by the next pass;
-- apply `contract`, `reduce_algebra`, and `reduce_algebra` as distinct phases;
+- apply `contract`, `simplify_algebra`, and `simplify_algebra` as distinct phases;
 - canonicalize only after the physics-specific identities required by the calculation are
   explicit.
 

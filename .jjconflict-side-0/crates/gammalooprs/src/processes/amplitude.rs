@@ -1121,7 +1121,7 @@ impl AmplitudeGraph {
         let before_gamma_plain = before_gamma.to_plain_string();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let simplified = SymbolicTensor::infer(cooking.try_cook(before_gamma.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()

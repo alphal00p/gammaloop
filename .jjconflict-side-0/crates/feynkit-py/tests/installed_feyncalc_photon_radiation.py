@@ -71,7 +71,7 @@ def calculate(outgoing, kin):
     operator = TensorExpression(sum(terms, E("0")))
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -110,7 +110,7 @@ def calculate(outgoing, kin):
     )
     colored = (
         TensorExpression(generic, intern="flattened")
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -118,7 +118,7 @@ def calculate(outgoing, kin):
     )
     colored = (
         TensorExpression(colored)
-        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
@@ -133,7 +133,7 @@ def calculate(outgoing, kin):
             colored.to_expression() * spins.replace(S("UFO::MM"), mass),
             intern="flattened",
         )
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )

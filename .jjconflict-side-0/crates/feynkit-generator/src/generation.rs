@@ -6518,7 +6518,7 @@ mod tests {
         let simplify = |expression: Atom| {
             let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
             let result = source
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                     ..Default::default()
                 })
@@ -6597,7 +6597,7 @@ mod tests {
         let simplify = |expression: Atom| {
             let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
             let result = source
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     epsilon: true,
                     ..Default::default()
                 })
@@ -6718,7 +6718,7 @@ mod tests {
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let source = SymbolicTensor::infer(cooking.cook(trace.as_view())).unwrap();
         let result = source
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                 ..Default::default()
             })

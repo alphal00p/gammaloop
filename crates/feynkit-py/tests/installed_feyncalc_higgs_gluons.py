@@ -123,10 +123,10 @@ for orientation, diagram in enumerate(result.diagrams):
     # orientations. Promote Lorentz dimension before Dirac trace; tr(1)=4.
     trace = (
         TensorExpression(numerator.expand())
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
-        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()

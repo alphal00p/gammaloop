@@ -121,7 +121,7 @@ for label, pdgs in (
     # same dummy-index canonicalization tests adjoint linearity exactly.
     combined_normalized = (
         TensorExpression(combined_adjoint)
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .canonize()
@@ -129,7 +129,7 @@ for label, pdgs in (
     )
     separate_normalized = (
         TensorExpression(sum(adjoints, E("0")))
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .canonize()
@@ -157,7 +157,7 @@ for label, pdgs in (
     ):
         scalar = (
             TensorExpression(raw * spins, intern="flattened")
-            .reduce_algebra(gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
         )
         assert scalar.contraction_complete

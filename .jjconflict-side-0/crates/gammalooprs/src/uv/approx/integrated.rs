@@ -158,7 +158,7 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
     // expansion/protection registry here. Vakint consumes the resolved Atom.
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let simplified = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::canonical()),
             epsilon: true,
             ..Default::default()
@@ -713,7 +713,7 @@ pub(crate) fn to_vakint_integrand<
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let input = GS.erase_uv_momentum_provenance(integrand);
     let color = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
-        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
             }),

@@ -1708,12 +1708,12 @@ impl TensorExpression {
     /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> gamma = TensorExpression.dirac_gamma(4)
     /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> result = expression.reduce_algebra(gamma=True)
+    /// >>> result = expression.simplify_algebra(gamma=True)
     /// >>> result.to_expression().rank
     /// 2
     #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
     #[allow(clippy::too_many_arguments)]
-    fn reduce_algebra(
+    fn simplify_algebra(
         &self,
         gamma: bool,
         color: bool,
@@ -1748,7 +1748,7 @@ impl TensorExpression {
         )?;
         let value = self
             .value
-            .reduce_algebra(&settings)
+            .simplify_algebra(&settings)
             .map_err(Self::inference_error)?;
         Ok(AliasedTensorExpression::from_parts(
             value,
@@ -2832,7 +2832,7 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// This performs symbolic structural contraction. Use reduce_algebra() for Dirac,
+    /// This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
     /// color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
     /// Polynomial expansion remains an explicit operation.
     ///
@@ -4325,7 +4325,7 @@ mod tests {
             // Casimir/index representation arguments are scalar metadata, not ports.
             let simplified = SymbolicTensor::infer(numerator)
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::simplification::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::simplification::AlgebraSettings {
                     color: Some(idenso::color::ColorSimplifySettings::default()),
                     ..Default::default()
                 })
@@ -4365,7 +4365,7 @@ mod tests {
             infer_interface(
                 SymbolicTensor::infer(scalar)
                     .unwrap()
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         epsilon: true,
                         ..Default::default()
                     })
@@ -4550,7 +4550,7 @@ mod tests {
                     let kwargs = pyo3::types::PyDict::new(py);
                     kwargs.set_item("gamma", true)?;
                     kwargs.set_item("gamma_output", "chains")?;
-                    let collected = compact.bind(py).call_method("reduce_algebra", (), Some(&kwargs))?;
+                    let collected = compact.bind(py).call_method("simplify_algebra", (), Some(&kwargs))?;
                     let collected = collected.extract::<PyRef<'_, AliasedTensorExpression>>()?;
                     let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
                     let collected = collected.borrow(py);
@@ -4663,7 +4663,7 @@ mod tests {
                 "with_name",
                 "to_expression",
                 "expand",
-                "reduce_algebra",
+                "simplify_algebra",
                 "wrap_indices",
                 "list_dangling",
                 "canonize",
@@ -5708,7 +5708,7 @@ mod tests {
                 let result =
                     gamma_expression
                         .bind(py)
-                        .call_method("reduce_algebra", (), Some(&kwargs))?;
+                        .call_method("simplify_algebra", (), Some(&kwargs))?;
                 let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
@@ -5910,7 +5910,7 @@ mod tests {
             let original =
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
-            let simplified = original.bind(py).call_method0("reduce_algebra")?;
+            let simplified = original.bind(py).call_method0("simplify_algebra")?;
             let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             let simplified = simplified
                 .value
@@ -6035,7 +6035,7 @@ mod tests {
                         interface.logical_slots()
                     );
                 }
-                let simplified = original.bind(py).call_method0("reduce_algebra")?;
+                let simplified = original.bind(py).call_method0("simplify_algebra")?;
                 let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
                 let simplified = simplified
                     .value
@@ -6692,7 +6692,7 @@ mod tests {
             kwargs.set_item("color", true)?;
             let simplified = tensor
                 .bind(py)
-                .call_method("reduce_algebra", (), Some(&kwargs))?
+                .call_method("simplify_algebra", (), Some(&kwargs))?
                 .call_method0("to_expression")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert!(simplified.interface().canonical().is_scalar());

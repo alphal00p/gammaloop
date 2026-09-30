@@ -142,7 +142,7 @@ for pdg in (9000005, -9000005):
                 )
             tensor = (
                 TensorExpression(numerator.expand())
-                .reduce_algebra(color=True)
+                .simplify_algebra(color=True)
                 .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()

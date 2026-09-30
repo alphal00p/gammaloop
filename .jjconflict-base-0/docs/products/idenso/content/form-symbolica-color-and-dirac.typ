@@ -1290,7 +1290,7 @@ or unsupported structures remain in the expression rather than acquiring tensor 
 their names.
 
 The comparisons below use native default gamma and color conventions. Python
-selects these with `reduce_algebra(gamma=True, color=True)`; Rust retains typed
+selects these with `simplify_algebra(gamma=True, color=True)`; Rust retains typed
 settings in `AlgebraSettings`. Both Rust and Python callers
 can choose other settings; record them when a normal form is part of a reproducible result.
 
@@ -1353,7 +1353,7 @@ numeric generator grouping. UFO `C(i,j)` is lowered to this symbol in the shared
 generator and GammaLoop reindexer.
 
 Explicit-index contractions and compact chains enter the existing
-`reduce_algebra` path. The generic Python expression boundary already supports
+`simplify_algebra` path. The generic Python expression boundary already supports
 this tensor; no separate reduction API is needed:
 
 // docs-example: compile
@@ -1367,14 +1367,14 @@ C = S("spenso::charge_conjugation")
 ci, cj, ck = (spin(index).to_expression() for index in (i, j, k))
 charge = TensorExpression(C(ci, cj))
 square = TensorExpression(C(ci, ck) * C(ck, cj))
-assert square.reduce_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression() == -spin.g(i, j).to_expression()
+assert square.simplify_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression() == -spin.g(i, j).to_expression()
 gamma, chain_head, incoming, outgoing = S(
     "spenso::gamma", "spenso::chain", "spenso::in", "spenso::out"
 )
 factor = gamma(incoming, outgoing, Representation.mink(4)(mu).to_expression())
 c_factor = C(incoming, outgoing)
 sandwich = TensorExpression(chain_head(ci, cj, c_factor, factor, c_factor))
-transposed_gamma = sandwich.reduce_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False)
+transposed_gamma = sandwich.simplify_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False)
 ```
 
 The compact chain declares its external endpoints once; each matrix uses the
@@ -1438,7 +1438,7 @@ $ sum_(c,d) f^(a c d) f^(b c d) = C_A δ^(a b). $
 
 For the conventional fundamental representation of $"SU"(N_c)$, one may subsequently choose
 $T_R = 1 / 2$, $C_A = N_c$, and $C_F = (N_c^2 - 1) / (2 N_c)$. Those substitutions are a
-specialization, not assumptions imposed on every expression by `reduce_algebra`.
+specialization, not assumptions imposed on every expression by `simplify_algebra`.
 
 The default color pass evaluates supported closed traces and expands supported cross-chain
 fundamental Fierz contractions. Open lines, higher invariant tensors, or unsupported structures

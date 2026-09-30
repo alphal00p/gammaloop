@@ -100,7 +100,7 @@ generic = (amplitude * adjoint * colors * gluon.color**2 / dA**2).replace(
 print("color contraction", flush=True)
 colored = (
     TensorExpression(generic, intern="flattened")
-    .reduce_algebra(color=True)
+    .simplify_algebra(color=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
@@ -108,7 +108,7 @@ colored = (
 )
 colored = (
     TensorExpression(colored)
-    .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()

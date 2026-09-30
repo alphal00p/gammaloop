@@ -109,7 +109,7 @@ one_numerator *= (
 )
 one_trace = kinematics.apply(
     TensorExpression(one_numerator)
-    .reduce_algebra(gamma=True, epsilon=True)
+    .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
@@ -211,7 +211,7 @@ for diagram in result.diagrams:
         )
     traced = (
         TensorExpression(uv)
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()

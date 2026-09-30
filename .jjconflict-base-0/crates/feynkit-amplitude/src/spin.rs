@@ -374,7 +374,7 @@ mod tests {
                         .to_owned()
                 )
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -398,7 +398,7 @@ mod tests {
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer((trace.expand()).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()
@@ -428,7 +428,7 @@ mod tests {
                         .to_owned()
                 )
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -800,7 +800,7 @@ mod tests {
         assert_eq!(
             idenso::tensor::SymbolicTensor::infer((unpolarized).as_atom_view().to_owned())
                 .unwrap()
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                     epsilon: true,
                     ..Default::default()
@@ -836,7 +836,7 @@ mod tests {
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer((projector).as_atom_view().to_owned())
                     .unwrap()
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                         epsilon: true,
                         ..Default::default()

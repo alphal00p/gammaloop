@@ -43,7 +43,7 @@ mod tests {
         "canonize",
         "dirac_adjoint",
         "list_dangling",
-        "reduce_algebra",
+        "simplify_algebra",
         "to_dots",
         "undo_dots",
         "undo_chain",
@@ -155,7 +155,7 @@ lorentz = sp.Representation.mink(4)
 gamma = sp.TensorExpression.dirac_gamma(4)
 source = gamma(spin('i'), spin('j'), lorentz('mu')) * gamma(spin('j'), spin('i'), lorentz('nu'))
 assert source.contract(representations=[]).to_expression() == source
-assert source.reduce_algebra().to_expression() == source
+assert source.simplify_algebra().to_expression() == source
 assert source.contract(representations=[lorentz]).to_expression() == source.contract(representations=[lorentz.name]).to_expression()
 collected = source.contract().to_expression()
 assert 'trace' in collected.to_expression().format_plain()
@@ -165,10 +165,10 @@ assert 'chain' in unfolded.to_expression().format_plain()
 explicit = unfolded.undo_chain()
 assert 'chain' not in explicit.to_expression().format_plain()
 assert explicit.components() == collected.components()
-reduced = source.reduce_algebra(gamma=True)
+reduced = source.simplify_algebra(gamma=True)
 assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression().to_expression()))
 assert reduced.expand().components() == collected.components()
-capped = source.reduce_algebra(gamma=True, max_steps_per_domain=0)
+capped = source.simplify_algebra(gamma=True, max_steps_per_domain=0)
 assert capped.reduction_status == sp.ReductionStatus.Capped
 assert capped.to_expression() == source
 assert not hasattr(sp.Tensor, 'contract')
@@ -281,7 +281,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
                 ),
                 (
                     py.get_type::<TensorExpression>()
-                        .getattr("reduce_algebra")
+                        .getattr("simplify_algebra")
                         .unwrap(),
                     "($self, *, gamma=False, color=False, epsilon=False, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16)",
                 ),
@@ -308,7 +308,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
             for name in [
                 "dirac_adjoint",
                 "list_dangling",
-                "reduce_algebra",
+                "simplify_algebra",
                 "to_dots",
                 "wrap_indices",
             ] {

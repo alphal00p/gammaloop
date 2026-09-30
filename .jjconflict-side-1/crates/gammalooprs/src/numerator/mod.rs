@@ -708,7 +708,7 @@ impl Numerator<Global> {
             expr: {
                 let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                 let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         color: Some(ColorSimplifySettings::default()),
                         ..Default::default()
                     })?
@@ -833,7 +833,7 @@ impl Numerator<AppliedFeynmanRule> {
             expr: {
                 let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                 let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
                         color: Some(ColorSimplifySettings::default()),
                         ..Default::default()
                     })?
@@ -866,7 +866,7 @@ impl Numerator<ColorSimplified> {
         debug!("Gamma simplifying color symplified numerator");
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()

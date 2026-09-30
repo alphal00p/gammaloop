@@ -132,7 +132,7 @@ class AliasedTensorExpression:
         -------
         ReductionStatus
             Complete, Deferred, or Capped. Unfinished results remain exact and can be
-            passed to contract() or reduce_algebra() again.
+            passed to contract() or simplify_algebra() again.
 
         Examples
         --------
@@ -357,7 +357,7 @@ class AliasedTensorExpression:
 
         Notes
         -----
-        This performs symbolic structural contraction. Use reduce_algebra() for Dirac,
+        This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
         color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
         Polynomial expansion remains an explicit operation.
 
@@ -469,7 +469,7 @@ class AliasedTensorExpression:
         >>> expression = AliasedTensorExpression.from_expression(expression)
         >>> opened = expression.undo_trace()
         """
-    def reduce_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
@@ -521,7 +521,7 @@ class AliasedTensorExpression:
         >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         >>> from symbolica.community.tensor import AliasedTensorExpression
         >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> result = expression.reduce_algebra(gamma=True)
+        >>> result = expression.simplify_algebra(gamma=True)
         >>> result.to_expression().rank
         2
         """
@@ -5297,7 +5297,7 @@ class TensorExpression:
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def reduce_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
@@ -5347,7 +5347,7 @@ class TensorExpression:
         >>> from symbolica.community.tensor import TensorExpression
         >>> gamma = TensorExpression.dirac_gamma(4)
         >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        >>> result = expression.reduce_algebra(gamma=True)
+        >>> result = expression.simplify_algebra(gamma=True)
         >>> result.to_expression().rank
         2
         """
@@ -5953,7 +5953,7 @@ class TensorExpression:
 
         Notes
         -----
-        This performs symbolic structural contraction. Use reduce_algebra() for Dirac,
+        This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
         color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
         Polynomial expansion remains an explicit operation.
 

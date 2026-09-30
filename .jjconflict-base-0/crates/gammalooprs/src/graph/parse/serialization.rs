@@ -43,7 +43,7 @@ impl Graph {
                 * &self.overall_factor;
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
             let num = SymbolicTensor::infer(cooking.try_cook(num.as_view())?)?
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: settings
                         .do_color_algebra
                         .then(|| ColorSimplifySettings::default().with_cof_dimension_invariants()),

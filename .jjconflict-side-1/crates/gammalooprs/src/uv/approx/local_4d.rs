@@ -2483,7 +2483,7 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let simplified_pair = SymbolicTensor::infer(cooking.try_cook(pair.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()
@@ -3923,7 +3923,7 @@ mod tests {
             .with_representation_payloads(true, true);
         let simplify_color = |expression: &Atom| -> Result<Atom> {
             let simplified = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
                 })?

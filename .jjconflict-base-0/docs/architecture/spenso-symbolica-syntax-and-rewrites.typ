@@ -496,7 +496,7 @@ let settings = MatchSettings {
 ```
 
 Keep family kernels as ordered local rule applications. The public
-`reduce_algebra(AlgebraSettings)` and `contract(ContractSettings)` use one
+`simplify_algebra(AlgebraSettings)` and `contract(ContractSettings)` use one
 capability-driven domain planner and one structural contractor. Candidate heads
 and shallow graph boundaries determine eligible work; dependencies and estimated
 term growth determine scheduling. Actual changes update regional observations
@@ -519,7 +519,7 @@ Keep semantic boundaries clear:
 - Unit tests for narrow rule families should live next to the implementation.
   Larger FORM/FeynCalc/reference cases should stay in the broader test modules.
 
-Public family simplification wrappers are replaced by `reduce_algebra` with
+Public family simplification wrappers are replaced by `simplify_algebra` with
 explicit family settings. Notation conversions remain separate: `to_dots`
 normalizes surviving compact scalar products without contracting repeated
 indices; `undo_dots`, `undo_chain`, and `undo_trace` unfold the notation present.

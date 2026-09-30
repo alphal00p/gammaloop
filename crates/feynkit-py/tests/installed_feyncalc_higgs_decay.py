@@ -92,7 +92,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
     )
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -147,7 +147,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
             operator.to_expression() * adjoint * spin_projector * color_projector,
             intern="flattened",
         )
-        .reduce_algebra(gamma=True, epsilon=True, color=True)
+        .simplify_algebra(gamma=True, epsilon=True, color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()

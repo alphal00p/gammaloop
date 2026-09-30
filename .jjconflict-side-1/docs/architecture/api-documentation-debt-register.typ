@@ -154,7 +154,7 @@ registration-to-execution journey with an asserted result.
 
 *Priority:* P0 · *Status:* In progress · *Surface:* Idenso methods on `spynso3.TensorExpression`
 
-The `reduce_algebra` prose contains index-inconsistent contractions and a Fierz formula
+The `simplify_algebra` prose contains index-inconsistent contractions and a Fierz formula
 that is not consistent with the stated normalization. Gamma-trace and gamma-five
 claims also lack the dimensional-scheme qualifications needed to interpret them.
 

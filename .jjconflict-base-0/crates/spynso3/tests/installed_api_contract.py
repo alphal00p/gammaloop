@@ -82,8 +82,8 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertNotIn("chain", explicit.to_expression().format_plain())
         # Independent finite HEP components compare represented tensors, not printed dummy labels.
         self.assertEqual(explicit.components(), collected.components())
-        self.assertEqual(source.reduce_algebra().to_expression(), source)
-        reduced = source.reduce_algebra(gamma=True)
+        self.assertEqual(source.simplify_algebra().to_expression(), source)
+        reduced = source.simplify_algebra(gamma=True)
         self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
         self.assertEqual(reduced.expand().components(), collected.components())
         for obsolete in (
@@ -101,7 +101,8 @@ class FactorizedContractionTests(unittest.TestCase):
 
         tensor = sp.TensorExpression(3)
         for carrier in (tensor, sp.AliasedTensorExpression.from_expression(tensor)):
-            for operation in (carrier.contract, carrier.reduce_algebra):
+            self.assertFalse(hasattr(carrier, "reduce_algebra"))
+            for operation in (carrier.contract, carrier.simplify_algebra):
                 signature = inspect.signature(operation)
                 self.assertTrue(
                     all(
@@ -141,14 +142,14 @@ class FactorizedContractionTests(unittest.TestCase):
                         with self.assertRaisesRegex(
                             ValueError, f"{option} requires {family}=True"
                         ):
-                            carrier.reduce_algebra(**{option: value})
+                            carrier.simplify_algebra(**{option: value})
                 config = {family: True, **options}
                 self.assertEqual(
-                    carrier.reduce_algebra(**config).to_expression(), tensor
+                    carrier.simplify_algebra(**config).to_expression(), tensor
                 )
             for option in ("gamma_ordering", "gamma_output"):
                 with self.assertRaisesRegex(ValueError, option):
-                    carrier.reduce_algebra(gamma=True, **{option: "invalid"})
+                    carrier.simplify_algebra(gamma=True, **{option: "invalid"})
             for representations in (
                 None,
                 [],

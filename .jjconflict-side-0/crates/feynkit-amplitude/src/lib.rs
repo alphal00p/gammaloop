@@ -236,7 +236,7 @@ impl Amplitude {
                 // amplitude. The shared scheduler owns gamma/metric cleanup.
                 SymbolicTensor::checked_parts(adjoint, interface.clone())
                     .and_then(|value| {
-                        value.reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        value.simplify_algebra(&idenso::tensor::AlgebraSettings {
                             gamma: Some(settings),
                             epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
                             ..Default::default()

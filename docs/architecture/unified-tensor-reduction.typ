@@ -10,7 +10,7 @@ consolidation are the acceptance criteria; measured speedups are not required.
 == API and consolidation
 
 The Rust reduction operations are `contract(ContractSettings)` and
-`reduce_algebra(AlgebraSettings)`, on the existing `SymbolicTensor` abstraction
+`simplify_algebra(AlgebraSettings)`, on the existing `SymbolicTensor` abstraction
 and its existing alias-capable owner. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
@@ -24,7 +24,7 @@ variance and positional port compatibility.
 Python exposes both operations through explicit keyword-only parameters on
 `TensorExpression` and `AliasedTensorExpression`. For example,
 `expr.contract(representations=[lorentz], collect_traces=False)` and
-`expr.reduce_algebra(gamma=True, gamma_ordering="canonical", color=True)`.
+`expr.simplify_algebra(gamma=True, gamma_ordering="canonical", color=True)`.
 The binding lowers those parameters into the existing Rust settings; it owns no
 planning or contraction logic. Family-specific options require the corresponding
 family to be enabled, and omitted options retain native defaults. The Python budget

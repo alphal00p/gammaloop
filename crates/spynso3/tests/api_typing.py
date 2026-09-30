@@ -111,13 +111,13 @@ def check_types(
     assert_type(expression.to_expression().collect_num(), Expression)
     assert_type(expression.to_expression().collect_factors(), Expression)
     assert_type(
-        expression.reduce_algebra(gamma=True, epsilon=True).contract(
+        expression.simplify_algebra(gamma=True, epsilon=True).contract(
             collect_chains=False, collect_traces=False
         ),
         sp.AliasedTensorExpression,
     )
     assert_type(
-        expression.reduce_algebra(color=True).contract(
+        expression.simplify_algebra(color=True).contract(
             collect_chains=False, collect_traces=False
         ),
         sp.AliasedTensorExpression,
@@ -125,7 +125,7 @@ def check_types(
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
     assert_type(
-        expression.reduce_algebra(gamma=True, color=True, epsilon=True),
+        expression.simplify_algebra(gamma=True, color=True, epsilon=True),
         sp.AliasedTensorExpression,
     )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
@@ -195,7 +195,7 @@ def check_types(
     policy: sp.ExecutionMode = sp.ExecutionMode.All
     assert_type(int(policy), int)
     assert_type(
-        expression.reduce_algebra(
+        expression.simplify_algebra(
             gamma=True, gamma_ordering="canonical", gamma0=True, gamma_conjugate=True
         ),
         sp.AliasedTensorExpression,

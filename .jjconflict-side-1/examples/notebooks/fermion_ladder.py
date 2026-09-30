@@ -212,7 +212,7 @@ class FermionLadder:
         """Trace, insert physical momentum routing, then fully collect the scalar."""
         if source is None:
             source = self.source
-        traced = source.reduce_algebra(**self.settings, epsilon=True).contract(
+        traced = source.simplify_algebra(**self.settings, epsilon=True).contract(
             collect_chains=False, collect_traces=False
         )
         traced = (
@@ -240,7 +240,7 @@ class FermionLadder:
         from tensor_benchmark_cases import completed
 
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        algebra = self.source.simplify_algebra(**self.settings, epsilon=True)
         owner = algebra.contract(collect_chains=False, collect_traces=False)
         traced = owner
         after_gamma = process_time_ns()
@@ -271,7 +271,7 @@ class FermionLadder:
             }
         assert result == expected
         return {
-            "completion": completed(reduce_algebra=algebra, contract=owner),
+            "completion": completed(simplify_algebra=algebra, contract=owner),
             "trace_cpu_ns": after_trace - start,
             "gamma_reduction_cpu_ns": after_gamma - start,
             "trace_materialization_cpu_ns": after_trace - after_gamma,

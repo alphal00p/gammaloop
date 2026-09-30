@@ -79,7 +79,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     assert len(operator.structure.slots) == (8 if count == 3 else 6)
     adjoint = (
         operator.dirac_adjoint()
-        .reduce_algebra(
+        .simplify_algebra(
             gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
@@ -138,7 +138,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     print("color", boson, flush=True)
     colored = (
         TensorExpression(generic, intern="flattened")
-        .reduce_algebra(color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
@@ -146,7 +146,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     )
     colored = (
         TensorExpression(colored)
-        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
@@ -159,7 +159,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     print("spin", boson, flush=True)
     spin_summed = (
         TensorExpression(colored.to_expression() * spin_projector, intern="flattened")
-        .reduce_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )

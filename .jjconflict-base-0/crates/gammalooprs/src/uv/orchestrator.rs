@@ -337,7 +337,7 @@ impl<'a> ComparableExpr<'a> {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let normalized = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
-            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(Default::default()),
                 ..Default::default()
             })?
