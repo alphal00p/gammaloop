@@ -1604,6 +1604,33 @@ mod tests {
                 "retired tensor method {method}"
             );
         }
+        for method in [
+            "expand_num",
+            "factor",
+            "collect",
+            "collect_num",
+            "collect_factors",
+            "collect_by_coefficient",
+            "collect_symbol",
+            "collect_horner",
+            "together",
+            "cancel",
+            "apart",
+        ] {
+            let member = tensor
+                .members
+                .iter()
+                .find(|member| member.name == method)
+                .unwrap_or_else(|| panic!("missing tensor algebra method {method}"));
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:"),
+                "{method} must preserve the tensor type"
+            );
+        }
         for (method, defaults) in [
             (
                 "contract",

@@ -204,10 +204,10 @@ access as `Expression | float | complex`. For variadic `chain` and `trace`, symb
 arguments retain `TensorExpression`; a concrete first or second factor selects
 `TensorNetwork`. General mixed argument sequences retain the union return type. This avoids
 unresolved types from overlapping variadic-tuple overloads in current type checkers.
-`TensorExpression` deliberately specializes a few
-inherited Symbolica names: `gamma` constructs a Dirac tensor, and `__getitem__` translates
-between logical flat indices and coordinates. Their narrow override annotations document
-this specialization instead of suppressing diagnostics for the entire module.
+`TensorExpression` wraps the shared symbolic tensor rather than inheriting from
+`Expression`. Its algebraic methods retain the tensor interface. Tensor-specific methods
+include `dirac_gamma`, which constructs a Dirac tensor, and `__getitem__`, which translates
+between logical flat indices and coordinates.
 
 The installed API regression checks compare every declared class member with the runtime,
 exercise all tour examples, round-trip settings representations, and check real, complex,
@@ -306,17 +306,39 @@ re-index the tensor. See the
 
 == Transforming expressions and axes
 
-`replace`, `replace_multiple`, `map`, and `derivative` return a `TensorExpression` after
-validating its external interface. Scalar changes inside a tensor's ordinary arguments
-also update its data identity, so replacing `x` in `A(x, mu)` makes library lookup use
-`A(y, mu)`. A transformation that removes or changes a non-scalar interface raises an
-error. A zero result retains its rank and slots. Explicitly named composite expressions
-retain their assigned metadata.
+Use ordinary algebra directly on a `TensorExpression`: `expand`, `expand_num`, `factor`,
+`collect`, `collect_symbol`, `collect_num`, `collect_factors`, `collect_by_coefficient`,
+`collect_horner`, `together`, `cancel`, and `apart` return `TensorExpression` values.
+They preserve logical port order, unresolved port identities, and explicitly assigned
+metadata. A zero result retains its rank and slots. `expand_num()` distributes numerical
+coefficients over sums; it does not request full polynomial expansion. `collect_factors()`
+extracts factors common to terms in sums, including nested sums.
 
-`derivative` handles scalar coefficients. A formal derivative of an unknown tensor
-function such as `A(x, mu)` is rejected because the network executor does not support
-that notation. Supply a tensor-name derivative callback or differentiate the scalar
-component expressions with `Tensor.map_components` instead.
+// docs-example: compile
+```python
+from symbolica import S
+from symbolica.community.tensor import Representation, TensorName
+
+x, y = S("x", "y")
+A = TensorName("algebra::A")(Representation.euc(3))("i")
+expression = 2 * (x + y) * A
+expanded = expression.expand_num()
+factored = expanded.collect_factors()
+assert factored.structure.slots == expression.structure.slots
+assert (factored - expression).expand().to_expression() == 0
+```
+
+These operations use Symbolica's algebra implementation. Trusted rearrangements reuse
+the established interface; user-supplied collection callbacks require checking the result.
+A callback that removes or changes external ports raises an error. Label unresolved axes
+before a transformation if their occurrence identities cannot be tracked through the result.
+
+`replace(TensorRule(...))` applies checked whole-tensor replacement rules. For unrestricted
+Symbolica matching, `map`, or differentiation, first call `to_expression()`. The returned
+`Expression` carries no tensor metadata. When intentionally rebuilding a tensor after a
+structure-preserving raw operation, pass `structure=original.structure` to the
+`TensorExpression` constructor; the constructor checks the declared interface. To transform
+stored component data, use `Tensor.map_components`.
 
 All three tensor forms expose `structure`, `rank`, `shape`, and `is_scalar`.
 `index(...)` (also `obj(...)`) fills only unresolved ports. `reindex(...)` assigns every
@@ -650,6 +672,10 @@ format.
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
+The default `ports` layout displays vectors inserted into tensors with bras and kets.
+Keep the default settings, or select `DisplaySettings.ports()`, for this notation.
+`DisplaySettings.schoonschip()` selects the alternative compact layout with bold momentum
+labels in the tensor's index positions. Both layouts retain unresolved AUTO ports.
 Compound graph indices and generated dummy indices use each representation's alphabet by default: Lorentz indices
 render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
 color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeated indices
@@ -744,9 +770,10 @@ display for those settings. Source-only methods reject unsupported settings rath
 silently ignoring them.
 
 
-Select chain output to contract a momentum with a gamma matrix and collect its
-bispinor channel for slash notation. Chain collection keeps the ordered factors and leaves Dirac traces
-unevaluated. The result remains a `TensorExpression` with its two bispinor ports.
+A momentum contracted into a gamma matrix displays as a slash, with its two
+remaining bispinor ports. Explicit spinor indices remain visible; unresolved ones
+use hollow placeholders. The consumed Lorentz port has no placeholder. Collected
+chains retain matrix order, and collecting a trace does not evaluate it.
 
 // docs-example: compile
 ```python
@@ -755,7 +782,7 @@ from symbolica.community.tensor import Representation, TensorExpression, TensorN
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.simplify_algebra(color=False, gamma_output="chains")
+pslash = indexed.contract()
 pslash.formatted()
 ```
 
@@ -782,8 +809,8 @@ Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `Im
 when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
 LaTeX or text. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
 the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
-rendering errors directly. These display methods do not replace Symbolica's inherited
-`to_latex` API.
+rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
+needed instead of tensor-aware notation.
 
 HTML output keeps selectable native MathML and embeds the same STIX Two Math font as
 the documentation site, including in standalone offline notebooks. Math defaults to

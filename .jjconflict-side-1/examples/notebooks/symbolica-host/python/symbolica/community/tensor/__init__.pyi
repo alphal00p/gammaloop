@@ -30,7 +30,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.core import AtomType, Condition, Evaluator, Expression, FormattedOutput, HeldExpression, PatternRestriction, Transformer
 
 AUTO: _AutoIndex
 Nc: Expression
@@ -4095,6 +4095,8 @@ class TensorExpression:
     Arithmetic with Tensor or TensorNetwork operands returns a TensorNetwork.
 
     Reductions preserve this tensor type and keep unrelated sums factorized.
+    Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
+    ``factor()``, also returns a tensor expression with its ordered interface.
     Use ``to_expression()`` to access the underlying Symbolica expression.
 
     Pass ``intern="indices"`` to reversibly encode compound index labels, or
@@ -4697,6 +4699,215 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> raw = A.to_expression()
         """
+    def contains(self, s: _ScalarInput | HeldExpression | Transformer) -> Condition:
+        r"""
+        Test literal symbolic containment, with the same Condition semantics as Expression.contains.
+        Use bool(result) for a Boolean answer, or combine it with other Symbolica conditions.
+        This inspects the stored expression without contracting or expanding tensors.
+
+        Parameters
+        ----------
+        s : Expression or pattern
+            Symbolic subexpression to find literally, with Expression.contains semantics.
+
+        Returns
+        -------
+        Condition
+            Containment condition, convertible to bool.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> assert TensorExpression(x + y).contains(x)
+        """
+    def __contains__(self, expression: Expression) -> builtins.bool:
+        r"""
+        Test whether an ordinary Expression occurs literally in this tensor expression.
+        """
+    def get_all_symbols(self, include_function_symbols: builtins.bool = True) -> builtins.list[Expression]:
+        r"""
+        Return symbols in Symbolica's internal order, including function heads by default.
+        Index labels and representation symbols are included when present in the syntax.
+
+        Parameters
+        ----------
+        include_function_symbols : bool, default True
+            Include function heads as well as variables.
+
+        Returns
+        -------
+        list of Expression
+            Symbols, without duplicate occurrences.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, f = S("x", "f")
+        >>> assert x in TensorExpression(f(x)).get_all_symbols(False)
+        """
+    def get_all_indeterminates(self, enter_functions: builtins.bool = True) -> builtins.list[Expression]:
+        r"""
+        Return variables and function calls in Symbolica's internal order.
+        Set enter_functions=False to treat function calls, including tensor leaves, as opaque.
+
+        Parameters
+        ----------
+        enter_functions : bool, default True
+            Inspect function arguments as well as complete function calls.
+
+        Returns
+        -------
+        list of Expression
+            Symbolic indeterminates, without duplicate occurrences.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, f = S("x", "f")
+        >>> assert TensorExpression(f(x)).get_all_indeterminates(False) == [f(x)]
+        """
+    def get_type(self) -> AtomType:
+        r"""
+        Return the Symbolica atom type of the stored expression.
+
+        Returns
+        -------
+        AtomType
+            Whether the stored expression is a number, variable, function, sum, product, or power.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> assert TensorExpression(x).get_type() == x.get_type()
+        """
+    def get_head(self) -> Expression:
+        r"""
+        Return the underlying function head or variable as an ordinary Expression.
+        Raise TypeError for a sum, product, power, or number.
+
+        Returns
+        -------
+        Expression
+            Function symbol or variable, without the tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert A.get_head() == A.to_expression().get_head()
+        """
+    def get_name(self) -> builtins.str:
+        r"""
+        Return the underlying variable or function name, independently of tensor data metadata.
+        Raise TypeError for a sum, product, power, or number.
+
+        Returns
+        -------
+        str
+            Symbolica's name for the underlying variable or function.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert A.get_name() == A.to_expression().get_name()
+        """
+    def get_byte_size(self) -> builtins.int:
+        r"""
+        Return the stored symbolic expression's size in bytes, excluding tensor metadata.
+
+        Returns
+        -------
+        int
+            Number of bytes in the symbolic payload.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> assert TensorExpression(x).get_byte_size() == x.get_byte_size()
+        """
+    def is_zero(self) -> builtins.bool:
+        r"""
+        Test whether the expression is exactly zero, including zeros with nonzero tensor rank.
+        This does not perform algebraic simplification.
+
+        Returns
+        -------
+        bool
+            True for an exact symbolic zero, irrespective of rank.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (0 * A).is_zero()
+        >>> assert (0 * A).rank == 1
+        """
+    def is_one(self) -> builtins.bool:
+        r"""
+        Test whether the expression is exactly the scalar one.
+
+        Returns
+        -------
+        bool
+            True for scalar one; an identity tensor is not the scalar one.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> assert TensorExpression(1).is_one()
+        """
+    def is_expanded(self, var: typing.Optional[_ScalarInput] = None) -> builtins.bool:
+        r"""
+        Test whether products and powers are expanded, optionally with respect to var.
+        The expression and its tensor interface are unchanged.
+
+        Parameters
+        ----------
+        var : Expression, optional
+            Restrict the expansion check to this indeterminate.
+
+        Returns
+        -------
+        bool
+            True if no further arithmetic distribution is needed for the requested scope.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> value = TensorExpression((x + 1)**2)
+        >>> assert not value.is_expanded()
+        >>> assert value.expand().is_expanded(x)
+        """
+    def nterms(self) -> builtins.int:
+        r"""
+        Count top-level additive terms without expanding the expression.
+        Unlike len(tensor), this counts symbolic terms rather than tensor components.
+
+        Returns
+        -------
+        int
+            Number of terms in the outermost sum, or one for a non-sum.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> value = TensorExpression((x + 1)**2)
+        >>> assert value.nterms() == 1
+        >>> assert value.expand().nterms() == 3
+        """
     def replace(self, rules: TensorRule | list[TensorRule]) -> TensorExpression:
         r"""
         Apply one rule or an ordered list of whole-tensor replacement rules.
@@ -4763,6 +4974,238 @@ class TensorExpression:
         >>> expanded = ((x + 1)**2 * A("i", "j")).expand()
         >>> expanded.rank
         2
+        """
+    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorExpression:
+        r"""
+        Factor scalar algebra while retaining ordered tensor ports and data metadata.
+        Tensor leaves are treated as symbolic indeterminates; no tensor identity is applied.
+
+        Parameters
+        ----------
+        complex : bool, default False
+            Factor over the complex rationals rather than the rationals.
+        extension : list of Expression, optional
+            Algebraic numbers defining the coefficient field, as in Expression.factor.
+
+        Returns
+        -------
+        TensorExpression
+            Factored expression with the original tensor interface, including typed zeros.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> factored = ((x**2 + 2*x + 1) * A).factor()
+        >>> assert factored == (x + 1)**2 * A
+        """
+    def expand_num(self) -> TensorExpression:
+        r"""
+        Distribute numerical coefficients over sums without expanding symbolic products.
+        The result remains a TensorExpression with the same ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (2 * (x + y) * A).expand_num()
+        >>> assert result == (2*x + 2*y) * A
+        """
+    def collect(self, *x: symbolica.core.Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms in variables or functions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *x : Expression
+            Variables or functions to collect in, with Expression.collect semantics.
+        key_map, coeff_map : callable, optional
+            Map each collected key or coefficient. Callbacks receive and return ordinary
+            Expressions. Their results must preserve this tensor's ordered external ports;
+            otherwise the operation raises ValueError. Zero retains the original interface.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + x*y*A).collect(x)
+        >>> assert result.expand() == (x*(1+y)*A).expand()
+        """
+    def collect_num(self) -> TensorExpression:
+        r"""
+        Extract common numerical coefficients from sums, retaining ordered ports and metadata.
+        This reverses numerical distribution performed by expand_num().
+
+        Returns
+        -------
+        TensorExpression
+            Expression with common numerical coefficients extracted.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((2*x + 4*y)*A).collect_num() == 2*(x + 2*y)*A
+        """
+    def collect_factors(self) -> TensorExpression:
+        r"""
+        Collect common factors from nested sums without applying tensor identities.
+        Ordered ports, unresolved axes, tensor zeros, and data metadata are retained.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + y*A).collect_factors()
+        >>> assert result == (x+y)*A
+        """
+    def collect_by_coefficient(self) -> TensorExpression:
+        r"""
+        Group terms with equal numerical coefficients, retaining ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Expression grouped by numerical coefficient with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(2*x + 2*y).collect_by_coefficient()
+        >>> assert result.to_expression() == 2*(x + y)
+        """
+    def collect_symbol(self, x: Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms by powers of a variable or calls with the same function head.
+
+        Parameters
+        ----------
+        x : Expression
+            Variable or function symbol to collect in.
+        key_map, coeff_map : callable, optional
+            Map ordinary Expressions. As with collect(), the result is checked for
+            preservation of the tensor's ordered external ports.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, f = S("x", "f")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (f(x)*A + 2*f(x)*A).collect_symbol(f)
+        >>> assert result.expand() == (3*f(x)*A).expand()
+        """
+    def collect_horner(self, vars: typing.Optional[typing.Sequence[Expression]] = None) -> TensorExpression:
+        r"""
+        Rewrite polynomial algebra in Horner form, retaining ordered ports and metadata.
+
+        Parameters
+        ----------
+        vars : list of Expression, optional
+            Variable order. Omit it to use Symbolica's heuristic ordering.
+
+        Returns
+        -------
+        TensorExpression
+            Horner-form expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(x**2 + x*y).collect_horner([x, y])
+        >>> assert result.to_expression() == x*(x + y)
+        """
+    def together(self) -> TensorExpression:
+        r"""
+        Combine scalar denominators into one fraction, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Single rational expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> assert TensorExpression(1/x + 1/y).together().to_expression() == (x + y)/(x*y)
+        """
+    def cancel(self) -> TensorExpression:
+        r"""
+        Cancel common numerator and denominator factors, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Rational expression with common factors cancelled and the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((x**2 - 1)/(x - 1)*A).cancel() == (x + 1)*A
+        """
+    def apart(self, *variables: symbolica.core.Expression) -> TensorExpression:
+        r"""
+        Decompose scalar denominators into partial fractions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *variables : Expression
+            Variables for partial fractioning. Omit them to use all indeterminates,
+            as in Expression.apart().
+
+        Returns
+        -------
+        TensorExpression
+            Partial fractions with the original ordered ports and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (A/(x*(x + 1))).apart(x) == A/x - A/(x + 1)
         """
     def evaluator(self, params: typing.Sequence[Expression], *, iterations: builtins.int = 1, n_cores: builtins.int = 1) -> Evaluator:
         r"""

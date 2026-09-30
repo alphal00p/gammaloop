@@ -565,20 +565,48 @@ fn compact_vector<'a>(
     }
     let representation = representation?;
 
-    let mut label = typst_tensor_head(symbol);
+    let backend = SpensoPrintSettings::resolve(options)?.backend;
+    let argument_source = |argument| {
+        if backend == SpensoPrintBackend::Typst {
+            typst_source(argument, options)
+        } else {
+            let mut source = String::new();
+            argument
+                .format(&mut source, options, PrintState::new())
+                .ok()?;
+            Some(source)
+        }
+    };
+    let mut label = if backend == SpensoPrintBackend::Typst {
+        typst_tensor_head(symbol)
+    } else {
+        tensor_head_print(symbol, backend).unwrap_or_else(|| symbol.get_stripped_name().to_owned())
+    };
     if settings.symbol_scripts && !label_arguments.is_empty() {
         let columns = label_arguments
             .iter()
-            .map(|argument| Some((typst_source(*argument, options)?, IndexRow::Bottom)))
+            .map(|argument| Some((argument_source(*argument)?, IndexRow::Bottom)))
             .collect::<Option<Vec<_>>>()?;
-        label = typst_attachment(label, columns);
+        label = if backend == SpensoPrintBackend::Typst {
+            typst_attachment(label, columns)
+        } else {
+            let arguments = columns
+                .into_iter()
+                .map(|(source, _)| source)
+                .collect::<Vec<_>>()
+                .join(",");
+            match backend {
+                SpensoPrintBackend::Latex => format!("{label}_{{{arguments}}}"),
+                _ => format!("{label}_({arguments})"),
+            }
+        };
     } else if !label_arguments.is_empty() {
         let separator = if settings.commas { "," } else { " " };
         label.push('(');
         label.push_str(
             &label_arguments
                 .iter()
-                .map(|argument| typst_source(*argument, options))
+                .map(|argument| argument_source(*argument))
                 .collect::<Option<Vec<_>>>()?
                 .join(separator),
         );
@@ -889,6 +917,11 @@ pub fn tensor_print(
     let arguments = function.iter().collect::<Vec<_>>();
     let open_columns = open_port_columns(&arguments, options)?;
     let has_open = open_columns.iter().any(Option::is_some);
+    if symbol.get_name() == "spenso::gamma"
+        && let Some(gamma) = gamma_print(function.as_view(), options, settings)
+    {
+        return Some(gamma);
+    }
     if symbol.has_tag(&SPENSO_TAG.tensor)
         && symbol.has_tag(&SPENSO_TAG.rank1)
         && !has_open
@@ -900,19 +933,29 @@ pub fn tensor_print(
         return crate::spenso_print_scripted_indexed!(atom, options, label);
     }
     if !matches!(resolved.backend, SpensoPrintBackend::Typst) {
+        let compact_arguments = arguments
+            .iter()
+            .map(|argument| compact_vector(*argument, settings, options))
+            .collect::<Vec<_>>();
         let head = tensor_head_print(symbol, resolved.backend).or_else(|| {
-            has_open.then(|| match (symbol.get_name(), resolved.backend) {
-                ("spenso::gamma", SpensoPrintBackend::Latex) => r"\gamma".to_owned(),
-                ("spenso::gamma", _) => "γ".to_owned(),
-                _ => symbol.get_stripped_name().to_owned(),
+            (has_open || compact_arguments.iter().any(Option::is_some)).then(|| {
+                match (symbol.get_name(), resolved.backend) {
+                    ("spenso::gamma", SpensoPrintBackend::Latex) => r"\gamma".to_owned(),
+                    ("spenso::gamma", _) => "γ".to_owned(),
+                    _ => symbol.get_stripped_name().to_owned(),
+                }
             })
         })?;
         let arguments = function
             .iter()
             .zip(&open_columns)
-            .map(|(argument, open)| {
+            .zip(compact_arguments)
+            .map(|((argument, open), compact)| {
                 if let Some((source, _)) = open {
                     return Some(source.clone());
+                }
+                if let Some(compact) = compact {
+                    return Some(compact.label);
                 }
                 let mut source = String::new();
                 argument
@@ -930,12 +973,6 @@ pub fn tensor_print(
     }
     if !function.get_symbol().has_tag(&SPENSO_TAG.tensor) {
         return None;
-    }
-
-    let function_symbol = function.get_symbol();
-    let function_name = function_symbol.get_name();
-    if function_name == "spenso::gamma" {
-        return gamma_typst_print(function.as_view(), options, settings);
     }
 
     let mut columns = Vec::new();
@@ -1004,7 +1041,7 @@ pub fn tensor_print(
     Some(base)
 }
 
-fn gamma_typst_print(
+fn gamma_print(
     atom: AtomView<'_>,
     options: &PrintOptions,
     settings: SpensoPrintSettings,
@@ -1025,17 +1062,28 @@ fn gamma_typst_print(
     let transposed = is_chain_marker(*first, SPENSO_TAG.chain_out)
         && is_chain_marker(*second, SPENSO_TAG.chain_in);
 
-    if (forward || transposed)
-        && let Some(compact) = compact_vector(*lorentz, settings, options)
-    {
-        let mut output = format!("cancel({})", compact.label);
-        if transposed {
-            output = format!("attach({output},t:upright(\"T\"))");
-        }
-        return Some(output);
+    let compact = compact_vector(*lorentz, settings, options);
+    let backend = SpensoPrintSettings::resolve(options)?.backend;
+    if backend != SpensoPrintBackend::Typst && compact.is_none() {
+        return None;
     }
-
-    let selected = if forward || transposed {
+    let base = compact.as_ref().map_or_else(
+        || "gamma".to_owned(),
+        |vector| match backend {
+            SpensoPrintBackend::Typst => format!("cancel({})", vector.label),
+            SpensoPrintBackend::Latex => format!(r"\not{{{}}}", vector.label),
+            SpensoPrintBackend::Plain => format!("slash({})", vector.label),
+        },
+    );
+    // A momentum in the Lorentz argument is consumed by the gamma matrix.
+    // Only its spinor ports remain free, whether explicit, AUTO, or chain markers.
+    let selected = if compact.is_some() {
+        if forward || transposed {
+            Vec::new()
+        } else {
+            vec![*first, *second]
+        }
+    } else if forward || transposed {
         vec![*lorentz]
     } else {
         arguments
@@ -1046,8 +1094,16 @@ fn gamma_typst_print(
         if let Some(column) = open {
             columns.push(column);
         } else if let Some(slot) = tensor_slot(argument) {
-            let source = typst_index_source(slot.representation, slot.index, options)?;
-            let source = if settings.with_dim {
+            let source = if backend == SpensoPrintBackend::Typst {
+                typst_index_source(slot.representation, slot.index, options)?
+            } else {
+                let mut source = String::new();
+                slot.index
+                    .format(&mut source, options, PrintState::new())
+                    .ok()?;
+                source
+            };
+            let source = if settings.with_dim && backend == SpensoPrintBackend::Typst {
                 qualified_typst_index(slot, source, options)?
             } else {
                 source
@@ -1057,9 +1113,38 @@ fn gamma_typst_print(
             columns.push((typst_source(argument, options)?, IndexRow::Bottom));
         }
     }
-    let mut output = typst_attachment("gamma".to_owned(), columns);
+    let mut output = match backend {
+        SpensoPrintBackend::Typst => typst_attachment(base, columns),
+        SpensoPrintBackend::Latex => {
+            let mut output = base;
+            for (row, script) in [(IndexRow::Top, '^'), (IndexRow::Bottom, '_')] {
+                let indices = columns
+                    .iter()
+                    .filter(|(_, side)| *side == row)
+                    .map(|(source, _)| source.as_str())
+                    .collect::<Vec<_>>();
+                if !indices.is_empty() {
+                    output.push_str(&format!("{script}{{{}}}", indices.join(" ")));
+                }
+            }
+            output
+        }
+        SpensoPrintBackend::Plain if columns.is_empty() => base,
+        SpensoPrintBackend::Plain => format!(
+            "{base}({})",
+            columns
+                .into_iter()
+                .map(|(source, _)| source)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    };
     if transposed {
-        output = format!("attach({output},t:upright(\"T\"))");
+        output = match backend {
+            SpensoPrintBackend::Typst => format!("attach({output},t:upright(\"T\"))"),
+            SpensoPrintBackend::Latex => format!(r"{output}^{{\mathrm{{T}}}}"),
+            SpensoPrintBackend::Plain => format!("{output}^T"),
+        };
     }
     Some(output)
 }
@@ -1541,13 +1626,21 @@ impl SpensoTags {
         if parens {
             out.push('(');
         }
-        a.format(&mut out, opt, PrintState::new()).ok()?;
+        if let Some(compact) = compact_vector(a, settings, opt) {
+            out.push_str(&compact.label);
+        } else {
+            a.format(&mut out, opt, PrintState::new()).ok()?;
+        }
         out.push_str(match resolved.backend {
             SpensoPrintBackend::Plain => ".",
             SpensoPrintBackend::Typst => " dot ",
             SpensoPrintBackend::Latex => r"\cdot ",
         });
-        b.format(&mut out, opt, PrintState::new()).ok()?;
+        if let Some(compact) = compact_vector(b, settings, opt) {
+            out.push_str(&compact.label);
+        } else {
+            b.format(&mut out, opt, PrintState::new()).ok()?;
+        }
         if parens {
             out.push(')');
         }
@@ -1637,6 +1730,8 @@ impl SpensoTags {
         let mut output = String::new();
         if let Some((source, _)) = &open_columns[0] {
             output.push_str(source);
+        } else if let Some(compact) = compact_vector(*start, settings, opt) {
+            output.push_str(&compact.label);
         } else if !is_reserved_marker(*start) {
             start.format(&mut output, opt, PrintState::new()).ok()?;
         }
@@ -1651,6 +1746,8 @@ impl SpensoTags {
         }
         if let Some((source, _)) = &open_columns[1] {
             output.push_str(source);
+        } else if let Some(compact) = compact_vector(*end, settings, opt) {
+            output.push_str(&compact.label);
         } else if !is_reserved_marker(*end) {
             end.format(&mut output, opt, PrintState::new()).ok()?;
         }
@@ -2636,6 +2733,95 @@ mod tests {
                 .to_string(),
             "cancel(attach(#($p$,std.hide($zws$)).join(),t:std.hide(1),b:1))"
         );
+    }
+
+    #[test]
+    fn standalone_slashes_keep_only_their_actual_spinor_ports() {
+        let p = function!(crate::vector_symbol!("slash_ports::p"), mink!(4));
+        for (first, second, open) in [
+            (
+                bottom_representation(Some(symbol!("a"))),
+                bottom_representation(Some(symbol!("b"))),
+                0,
+            ),
+            (bottom_representation(None), bottom_representation(None), 2),
+            (
+                bottom_representation(Some(symbol!("a"))),
+                bottom_representation(None),
+                1,
+            ),
+        ] {
+            let tensor = function!(gamma_symbol(), first, second, &p);
+            for (options, slash, square) in [
+                (
+                    SpensoPrintSettings::typst_options(),
+                    "cancel(p)",
+                    "square.stroked",
+                ),
+                (
+                    PrintOptions {
+                        custom_print_mode: SpensoPrintSettings::typst().into(),
+                        ..PrintOptions::latex()
+                    },
+                    r"\not{p}",
+                    r"\square",
+                ),
+                (
+                    SpensoPrintSettings::compact().nice_symbolica(),
+                    "slash(p)",
+                    "□",
+                ),
+            ] {
+                // Typst mirrors each index in a hidden opposite-row attachment
+                // to align tensor columns. Rich-output tests count visible MathML.
+                let copies = if options.mode.is_typst() { 2 } else { 1 };
+                let rendered = prepare_tensor_print(&tensor).printer(options).to_string();
+                assert!(rendered.contains(slash), "{rendered}");
+                assert_eq!(
+                    rendered.matches(square).count(),
+                    copies * open,
+                    "{rendered}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn consumed_compact_vectors_do_not_acquire_open_placeholders() {
+        let p = function!(crate::vector_symbol!("compact_ports::p"), mink!(4));
+        let q = function!(crate::vector_symbol!("compact_ports::q"), mink!(4));
+        let tensor = function!(crate::tensor_symbol!("compact_ports::T"), &p, mink!(4));
+        let dot = function!(SPENSO_TAG.dot, &p, &q);
+        let matrix = function!(
+            crate::tensor_symbol!("compact_ports::M"),
+            Atom::var(SPENSO_TAG.chain_in),
+            Atom::var(SPENSO_TAG.chain_out)
+        );
+        let chain = SPENSO_TAG.chain(p.clone(), q.clone(), [matrix]);
+        for (options, square) in [
+            (SpensoPrintSettings::typst_options(), "square.stroked"),
+            (
+                PrintOptions {
+                    custom_print_mode: SpensoPrintSettings::typst().into(),
+                    ..PrintOptions::latex()
+                },
+                r"\square",
+            ),
+            (SpensoPrintSettings::compact().nice_symbolica(), "□"),
+        ] {
+            // Native Typst source includes one hidden alignment copy per index.
+            let copies = if options.mode.is_typst() { 2 } else { 1 };
+            for (atom, open) in [(&p, 1), (&tensor, 1), (&dot, 0), (&chain, 0)] {
+                let rendered = prepare_tensor_print(atom)
+                    .printer(options.clone())
+                    .to_string();
+                assert_eq!(
+                    rendered.matches(square).count(),
+                    copies * open,
+                    "{rendered}"
+                );
+            }
+        }
     }
 
     #[test]

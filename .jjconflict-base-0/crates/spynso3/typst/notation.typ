@@ -97,6 +97,15 @@
     none
   }
 }
+// Typst's HTML backend omits math.cancel's stroke, and browsers do not support
+// MathML menclose consistently. Keep native math layout and paint the stroke
+// with the notebook stylesheet; paged/SVG output uses Typst's own cancellation.
+#let _cancel(value) = context if target() == "html" {
+  html.elem("mrow", attrs: ("data-spenso-cancel": "updiagonal"), value)
+} else {
+  math.cancel(value)
+}
+
 #let _display-node(display) = {
   if type(display) != array or display.len() == 0 { return math.upright("?") }
   let kind = display.first()
@@ -166,7 +175,7 @@
   }
   if head == "underline" and args.len() == 1 { return math.underline(first()) }
   if head == "overline" and args.len() == 1 { return math.overline(first()) }
-  if head == "cancel" and args.len() == 1 { return math.cancel(first()) }
+  if head == "cancel" and args.len() == 1 { return _cancel(first()) }
   if head == "scripts" and args.len() == 1 { return math.scripts(first()) }
   if head == "limits" and args.len() == 1 { return math.limits(first()) }
   if head == "class" and args.len() == 2 {
@@ -641,15 +650,13 @@
   let forward = _is-marker(first, "in") and _is-marker(second, "out")
   let transposed = _is-marker(first, "out") and _is-marker(second, "in")
 
-  if forward or transposed {
-    let compact = _compact-vector(lorentz, ctx, settings)
-    if compact != none {
-      let body = math.cancel(compact.label)
-      return if transposed { math.attach(body, t: math.upright("T")) } else { body }
-    }
-  }
-
-  let selected = if forward or transposed { (lorentz,) } else { node.arguments }
+  let compact = _compact-vector(lorentz, ctx, settings)
+  let base = if compact != none { _cancel(compact.label) } else { _head(ctx, node) }
+  // The compact momentum fills the Lorentz port; only actual spinor ports
+  // receive indices or AUTO squares. Chain markers remain implicit.
+  let selected = if compact != none {
+    if forward or transposed { () } else { (first, second) }
+  } else if forward or transposed { (lorentz,) } else { node.arguments }
   let columns = ()
   let open-columns = _open-port-columns(selected, ctx, settings)
   for (position, argument) in selected.enumerate() {
@@ -667,7 +674,7 @@
       ))
     }
   }
-  let body = _row-attachment(_head(ctx, node), columns, settings)
+  let body = _row-attachment(base, columns, settings)
   if transposed { math.attach(body, t: math.upright("T")) } else { body }
 }
 

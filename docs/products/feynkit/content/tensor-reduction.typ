@@ -111,9 +111,10 @@ For standalone tensors, `TensorExpression(expression)` performs the same convers
 interfaces and data identities preserved: `expand`, `expand_num`, `factor`, `collect`,
 `collect_symbol`, `collect_num`, `collect_factors`, `collect_by_coefficient`, `collect_horner`,
 `together`, `cancel`, and `apart`. Python's `copy.copy` also preserves tensor metadata.
-The transformation methods validate the result and reject incompatible interfaces, including
-changes introduced by collection callbacks. Arbitrary replacement, differentiation, and
-numerical conversion retain Symbolica's return types because they can change index structure.
+Trusted algebraic rearrangements retain the established interface; collection callbacks
+require checking the resulting interface and reject incompatible changes. For arbitrary
+Symbolica replacement or differentiation, use `to_expression()` explicitly. Its result has
+Symbolica's return types and does not carry the tensor's interface metadata.
 Use `tensor.with_lorentz_dimension(D)` before contracting indices to promote four-dimensional
 Lorentz slots, including compact representations. Spinor/color dimensions, scalar coefficients,
 and Lorentz slots already in other dimensions remain unchanged.

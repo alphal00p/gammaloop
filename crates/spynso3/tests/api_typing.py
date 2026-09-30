@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import Literal, assert_type
 
 import linnet
-from symbolica import Expression, S
+from symbolica import AtomType, Condition, Expression, S
 from symbolica.community import tensor as sp
 
 
@@ -112,9 +112,33 @@ def check_types(
     assert_type(sp.chain(start, end, expression), sp.TensorExpression)
     assert_type(sp.chain(start, end, tensor, expression), sp.TensorNetwork)
     assert_type(sp.chain(start, end, expression, tensor), sp.TensorNetwork)
-    assert_type(expression.to_expression().factor(), Expression)
-    assert_type(expression.to_expression().collect_num(), Expression)
-    assert_type(expression.to_expression().collect_factors(), Expression)
+    assert_type(expression.factor(), sp.TensorExpression)
+    assert_type(expression.expand_num(), sp.TensorExpression)
+    assert_type(expression.collect(scalar), sp.TensorExpression)
+    assert_type(expression.collect_num(), sp.TensorExpression)
+    assert_type(expression.collect_factors(), sp.TensorExpression)
+    assert_type(expression.collect_by_coefficient(), sp.TensorExpression)
+    assert_type(expression.collect_symbol(scalar), sp.TensorExpression)
+    assert_type(expression.collect_horner([scalar]), sp.TensorExpression)
+    assert_type(expression.together(), sp.TensorExpression)
+    assert_type(expression.cancel(), sp.TensorExpression)
+    assert_type(expression.apart(scalar), sp.TensorExpression)
+    assert_type(
+        expression.collect(scalar, key_map=lambda key: key, coeff_map=lambda c: 2 * c),
+        sp.TensorExpression,
+    )
+    assert_type(expression.contains(scalar), Condition)
+    assert_type(scalar in expression, bool)
+    assert_type(expression.get_all_symbols(), list[Expression])
+    assert_type(expression.get_all_indeterminates(False), list[Expression])
+    assert_type(expression.get_type(), AtomType)
+    assert_type(expression.get_name(), str)
+    assert_type(expression.get_head(), Expression)
+    assert_type(expression.get_byte_size(), int)
+    assert_type(expression.is_zero(), bool)
+    assert_type(expression.is_one(), bool)
+    assert_type(expression.is_expanded(scalar), bool)
+    assert_type(expression.nterms(), int)
     assert_type(
         expression.simplify_algebra(gamma=True, epsilon=True, contract="dots"),
         sp.TensorExpression,

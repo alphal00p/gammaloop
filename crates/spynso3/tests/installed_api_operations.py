@@ -150,6 +150,169 @@ class TensorOperationsTests(unittest.TestCase):
         evaluator = value.evaluator([self.x], iterations=1, n_cores=1)
         self.assertEqual(evaluator.evaluate([[2.0]])[0][0], 841.0)
 
+    def test_symbolica_algebra_returns_tensors_with_exact_requested_forms(self):
+        x, y = self.x, self.y
+        tensor = self.A(self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        a = tensor.to_expression()
+        for method, arguments, source, expected in (
+            ("expand_num", (), 3 * (x + y) * tensor, (3 * x + 3 * y) * a),
+            ("collect_factors", (), x * tensor + y * tensor, (x + y) * a),
+            ("factor", (), (x**2 - 1) * tensor, (x - 1) * (x + 1) * a),
+            ("collect", (x,), x * tensor + y * x * tensor, x * (a + y * a)),
+            ("collect_num", (), (2 * x + 4 * y) * tensor, 2 * (x + 2 * y) * a),
+            (
+                "collect_by_coefficient",
+                (),
+                2 * x * tensor + 2 * y * tensor,
+                2 * (x * a + y * a),
+            ),
+            ("collect_symbol", (x,), x * tensor + y * x * tensor, x * (a + y * a)),
+            ("collect_horner", ([x, y],), (x**2 + x * y) * tensor, x * (x + y) * a),
+            ("together", (), tensor / x + tensor / y, (x * a + y * a) / (x * y)),
+            ("cancel", (), (x**2 - 1) / (x - 1) * tensor, (x + 1) * a),
+            ("apart", (x,), tensor / (x * (x + 1)), a / x - a / (x + 1)),
+        ):
+            with self.subTest(method=method):
+                source = source.with_name("api_operations::AlgebraResult")
+                before = source.to_expression()
+                result = getattr(source, method)(*arguments)
+                self.assertIsInstance(result, sp.TensorExpression)
+                self.assertEqual(result.to_expression(), expected)
+                self.assertEqual(result.structure, source.structure)
+                self.assertEqual(result.structure.slots, tensor.structure.slots)
+                self.assertEqual(source.to_expression(), before)
+
+    def test_symbolica_algebra_preserves_unresolved_ports_metadata_and_typed_zero(self):
+        tensor = self.A(7, self.rep("i"), self.other)
+        self.assertIsInstance(tensor.structure.slots[1], sp.Representation)
+        for source in (tensor, 0 * tensor):
+            source = source.with_name(
+                sp.TensorName("api_operations::AlgebraMetadata")(7)
+            )
+            self.assertEqual(source.structure.arguments, (E("7"),))
+            for method, arguments in (
+                ("factor", ()),
+                ("expand_num", ()),
+                ("collect", (self.x, self.y)),
+                ("collect_num", ()),
+                ("collect_factors", ()),
+                ("collect_by_coefficient", ()),
+                ("collect_symbol", (self.x,)),
+                ("collect_horner", ()),
+                ("together", ()),
+                ("cancel", ()),
+                ("apart", (self.x, self.y)),
+            ):
+                with self.subTest(method=method, zero=not bool(source)):
+                    result = getattr(source, method)(*arguments)
+                    self.assertIsInstance(result, sp.TensorExpression)
+                    self.assertEqual(result.to_expression(), source.to_expression())
+                    self.assertEqual(result.structure, source.structure)
+                    self.assertEqual(result.rank, 2)
+
+        opened = self.A(self.other, self.rep)
+        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        library = sp.TensorLibrary()
+        library.register(
+            sp.Tensor.dense(
+                self.A(self.other, self.rep), [E(str(i)) for i in range(1, 7)]
+            )
+        )
+        for source, method, coefficient in (
+            (self.x * opened + self.y * opened, "collect_factors", self.x + self.y),
+            ((self.x**2 - 1) * opened, "factor", self.x**2 - 1),
+        ):
+            with self.subTest(method=method, changed=True):
+                result = getattr(source, method)()
+                self.assertEqual(result.structure.slots, opened.structure.slots)
+                # Keep the declared component order as well as its shape.
+                for actual, component in zip(
+                    result.to_tensor(library)[:], range(1, 7), strict=True
+                ):
+                    self.assertEqual(
+                        (actual - coefficient * component).expand(), E("0")
+                    )
+
+    def test_collection_callbacks_check_the_actual_replacement_interface(self):
+        tensor = self.A(self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        source = (self.x * tensor).with_name("api_operations::CallbackResult")
+        for method in ("collect", "collect_symbol"):
+            with self.subTest(method=method):
+                mapped = getattr(source, method)(
+                    self.x, coeff_map=lambda value: 2 * value
+                )
+                self.assertEqual(mapped.to_expression(), 2 * source.to_expression())
+                self.assertEqual(mapped.structure, source.structure)
+                zero = getattr(source, method)(self.x, coeff_map=lambda value: E("0"))
+                self.assertEqual(zero.to_expression(), E("0"))
+                self.assertEqual(zero.structure, source.structure)
+                for replacement in (
+                    E("1"),
+                    self.A(self.rep("k"), self.rep("i")).to_expression(),
+                ):
+                    with (
+                        self.subTest(replacement=str(replacement)),
+                        self.assertRaises(ValueError),
+                    ):
+                        getattr(source, method)(
+                            self.x,
+                            coeff_map=lambda value, replacement=replacement: (
+                                replacement
+                            ),
+                        )
+                with self.assertRaises(ValueError):
+                    getattr(source, method)(
+                        self.x,
+                        key_map=lambda key: (
+                            key * self.A(self.other("mu")).to_expression()
+                        ),
+                    )
+
+        opened = self.A(self.other, self.rep)
+        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        source = self.x * opened
+        mapped = source.collect(self.x, coeff_map=lambda coefficient: 2 * coefficient)
+        self.assertEqual(mapped.structure, source.structure)
+        self.assertEqual(mapped.to_expression(), 2 * source.to_expression())
+
+    def test_unchanged_algebra_retains_completed_reduction_status(self):
+        source = sp.TensorExpression(7).simplify_algebra()
+        self.assertEqual(source.reduction_status, sp.ReductionStatus.Complete)
+        result = source.expand_num().collect_factors().factor().cancel()
+        self.assertEqual(result, source)
+        self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
+
+    def test_read_only_symbolica_inspection_preserves_tensor_value(self):
+        tensor = self.A(self.x, self.rep("i"))
+        value = (self.x + self.y) * tensor
+        expression, structure = value.to_expression(), value.structure
+        self.assertTrue(value.contains(self.x))
+        self.assertTrue(self.x in value)
+        self.assertFalse(S("api_operations::absent") in value)
+        for method, arguments in (
+            ("get_all_symbols", ()),
+            ("get_all_symbols", (False,)),
+            ("get_all_indeterminates", ()),
+            ("get_all_indeterminates", (False,)),
+            ("get_type", ()),
+            ("get_byte_size", ()),
+        ):
+            with self.subTest(method=method, arguments=arguments):
+                self.assertEqual(
+                    getattr(value, method)(*arguments),
+                    getattr(expression, method)(*arguments),
+                )
+        self.assertEqual(tensor.get_head(), self.A.to_expression())
+        self.assertEqual(tensor.get_name(), "api_operations::A")
+        self.assertTrue((0 * tensor).is_zero())
+        self.assertTrue(sp.TensorExpression(1).is_one())
+        self.assertFalse(value.is_expanded())
+        self.assertTrue(value.expand().is_expanded(self.x))
+        self.assertEqual(value.nterms(), 1)
+        self.assertEqual(value.expand().nterms(), 2)
+        self.assertEqual(value.to_expression(), expression)
+        self.assertEqual(value.structure, structure)
+
     def test_scalar_tensor_denominator_accepts_an_open_expression(self):
         tensor = self.A(self.rep("j"), self.rep("i"))
         denominator = sp.TensorExpression(self.x)

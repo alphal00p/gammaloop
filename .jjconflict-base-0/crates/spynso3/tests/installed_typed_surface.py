@@ -24,10 +24,6 @@ class TypedSurfaceTests(unittest.TestCase):
             "replace_multiple",
             "map",
             "derivative",
-            "factor",
-            "together",
-            "cancel",
-            "apart",
         ):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(source, name))

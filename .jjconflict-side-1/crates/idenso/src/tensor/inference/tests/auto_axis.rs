@@ -118,13 +118,16 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     );
     assert!(source.with_rewritten_expression(changed.clone()).is_err());
     assert!(source.with_algebra_result(changed.clone()).is_err());
+    assert!(source.with_checked_expression(changed.clone()).is_err());
     let mixed = source.expression() + &changed;
     assert!(source.with_rewritten_expression(mixed.clone()).is_err());
-    assert!(source.with_algebra_result(mixed).is_err());
+    assert!(source.with_algebra_result(mixed.clone()).is_err());
+    assert!(source.with_checked_expression(mixed).is_err());
 
     for finish in [
         SymbolicTensor::with_rewritten_expression,
         SymbolicTensor::with_algebra_result,
+        SymbolicTensor::with_checked_expression,
     ] {
         let doubled = finish(&source, Atom::num(2) * source.expression()).unwrap();
         assert_eq!(
