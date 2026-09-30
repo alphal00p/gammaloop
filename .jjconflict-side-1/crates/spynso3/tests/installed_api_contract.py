@@ -82,7 +82,9 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertNotIn("chain", explicit.to_expression().format_plain())
         # Independent finite HEP components compare represented tensors, not printed dummy labels.
         self.assertEqual(explicit.components(), collected.components())
-        self.assertEqual(source.simplify_algebra().to_expression(), source)
+        self.assertEqual(
+            source.simplify_algebra(contract="none").to_expression(), source
+        )
         reduced = source.simplify_algebra(gamma=True)
         self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
         self.assertEqual(reduced.expand().components(), collected.components())
@@ -95,6 +97,114 @@ class FactorizedContractionTests(unittest.TestCase):
             "chainify",
         ):
             self.assertFalse(hasattr(source, obsolete))
+
+    def test_algebra_contraction_modes(self):
+        from symbolica import S
+
+        color = sp.Representation.cof(S("algebra_modes::Nc"))
+        lorentz = sp.Representation.mink(4)
+        metric = sp.TensorExpression.g(color, color.dual())
+        source = metric("i", "j") * metric("j", "i")
+        nc = S("algebra_modes::Nc")
+        for value in (source, sp.AliasedTensorExpression.from_expression(source)):
+            full = value.simplify_algebra()
+            self.assertEqual(full.to_expression().to_expression(), nc)
+            self.assertEqual(full.reduction_status, sp.ReductionStatus.Complete)
+            self.assertEqual(
+                full.simplify_algebra().to_expression(), full.to_expression()
+            )
+            for mode, options in (
+                ("none", {}),
+                ("selected", {"representations": []}),
+                ("selected", {"representations": [lorentz]}),
+            ):
+                self.assertEqual(
+                    value.simplify_algebra(contract=mode, **options).to_expression(),
+                    source,
+                )
+            selected = value.simplify_algebra(
+                contract="selected", representations=[color.name]
+            )
+            self.assertEqual(selected.to_expression().to_expression(), nc)
+            capped = value.simplify_algebra(max_steps_per_domain=0)
+            self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
+            self.assertEqual(capped.to_expression(), source)
+            self.assertEqual(
+                capped.simplify_algebra().to_expression().to_expression(), nc
+            )
+            for options in (
+                {"contract": "invalid"},
+                {"contract": "selected"},
+                {"contract": "fully", "representations": []},
+                {"contract": "none", "representations": [color]},
+            ):
+                with self.assertRaises(ValueError):
+                    value.simplify_algebra(**options)
+
+        # Algebra prerequisites ignore the optional structural representation filter.
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        spin = sp.Representation.bis(4)
+        word = gamma("a", "b", "mu") * gamma("b", "c", "mu")
+        expected = 4 * sp.TensorExpression.g(spin)("a", "c")
+        for options in (
+            {"contract": "none"},
+            {"contract": "selected", "representations": []},
+        ):
+            result = word.simplify_algebra(gamma=True, **options).to_expression()
+            self.assertEqual(result.components(), expected.components())
+        # The closed colour delta is independent of gamma work, but full cleanup
+        # still produces Nc without enabling any generator or Fierz identities.
+        mixed = source * gamma("a", "b", "mu") * gamma("b", "a", "mu")
+        self.assertEqual(
+            mixed.simplify_algebra(gamma=True).to_expression().to_expression(), 16 * nc
+        )
+        unevaluated = (gamma("a", "b", "mu") * gamma("b", "a", "nu")).simplify_algebra()
+        self.assertIn(
+            "trace", unevaluated.to_expression().to_expression().format_plain()
+        )
+
+        p = sp.TensorName.vector("algebra_modes::p")(lorentz)
+        q = sp.TensorName.vector("algebra_modes::q")(lorentz)
+        compact = (p("mu") * q("mu")).contract()
+        dots = compact.simplify_algebra(contract="dots")
+        self.assertEqual(dots.to_expression(), compact.to_dots().to_expression())
+        self.assertIn("dot", dots.to_expression().to_expression().format_plain())
+        self.assertEqual(
+            dots.simplify_algebra(
+                contract="dots", max_steps_per_domain=0
+            ).reduction_status,
+            sp.ReductionStatus.Complete,
+        )
+        pending = compact.simplify_algebra(contract="dots", max_steps_per_domain=0)
+        if compact.to_expression() != dots.to_expression():
+            self.assertEqual(pending.reduction_status, sp.ReductionStatus.Capped)
+            self.assertEqual(pending.to_expression(), compact.to_expression())
+        self.assertEqual(
+            pending.simplify_algebra(contract="dots").to_expression(),
+            dots.to_expression(),
+        )
+
+    def test_full_contraction_preserves_disabled_color_identities(self):
+        generator = sp.TensorExpression.color_t(8, 3)
+        source = generator("a", "i", "j") * generator("a", "k", "l")
+        expected = source.components()
+        for options in (
+            {},
+            {"color": True, "color_expand_fierz": False},
+            {
+                "color": True,
+                "color_expand_fierz": False,
+                "contract": "selected",
+                "representations": [sp.Representation.cof(3)],
+            },
+        ):
+            result = source.simplify_algebra(**options)
+            self.assertIn("t(", result.to_expression().to_expression().format_plain())
+            self.assertEqual(result.to_expression().components(), expected)
+            self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
+            rerun = result.simplify_algebra(**options)
+            self.assertEqual(rerun.reduction_status, sp.ReductionStatus.Complete)
+            self.assertEqual(rerun.to_expression(), result.to_expression())
 
     def test_keyword_configs_and_family_validation(self):
         import inspect

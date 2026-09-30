@@ -174,6 +174,7 @@ fn gamma_identity_contracts_its_prerequisite_without_opening_scalar_spectators()
     let result = source
         .simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
+            contract: AlgebraContraction::None,
             ..Default::default()
         })
         .unwrap();

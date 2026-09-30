@@ -474,7 +474,6 @@ class FreeTrace:
     def reduce(self):
         return (
             self.source.simplify_algebra(**self.settings, epsilon=True)
-            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_expression()
         )
@@ -668,9 +667,7 @@ class AxialTrace(FreeTrace):
         )
 
     def reduce(self):
-        reduced = self.source.simplify_algebra(**self.settings, epsilon=True).contract(
-            collect_chains=False, collect_traces=False
-        )
+        reduced = self.source.simplify_algebra(**self.settings, epsilon=True)
         # M1 and FORM materialize the trace while retaining the scalar factor.
         # Applying expand to the entire aliased tensor would also distribute
         # (x+y)^8, which is outside this case's declared materialization scope.
@@ -748,7 +745,6 @@ class ProductionNumerator:
     def reduce(self):
         return (
             self.source.simplify_algebra(gamma=True, epsilon=True, color=True)
-            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
         )
@@ -958,11 +954,9 @@ class ColourFierz:
         }
 
     def reduce(self):
-        return atom(
-            self.source.simplify_algebra(**self.settings).contract(
-                collect_chains=False, collect_traces=False
-            )
-        ).replace(self.trace_index, E("1/2"))
+        return atom(self.source.simplify_algebra(**self.settings)).replace(
+            self.trace_index, E("1/2")
+        )
 
     def phases(self, expected):
         start = process_time_ns()
@@ -1032,7 +1026,7 @@ class MixedColourTrace(FreeTrace):
     def reduce(self):
         value = self.source.simplify_algebra(
             **self.settings, **self.color.settings, epsilon=True
-        ).contract(collect_chains=False, collect_traces=False)
+        )
         return atom(value.expand()).replace(self.color.trace_index, E("1/2"))
 
     def phases(self, expected):

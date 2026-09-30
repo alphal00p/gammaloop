@@ -16,7 +16,11 @@ binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
 the existing optional contraction order, and a per-domain change budget.
 `AlgebraSettings` independently carries optional `GammaSimplifySettings` and
-`ColorSimplifySettings`, the epsilon permission, and its per-domain change budget.
+`ColorSimplifySettings`, the epsilon permission, `AlgebraContraction`, and its
+per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
+normalizes scalar-product notation, `Selected` limits additional connections by
+representation, and `None` retains identity prerequisites only. These lower to
+work in the same queue; they do not launch another whole-expression pipeline.
 Representation filters select the `LibraryRep` base family, including duals;
 for example, a Python `Representation.mink(4)` filter does not restrict permission
 to four-dimensional slots. Actual connections must still satisfy dimension,

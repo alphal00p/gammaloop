@@ -500,7 +500,12 @@ class TensorOperationsTests(unittest.TestCase):
         self.assertEqual(expression.simplify_algebra().to_expression(), expression)
         self.assertEqual(expression.simplify_algebra().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
-        self.assertEqual(metric.simplify_algebra().expand(), metric.expand())
+        self.assertEqual(
+            metric.simplify_algebra(contract="none").expand(), metric.expand()
+        )
+        self.assertEqual(
+            metric.simplify_algebra().to_expression(), self.A(self.rep("j"))
+        )
         gamma = sp.TensorExpression.dirac_gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         simplified = chain.simplify_algebra(gamma=True, color=True, epsilon=True)

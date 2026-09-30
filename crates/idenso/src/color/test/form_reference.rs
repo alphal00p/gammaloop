@@ -692,6 +692,8 @@ fn signed_pruning_reenters_color_simplification() {
 
 #[test]
 fn color_simplification_does_not_canonicalize_lorentz_tensors() {
+    // This test selects family prerequisites only, preserving its explicit output scope.
+
     test_initialize();
     let r = TestReps::new();
     let a = mink!(4, color_only_canonicalization_a);
@@ -703,6 +705,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
     let expected = crate::tensor::SymbolicTensor::infer((color).as_atom_view().to_owned())
         .unwrap()
         .simplify_algebra(&crate::tensor::AlgebraSettings {
+            contract: crate::tensor::AlgebraContraction::None,
             color: Some(crate::color::ColorSimplifySettings::default()),
             ..Default::default()
         })
@@ -723,6 +726,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
         crate::tensor::SymbolicTensor::infer((color * &odd_lorentz).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })

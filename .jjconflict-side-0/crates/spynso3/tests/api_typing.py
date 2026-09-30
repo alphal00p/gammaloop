@@ -111,14 +111,12 @@ def check_types(
     assert_type(expression.to_expression().collect_num(), Expression)
     assert_type(expression.to_expression().collect_factors(), Expression)
     assert_type(
-        expression.simplify_algebra(gamma=True, epsilon=True).contract(
-            collect_chains=False, collect_traces=False
-        ),
+        expression.simplify_algebra(gamma=True, epsilon=True, contract="dots"),
         sp.AliasedTensorExpression,
     )
     assert_type(
-        expression.simplify_algebra(color=True).contract(
-            collect_chains=False, collect_traces=False
+        expression.simplify_algebra(
+            color=True, contract="selected", representations=[representation]
         ),
         sp.AliasedTensorExpression,
     )

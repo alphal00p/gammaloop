@@ -469,7 +469,7 @@ class AliasedTensorExpression:
         >>> expression = AliasedTensorExpression.from_expression(expression)
         >>> opened = expression.undo_trace()
         """
-    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
@@ -477,6 +477,14 @@ class AliasedTensorExpression:
         ----------
         gamma, color, epsilon : bool, default False
             Enable only the selected identity families and their prerequisite contractions.
+        contract : {"fully", "dots", "selected", "none"}, default "fully"
+            Additional structural work: all contractions, all plus dot notation,
+            only selected representations, or only identity prerequisites.
+            Collecting a trace does not evaluate it or enable another identity family.
+        representations : sequence of Representation or RepresentationName, optional
+            Required only for contract="selected"; an empty sequence permits no
+            additional connections. Filters do not suppress identity prerequisites
+            or intrinsic normalization already performed during construction.
         gamma_output : {"reduced", "chains"}, optional
             Apply Clifford identities (default), or only collect Dirac chains.
         gamma_ordering : {"repeated_pairs", "canonical"}, optional
@@ -509,10 +517,11 @@ class AliasedTensorExpression:
 
         Notes
         -----
-        Each enabled family includes its necessary contractions. Brackets are transparent
-        and global polynomial expansion is not required. Use contract() for structural
-        contractions independent of an algebra family. A capped result retains exact
-        unfinished work and can be reduced again.
+        Enabled identities and permitted structural work reach a shared fixed point.
+        Closed color deltas produce their dimension even when color identities are off.
+        Each enabled family includes its necessary contractions, including with
+        contract="none". Unrelated sums stay factored. A capped result retains exact
+        unfinished work and can be simplified again.
 
         Examples
         --------
@@ -5297,7 +5306,7 @@ class TensorExpression:
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
@@ -5305,6 +5314,14 @@ class TensorExpression:
         ----------
         gamma, color, epsilon : bool, default False
             Enable only the selected identity families and their prerequisite contractions.
+        contract : {"fully", "dots", "selected", "none"}, default "fully"
+            Additional structural work: all contractions, all plus dot notation,
+            only selected representations, or only identity prerequisites.
+            Collecting a trace does not evaluate it or enable another identity family.
+        representations : sequence of Representation or RepresentationName, optional
+            Required only for contract="selected"; an empty sequence permits no
+            additional connections. Filters do not suppress identity prerequisites
+            or intrinsic normalization already performed during construction.
         gamma_output : {"reduced", "chains"}, optional
             Apply Clifford identities (default), or only collect Dirac chains.
         gamma_ordering : {"repeated_pairs", "canonical"}, optional
@@ -5337,10 +5354,11 @@ class TensorExpression:
 
         Notes
         -----
-        Each enabled family includes its necessary contractions. Brackets are transparent
-        and global polynomial expansion is not required. Use contract() for structural
-        contractions independent of an algebra family. A capped result retains exact
-        unfinished work and can be reduced again.
+        Enabled identities and permitted structural work reach a shared fixed point.
+        Closed color deltas produce their dimension even when color identities are off.
+        Each enabled family includes its necessary contractions, including with
+        contract="none". Unrelated sums stay factored. A capped result retains exact
+        unfinished work and can be simplified again.
 
         Examples
         --------

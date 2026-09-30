@@ -235,9 +235,7 @@ def keep_rest():
                 if output is not None:
                     row["output"] = atom(output).format_plain()
                     expected_gamma = (
-                        gamma_value.simplify_algebra(gamma=True, epsilon=True).contract(
-                            collect_chains=False, collect_traces=False
-                        )
+                        gamma_value.simplify_algebra(gamma=True, epsilon=True)
                         if method == "simplify_algebra"
                         else gamma_value
                     )

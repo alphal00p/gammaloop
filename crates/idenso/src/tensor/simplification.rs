@@ -30,13 +30,28 @@ pub enum ReductionStatus {
     Capped,
 }
 
-/// Independent algebra capabilities. Enabling a family authorizes its required
-/// structural contractions, but never enables a different identity family.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Structural work permitted in addition to identity prerequisites.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum AlgebraContraction {
+    /// All structural contractions, including chain and trace collection.
+    #[default]
+    Fully,
+    /// Full contraction and canonical index-free dot notation.
+    Dots,
+    /// Additional connections selected by representation, not by tensor factor.
+    Selected(Vec<spenso::structure::representation::LibraryRep>),
+    /// Only the structural prerequisites of enabled identities.
+    None,
+}
+
+/// Independent identity and output capabilities for the shared domain planner.
+/// Enabling a family always authorizes its structural prerequisites.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlgebraSettings {
     pub gamma: Option<GammaSimplifySettings>,
     pub color: Option<ColorSimplifySettings>,
     pub epsilon: bool,
+    pub contract: AlgebraContraction,
     /// Maximum successful transformations of each domain in this invocation.
     pub max_passes: usize,
 }
@@ -47,6 +62,7 @@ impl Default for AlgebraSettings {
             gamma: None,
             color: None,
             epsilon: false,
+            contract: AlgebraContraction::Fully,
             max_passes: 16,
         }
     }
@@ -95,11 +111,12 @@ const STRUCTURE: u8 = 1;
 const GAMMA: u8 = 2;
 const COLOR: u8 = 4;
 const EPSILON: u8 = 8;
+const DOTS: u8 = 16;
 
 impl ReductionRequest<'_> {
     fn policy(self) -> ReductionPolicy {
         match self {
-            Self::Algebra(settings) => ReductionPolicy::Algebra(*settings),
+            Self::Algebra(settings) => ReductionPolicy::Algebra(settings.clone()),
             Self::Contract(settings) => ReductionPolicy::Contract {
                 representations: settings.representations.map(<[_]>::to_vec),
                 metrics: settings.metrics,
@@ -126,6 +143,8 @@ impl ReductionRequest<'_> {
                 (u8::from(settings.gamma.is_some()) * GAMMA)
                     | (u8::from(settings.color.is_some()) * COLOR)
                     | (u8::from(settings.epsilon) * EPSILON)
+                    | (u8::from(settings.contract != AlgebraContraction::None) * STRUCTURE)
+                    | (u8::from(settings.contract == AlgebraContraction::Dots) * DOTS)
             }
         }
     }
@@ -176,7 +195,13 @@ impl DomainPlan {
     }
 
     fn local_candidates(&self) -> u8 {
-        self.observed.identity_candidates() | STRUCTURE
+        self.observed.identity_candidates()
+            | STRUCTURE
+            | if self.observed.candidates.dots || self.observed.candidates.symbols[17] {
+                DOTS
+            } else {
+                0
+            }
     }
 }
 
@@ -242,12 +267,22 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             return Ok(result);
         }
         let enabled = request.enabled();
+        // Identity prerequisites are independent of the additional structural
+        // filter. Both requests use the same contractor with different scope.
+        let prerequisite_settings = ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        };
         let structural = match request {
             ReductionRequest::Contract(settings) => settings,
-            ReductionRequest::Algebra(_) => ContractSettings {
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
+            ReductionRequest::Algebra(settings) => match &settings.contract {
+                AlgebraContraction::None => prerequisite_settings,
+                AlgebraContraction::Selected(representations) => ContractSettings {
+                    representations: Some(representations),
+                    ..Default::default()
+                },
+                _ => ContractSettings::default(),
             },
         };
         let original = self.aliases()?;
@@ -353,6 +388,18 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                     plan.status = ReductionStatus::Complete;
                 }
             }
+            // Notation is cheap, exact local work. Discharge an already normalized
+            // region before charging its budget, and reuse the computed replacement.
+            let dot_result = if eligible & DOTS != 0 && eligible & !DOTS == 0 {
+                let value = plan.value.to_dots()?;
+                if value == plan.value {
+                    plan.pending &= !DOTS;
+                    eligible &= !DOTS;
+                }
+                Some(value)
+            } else {
+                None
+            };
             if eligible == 0 {
                 continue;
             }
@@ -361,17 +408,20 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                 status = status.max(plan.status);
                 continue;
             }
-            // Prefer cheap contractions and short words to a determinant or
-            // trace expansion. Recompute this choice only for changed inputs.
-            let operation = [STRUCTURE, GAMMA, COLOR, EPSILON]
+            // Identity kernels first contract their own prerequisites. Let them
+            // consume visible candidates before optional chain collection can hide
+            // those candidates in an unevaluated trace (for example epsilon^2).
+            // Recompute this choice only for changed inputs.
+            let operation = [STRUCTURE, GAMMA, COLOR, EPSILON, DOTS]
                 .into_iter()
                 .filter(|operation| eligible & operation != 0)
                 .min_by_key(|operation| {
                     let counts = &plan.observed.candidates.counts;
                     match *operation {
-                        STRUCTURE => 0,
+                        STRUCTURE => usize::MAX - 1,
                         GAMMA => 1 + counts[8..17].iter().sum::<usize>(),
                         COLOR => 2 + counts[1..4].iter().sum::<usize>(),
+                        DOTS => usize::MAX,
                         _ => 8 + counts[4].saturating_mul(counts[4]),
                     }
                 })
@@ -398,7 +448,13 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                     (value, status)
                 }
                 ReductionRequest::Algebra(settings) => {
-                    if operation == STRUCTURE {
+                    if operation == DOTS {
+                        emitted = Vec::new();
+                        (
+                            dot_result.expect("dot notation follows eligible identities"),
+                            ReductionStatus::Complete,
+                        )
+                    } else if operation == STRUCTURE {
                         let (value, definitions, status) =
                             before.contract_domain(structural, &registry)?;
                         emitted = definitions;
@@ -407,7 +463,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                         let definitions = available
                             .get_or_insert_with(|| registry.values().cloned().collect::<Vec<_>>());
                         let observed = &plan.observed;
-                        let (prerequisites, additions) = before.contract_prerequisites(structural, definitions, |value| {
+                        let (prerequisites, additions) = before.contract_prerequisites(prerequisite_settings, definitions, |value| {
                             if alias_candidates.get(value.get_data()).is_some_and(|mask| mask & operation != 0) { return true; }
                             // A metric is a prerequisite, not the identity's seed.
                             // Nested leaves may lack individual regional records;
@@ -453,7 +509,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                                         let rewritten = selected.with_identity_result(expression)?;
                                         if rewritten == selected { return Ok((rewritten, Vec::new())); }
                                         let registry = registry.iter().cloned().map(|pair| (pair.0.expression.clone(), pair)).collect();
-                                        let (mut value, definitions, status) = rewritten.contract_domain(structural, &registry)?;
+                                        let (mut value, definitions, status) = rewritten.contract_domain(prerequisite_settings, &registry)?;
                                         value.proofs.frontier = status;
                                         Ok((value, definitions))
                                     }))?,
@@ -621,7 +677,8 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
         };
         let proofs = &mut Arc::make_mut(&mut result).proofs;
         proofs.contracted = (!changed && self.proofs.contracted)
-            || (matches!(request, ReductionRequest::Contract(settings) if settings.unrestricted())
+            || ((matches!(request, ReductionRequest::Contract(settings) if settings.unrestricted())
+                || matches!(request, ReductionRequest::Algebra(settings) if matches!(settings.contract, AlgebraContraction::Fully | AlgebraContraction::Dots)))
                 && status == ReductionStatus::Complete);
         let mut completed = if changed {
             Vec::new()
@@ -651,6 +708,80 @@ mod tests {
         atom::{Atom, AtomCore},
         symbol,
     };
+
+    #[test]
+    fn full_algebra_settles_mixed_single_and_long_gamma_words() {
+        use crate::gamma;
+        use spenso::{chain, q};
+        let reps = crate::test_support::test_initialize();
+        let start = reps.bis4.to_symbolic([Atom::num(98201)]);
+        let end = reps.bis4.to_symbolic([Atom::num(98202)]);
+        let mu = mink!(4, 98203);
+        let p = p!(mink!(4));
+        let q = q!(mink!(4));
+        let single = chain!(&start, &end, gamma!(&mu));
+        let slash = chain!(&start, &end, gamma!(&p));
+        let long = chain!(&start, &end, gamma!(&mu), gamma!(&p), gamma!(&q));
+        let source = SymbolicTensor::infer(
+            (Atom::num(-4) * single + Atom::num(2) * slash * q!(&mu) + long) * q!(mink!(4, 98204)),
+        )
+        .unwrap();
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            contract: AlgebraContraction::Dots,
+            ..Default::default()
+        };
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert!(Arc::ptr_eq(
+            &result,
+            &result.simplify_algebra(&settings).unwrap()
+        ));
+    }
+
+    #[test]
+    fn algebra_structural_modes_share_budget_and_cached_observations() {
+        use observation::INITIAL_SCANS;
+        let reps = crate::test_support::test_initialize();
+        let source = SymbolicTensor::<PartialStructure>::infer(
+            g!(mink!(4, mode_mu), mink!(4, mode_nu)) * p!(mink!(4, mode_nu)),
+        )
+        .unwrap();
+        let result = source
+            .simplify_algebra(&AlgebraSettings::default())
+            .unwrap();
+        assert_eq!(result.resolved().unwrap().expression, p!(mink!(4, mode_mu)));
+        INITIAL_SCANS.with(|count| count.set(0));
+        assert!(Arc::ptr_eq(
+            &result,
+            &result
+                .simplify_algebra(&AlgebraSettings::default())
+                .unwrap()
+        ));
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), 0);
+        let selected = AlgebraSettings {
+            contract: AlgebraContraction::Selected(vec![reps.bis4.rep.into()]),
+            ..Default::default()
+        };
+        assert_eq!(source.simplify_algebra(&selected).unwrap().root(), source);
+        let capped = source
+            .simplify_algebra(&AlgebraSettings {
+                max_passes: 0,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
+        assert_eq!(capped.root(), source);
+        assert_eq!(
+            capped
+                .simplify_algebra(&AlgebraSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            result.resolved().unwrap().expression
+        );
+    }
 
     #[test]
     fn admitted_gamma_traces_do_not_revalidate_generated_results() {
@@ -825,7 +956,10 @@ mod tests {
         )
         .unwrap();
         let disabled = source
-            .simplify_algebra(&AlgebraSettings::default())
+            .simplify_algebra(&AlgebraSettings {
+                contract: AlgebraContraction::None,
+                ..Default::default()
+            })
             .unwrap();
         assert_eq!(disabled.root(), source);
         assert_eq!(disabled.reduction_status(), ReductionStatus::Complete);

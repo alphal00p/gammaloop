@@ -797,6 +797,8 @@ fn epsilon_context_exposes_symmetric_and_epsilon_aliases() {
 
 #[test]
 fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
+    // This test selects family prerequisites only, preserving its explicit output scope.
+
     use spenso::structure::slot::ParseableAind;
     crate::test_support::test_initialize();
     let label = symbolica::symbol!(
@@ -815,6 +817,7 @@ fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
     );
     let result = value
         .simplify_algebra(&crate::tensor::AlgebraSettings {
+            contract: crate::tensor::AlgebraContraction::None,
             epsilon: true,
             ..Default::default()
         })
@@ -826,6 +829,7 @@ fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
         &result,
         &result
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 epsilon: true,
                 ..Default::default()
             })

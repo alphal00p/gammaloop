@@ -53,6 +53,7 @@ fn root_or_definition_changes_invalidate_previously_completed_policies() {
     ];
     let settings = AlgebraSettings {
         gamma: Some(GammaSimplifySettings::default()),
+        contract: AlgebraContraction::None,
         ..Default::default()
     };
     let structural_policy = ReductionRequest::Contract(Default::default()).policy();
@@ -92,7 +93,10 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
         max_passes: 0,
         ..Default::default()
     };
-    let disabled = AlgebraSettings::default();
+    let disabled = AlgebraSettings {
+        contract: AlgebraContraction::None,
+        ..Default::default()
+    };
     let completed = body.simplify_algebra(&disabled).unwrap();
     let capped = completed.simplify_algebra(&settings).unwrap();
     let repeated = capped.simplify_algebra(&settings).unwrap();
@@ -123,7 +127,10 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
     let expression = (rounded * p!(&port) + q!(&port))
         * (symbolica::function!(r, &port) + symbolica::function!(s, &port));
     let source = SymbolicTensor::infer(expression.clone()).unwrap();
-    let disabled = AlgebraSettings::default();
+    let disabled = AlgebraSettings {
+        contract: AlgebraContraction::None,
+        ..Default::default()
+    };
     let settings = ContractSettings {
         collect_chains: false,
         collect_traces: false,

@@ -3,7 +3,7 @@ use crate::{metadata::SpensoRepresentationName, structure::SpensoRepresentation}
 use idenso::{
     color::ColorSimplifySettings,
     dirac::{GammaChainOrdering, GammaOutput, GammaSimplifySettings},
-    tensor::simplification::AlgebraSettings,
+    tensor::simplification::{AlgebraContraction, AlgebraSettings},
 };
 use pyo3::{exceptions::PyValueError, prelude::*};
 use spenso::structure::representation::LibraryRep;
@@ -34,6 +34,8 @@ pub(crate) fn algebra_settings(
     gamma: bool,
     color: bool,
     epsilon: bool,
+    contract: &str,
+    representations: Option<Vec<Bound<'_, PyAny>>>,
     gamma_output: Option<&str>,
     gamma_ordering: Option<&str>,
     gamma_evaluate_traces: Option<bool>,
@@ -45,6 +47,28 @@ pub(crate) fn algebra_settings(
     color_substitute_cof_dimension_invariants: Option<bool>,
     max_steps_per_domain: usize,
 ) -> PyResult<AlgebraSettings> {
+    let representations = contraction_representations(representations)?;
+    let contract = match (contract, representations) {
+        ("fully", None) => AlgebraContraction::Fully,
+        ("dots", None) => AlgebraContraction::Dots,
+        ("none", None) => AlgebraContraction::None,
+        ("selected", Some(representations)) => AlgebraContraction::Selected(representations),
+        ("selected", None) => {
+            return Err(PyValueError::new_err(
+                "contract='selected' requires representations (an empty list permits no additional contractions)",
+            ));
+        }
+        ("fully" | "dots" | "none", Some(_)) => {
+            return Err(PyValueError::new_err(
+                "representations requires contract='selected'",
+            ));
+        }
+        _ => {
+            return Err(PyValueError::new_err(
+                "contract must be 'fully', 'dots', 'selected', or 'none'",
+            ));
+        }
+    };
     for (enabled, options) in [
         (
             gamma,
@@ -136,6 +160,7 @@ pub(crate) fn algebra_settings(
         gamma: gamma.then_some(gamma_settings),
         color: color.then_some(color_settings),
         epsilon,
+        contract,
         max_passes: max_steps_per_domain,
     })
 }

@@ -25,7 +25,7 @@ feature is enabled. Python bindings belong to `spynso3`.
 == Python community module
 
 #boundary("Part of Symbolica community", [
-  Import `TensorExpression` and algebra settings from `symbolica.community.tensor`.
+  Import `TensorExpression` and representation types from `symbolica.community.tensor`.
   The `spynso3` Cargo package supplies the unified Python bindings for Spenso and Idenso;
   Idenso remains the Rust algebra implementation. There is no separate `idenso` Python module.
 ])
@@ -80,7 +80,20 @@ all three. Flat keyword arguments such as `gamma_ordering="canonical"`,
 conventions and requested output. Supplying a family option requires explicitly
 enabling that family. Dimensions belong to representations. Enabled identities authorize their necessary
 structural contractions; emitting an epsilon does not itself enable epsilon identities.
-Both reduction operations use the same Rust planner and contraction implementation.
+The default `contract="fully"` also performs structural contractions, including
+closed colour deltas, without enabling colour generator identities. No trailing
+`contract()` is needed to obtain the colour dimension. `contract="dots"` requests
+the same work plus canonical dot notation. `contract="selected"` requires
+`representations=[...]` and permits additional connections only in those
+representations; an empty list permits none. `contract="none"` performs only the
+structural prerequisites of enabled identities. Representation filters never
+suppress those prerequisites or undo construction's intrinsic normalization.
+Trace collection does not evaluate the trace. Unrelated sums remain factored.
+All modes use the same Rust domain planner and contraction implementation; dot
+notation is scheduled with the other operations and obeys the same work budget.
+Rust uses `AlgebraSettings.contract: AlgebraContraction` with `Fully` (default),
+`Dots`, `Selected(Vec<LibraryRep>)`, and `None`. No nested contraction settings
+are required.
 
 `contract()` independently controls `metrics`, `rank_one`, `representations`,
 `collect_chains`, `collect_traces`, and the work budget `max_steps_per_domain`. Representation filters select connections,

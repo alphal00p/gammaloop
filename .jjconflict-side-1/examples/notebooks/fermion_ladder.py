@@ -212,9 +212,7 @@ class FermionLadder:
         """Trace, insert physical momentum routing, then fully collect the scalar."""
         if source is None:
             source = self.source
-        traced = source.simplify_algebra(**self.settings, epsilon=True).contract(
-            collect_chains=False, collect_traces=False
-        )
+        traced = source.simplify_algebra(**self.settings, epsilon=True)
         traced = (
             traced.expand() if self.staged_routing else traced.to_expression()
         ).to_expression()

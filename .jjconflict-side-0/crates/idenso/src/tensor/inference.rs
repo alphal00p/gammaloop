@@ -4311,6 +4311,8 @@ pub(crate) mod tests {
 
     #[test]
     fn metric_gamma_rewrites_preserve_auto_ports_and_logical_order() {
+        // This test selects family prerequisites only, preserving its explicit output scope.
+
         use crate::shorthands::schoonschip::Schoonschip;
 
         crate::test_support::test_initialize();
@@ -4358,6 +4360,7 @@ pub(crate) mod tests {
                         )
                         .unwrap()
                         .simplify_algebra(&crate::tensor::AlgebraSettings {
+                            contract: crate::tensor::AlgebraContraction::None,
                             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                             epsilon: true,
                             ..Default::default()
@@ -4377,6 +4380,7 @@ pub(crate) mod tests {
                         )
                         .unwrap()
                         .simplify_algebra(&crate::tensor::AlgebraSettings {
+                            contract: crate::tensor::AlgebraContraction::None,
                             gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                             epsilon: true,
                             ..Default::default()

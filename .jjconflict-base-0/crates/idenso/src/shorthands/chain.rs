@@ -211,7 +211,7 @@ impl<'a> Chain for AtomView<'a> {
                 ),
             ]);
         }
-        let mut result = source;
+        let mut result = source.clone();
         let mut joined = false;
         loop {
             let previous = result.clone();
@@ -264,7 +264,10 @@ impl<'a> Chain for AtomView<'a> {
             result = normalize(result);
             // Every join removes one chain; normalization may close it as a trace.
             if result == previous {
-                if !joined && !traces {
+                if !joined && (!traces || result == source) {
+                    // No connection was joined or closed. Keep the original
+                    // notation, including existing one-factor chains: unfolding
+                    // them here competes with the algebra kernels' collection.
                     return self.to_owned();
                 }
                 // An isolated matrix has no product to collect. Retain its exact
@@ -1086,7 +1089,25 @@ mod tests {
     }
 
     #[test]
+    fn structural_collection_preserves_existing_isolated_chain_notation() {
+        test_initialize();
+        let source = parse!(
+            "chain(bis(4,i),bis(4,j),spenso::gamma(in,out,mink(4,mu)))",
+            default_namespace = "spenso"
+        );
+        let representation = Bispinor {}.into();
+        assert_eq!(source.collect_chains(representation, true, true), source);
+        let explicit = source.undo_single_length();
+        assert_eq!(
+            explicit.collect_chains(representation, true, true),
+            explicit
+        );
+    }
+
+    #[test]
     fn join_chains_keeps_other_representations_factored() {
+        // This test selects family prerequisites only, preserving its explicit output scope.
+
         test_initialize();
         let spin = parse!(
             "chain(bis(4, i), bis(4, j), spenso::gamma(in, out, mink(4, mu)))
@@ -1138,6 +1159,7 @@ mod tests {
             crate::tensor::SymbolicTensor::infer(input)
                 .unwrap()
                 .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    contract: crate::tensor::AlgebraContraction::None,
                     color: Some(crate::color::ColorSimplifySettings {
                         ..Default::default()
                     }),

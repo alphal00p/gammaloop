@@ -691,6 +691,8 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
 
 #[test]
 fn color_payload_reduction_preserves_non_color_coefficients() {
+    // This test selects family prerequisites only, preserving its explicit output scope.
+
     test_initialize();
     let _ = spenso::vector_symbol!("spenso::p");
     // Opaque word factors still declare their structural channels.
@@ -711,6 +713,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
     let simplified = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
         .unwrap()
         .simplify_algebra(&crate::tensor::AlgebraSettings {
+            contract: crate::tensor::AlgebraContraction::None,
             color: Some(settings),
             ..Default::default()
         })
@@ -723,6 +726,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(settings),
                 ..Default::default()
             })
@@ -743,6 +747,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                 ..Default::default()
             })
@@ -766,6 +771,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(settings),
                 ..Default::default()
             })
@@ -788,6 +794,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         crate::tensor::SymbolicTensor::infer((open).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(settings),
                 ..Default::default()
             })
@@ -1065,6 +1072,8 @@ fn cof_dimension_simplification_respects_disabled_trace_evaluation() {
 
 #[test]
 fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
+    // This test selects family prerequisites only, preserving its explicit output scope.
+
     test_initialize();
     let fundamental = ColorFundamental {}.new_rep(3);
     let adjoint = ColorAdjoint {}.new_rep(8);
@@ -1086,6 +1095,7 @@ fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
     )
     .unwrap()
     .simplify_algebra(&crate::tensor::AlgebraSettings {
+        contract: crate::tensor::AlgebraContraction::None,
         color: Some(settings),
         ..Default::default()
     })
@@ -1104,6 +1114,7 @@ fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
         crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(settings),
                 ..Default::default()
             })
@@ -1584,6 +1595,8 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
 
 #[test]
 fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
+    // This test selects family prerequisites only, preserving its explicit output scope.
+
     test_initialize();
     let r = TestReps::new();
     let expr = chain!(
@@ -1592,7 +1605,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { contract: crate::tensor::AlgebraContraction::None, color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
 }
 
 #[test]
@@ -2602,6 +2615,8 @@ mod failing {
 
     #[test]
     fn test_color_matrix_element() {
+        // This test selects family prerequisites only, preserving its explicit output scope.
+
         use crate::shorthands::{UndoShorthands, chain::Chain};
 
         test_initialize();
@@ -2668,6 +2683,7 @@ mod failing {
             .resolved()
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -2807,6 +2823,7 @@ mod failing {
         let color = crate::tensor::SymbolicTensor::infer(admitted)
             .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 color: Some(crate::color::ColorSimplifySettings::default()),
                 ..Default::default()
             })
@@ -2823,6 +2840,7 @@ mod failing {
         );
         let gamma = color
             .simplify_algebra(&crate::tensor::AlgebraSettings {
+                contract: crate::tensor::AlgebraContraction::None,
                 gamma: Some(crate::dirac::GammaSimplifySettings::default()),
                 epsilon: true,
                 ..Default::default()

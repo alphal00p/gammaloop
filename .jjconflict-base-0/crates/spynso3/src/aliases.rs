@@ -666,6 +666,14 @@ impl AliasedTensorExpression {
     /// ----------
     /// gamma, color, epsilon : bool, default False
     ///     Enable only the selected identity families and their prerequisite contractions.
+    /// contract : {"fully", "dots", "selected", "none"}, default "fully"
+    ///     Additional structural work: all contractions, all plus dot notation,
+    ///     only selected representations, or only identity prerequisites.
+    ///     Collecting a trace does not evaluate it or enable another identity family.
+    /// representations : sequence of Representation or RepresentationName, optional
+    ///     Required only for contract="selected"; an empty sequence permits no
+    ///     additional connections. Filters do not suppress identity prerequisites
+    ///     or intrinsic normalization already performed during construction.
     /// gamma_output : {"reduced", "chains"}, optional
     ///     Apply Clifford identities (default), or only collect Dirac chains.
     /// gamma_ordering : {"repeated_pairs", "canonical"}, optional
@@ -698,10 +706,11 @@ impl AliasedTensorExpression {
     ///
     /// Notes
     /// -----
-    /// Each enabled family includes its necessary contractions. Brackets are transparent
-    /// and global polynomial expansion is not required. Use contract() for structural
-    /// contractions independent of an algebra family. A capped result retains exact
-    /// unfinished work and can be reduced again.
+    /// Enabled identities and permitted structural work reach a shared fixed point.
+    /// Closed color deltas produce their dimension even when color identities are off.
+    /// Each enabled family includes its necessary contractions, including with
+    /// contract="none". Unrelated sums stay factored. A capped result retains exact
+    /// unfinished work and can be simplified again.
     ///
     /// Examples
     /// --------
@@ -713,13 +722,17 @@ impl AliasedTensorExpression {
     /// >>> result = expression.simplify_algebra(gamma=True)
     /// >>> result.to_expression().rank
     /// 2
-    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
         &self,
         gamma: bool,
         color: bool,
         epsilon: bool,
+        #[gen_stub(override_type(type_repr="typing.Literal['fully', 'dots', 'selected', 'none']", imports=("typing")))]
+        contract: &str,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
+        representations: Option<Vec<Bound<'_, PyAny>>>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['reduced', 'chains']]", imports=("typing")))]
         gamma_output: Option<&str>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['repeated_pairs', 'canonical']]", imports=("typing")))]
@@ -737,6 +750,8 @@ impl AliasedTensorExpression {
             gamma,
             color,
             epsilon,
+            contract,
+            representations,
             gamma_output,
             gamma_ordering,
             gamma_evaluate_traces,
