@@ -8,18 +8,17 @@
 # `... card.toml run all`; named generation/integration knobs can be overridden
 # with `-D name=value`, for example `run integrate -D n_start=81920`.
 
-# Higgs-aware metadata: full-UV generation passes for all 936 orientations.
+# Higgs-aware metadata with both LTD and CFF, full UV subtraction from 4D,
+# and the complete residue sum for each representation.
 # Exact coincident radial roots remain an evaluation limitation. Focused channels
 # improve selected corners but do not establish global finite variance; see
 # docs/products/gammaloop/content/sampling.typ and threshold-subtraction.typ.
 # From the repository root: gammaloop THIS_CARD run all
-# Selected orientation: gammaloop -s NEW_STATE THIS_CARD run generate_o0
 # Steering: run pilot -D mapping=power -D radial_power=2 -D workspace=NEW_WORKSPACE
-# Generation defaults to ALL orientations and clears any earlier restriction.
-# The explicit full sum avoids repeated per-orientation evaluator calls.
-# Use -D explicit_sum=false to retain individual-orientation diagnostics;
-# generate_o0..o3 set this automatically. A custom orientation_pattern needs it too.
-# Keep separate states for all/o0/o1/o2/o3. Compilation or sum changes need regeneration.
+# Generation clears any earlier orientation restriction. LTD and UV-from-4D
+# require the full sum; individual-orientation diagnostics use a separate card.
+# Regenerate existing CFF-only states before using this mixed stability stack.
+# Runtime tries Double LTD, Double CFF, Quad CFF, then the existing Arb rescue.
 # Integration presets default to 50 cores with 81920-point iterations; use
 # -D integration_cores=50 for longer runs and -D training_phase=imag to train Im.
 # Tune the radial scale with -D radial_scale=0.3 and compare independent pilot runs.
@@ -46,6 +45,7 @@ folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638_advanced_samplin
 name = "epem_a_tth_NNLO_GL638_advanced_sampling"
 
 [cli_settings.global.generation]
+three_dimensional_representations = ["ltd", "cff"]
 explicit_orientation_sum_only = true
 
 [cli_settings.global.generation.evaluator]
@@ -67,10 +67,11 @@ softct = false
 inner_products = true
 subtract_uv = true
 generate_integrated = true
-local_uv_cts_from_expanded_4d_integrands = false
+local_uv_cts_from_expanded_4d_integrands = true
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
+disable_integrated_ct = false
 check_esurface_at_generation = true
 esurface_existence_threshold = 1.0e-14
 skip_thresholds_that_are_cuts = true
@@ -94,8 +95,10 @@ commands = ["set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.16
 [[command_blocks]]
 name = "configure_generation"
 commands = ["""set global kv
-  global.generation.explicit_orientation_sum_only=$(explicit_sum:true)
-  global.generation.orientation_pattern.pat='$(orientation_pattern:null)'
+  global.generation.three_dimensional_representations='["ltd","cff"]'
+  global.generation.explicit_orientation_sum_only=true
+  global.generation.orientation_pattern.pat='null'
+  global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true
   global.generation.evaluator.compile=$(compile:false)
   global.generation.threshold_subtraction.esurface_existence_threshold=$(generation_threshold_tolerance:1e-14)
   global.n_cores.generate=$(generate_cores:4) global.n_cores.compile=$(generate_cores:4)
@@ -215,9 +218,10 @@ around = "lmb(6,12,13,14)"
   check_on_norm = $(stability_check_on_norm:false)
   rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
   levels = [
-    { precision = "Double", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
-    { precision = "Quad", required_precision_for_re = $(quad_precision:1e-10), required_precision_for_im = $(quad_precision:1e-10), escalate_for_large_weight_threshold = -1.0 },
-    { precision = "Arb", ecm_relative_tolerance_for_re = $(ecm_relative_tolerance_for_re:1e-100), ecm_relative_tolerance_for_im = 0.0, required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Double", three_dimensional_representation = "ltd", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
+    { precision = "Double", three_dimensional_representation = "cff", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
+    { precision = "Quad", three_dimensional_representation = "cff", required_precision_for_re = $(quad_precision:1e-10), required_precision_for_im = $(quad_precision:1e-10), escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", three_dimensional_representation = "cff", ecm_relative_tolerance_for_re = $(ecm_relative_tolerance_for_re:1e-100), ecm_relative_tolerance_for_im = 0.0, required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
   ]
 '"""]
 
@@ -242,22 +246,6 @@ commands = [
 [[command_blocks]]
 name = "generate"
 commands = ["run generate_diagrams generate_integrands"]
-
-[[command_blocks]]
-name = "generate_o0"
-commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)'"]
-
-[[command_blocks]]
-name = "generate_o1"
-commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,-,-)'"]
-
-[[command_blocks]]
-name = "generate_o2"
-commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,+)'"]
-
-[[command_blocks]]
-name = "generate_o3"
-commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,-)'"]
 
 [[command_blocks]]
 name = "integrate_common"

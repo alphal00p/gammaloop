@@ -96,6 +96,9 @@ but it is not an API or freshness authority.
 == Raised-energy integration updates
 
 The numerical-stability panel includes the median and processed percentage for each precision.
+The startup message lists the configured precision and representation at every stability level.
+Per-sample records retain each attempt separately, including consecutive Double/LTD and
+Double/CFF attempts; dashboard histograms continue to aggregate by precision.
 An interrupted run may write diagnostic stability and observable previews, but resume state still
 represents the last completed iteration. Integration workspace manifests carry an explicit version;
 resume and summary reject an unsupported version before decoding state. Read-only sessions use

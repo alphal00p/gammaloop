@@ -136,6 +136,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let scope = Atom::var(symbol!("uv_definition_test::scope"));
     let body = (&x + &y).pow(3) * (&x + Atom::num(1));
     let entry = Arc::new(FnMapEntry {
+        inlining: Default::default(),
         lhs: function!(family, &scope, &x),
         rhs: body.clone(),
         args: vec![parameter.into()],
@@ -221,6 +222,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let scope = Atom::var(symbol!("uv_definition_test::conflict_scope"));
     let call = function!(family, &scope);
     let entry = Arc::new(FnMapEntry {
+        inlining: Default::default(),
         lhs: call.clone(),
         rhs: Atom::num(2),
         args: Vec::new(),
@@ -280,6 +282,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
         (scope.clone(), vec![z.clone(), z]),
     ] {
         let entry = Arc::new(FnMapEntry {
+            inlining: Default::default(),
             lhs: family.call_args(std::iter::once(tag.clone()).chain(parameters.iter().cloned())),
             rhs: parameters[0].clone(),
             args: parameters
@@ -294,6 +297,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
     // formal key leaves that fixed tag intact.
     let parameter = function!(head, &scope, 0);
     let entry = Arc::new(FnMapEntry {
+        inlining: Default::default(),
         lhs: function!(family, &scope, &parameter),
         rhs: parameter.clone(),
         args: vec![Indeterminate::try_from(parameter).unwrap()],
@@ -334,14 +338,15 @@ fn scalar_bubble_root_integrand_reference(
     let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
-    let production = amplitude_graph
-        .derived_data
-        .cff_expression
-        .as_ref()
-        .expect("cff_expression should have been created");
+    let production = &amplitude_graph.derived_data.representations
+        [&three_dimensional_reps::generation::RepresentationMode::Cff]
+        .expression;
     let options = amplitude_graph
         .graph
-        .production_cff_3d_expression_options(generation_settings)
+        .production_3d_expression_options(
+            generation_settings,
+            generation_settings.three_dimensional_representations[0],
+        )
         .expect("the reference retains its generated numerator-capacity options");
     forests
         .compute(
@@ -354,6 +359,7 @@ fn scalar_bubble_root_integrand_reference(
                 generation_settings.explicit_orientation_sum_only,
             ),
             &reference_settings.uv,
+            true,
         )
         .unwrap();
 
@@ -679,10 +685,9 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
 
     amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
-        &amp.derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
+        &amp.derived_data.representations
+            [&three_dimensional_reps::generation::RepresentationMode::Cff]
+            .expression
             .expression
             .orientations[OrientationID(0)],
     );
@@ -700,8 +705,12 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
         ..Default::default()
     };
 
-    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
-        .unwrap();
+    amp.build_integrands(
+        &settings,
+        crate::utils::vakint().unwrap(),
+        &mut Default::default(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -726,10 +735,9 @@ fn scalars_integrated_banana_hedge_poset() {
 
     amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
-        &amp.derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
+        &amp.derived_data.representations
+            [&three_dimensional_reps::generation::RepresentationMode::Cff]
+            .expression
             .expression
             .orientations[OrientationID(0)],
     );
@@ -747,8 +755,12 @@ fn scalars_integrated_banana_hedge_poset() {
         ..Default::default()
     };
 
-    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
-        .unwrap();
+    amp.build_integrands(
+        &settings,
+        crate::utils::vakint().unwrap(),
+        &mut Default::default(),
+    )
+    .unwrap();
 }
 
 /*
@@ -1860,7 +1872,6 @@ General:
   load_compiled_cff: true
   load_compiled_numerator: true
   load_compiled_separate_orientations: false
-  use_ltd: false
 integrand:
   type: gamma_loop
 integrator:
@@ -2071,13 +2082,13 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
             ..Default::default()
         };
         let mut bare = AmplitudeGraph::new(convergent.clone());
-        assert!(bare.derived_data.cff_expression.is_none());
+        assert!(bare.derived_data.representations.is_empty());
         let part = bare.renormalization_part(&settings).unwrap();
         assert!(!part.expression.is_zero());
-        assert!(bare.derived_data.cff_expression.is_none());
+        assert!(bare.derived_data.representations.is_empty());
         let mut stored = AmplitudeGraph::new(convergent.clone());
         stored.generate_cff(&GenerationSettings::default()).unwrap();
-        assert!(stored.derived_data.cff_expression.is_some());
+        assert!(!stored.derived_data.representations.is_empty());
         let with_cff = stored.renormalization_part(&settings).unwrap();
         assert_eq!(
             part.expression.collect_factors(),
@@ -2090,14 +2101,14 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         }
 
         let mut unsupported = AmplitudeGraph::new(divergent.clone());
-        assert!(unsupported.derived_data.cff_expression.is_none());
+        assert!(unsupported.derived_data.representations.is_empty());
         let error = unsupported
             .renormalization_part(&settings)
             .unwrap_err()
             .to_string();
         assert!(error.contains("DOD_4D=3"), "{error}");
         assert!(error.contains("DOD_E=0"), "{error}");
-        assert!(unsupported.derived_data.cff_expression.is_none());
+        assert!(unsupported.derived_data.representations.is_empty());
     }
 }
 
@@ -2269,10 +2280,9 @@ mod failing {
         amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
-                &amp.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
+                &amp.derived_data.representations
+                    [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                    .expression
                     .expression
                     .orientations[OrientationID(0)],
             ),
@@ -2285,9 +2295,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(&set, vk, &mut Default::default())
+            .unwrap();
 
-        println!("{}", amp.derived_data.all_mighty_integrand);
+        println!(
+            "{}",
+            amp.derived_data.representations
+                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                .all_mighty_integrand
+        );
     }
 
     #[test]
@@ -2311,10 +2327,9 @@ mod failing {
         amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
-                &amp.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
+                &amp.derived_data.representations
+                    [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                    .expression
                     .expression
                     .orientations[OrientationID(0)],
             ),
@@ -2327,9 +2342,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(&set, vk, &mut Default::default())
+            .unwrap();
 
-        println!("{}", amp.derived_data.all_mighty_integrand);
+        println!(
+            "{}",
+            amp.derived_data.representations
+                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                .all_mighty_integrand
+        );
     }
 
     #[test]
@@ -2476,7 +2497,10 @@ mod failing {
 
         println!(
             "{}",
-            amp.graphs[0].derived_data.resolved_integrand().unwrap()
+            amp.graphs[0].derived_data.representations
+                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                .resolved_integrand()
+                .unwrap()
         );
 
         for g in amp.graphs {
@@ -2484,7 +2508,10 @@ mod failing {
 
             g.graph.all_limits(
                 &g.graph.full_filter(),
-                &g.derived_data.resolved_integrand().unwrap(),
+                &g.derived_data.representations
+                    [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                    .resolved_integrand()
+                    .unwrap(),
                 symbol!("lambd"),
                 &g.graph.loop_momentum_basis,
             );

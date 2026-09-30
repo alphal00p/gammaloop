@@ -143,7 +143,7 @@ fn build_amplitude(
         .unwrap();
     let evaluator_count = reports
         .iter()
-        .map(|report| report.stats.evaluator_count)
+        .map(|report| report.stats.timings.evaluator_count)
         .sum();
     amplitude
         .integrand
@@ -163,8 +163,8 @@ fn assert_amplitude_legacy_storage(amplitude: &Amplitude) -> usize {
             .is_some_and(|resolved| resolved.legacy_equivalent)
     );
     assert!(
-        !amplitude.graphs[0]
-            .derived_data
+        !amplitude.graphs[0].derived_data.representations
+            [&three_dimensional_reps::RepresentationMode::Cff]
             .threshold_counterterms
             .is_empty(),
         "the amplitude comparison must exercise homogeneous threshold-counterterm storage",
@@ -349,7 +349,7 @@ fn build_cross_section(
         .unwrap();
     let evaluator_count = reports
         .iter()
-        .map(|report| report.stats.evaluator_count)
+        .map(|report| report.stats.timings.evaluator_count)
         .sum();
     cross_section
         .integrand

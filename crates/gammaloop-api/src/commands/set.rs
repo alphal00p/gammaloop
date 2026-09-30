@@ -1416,14 +1416,15 @@ lmb_channel_weight = "map_density"
             );
             std::fs::remove_file(&file).unwrap();
             let mut expected = settings.clone();
-            expected.sampling =
-                toml::from_str("default_channel_selection = ['auto:lmb']").unwrap();
-            expected.model.external_parameters.insert(
-                "mass_scalar_2".to_string(),
-                (F(3.0), F(1.0)),
-            );
+            expected.sampling = toml::from_str("default_channel_selection = ['auto:lmb']").unwrap();
+            expected
+                .model
+                .external_parameters
+                .insert("mass_scalar_2".to_string(), (F(3.0), F(1.0)));
             assert_eq!(result.unwrap(), expected);
-            assert!(super::merge_runtime_settings_input(&settings, &SetArgs::File { file }).is_err());
+            assert!(
+                super::merge_runtime_settings_input(&settings, &SetArgs::File { file }).is_err()
+            );
         }
     }
 

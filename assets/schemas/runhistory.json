@@ -4,15 +4,18 @@
   "type": "object",
   "properties": {
     "cli_settings": {
+      "description": "State and global CLI settings captured with this run history.",
       "$ref": "#/$defs/CLISettings"
     },
     "command_blocks": {
+      "description": "Named reusable command sequences declared by run cards.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/CommandsBlock"
       }
     },
     "commands": {
+      "description": "Ordered top-level commands persisted for replay.",
       "type": "array",
       "default": [],
       "items": {
@@ -20,6 +23,7 @@
       }
     },
     "default_runtime_settings": {
+      "description": "Default runtime settings restored before replaying the recorded commands.",
       "$ref": "#/$defs/RuntimeSettings"
     }
   },
@@ -29,6 +33,7 @@
       "type": "object",
       "properties": {
         "susbstitute_masters": {
+          "description": "Substitute AlphaLoop master integrals by their registered expressions.",
           "type": "boolean"
         }
       },
@@ -38,7 +43,7 @@
       "type": "object",
       "properties": {
         "approach_axes": {
-          "description": "Direction vector for one approach axis, as comma-separated components",
+          "description": "Direction vector in the same coordinate layout and dimension as `--point`",
           "type": "array",
           "items": {
             "type": "string"
@@ -98,7 +103,7 @@
           "default": 1e-6
         },
         "momentum_space": {
-          "description": "Interpret point as momentum-space coordinates",
+          "description": "Interpret `--point` and every axis as spatial loop-momentum triplets",
           "type": "boolean"
         },
         "n_cores": {
@@ -126,7 +131,7 @@
           "minimum": 0
         },
         "output_results": {
-          "description": "Path to the JSON output file",
+          "description": "Write sampled approach points and run metadata to this JSON file",
           "type": [
             "string",
             "null"
@@ -138,7 +143,7 @@
           "default": "t"
         },
         "point": {
-          "description": "The midpoint to inspect (x y) or (p0 px ...)",
+          "description": "Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`",
           "type": "array",
           "items": {
             "type": "number",
@@ -146,7 +151,7 @@
           }
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -162,7 +167,7 @@
           "default": false
         },
         "use_arb_prec": {
-          "description": "Evaluate in f128 precision",
+          "description": "Force arbitrary-precision (Arb) internal evaluation; results remain f64",
           "type": "boolean"
         }
       },
@@ -290,18 +295,22 @@
       "type": "object",
       "properties": {
         "json_out": {
+          "description": "Override the output JSON path for the oriented expression.",
           "type": [
             "string",
             "null"
           ]
         },
         "no_color": {
+          "description": "Disable ANSI colors in the formatted output.",
           "type": "boolean"
         },
         "no_pretty": {
+          "description": "Suppress the formatted expression summary unless orientation details are requested.",
           "type": "boolean"
         },
         "no_save_json": {
+          "description": "Skip saving the oriented expression and workspace pointer.",
           "type": "boolean"
         },
         "numerator_samples_normalization": {
@@ -316,20 +325,22 @@
           ]
         },
         "representation": {
-          "description": "Three-dimensional representation to build. LTD is reserved but not implemented yet.",
-          "$ref": "#/$defs/CliRepresentationMode",
+          "description": "Three-dimensional representation to build.",
+          "$ref": "#/$defs/RepresentationMode",
           "default": "cff"
         },
         "selection": {
           "$ref": "#/$defs/GraphSelectorArgs"
         },
         "show_details_for_orientation": {
+          "description": "Show a residue/orientation by row id or label, optionally suffixed with `|N<map>|<variant>`.",
           "type": [
             "string",
             "null"
           ]
         },
         "workspace_path": {
+          "description": "Directory for generated expression artifacts and the latest-expression pointer.",
           "type": [
             "string",
             "null"
@@ -347,15 +358,19 @@
       "type": "object",
       "properties": {
         "global": {
+          "description": "Generation, logging, and parallelization settings shared by the CLI session.",
           "$ref": "#/$defs/GlobalSettings"
         },
         "override_state": {
+          "description": "Permit generated artifacts to replace compatible files in the active state folder.",
           "type": "boolean"
         },
         "state": {
+          "description": "Location and optional display name of the persistent GammaLoop state.",
           "$ref": "#/$defs/StateSettings"
         },
         "try_strings": {
+          "description": "Serialize replayable commands as compact strings when their structured form permits it.",
           "type": "boolean"
         }
       },
@@ -365,6 +380,7 @@
       "type": "object",
       "properties": {
         "external_pdg_set": {
+          "description": "Signed PDG identifiers on the counterterm's external boundary.",
           "type": "array",
           "items": {
             "type": "integer",
@@ -373,6 +389,7 @@
           "uniqueItems": true
         },
         "internal_pdg_set": {
+          "description": "Optional internal PDG identifiers; omitting them makes the rule match any internal set.",
           "type": [
             "array",
             "null"
@@ -390,9 +407,11 @@
       "type": "object",
       "properties": {
         "ct_identifier": {
+          "description": "Particle-content pattern that selects the counterterms to which this rule applies.",
           "$ref": "#/$defs/CTIdentifier"
         },
         "prescription": {
+          "description": "Approximation that replaces the default prescription for matching counterterms.",
           "$ref": "#/$defs/ApproximationType"
         }
       },
@@ -410,13 +429,6 @@
         "MForBeyondQuadraticOnly"
       ]
     },
-    "CliRepresentationMode": {
-      "type": "string",
-      "enum": [
-        "cff",
-        "ltd"
-      ]
-    },
     "CommandHistory": {
       "description": "A raw command string (including scoped templates) or a structured command.",
       "anyOf": [
@@ -431,12 +443,7 @@
     "Commands": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "FinishCommandsBlock"
-          ]
-        },
-        {
+          "description": "Inspect models, processes, integrands, settings, and named session data.",
           "type": "object",
           "properties": {
             "Display": {
@@ -449,6 +456,7 @@
           ]
         },
         {
+          "description": "Copy generated data to a new process or integrand name.",
           "type": "object",
           "properties": {
             "Duplicate": {
@@ -461,6 +469,7 @@
           ]
         },
         {
+          "description": "Change global, runtime, model, or process settings.",
           "type": "object",
           "properties": {
             "Set": {
@@ -473,6 +482,7 @@
           ]
         },
         {
+          "description": "Import models or previously generated graphs into the active state.",
           "type": "object",
           "properties": {
             "Import": {
@@ -485,6 +495,7 @@
           ]
         },
         {
+          "description": "Export graph data, standalone evaluators, schemas, or the current state.",
           "type": "object",
           "properties": {
             "Save": {
@@ -497,6 +508,7 @@
           ]
         },
         {
+          "description": "Execute a stored command block or an inline command list.",
           "type": "object",
           "properties": {
             "Run": {
@@ -509,6 +521,7 @@
           ]
         },
         {
+          "description": "Begin recording subsequent commands under a reusable block name.",
           "type": "object",
           "properties": {
             "StartCommandsBlock": {
@@ -521,6 +534,12 @@
           ]
         },
         {
+          "description": "Stop recording commands and store the active command block.",
+          "type": "string",
+          "const": "FinishCommandsBlock"
+        },
+        {
+          "description": "Remove generated processes from the active state.",
           "type": "object",
           "properties": {
             "Remove": {
@@ -533,6 +552,7 @@
           ]
         },
         {
+          "description": "Integrate one or more generated process integrands.",
           "type": "object",
           "properties": {
             "Integrate": {
@@ -557,6 +577,7 @@
           ]
         },
         {
+          "description": "Select graph groups and write the selection to a new process or integrand.",
           "type": "object",
           "properties": {
             "Select": {
@@ -569,7 +590,7 @@
           ]
         },
         {
-          "description": "Quit gammaloop",
+          "description": "End the interactive GammaLoop session without executing further commands.",
           "type": "object",
           "properties": {
             "Quit": {
@@ -582,7 +603,7 @@
           ]
         },
         {
-          "description": "Inspect a single phase‑space point / momentum configuration",
+          "description": "Inspect integrand contributions at one phase-space point or momentum configuration.",
           "type": "object",
           "properties": {
             "Inspect": {
@@ -595,7 +616,7 @@
           ]
         },
         {
-          "description": "Approach a phase-space point along one or more axes",
+          "description": "Sample an integrand while approaching a phase-space point along selected scaling axes.",
           "type": "object",
           "properties": {
             "Approach": {
@@ -608,6 +629,7 @@
           ]
         },
         {
+          "description": "Evaluate a vacuum amplitude analytically or numerically with Vakint.",
           "type": "object",
           "properties": {
             "Evaluate": {
@@ -620,6 +642,7 @@
           ]
         },
         {
+          "description": "Compute and export ultraviolet renormalization contributions for an amplitude.",
           "type": "object",
           "properties": {
             "Renormalize": {
@@ -632,7 +655,7 @@
           ]
         },
         {
-          "description": "Benchmark raw integrand evaluation speed",
+          "description": "Measure evaluation throughput at a fixed point over a target duration.",
           "type": "object",
           "properties": {
             "Bench": {
@@ -645,6 +668,7 @@
           ]
         },
         {
+          "description": "Profile ultraviolet or infrared scaling limits of a generated integrand.",
           "type": "object",
           "properties": {
             "Profile": {
@@ -657,6 +681,7 @@
           ]
         },
         {
+          "description": "Validate a graph or build its diagnostic three-dimensional energy representation.",
           "type": "object",
           "properties": {
             "ThreeDRep": {
@@ -669,22 +694,26 @@
           ]
         },
         {
-          "description": "HPC batch evaluation branch",
+          "description": "Evaluate a process-definition file against an HPC batch input and write named results.",
           "type": "object",
           "properties": {
             "Batch": {
               "type": "object",
               "properties": {
                 "batch_input_file": {
+                  "description": "Batch input file containing the evaluation points or jobs to execute.",
                   "type": "string"
                 },
                 "name": {
+                  "description": "Logical batch name used in generated output metadata.",
                   "type": "string"
                 },
                 "output_name": {
+                  "description": "Base name assigned to the batch result output.",
                   "type": "string"
                 },
                 "process_file": {
+                  "description": "Process-definition file used to construct the batch evaluator.",
                   "type": "string"
                 }
               },
@@ -702,6 +731,7 @@
           ]
         },
         {
+          "description": "Run an operating-system shell command from the interactive GammaLoop session.",
           "type": "object",
           "properties": {
             "Shell": {
@@ -920,7 +950,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "lmb_channel_ids"
+              "const": "sampling_channel_ids"
             }
           },
           "required": [
@@ -1003,7 +1033,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "lmb_channel_edge_ids"
+              "const": "sampling_channel_edge_ids"
             }
           },
           "required": [
@@ -1070,12 +1100,7 @@
     "Display": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "Processes"
-          ]
-        },
-        {
+          "description": "Show model particles, parameters, couplings, and vertices for the selected context.",
           "type": "object",
           "properties": {
             "Model": {
@@ -1089,7 +1114,7 @@
                   ]
                 },
                 "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
                   "anyOf": [
                     {
                       "$ref": "#/$defs/ProcessRef"
@@ -1100,18 +1125,23 @@
                   ]
                 },
                 "show_all": {
+                  "description": "Include particles, parameters, couplings, and vertices in one report.",
                   "type": "boolean"
                 },
                 "show_couplings": {
+                  "description": "Include the model's coupling-order definitions and coupling values.",
                   "type": "boolean"
                 },
                 "show_parameters": {
+                  "description": "Include external and derived model parameters.",
                   "type": "boolean"
                 },
                 "show_particles": {
+                  "description": "Include the model's particle definitions.",
                   "type": "boolean"
                 },
                 "show_vertices": {
+                  "description": "Include interaction vertices from the active model.",
                   "type": "boolean"
                 }
               },
@@ -1130,6 +1160,12 @@
           ]
         },
         {
+          "description": "List processes currently stored in the active state.",
+          "type": "string",
+          "const": "Processes"
+        },
+        {
+          "description": "Show stored representations, graph groups, generation timings, and selected detail tables.",
           "type": "object",
           "properties": {
             "Integrands": {
@@ -1162,10 +1198,21 @@
                   ]
                 },
                 "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
                   "anyOf": [
                     {
                       "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "show_sampling": {
+                  "description": "Show only resolved sampling channels; omit --graph to include all master graphs.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/MetadataDisplayFormat"
                     },
                     {
                       "type": "null"
@@ -1176,6 +1223,17 @@
                   "description": "Show full threshold-counterterm multiplier expressions and flags",
                   "type": "boolean",
                   "default": false
+                },
+                "show_threshold_subtraction": {
+                  "description": "Show only generation-time threshold metadata; TOML requires one master graph.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/MetadataDisplayFormat"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -1190,6 +1248,7 @@
           ]
         },
         {
+          "description": "List configured named quantities, or inspect one quantity in a selected process.",
           "type": "object",
           "properties": {
             "Quantities": {
@@ -1210,6 +1269,7 @@
           ]
         },
         {
+          "description": "List configured observables, or inspect one observable in a selected process.",
           "type": "object",
           "properties": {
             "Observables": {
@@ -1230,6 +1290,7 @@
           ]
         },
         {
+          "description": "List configured event selectors, or inspect one selector in a selected process.",
           "type": "object",
           "properties": {
             "Selectors": {
@@ -1250,12 +1311,14 @@
           ]
         },
         {
+          "description": "Show one stored command block, or list every block when no name is supplied.",
           "type": "object",
           "properties": {
             "CommandBlock": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Stored command-block name; omit it to list all available blocks.",
                   "type": [
                     "string",
                     "null"
@@ -1270,6 +1333,7 @@
           ]
         },
         {
+          "description": "Show effective global, default-runtime, or process-specific settings.",
           "type": "object",
           "properties": {
             "Settings": {
@@ -1295,6 +1359,7 @@
       "type": "object",
       "properties": {
         "name": {
+          "description": "Named quantity, observable, or selector; omit it to list the selected category.",
           "type": [
             "string",
             "null"
@@ -1311,6 +1376,7 @@
     "DisplaySettingsTarget": {
       "oneOf": [
         {
+          "description": "Show effective global generation, logging, and parallelization settings.",
           "type": "object",
           "properties": {
             "Global": {
@@ -1332,6 +1398,7 @@
           ]
         },
         {
+          "description": "Show the default runtime settings inherited by newly generated integrands.",
           "type": "object",
           "properties": {
             "DefaultRuntime": {
@@ -1353,6 +1420,7 @@
           ]
         },
         {
+          "description": "Show effective settings for one generated process or integrand.",
           "type": "object",
           "properties": {
             "Process": {
@@ -1384,6 +1452,7 @@
     "Duplicate": {
       "oneOf": [
         {
+          "description": "Copy one generated integrand and its process context under new names.",
           "type": "object",
           "properties": {
             "Integrand": {
@@ -1416,7 +1485,7 @@
           "type": "string"
         },
         "process": {
-          "description": "Source process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Source process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -1464,7 +1533,7 @@
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -1475,7 +1544,7 @@
           ]
         },
         "result_path": {
-          "description": "The path to store results in",
+          "description": "Write the canonical symbolic evaluation result to this TOML file",
           "type": [
             "string",
             "null"
@@ -1499,14 +1568,17 @@
       "type": "object",
       "properties": {
         "abort_level": {
+          "description": "Optimization stage at which evaluator construction aborts for diagnostic isolation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "compile": {
+          "description": "Compile the lowered evaluator using the configured generation compilation backend.",
           "type": "boolean"
         },
         "cpe_iterations": {
+          "description": "Optional number of common-pair-elimination optimization passes.",
           "type": [
             "integer",
             "null"
@@ -1515,43 +1587,53 @@
           "minimum": 0
         },
         "direct_translation": {
+          "description": "Translate compatible symbolic expressions directly into Spenso networks.",
           "type": "boolean"
         },
         "do_algebra": {
+          "description": "Perform symbolic tensor and scalar algebra before lowering to an evaluator.",
           "type": "boolean"
         },
         "do_fn_map_replacements": {
+          "description": "Apply function-map replacements before numerical lowering.",
           "type": "boolean"
         },
         "horner_iterations": {
+          "description": "Number of Horner-scheme optimization passes applied to scalar expressions.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "iterative_orientation_optimization": {
+          "description": "Re-optimize orientation expressions iteratively while building the evaluator.",
           "type": "boolean"
         },
         "max_common_pair_cache_entries": {
+          "description": "Maximum cached candidate pairs during common-pair elimination.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "max_common_pair_distance": {
+          "description": "Maximum expression-tree distance considered during common-pair elimination.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "max_horner_scheme_variables": {
+          "description": "Maximum variable count for attempting a Horner-scheme optimization.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_cores": {
+          "description": "Worker threads used while constructing one evaluator.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "spenso_execution_mode": {
+          "description": "Spenso execution and contraction modes used by the lowered tensor network.",
           "type": "array",
           "maxItems": 2,
           "minItems": 2,
@@ -1565,18 +1647,23 @@
           ]
         },
         "store_atom": {
+          "description": "Retain the intermediate Symbolica atom alongside the executable evaluator.",
           "type": "boolean"
         },
         "summed": {
+          "description": "Build one evaluator for the sum of all contributions instead of separate evaluators.",
           "type": "boolean"
         },
         "summed_function_map": {
+          "description": "Represent a summed evaluator through a shared Symbolica function map.",
           "type": "boolean"
         },
         "tensor_network_contraction_order": {
+          "description": "Heuristic used to order tensor-network contractions.",
           "$ref": "#/$defs/TensorNetworkContractionOrder"
         },
         "verbose": {
+          "description": "Emit detailed evaluator-construction diagnostics.",
           "type": "boolean"
         }
       }
@@ -1608,21 +1695,25 @@
     "Externals": {
       "oneOf": [
         {
+          "description": "Use one fixed list of external momenta and helicities for every evaluation.",
           "type": "object",
           "properties": {
             "data": {
               "type": "object",
               "properties": {
                 "helicities": {
+                  "description": "Helicity assigned to each external particle in process order.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/Helicity"
                   }
                 },
                 "improvement_settings": {
+                  "description": "Optional on-shell phase-space improvement applied before evaluation.",
                   "$ref": "#/$defs/PhaseSpaceImprovementSettings"
                 },
                 "momenta": {
+                  "description": "External four-momenta; exactly one entry may be marked dependent.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/ExternalMomenta"
@@ -1656,9 +1747,11 @@
       "type": "object",
       "properties": {
         "expand_masters": {
+          "description": "Expand FMFT master-integral abbreviations before returning the result.",
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "description": "Substitute FMFT master integrals by their known analytic expressions.",
           "type": "boolean"
         }
       },
@@ -1668,6 +1761,7 @@
       "type": "object",
       "properties": {
         "gamma_simplification_closure_check": {
+          "description": "Check that gamma-matrix simplification is closed under the generated rewrite sequence.",
           "type": "boolean"
         }
       },
@@ -1698,33 +1792,61 @@
       "type": "object",
       "properties": {
         "compilation_mode": {
+          "description": "Evaluator backend: Symbolica JIT, generated C++, or generated assembly.",
           "$ref": "#/$defs/CompilationMode"
         },
         "compiler": {
+          "description": "External C++ compiler executable used by C++ and assembly modes.",
           "type": "string"
         },
         "custom": {
+          "description": "Additional command-line arguments passed verbatim to the external compiler.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "fast_math": {
+          "description": "Permit algebraic floating-point transformations that ignore strict IEEE ordering.",
           "type": "boolean"
         },
         "optimization_level": {
+          "description": "Optimization level passed to the selected evaluator compiler.",
           "$ref": "#/$defs/CompilationOptimizationLevel"
         },
         "unsafe_math": {
+          "description": "Permit compiler math optimizations that may change exceptional-value behavior.",
           "type": "boolean"
         }
       },
       "additionalProperties": false
     },
+    "GaussianReferenceFunction": {
+      "description": "A normalized isotropic Gaussian on the raw loop-momentum coordinates.\n\n`center` is flattened as `(p_0x, p_0y, p_0z, p_1x, ...)`.  The function is\nnormalized with respect to the unconstrained spatial loop-momentum volume,\nmaking it suitable for testing a real process parameterization independently\nof its physical numerator and denominator.",
+      "type": "object",
+      "properties": {
+        "center": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "width": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "width"
+      ]
+    },
     "GeneralSettings": {
       "type": "object",
       "properties": {
         "additional_param_values": {
+          "description": "Values assigned, in order, to extra symbolic parameters expected by the evaluator.",
           "type": "array",
           "items": {
             "type": "number",
@@ -1732,56 +1854,66 @@
           }
         },
         "debug_cache": {
+          "description": "Emit additional cache consistency diagnostics while evaluating samples.",
           "type": "boolean"
         },
         "disable_flux_factor": {
+          "description": "Omit the incoming-state flux factor from the returned integrand value.",
           "type": "boolean"
         },
         "enable_cache": {
+          "description": "Cache reusable evaluation data between phase-space samples.",
           "type": "boolean"
         },
         "evaluator_method": {
+          "description": "Evaluator backend used for generated integrands.",
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
+          "description": "Return generated events in addition to accumulating integration statistics.",
           "type": "boolean"
         },
         "integral_unit": {
+          "description": "Unit used to report integrated cross-sections; `auto` selects picobarns for scattering.",
           "$ref": "#/$defs/IntegralUnit"
         },
         "load_compiled_cff": {
+          "description": "Load a previously compiled causal-flow function instead of rebuilding it for this run.",
           "type": "boolean"
         },
         "m_uv": {
+          "description": "Ultraviolet reference mass used by local counterterms, in the model's energy units.",
           "type": "number",
           "format": "double"
         },
         "mu_r": {
+          "description": "Renormalization scale used by running parameters and scale-dependent terms.",
           "type": "number",
           "format": "double"
         },
         "numerator_sampling_scale": {
+          "description": "Shared energy scale for numerator reconstruction when enabled during generation.",
           "type": "number",
           "format": "double"
         },
         "orientation_pat": {
+          "description": "Optional orientation pattern restricting which causal-flow orientations are evaluated.",
           "$ref": "#/$defs/OrientationPattern"
         },
         "renormalization_localization_scale": {
+          "description": "Localization scale applied to ultraviolet counterterms, in the model's energy units.",
           "type": "number",
           "format": "double"
         },
         "store_additional_weights_in_event": {
-          "type": "boolean"
-        },
-        "use_ltd": {
+          "description": "Persist every configured additional weight on each generated event.",
           "type": "boolean"
         }
       },
       "additionalProperties": false
     },
     "Generate": {
-      "description": "Generate integrands",
+      "description": "Generate cross-section or amplitude integrands from a process specification.",
       "type": "object",
       "properties": {
         "keep_sources": {
@@ -1790,6 +1922,7 @@
           "default": false
         },
         "mode": {
+          "description": "Selects cross-section, amplitude, or existing-process generation; when\nomitted, generates all integrands in the active state.",
           "anyOf": [
             {
               "$ref": "#/$defs/GenerateCmd"
@@ -1802,10 +1935,10 @@
       }
     },
     "GenerateCmd": {
-      "description": "Generate integrands",
+      "description": "Select cross-section, amplitude, or existing-process integrand generation.",
       "oneOf": [
         {
-          "description": "Cross-section (forward-scattering) generation",
+          "description": "Generate a cross-section integrand through the forward-scattering construction.",
           "type": "object",
           "properties": {
             "Xs": {
@@ -1818,7 +1951,7 @@
           ]
         },
         {
-          "description": "Amplitude generation",
+          "description": "Generate an amplitude integrand for the supplied process specification.",
           "type": "object",
           "properties": {
             "Amp": {
@@ -1831,7 +1964,7 @@
           ]
         },
         {
-          "description": "Reuse an already generated process",
+          "description": "Create another integrand from an existing process without regenerating its graphs.",
           "type": "object",
           "properties": {
             "Existing": {
@@ -1848,19 +1981,28 @@
     "GenerationSettings": {
       "type": "object",
       "properties": {
+        "three_dimensional_representations": {
+          "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
+          "$ref": "#/$defs/ThreeDRepresentationSelection"
+        },
         "compile": {
+          "description": "Code-generation backend, compiler, and optimization flags.",
           "$ref": "#/$defs/GammaloopCompileOptions"
         },
         "evaluator": {
+          "description": "Symbolic simplification, contraction, optimization, and compilation controls for evaluators.",
           "$ref": "#/$defs/EvaluatorSettings"
         },
         "explicit_orientation_sum_only": {
+          "description": "Sum all generated residue branches explicitly, removing runtime orientation selectors.",
           "type": "boolean"
         },
         "feyngen": {
+          "description": "Feynman-graph generation checks and diagnostics.",
           "$ref": "#/$defs/FeyGenSettings"
         },
         "force_cuts": {
+          "description": "Explicit particle-name sets forced to define graph cuts.",
           "type": "array",
           "items": {
             "type": "array",
@@ -1870,24 +2012,31 @@
           }
         },
         "orientation_pattern": {
+          "description": "Optional causal-orientation pattern applied during generation.",
           "$ref": "#/$defs/OrientationPattern"
         },
         "override_lmb_heuristics": {
+          "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
           "type": "boolean"
         },
         "threshold_subtraction": {
+          "description": "Generation-time selection of local threshold counterterms.",
           "$ref": "#/$defs/ThresholdSubtractionSettings"
         },
         "tropical_subgraph_table": {
+          "description": "Controls construction of tropical subgraph power-counting tables.",
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
         },
         "uniform_numerator_sampling_scale": {
+          "description": "Choose which numerator-energy reconstructions use the shared runtime sampling scale.",
           "$ref": "#/$defs/UniformNumeratorSamplingScale"
         },
         "uv": {
+          "description": "Ultraviolet counterterm generation, prescription, and Vakint backend settings.",
           "$ref": "#/$defs/UVgenerationSettings"
         },
         "vector_polarization_sum_gauge": {
+          "description": "Gauge used when summing external vector-particle polarizations.",
           "$ref": "#/$defs/VectorPolarizationSumGauge"
         }
       },
@@ -1897,18 +2046,23 @@
       "type": "object",
       "properties": {
         "display_directive": {
+          "description": "Tracing filter applied to terminal output shown by the interactive session.",
           "type": "string"
         },
         "generation": {
+          "description": "Diagram, numerator, counterterm, evaluator, and compilation settings used during generation.",
           "$ref": "#/$defs/GenerationSettings"
         },
         "log_style": {
+          "description": "Formatting choices shared by terminal and file tracing subscribers.",
           "$ref": "#/$defs/LogStyle"
         },
         "logfile_directive": {
+          "description": "Tracing filter applied to the optional log-file sink; `off` disables that sink.",
           "type": "string"
         },
         "n_cores": {
+          "description": "Per-stage worker counts for diagram generation, evaluator construction, compilation, and integration.",
           "$ref": "#/$defs/Parallelisation"
         }
       },
@@ -1966,12 +2120,15 @@
       "type": "object",
       "properties": {
         "enabled_dampening": {
+          "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
           "type": "boolean"
         },
         "function": {
+          "description": "Functional form of the counterterm damping profile.",
           "$ref": "#/$defs/HFunction"
         },
         "power": {
+          "description": "Optional polynomial power overriding the profile's built-in choice.",
           "type": [
             "integer",
             "null"
@@ -1980,22 +2137,12 @@
           "minimum": 0
         },
         "sigma": {
+          "description": "Characteristic width of the damping profile.",
           "type": "number",
           "format": "double"
         }
       },
       "additionalProperties": false
-    },
-    "HFunctionTestSettings": {
-      "type": "object",
-      "properties": {
-        "h_function": {
-          "$ref": "#/$defs/HFunctionSettings"
-        }
-      },
-      "required": [
-        "h_function"
-      ]
     },
     "Helicity": {
       "description": "Helicity input. Use -1, 0, or 1 for fixed helicities; or use a string for summed modes.",
@@ -2034,6 +2181,7 @@
     "Import": {
       "oneOf": [
         {
+          "description": "Load a UFO model and make it the active model for subsequent generation.",
           "type": "object",
           "properties": {
             "Model": {
@@ -2046,12 +2194,14 @@
           ]
         },
         {
+          "description": "Load serialized graph data into a new or existing process.",
           "type": "object",
           "properties": {
             "Graphs": {
               "type": "object",
               "properties": {
                 "append": {
+                  "description": "Append imported graphs to the selected target instead of replacing it.",
                   "type": "boolean"
                 },
                 "inline_dot": {
@@ -2062,16 +2212,18 @@
                   ]
                 },
                 "integrand_name": {
+                  "description": "Name assigned to the imported integrand.",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
                 "overwrite": {
+                  "description": "Replace an existing process or integrand with the same target name.",
                   "type": "boolean"
                 },
                 "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
                   "anyOf": [
                     {
                       "$ref": "#/$defs/ProcessRef"
@@ -2089,6 +2241,7 @@
                   ]
                 },
                 "source": {
+                  "description": "Graph file to load, resolved against the active state root and current directory.",
                   "type": [
                     "string",
                     "null"
@@ -2109,13 +2262,15 @@
       ]
     },
     "ImportModel": {
-      "description": "Generate integrands",
+      "description": "Imports a built-in JSON model, a JSON model file, or a UFO model directory into the active state.",
       "type": "object",
       "properties": {
         "path": {
+          "description": "Built-in model name, JSON model path, or UFO directory to import.",
           "type": "string"
         },
         "simplify_model": {
+          "description": "Simplify imported model expressions before storing the active model.",
           "type": "boolean"
         }
       },
@@ -2143,12 +2298,12 @@
           ]
         },
         "max_scale_exponent": {
-          "description": "Maximum scaling factor",
+          "description": "Ending exponent of the sampled bulk scaling range",
           "type": "number",
           "format": "double"
         },
         "min_scale_exponent": {
-          "description": "Minimum scaling factor",
+          "description": "Starting exponent of the sampled bulk scaling range",
           "type": "number",
           "format": "double"
         },
@@ -2170,7 +2325,7 @@
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -2245,7 +2400,7 @@
           ]
         },
         "momentum_space": {
-          "description": "Interpret point as momentum-space coordinates",
+          "description": "Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted",
           "type": "boolean"
         },
         "orientation_id": {
@@ -2258,7 +2413,7 @@
           "minimum": 0
         },
         "point": {
-          "description": "The point to inspect (x y) or (p0 px ...)",
+          "description": "Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`",
           "type": "array",
           "items": {
             "type": "number",
@@ -2266,7 +2421,7 @@
           }
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -2277,7 +2432,7 @@
           ]
         },
         "use_arb_prec": {
-          "description": "Evaluate in f128 precision",
+          "description": "Force arbitrary-precision (Arb) internal evaluation; output remains f64",
           "type": "boolean"
         }
       },
@@ -2306,49 +2461,6 @@
         "orientation",
         "loop_momentum_basis",
         "cuts"
-      ]
-    },
-    "IntegrandSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "unit_surface"
-            }
-          },
-          "$ref": "#/$defs/UnitSurfaceSettings",
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "unit_volume"
-            }
-          },
-          "$ref": "#/$defs/UnitVolumeSettings",
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "h_function_test"
-            }
-          },
-          "$ref": "#/$defs/HFunctionTestSettings",
-          "required": [
-            "type"
-          ]
-        }
       ]
     },
     "Integrate": {
@@ -2408,11 +2520,22 @@
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>; repeat with -i to select multiple integrands",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`; repeat with `-i` to select multiple integrands",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProcessRef"
           }
+        },
+        "reference_gaussian": {
+          "description": "Integrate a Gaussian acceptance target, e.g. '{\"width\":300}' or\n`'{\"width\":300,\"center\":[1,2,3]}'`. Re is normalization; Im is the raw\nsecond moment divided by its known expectation (both targets are one).\nOmitted/empty center means centered. Omission requests physics; repeat\nthe same descriptor when resuming a reference workspace.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GaussianReferenceFunction"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "renderer": {
           "description": "Renderer used for interactive streaming integration updates",
@@ -2462,7 +2585,7 @@
           "type": "boolean"
         },
         "workspace_path": {
-          "description": "The path to run the integrationg within",
+          "description": "Workspace directory used for resumable integration state and persisted results",
           "type": [
             "string",
             "null"
@@ -2499,9 +2622,11 @@
     "IntegratedCounterTermRange": {
       "oneOf": [
         {
+          "description": "Integrate over the full radial domain and regulate it with an H-function profile.",
           "type": "object",
           "properties": {
             "h_function_settings": {
+              "description": "Damping profile used to make the infinite-domain counterterm integral convergent.",
               "$ref": "#/$defs/HFunctionSettings"
             },
             "type": {
@@ -2516,6 +2641,7 @@
           ]
         },
         {
+          "description": "Integrate over the compact radial domain without an infinite-tail damping profile.",
           "type": "object",
           "properties": {
             "type": {
@@ -2534,6 +2660,7 @@
       "type": "object",
       "properties": {
         "range": {
+          "description": "Integration domain and damping function used for integrated counterterms.",
           "$ref": "#/$defs/IntegratedCounterTermRange"
         }
       },
@@ -2551,6 +2678,7 @@
       "type": "object",
       "properties": {
         "bin_number_evolution": {
+          "description": "Optional per-iteration bin counts, overriding the fixed `n_bins` value as training proceeds.",
           "type": [
             "array",
             "null"
@@ -2562,57 +2690,70 @@
           }
         },
         "continuous_dim_learning_rate": {
+          "description": "Update rate for adaptive grids over continuous integration dimensions.",
           "type": "number",
           "format": "double"
         },
         "discrete_dim_learning_rate": {
+          "description": "Update rate for learned probabilities over discrete sampling choices.",
           "type": "number",
           "format": "double"
         },
         "integrated_phase": {
+          "description": "Complex component to integrate: real, imaginary, or both.",
           "$ref": "#/$defs/IntegratedPhase"
         },
         "max_prob_ratio": {
+          "description": "Cap the ratio used when turning sampled weights into adaptive probabilities.",
           "type": "number",
           "format": "double"
         },
         "min_samples_for_update": {
+          "description": "Minimum accumulated samples before an adaptive grid or discrete probability is updated.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_bins": {
+          "description": "Number of bins maintained along each continuous integration dimension.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_increase": {
+          "description": "Samples added to each successive Monte Carlo iteration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_max": {
+          "description": "Hard upper bound on the total number of integrand evaluations.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_start": {
+          "description": "Number of samples in the first Monte Carlo iteration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "observables_output": {
+          "description": "File formats used when writing observable histograms and distributions.",
           "$ref": "#/$defs/ObservablesOutputSettings"
         },
         "seed": {
+          "description": "Seed for deterministic initialization of Monte Carlo random-number streams.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
         },
         "show_max_wgt_info": {
+          "description": "Include maximum-weight diagnostics in integration progress and result data.",
           "type": "boolean"
         },
         "target_absolute_accuracy": {
+          "description": "Stop once the estimated absolute uncertainty reaches this value, if configured.",
           "type": [
             "number",
             "null"
@@ -2620,6 +2761,7 @@
           "format": "double"
         },
         "target_relative_accuracy": {
+          "description": "Stop once the estimated relative uncertainty reaches this value, if configured.",
           "type": [
             "number",
             "null"
@@ -2627,6 +2769,7 @@
           "format": "double"
         },
         "train_on_avg": {
+          "description": "Train adaptive distributions on iteration averages instead of individual sample weights.",
           "type": "boolean"
         }
       },
@@ -2644,10 +2787,12 @@
       "type": "object",
       "properties": {
         "e_cm": {
+          "description": "Center-of-mass energy used to normalize and construct external momenta.",
           "type": "number",
           "format": "double"
         },
         "externals": {
+          "description": "External momentum and helicity configuration evaluated by the integrand.",
           "$ref": "#/$defs/Externals"
         }
       },
@@ -2672,12 +2817,14 @@
       "type": "object",
       "properties": {
         "uv_localisation": {
+          "description": "Widths and override controls for ultraviolet-counterterm localization dampers.",
           "$ref": "#/$defs/UVLocalisationSettings"
         }
       },
       "additionalProperties": false
     },
     "LogFormat": {
+      "description": "Amount of prefix and source detail shown by the terminal and logfile sinks.",
       "type": "string",
       "enum": [
         "Long",
@@ -2691,15 +2838,19 @@
       "type": "object",
       "properties": {
         "full_line_source": {
+          "description": "Include the complete source file path and line number for each event.",
           "type": "boolean"
         },
         "include_fields": {
+          "description": "Render structured tracing fields in addition to the formatted event message.",
           "type": "boolean"
         },
         "log_format": {
+          "description": "Amount of timestamp, target, level, and source context included in each log line.",
           "$ref": "#/$defs/LogFormat"
         },
         "short_timestamp": {
+          "description": "Use compact timestamps instead of full date-and-time values.",
           "type": "boolean"
         }
       },
@@ -2709,19 +2860,31 @@
       "type": "object",
       "properties": {
         "direct_numerical_substition": {
+          "description": "Numerically substitute constants directly in the MATAD result.",
           "type": "boolean"
         },
         "expand_masters": {
+          "description": "Expand MATAD master-integral abbreviations before returning the result.",
           "type": "boolean"
         },
         "substitute_hpls": {
+          "description": "Substitute harmonic polylogarithms produced by MATAD where formulas are available.",
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "description": "Substitute MATAD master integrals by their known analytic expressions.",
           "type": "boolean"
         }
       },
       "additionalProperties": false
+    },
+    "MetadataDisplayFormat": {
+      "description": "Output representation for a dedicated graph metadata view.",
+      "type": "string",
+      "enum": [
+        "pretty",
+        "toml"
+      ]
     },
     "ModelSetValue": {
       "oneOf": [
@@ -2897,6 +3060,7 @@
       "type": "object",
       "properties": {
         "format": {
+          "description": "Output formats written for configured observables; duplicates and `none` are ignored.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ObservableFileFormat"
@@ -2909,6 +3073,7 @@
       "type": "object",
       "properties": {
         "pat": {
+          "description": "Symbolica pattern matched against serialized causal orientations.",
           "anyOf": [
             {
               "$ref": "#/$defs/ParseableAtom"
@@ -2959,13 +3124,38 @@
         }
       ]
     },
+    "OverlapCenterObjective": {
+      "oneOf": [
+        {
+          "description": "Maximize the smallest unnormalized energy depth, as in the original solver.",
+          "type": "string",
+          "const": "max_min_depth"
+        },
+        {
+          "description": "Maximize a conservative Euclidean ball radius using the active routing norms.",
+          "type": "string",
+          "const": "relaxed_chebyshev"
+        },
+        {
+          "description": "Minimize the signed sum of E-surface values while preserving the best certified\nrelaxed-Chebyshev clearance within solver accuracy.",
+          "type": "string",
+          "const": "min_sum"
+        }
+      ]
+    },
     "OverlapSettings": {
       "type": "object",
       "properties": {
         "check_global_center": {
+          "description": "Validate that the selected global center lies inside every required E-surface.",
+          "type": "boolean"
+        },
+        "enable_heuristics": {
+          "description": "Enable the configured heuristic center tests before invoking the overlap solver.\nAn explicitly forced center is independent of this switch and is always validated.",
           "type": "boolean"
         },
         "force_global_center": {
+          "description": "Explicit three-vector center used for every threshold overlap, when provided.",
           "type": [
             "array",
             "null"
@@ -2980,10 +3170,16 @@
             "minItems": 3
           }
         },
+        "objective": {
+          "description": "Refine final maximal-overlap centers after enabled heuristics fail their interior checks.\nOptional objectives leave catalogue membership unchanged and retain a certified witness\nif their fixed iteration budget or physical validation rejects an optimization result.",
+          "$ref": "#/$defs/OverlapCenterObjective"
+        },
         "try_origin": {
+          "description": "Try the loop-momentum origin as the global center before solving for another point.",
           "type": "boolean"
         },
         "try_origin_all_lmbs": {
+          "description": "Try the origin independently for every available loop-momentum basis.",
           "type": "boolean"
         }
       },
@@ -3005,21 +3201,25 @@
       "type": "object",
       "properties": {
         "compile": {
+          "description": "Worker threads used for evaluator compilation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "feyngen": {
+          "description": "Worker threads used by Feynman-graph generation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "generate": {
+          "description": "Worker threads used to construct symbolic graph evaluators.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "integrate": {
+          "description": "Worker threads used by numerical integration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
@@ -3045,6 +3245,7 @@
       "type": "object",
       "properties": {
         "large_deformation_check": {
+          "description": "Maximum dimensionless deformation before the improved point is rejected.",
           "anyOf": [
             {
               "$ref": "#/$defs/F"
@@ -3055,9 +3256,11 @@
           ]
         },
         "mode": {
+          "description": "On-shell improvement algorithm, or `none` to preserve the supplied momenta.",
           "$ref": "#/$defs/ImprovementMode"
         },
         "only_warn_on_large_deformation": {
+          "description": "Warn instead of failing when an improvement exceeds the deformation threshold.",
           "type": "boolean"
         }
       },
@@ -3074,18 +3277,22 @@
     "ProcessAddTarget": {
       "oneOf": [
         {
+          "description": "Add a named derived quantity to the selected process settings.",
           "type": "object",
           "properties": {
             "Quantity": {
               "type": "object",
               "properties": {
                 "kind": {
+                  "description": "Registered quantity implementation to instantiate.",
                   "type": "string"
                 },
                 "name": {
+                  "description": "Unique name used to reference the quantity from expressions and observables.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "Initial quantity settings as dotted `KEY=VALUE` assignments.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3105,15 +3312,18 @@
           ]
         },
         {
+          "description": "Add a named observable to the selected process settings.",
           "type": "object",
           "properties": {
             "Observable": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Unique name used for the observable and its output files.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "Initial observable settings as dotted `KEY=VALUE` assignments, including its type.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3132,18 +3342,22 @@
           ]
         },
         {
+          "description": "Add a named event selector to the selected process settings.",
           "type": "object",
           "properties": {
             "Selector": {
               "type": "object",
               "properties": {
                 "kind": {
+                  "description": "Registered selector implementation to instantiate.",
                   "type": "string"
                 },
                 "name": {
+                  "description": "Unique name used to identify the selector in diagnostics.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "Initial selector settings as dotted `KEY=VALUE` assignments.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3168,14 +3382,14 @@
       "type": "object",
       "properties": {
         "integrand_name": {
-          "description": "Optional human name",
+          "description": "Optional human-readable integrand name used to disambiguate the process",
           "type": [
             "string",
             "null"
           ]
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -3232,12 +3446,14 @@
     "ProcessRemoveTarget": {
       "oneOf": [
         {
+          "description": "Remove a named quantity from the selected process settings.",
           "type": "object",
           "properties": {
             "Quantity": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the quantity to remove.",
                   "type": "string"
                 }
               },
@@ -3252,12 +3468,14 @@
           ]
         },
         {
+          "description": "Remove a named observable from the selected process settings.",
           "type": "object",
           "properties": {
             "Observable": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the observable to remove.",
                   "type": "string"
                 }
               },
@@ -3272,12 +3490,14 @@
           ]
         },
         {
+          "description": "Remove a named selector from the selected process settings.",
           "type": "object",
           "properties": {
             "Selector": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the selector to remove.",
                   "type": "string"
                 }
               },
@@ -3296,13 +3516,14 @@
     "ProcessSetArgs": {
       "oneOf": [
         {
-          "description": "Load from a settings file",
+          "description": "Merge a TOML file into the selected process or integrand settings.",
           "type": "object",
           "properties": {
             "File": {
               "type": "object",
               "properties": {
                 "file": {
+                  "description": "TOML settings file merged into the selected process or integrand settings.",
                   "type": "string"
                 }
               },
@@ -3324,6 +3545,7 @@
               "type": "object",
               "properties": {
                 "string": {
+                  "description": "Inline TOML document merged into the selected process or integrand settings.",
                   "type": "string"
                 }
               },
@@ -3338,7 +3560,7 @@
           ]
         },
         {
-          "description": "Set one or more dotted key-paths",
+          "description": "Merge one or more dotted `KEY=VALUE` assignments into the selected settings.",
           "type": "object",
           "properties": {
             "Kv": {
@@ -3368,7 +3590,7 @@
           "const": "Defaults"
         },
         {
-          "description": "Use the stored settings file",
+          "description": "Reload the selected process or integrand settings from its stored file.",
           "type": "string",
           "const": "Stored"
         },
@@ -3440,15 +3662,18 @@
     "ProcessUpdateTarget": {
       "oneOf": [
         {
+          "description": "Update fields of an existing named quantity.",
           "type": "object",
           "properties": {
             "Quantity": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the quantity to update.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "One or more dotted quantity-setting assignments.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3467,15 +3692,18 @@
           ]
         },
         {
+          "description": "Update fields of an existing named observable.",
           "type": "object",
           "properties": {
             "Observable": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the observable to update.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "One or more dotted observable-setting assignments.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3494,15 +3722,18 @@
           ]
         },
         {
+          "description": "Update fields of an existing named selector.",
           "type": "object",
           "properties": {
             "Selector": {
               "type": "object",
               "properties": {
                 "name": {
+                  "description": "Name of the selector to update.",
                   "type": "string"
                 },
                 "pairs": {
+                  "description": "One or more dotted selector-setting assignments.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/KvPair"
@@ -3525,7 +3756,7 @@
     "Profile": {
       "oneOf": [
         {
-          "description": "Ultraviolet profile analysis",
+          "description": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior.",
           "type": "object",
           "properties": {
             "UltraViolet": {
@@ -3538,7 +3769,7 @@
           ]
         },
         {
-          "description": "Bulk profile analysis",
+          "description": "Probe multiple infrared scaling limits and report their fitted behavior in one run.",
           "type": "object",
           "properties": {
             "InfraRed": {
@@ -3556,23 +3787,28 @@
       "type": "object",
       "properties": {
         "max_n_evals": {
+          "description": "Maximum pySecDec sample count before the numerical integration stops.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "min_n_evals": {
+          "description": "Minimum pySecDec sample count before a precision-based stop is accepted.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "quiet": {
+          "description": "Suppress pySecDec progress output while Vakint evaluates an integral.",
           "type": "boolean"
         },
         "relative_precision": {
+          "description": "Requested relative precision for the pySecDec numerical integration.",
           "type": "number",
           "format": "double"
         },
         "reuse_existing_output": {
+          "description": "Existing pySecDec output directory to reuse instead of regenerating integration code.",
           "type": [
             "string",
             "null"
@@ -3870,7 +4106,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "lmb_channel_id"
+              "const": "sampling_channel_id"
             }
           },
           "required": [
@@ -3882,6 +4118,7 @@
     "Remove": {
       "oneOf": [
         {
+          "description": "Remove one integrand, one process, or all processes selected by the supplied target.",
           "type": "object",
           "properties": {
             "Processes": {
@@ -3895,7 +4132,7 @@
                   ]
                 },
                 "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
                   "anyOf": [
                     {
                       "$ref": "#/$defs/ProcessRef"
@@ -3926,15 +4163,19 @@
       "type": "object",
       "properties": {
         "log_divergent": {
+          "description": "Approximation applied to logarithmically divergent ultraviolet counterterms.",
           "$ref": "#/$defs/ApproximationType"
         },
         "massive_power_divergent": {
+          "description": "Approximation applied to power-divergent counterterms with massive external structure.",
           "$ref": "#/$defs/ApproximationType"
         },
         "massless_power_divergent": {
+          "description": "Approximation applied to power-divergent counterterms with massless external structure.",
           "$ref": "#/$defs/ApproximationType"
         },
         "overrides": {
+          "description": "Counterterm-specific prescription rules evaluated before the divergence-class defaults.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/CTRenormalizationRule"
@@ -3947,6 +4188,7 @@
       "type": "object",
       "properties": {
         "align_to_rqft": {
+          "description": "Rewrite the result into the normalization and symbol conventions used by RQFT comparisons.",
           "type": "boolean"
         },
         "integrand_name": {
@@ -3957,10 +4199,11 @@
           ]
         },
         "print_namespaces": {
+          "description": "Preserve fully qualified Symbolica namespaces in printed expressions.",
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -3981,6 +4224,13 @@
       "required": [
         "align_to_rqft",
         "print_namespaces"
+      ]
+    },
+    "RepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
       ]
     },
     "RotationSetting": {
@@ -4041,14 +4291,17 @@
           "type": "object",
           "properties": {
             "alpha": {
+              "description": "First Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
             "beta": {
+              "description": "Second Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
             "gamma": {
+              "description": "Third Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
@@ -4078,6 +4331,7 @@
           }
         },
         "commands": {
+          "description": "Semicolon-separated inline commands executed after the named blocks.",
           "type": [
             "string",
             "null"
@@ -4130,55 +4384,56 @@
       "type": "object",
       "properties": {
         "general": {
+          "description": "Evaluation scales, backend, caching, event generation, and output-unit controls.",
           "$ref": "#/$defs/GeneralSettings"
         },
         "h_function": {
+          "description": "Damping profile shared by Local Unitarity threshold terms.",
           "$ref": "#/$defs/HFunctionSettings"
         },
-        "integrand": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/IntegrandSettings"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "integrator": {
+          "description": "Adaptive Monte Carlo iteration, accuracy, learning, and output controls.",
           "$ref": "#/$defs/IntegratorSettings"
         },
         "kinematics": {
+          "description": "Center-of-mass energy, external momenta, helicities, and phase-space improvement.",
           "$ref": "#/$defs/KinematicsSettings"
         },
         "model": {
+          "description": "Per-integrand overrides for external model parameters.",
           "$ref": "#/$defs/RuntimeModelSettings"
         },
         "observables": {
+          "description": "Named histograms and other observable accumulators.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ObservableSettings"
           }
         },
         "quantities": {
+          "description": "Named derived quantities available to selectors and observables.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/QuantitySettings"
           }
         },
         "sampling": {
+          "description": "Continuous parameterization and discrete graph/orientation/channel sampling strategy.",
           "$ref": "#/$defs/SamplingSettings"
         },
         "selectors": {
+          "description": "Named event-selection predicates applied before observable accumulation.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/SelectorSettings"
           }
         },
         "stability": {
+          "description": "Precision escalation, rotated checks, and optional stability diagnostics.",
           "$ref": "#/$defs/StabilitySettings"
         },
         "subtraction": {
+          "description": "Local and integrated threshold/ultraviolet subtraction controls.",
           "$ref": "#/$defs/SubtractionSettings"
         }
       },
@@ -4192,14 +4447,16 @@
           "type": "string",
           "default": ""
         },
-        "subspace_lmb": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
+        "channel_weight": {
+          "description": "Override the global channel score for this named channel. OSE scores\nrequire a complete ordinary LMB map; advanced maps keep their actual\ndensity unless an explicit compatible proxy is selected.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SamplingChannelWeight"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "on_cut": {
           "type": "array",
@@ -4218,31 +4475,121 @@
             "format": "uint",
             "minimum": 0
           }
+        },
+        "radial_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SamplingRadialProfile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "singularity_proxy": {
+          "description": "Optional positive singularity proxy used when the effective global or\nper-channel weight is `singularity_proxy`. The expression is\nparsed by Symbolica and evaluated in the complete master raw frame;\nits variables are `x0`, `x1`, ... in coordinate order.  A proxy is\nnever inferred from the map, since doing so could hide an incomplete\nsingularity model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subspace_lmb": {
+          "description": "Ordered loop edges spanning the coordinates in which a surface or\njoint constraint is solved.  This is distinct from the edge set in\n`around`, which identifies the physical energy constraints.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
         }
       },
       "additionalProperties": false
     },
     "SamplingChannelWeight": {
-      "description": "Weighting strategy for the resolved sampling-channel partition.\n\n`Ose` and `InverseJacobian` are retained as input aliases for old cards;\nnew cards should use `map_density` or `singularity_proxy`.",
+      "description": "Weighting strategy for the resolved sampling-channel partition.\n\nExact inverse-map densities, on-shell-energy scores, and explicit positive\nproxies share the same channel catalogue. `inverse_jacobian` selects the\nsame density score as `map_density`; `ose` is a distinct energy score.",
       "type": "string",
       "enum": [
         "map_density",
+        "ose",
         "singularity_proxy",
         "inverse_jacobian"
+      ]
+    },
+    "SamplingRadialApproximation": {
+      "type": "string",
+      "enum": [
+        "log_logistic"
+      ]
+    },
+    "SamplingRadialProfile": {
+      "description": "A normalized proposal for the auxiliary LU scale. This changes sampling\nonly: the physical LU h-function and its raised-cut derivatives are intact.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SamplingRadialProfileKind"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "approximation": {
+              "$ref": "#/$defs/SamplingRadialApproximation",
+              "default": "log_logistic"
+            },
+            "broad_fraction": {
+              "type": "number",
+              "format": "double",
+              "default": 0.02
+            },
+            "kind": {
+              "$ref": "#/$defs/SamplingRadialProfileKind"
+            },
+            "scale": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double",
+              "default": null
+            },
+            "shape": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "SamplingRadialProfileKind": {
+      "description": "Radial proposal family for a physical-cut sampling channel.",
+      "type": "string",
+      "enum": [
+        "lu_h"
       ]
     },
     "SamplingSettings": {
       "type": "object",
       "properties": {
         "alpha": {
+          "description": "Exponent of each selected loop edge's on-shell energy in an OSE channel score.",
           "type": "number",
-          "format": "double"
+          "format": "double",
+          "minimum": 0.0
         },
         "b": {
+          "description": "Scale parameter of the selected radial mapping.",
           "type": "number",
           "format": "double"
         },
         "channel_definitions": {
+          "description": "Named channel definitions keyed first by graph name, then by channel name.",
           "type": "object",
           "additionalProperties": {
             "type": "object",
@@ -4252,6 +4599,7 @@
           }
         },
         "channel_selection": {
+          "description": "Channel selectors keyed by graph name, overriding the default selection.",
           "type": "object",
           "additionalProperties": {
             "type": "array",
@@ -4261,24 +4609,29 @@
           }
         },
         "coordinate_system": {
+          "description": "Coordinate system used to parameterize loop momenta.",
           "$ref": "#/$defs/CoordinateSystem"
         },
         "default_channel_selection": {
+          "description": "Default channel selectors for graphs without a graph-specific selection.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "graph_names": {
+          "description": "Optional graph-name allow-list for discrete graph sampling.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "graphs": {
+          "description": "Whether graph contributions are summed deterministically or sampled as a discrete axis.",
           "$ref": "#/$defs/SumMode"
         },
         "lmb_basis_ids": {
+          "description": "Explicit loop-momentum-basis identifiers keyed by graph name.",
           "type": "object",
           "additionalProperties": {
             "type": "array",
@@ -4290,22 +4643,28 @@
           }
         },
         "mapping": {
+          "description": "Mapping from the unit hypercube to unbounded radial coordinates.",
           "$ref": "#/$defs/ParameterizationMapping"
         },
         "orientations": {
+          "description": "Whether causal orientations are summed deterministically or sampled as a discrete axis.",
           "$ref": "#/$defs/SumMode"
         },
         "power": {
+          "description": "Power parameter of the selected radial mapping.",
           "type": "number",
           "format": "double"
         },
         "sampling_channel_weight": {
+          "description": "Rule used to construct the relative probability of each resolved sampling channel.",
           "$ref": "#/$defs/SamplingChannelWeight"
         },
         "sampling_channels": {
+          "description": "Whether resolved sampling channels are summed or sampled discretely.",
           "$ref": "#/$defs/SumMode"
         },
         "sampling_multichanneling": {
+          "description": "Enable multichannel sampling over the resolved graph-aware channels.",
           "type": "boolean"
         }
       },
@@ -4314,51 +4673,60 @@
     "Save": {
       "oneOf": [
         {
+          "description": "Export generated graphs as DOT files and drawing templates.",
           "type": "object",
           "properties": {
             "Dot": {
               "type": "object",
               "properties": {
                 "combine_diagrams": {
+                  "description": "Combine diagrams in one DOT output instead of writing one file per graph.",
                   "type": "boolean"
                 },
                 "do_color_algebra": {
+                  "description": "Simplify color algebra before formatting graph numerators.",
                   "type": [
                     "boolean",
                     "null"
                   ]
                 },
                 "do_gamma_algebra": {
+                  "description": "Simplify gamma-matrix algebra before formatting graph numerators.",
                   "type": [
                     "boolean",
                     "null"
                   ]
                 },
                 "include_autogenerated_fields": {
+                  "description": "Include fields generated internally rather than supplied by the source graph.",
                   "type": [
                     "boolean",
                     "null"
                   ]
                 },
                 "output_full_numerator": {
+                  "description": "Export the full numerator expression rather than the compact display form.",
                   "type": [
                     "boolean",
                     "null"
                   ]
                 },
                 "path": {
+                  "description": "Destination directory; defaults to the active state folder.",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
                 "split_xs_by_initial_states": {
+                  "description": "Write separate cross-section drawings for distinct initial-state assignments.",
                   "type": [
                     "boolean",
                     "null"
                   ]
                 },
                 "with_uv": {
+                  "description": "Include ultraviolet counterterm graphs in the exported drawing data.",
                   "type": [
                     "boolean",
                     "null"
@@ -4376,21 +4744,25 @@
           ]
         },
         {
+          "description": "Export the ultraviolet forest for selected generated graphs.",
           "type": "object",
           "properties": {
             "UvForest": {
               "type": "object",
               "properties": {
                 "computed": {
+                  "description": "Export computed counterterm expressions in addition to the forest structure.",
                   "type": "boolean"
                 },
                 "graph": {
+                  "description": "Master graph names to export; repeat the option to select multiple graphs.",
                   "type": "array",
                   "items": {
                     "type": "string"
                   }
                 },
                 "path": {
+                  "description": "Destination directory; defaults to the active state folder.",
                   "type": [
                     "string",
                     "null"
@@ -4413,33 +4785,41 @@
           ]
         },
         {
+          "description": "Export an integrand as a standalone evaluator or serialized data file.",
           "type": "object",
           "properties": {
             "Standalone": {
               "type": "object",
               "properties": {
                 "arbprec": {
+                  "description": "Include arbitrary-precision evaluator support in generated source projects.",
                   "type": "boolean"
                 },
                 "binary": {
+                  "description": "Serialize evaluator data in the compact binary format.",
                   "type": "boolean"
                 },
                 "json": {
+                  "description": "Serialize evaluator data as human-readable JSON.",
                   "type": "boolean"
                 },
                 "path": {
+                  "description": "Destination path for the exported project or data file.",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
                 "python": {
+                  "description": "Generate a standalone Python evaluator project.",
                   "type": "boolean"
                 },
                 "quadprec": {
+                  "description": "Include quad-precision evaluator support in generated source projects.",
                   "type": "boolean"
                 },
                 "rust": {
+                  "description": "Generate a standalone Rust evaluator project.",
                   "type": "boolean"
                 }
               },
@@ -4459,6 +4839,7 @@
           ]
         },
         {
+          "description": "Persist the active state, settings, and replayable run history.",
           "type": "object",
           "properties": {
             "State": {
@@ -4471,7 +4852,7 @@
           ]
         },
         {
-          "description": "regenerate the schema files",
+          "description": "Regenerate the JSON schema files for CLI and runtime configuration.",
           "type": "object",
           "properties": {
             "Schema": {
@@ -4489,6 +4870,7 @@
       "type": "object",
       "properties": {
         "no_save_state": {
+          "description": "Exit without writing state data, even when state saving is otherwise enabled.",
           "type": "boolean"
         },
         "override_state": {
@@ -4506,6 +4888,7 @@
           ]
         },
         "strict": {
+          "description": "Treat state serialization warnings as errors and refuse a partial save.",
           "type": [
             "boolean",
             "null"
@@ -4556,7 +4939,7 @@
           ]
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -4770,6 +5153,7 @@
               "type": "object",
               "properties": {
                 "path": {
+                  "description": "Directory used to resolve relative state and log paths.",
                   "type": "string"
                 }
               },
@@ -4784,7 +5168,7 @@
           ]
         },
         {
-          "description": "Set GLOBAL settings",
+          "description": "Change global generation, logging, and parallelism settings.",
           "type": "object",
           "properties": {
             "Global": {
@@ -4805,7 +5189,7 @@
           ]
         },
         {
-          "description": "Set DEFAULT RUNTIME settings",
+          "description": "Change the runtime settings inherited by newly generated integrands.",
           "type": "object",
           "properties": {
             "DefaultRuntime": {
@@ -4826,7 +5210,7 @@
           ]
         },
         {
-          "description": "Set Model parameters",
+          "description": "Assign model parameters in the selected context or reset them to defaults.",
           "type": "object",
           "properties": {
             "Model": {
@@ -4855,7 +5239,7 @@
           ]
         },
         {
-          "description": "Set settings for a PROCESS",
+          "description": "Change runtime settings or named analysis objects for one process or integrand.",
           "type": "object",
           "properties": {
             "Process": {
@@ -4884,13 +5268,14 @@
     "SetArgs": {
       "oneOf": [
         {
-          "description": "Load from a settings file",
+          "description": "Merge a TOML file into the current global or default-runtime settings.",
           "type": "object",
           "properties": {
             "File": {
               "type": "object",
               "properties": {
                 "file": {
+                  "description": "TOML settings file merged into the current global or default-runtime settings.",
                   "type": "string"
                 }
               },
@@ -4912,6 +5297,7 @@
               "type": "object",
               "properties": {
                 "string": {
+                  "description": "Inline TOML document merged into the current global or default-runtime settings.",
                   "type": "string"
                 }
               },
@@ -4926,7 +5312,7 @@
           ]
         },
         {
-          "description": "Set one or more dotted key-paths",
+          "description": "Merge one or more dotted `KEY=VALUE` assignments into the current settings.",
           "type": "object",
           "properties": {
             "Kv": {
@@ -4956,7 +5342,7 @@
           "const": "Defaults"
         },
         {
-          "description": "Use the stored settings file",
+          "description": "Reload the corresponding settings from the active state's stored file.",
           "type": "string",
           "const": "Stored"
         }
@@ -4966,6 +5352,7 @@
       "type": "object",
       "properties": {
         "cmd": {
+          "description": "Command and arguments passed to the user's login shell.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/OsString"
@@ -4989,7 +5376,7 @@
       "type": "object",
       "properties": {
         "allow_symmetrization_of_external_fermions_in_amplitudes": {
-          "description": "Symmetrization (Option<bool> for smart defaults depending on generation type)",
+          "description": "Permit external fermion permutations when identifying equivalent amplitudes.",
           "type": [
             "boolean",
             "null"
@@ -5006,6 +5393,7 @@
           }
         },
         "append": {
+          "description": "Append the generated process instead of replacing the current process selection.",
           "type": "boolean"
         },
         "clear_existing_processes": {
@@ -5013,57 +5401,63 @@
           "type": "boolean"
         },
         "compare_canonized_numerator": {
+          "description": "Compare canonicalized numerators in addition to graph topology when grouping.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "consider_internal_masses_only_in_numerator_isomorphisms": {
+          "description": "Distinguish mass parameters while ignoring other model-parameter labels during grouping.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_cross_section_tadpoles": {
-          "description": "Cross-section tadpole filtering when sewing",
+          "description": "Filter tadpoles formed while sewing amplitudes into a cross-section graph.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_self_loop": {
-          "description": "Filter self-loop (explicit; default false)",
+          "description": "Filter graph-theoretic self-loops explicitly; omission keeps them.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_selfenergies": {
-          "description": "Topology filters (Option<bool> to enable smart defaults)",
+          "description": "Include or exclude self-energy topologies; omission uses the generation-mode default.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_snails": {
+          "description": "Include or exclude snail topologies; omission uses the generation-mode default.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_tadpoles": {
+          "description": "Include or exclude tadpole topologies; omission uses the generation-mode default.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_zero_flow_edges": {
+          "description": "Filter edges that carry zero momentum flow in the selected routing.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "fully_numerical_substitution_when_comparing_numerators": {
+          "description": "Numerically substitute every parameter when comparing candidate numerator isomorphisms.",
           "type": [
             "boolean",
             "null"
@@ -5084,13 +5478,14 @@
           ]
         },
         "graph_prefix": {
-          "description": "Graph name prefix",
+          "description": "Prefix assigned to generated graph names; defaults to `GL`",
           "type": [
             "string",
             "null"
           ]
         },
         "integrand_name": {
+          "description": "Name assigned to the generated integrand; defaults to the generated process name.",
           "type": [
             "string",
             "null"
@@ -5113,7 +5508,7 @@
           "minimum": 0
         },
         "max_n_bridges": {
-          "description": "Extra filters / constraints",
+          "description": "Maximum number of bridges allowed in a generated graph; negative values disable the bound.",
           "type": [
             "integer",
             "null"
@@ -5121,7 +5516,7 @@
           "format": "int32"
         },
         "n_cut_blobs": {
-          "description": "Cut options (cross-section)\nRange of cut blobs on either side of the cut",
+          "description": "Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut.",
           "type": [
             "array",
             "null"
@@ -5133,7 +5528,7 @@
           }
         },
         "n_cut_spectators": {
-          "description": "Range of cut spectators on either side of the cut",
+          "description": "Inclusive minimum and maximum number of spectators crossing a cross-section cut.",
           "type": [
             "array",
             "null"
@@ -5144,8 +5539,8 @@
             "minimum": 0
           }
         },
-        "number_of_anticommutating_loops": {
-          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
+        "number_of_factorized_loop_subtopologies": {
+          "description": "Inclusive minimum and maximum number of factorized loop subtopologies.",
           "type": [
             "array",
             "null"
@@ -5154,10 +5549,6 @@
             "type": "integer",
             "format": "int32"
           }
-        },
-        "number_of_factorized_loop_subtopologies": {
-          "type": ["array", "null"],
-          "items": {"type": "integer", "format": "int32"}
         },
         "number_of_fermion_loops": {
           "description": "Number of closed fermion loops, excluding ghosts; negative disables",
@@ -5171,6 +5562,7 @@
           }
         },
         "number_of_samples_for_numerator_comparisons": {
+          "description": "Number of phase-space samples used to decide whether two numerators are equivalent.",
           "type": [
             "integer",
             "null"
@@ -5190,7 +5582,7 @@
           ]
         },
         "numerical_samples_seed": {
-          "description": "Grouping attributes",
+          "description": "Deterministic random seed used for numerical numerator comparisons.",
           "type": [
             "integer",
             "null"
@@ -5200,6 +5592,7 @@
           "minimum": 0
         },
         "only_diagrams": {
+          "description": "Stop after diagram generation without constructing an evaluable integrand.",
           "type": "boolean"
         },
         "process_name": {
@@ -5210,6 +5603,7 @@
           ]
         },
         "select_graphs": {
+          "description": "Generate only graphs whose names appear in this allow-list.",
           "type": [
             "array",
             "null"
@@ -5219,25 +5613,28 @@
           }
         },
         "symmetric_left_right_polarizations": {
+          "description": "Treat left- and right-side polarization factors symmetrically during numerator grouping.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "symmetrize_final_states": {
+          "description": "Identify graphs related by permutations of identical final-state particles.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "symmetrize_initial_states": {
+          "description": "Identify graphs related by permutations of identical initial-state particles.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "symmetrize_left_right_states": {
-          "description": "Optional CP-based left/right graph identification; requires CP symmetry.",
+          "description": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.",
           "type": [
             "boolean",
             "null"
@@ -5251,6 +5648,7 @@
           }
         },
         "veto_graphs": {
+          "description": "Exclude graphs whose names appear in this deny-list.",
           "type": [
             "array",
             "null"
@@ -5260,64 +5658,70 @@
           }
         },
         "veto_only_scaleless_self_energy": {
+          "description": "Veto only self-energy insertions that are scaleless.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_only_scaleless_snails": {
+          "description": "Veto only snail insertions that are scaleless.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_only_scaleless_tadpoles": {
+          "description": "Veto only tadpoles that are scaleless.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_self_energy_of_massive_lines": {
-          "description": "Self-energy veto details",
+          "description": "Veto self-energy insertions on massive propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_self_energy_of_massless_lines": {
+          "description": "Veto self-energy insertions on massless propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_snails_attached_to_massive_lines": {
-          "description": "Snail veto details",
+          "description": "Veto snail insertions attached to massive propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_snails_attached_to_massless_lines": {
+          "description": "Veto snail insertions attached to massless propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_tadpoles_attached_to_massive_lines": {
-          "description": "Tadpole veto details",
+          "description": "Veto tadpoles attached to massive propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_tadpoles_attached_to_massless_lines": {
+          "description": "Veto tadpoles attached to massless propagators.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "veto_vertex_interactions": {
-          "description": "Veto vertex interactions",
+          "description": "Exclude graphs containing any listed vertex-interaction name",
           "type": [
             "array",
             "null"
@@ -5338,18 +5742,45 @@
     "StabilityLevelSetting": {
       "type": "object",
       "properties": {
+        "three_dimensional_representation": {
+          "description": "Representation for this attempt; omission selects the first generated representation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ecm_relative_tolerance_for_im": {
+          "description": "Independent dimensionless imaginary-component tolerance, with the same\nE_cm-relative convention as `ecm_relative_tolerance_for_re`.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        },
+        "ecm_relative_tolerance_for_re": {
+          "description": "Dimensionless real-component probe disagreement relative to E_cm raised\nto the observable's declared energy dimension, with its output-unit\nconversion. Includes every sample factor and the outer grid weight;\ndirect momentum densities account for the missing spatial measure.\nZero disables this alternative to relative accuracy. This is not the\nintegrator's target standard error.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        },
         "escalate_for_large_weight_threshold": {
+          "description": "Ratio threshold for the large-weight escalation check; a non-positive value disables it.",
           "type": "number",
           "format": "double"
         },
         "precision": {
+          "description": "Numeric precision used for this escalation level.",
           "$ref": "#/$defs/Precision"
         },
         "required_precision_for_im": {
+          "description": "Maximum accepted relative error in the imaginary component before escalating.",
           "type": "number",
           "format": "double"
         },
         "required_precision_for_re": {
+          "description": "Maximum accepted relative error in the real component before escalating.",
           "type": "number",
           "format": "double"
         }
@@ -5366,12 +5797,15 @@
       "type": "object",
       "properties": {
         "record_all_stability_levels": {
+          "description": "Record the result produced at every attempted numerical-precision level.",
           "type": "boolean"
         },
         "record_loop_momenta_escalation": {
+          "description": "Record evaluations escalated because of the loop-momentum norm threshold.",
           "type": "boolean"
         },
         "record_rotated_results": {
+          "description": "Record the values obtained at rotated phase-space points.",
           "type": "boolean"
         }
       },
@@ -5381,23 +5815,41 @@
       "type": "object",
       "properties": {
         "check_on_norm": {
+          "description": "Compare rotated results after normalizing by the result magnitude.",
           "type": "boolean"
         },
         "escalate_if_exact_zero": {
-          "type": "boolean",
-          "default": false
+          "description": "Escalate precision when a result is exactly zero at the current level.",
+          "type": "boolean"
+        },
+        "integrated_energy_dimension": {
+          "description": "Energy dimension of the integrated physical quantity after flux\nnormalization and before conversion to output units. Required when an\nE_cm-relative tolerance is enabled for a physical evaluation; reference\nfunctions carry their own known dimensions. Direct momentum evaluations\nsubtract the dimension of their missing spatial integration measure.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
         },
         "levels": {
+          "description": "Ordered precision and representation choices with tolerances for stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"
           }
         },
         "loop_momenta_norm_escalation_factor": {
+          "description": "Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.",
           "type": "number",
           "format": "double"
         },
+        "min_abs_wgt_for_escalation": {
+          "description": "Suppress non-final stability escalation for negligible weighted probes.\nWhen positive, a probe is allowed to remain at its current precision if\nits largest absolute weighted rotation result is below this fraction of\nan absolute-component integral estimate whose relative standard error\nis at most ten percent. Zero disables this waiver.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
+        },
         "recording": {
+          "description": "Optional diagnostics retained for rotated, escalated, and high-precision evaluations.",
           "anyOf": [
             {
               "$ref": "#/$defs/StabilityRecordingSettings"
@@ -5408,6 +5860,7 @@
           ]
         },
         "rotation_axis": {
+          "description": "Rotations applied when comparing an unstable sample with an equivalent phase-space point.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RotationSetting"
@@ -5420,6 +5873,7 @@
       "type": "object",
       "properties": {
         "name": {
+          "description": "Name under which the recorded command sequence will be stored.",
           "type": "string"
         }
       },
@@ -5431,10 +5885,12 @@
       "type": "object",
       "properties": {
         "folder": {
+          "description": "Folder containing persisted settings, models, processes, and run history.",
           "type": "string",
           "default": "./gammaloop_state"
         },
         "name": {
+          "description": "Optional human-readable state name stored with the serialized state.",
           "type": [
             "string",
             "null"
@@ -5447,6 +5903,7 @@
       "type": "object",
       "properties": {
         "disable_threshold_subtraction": {
+          "description": "Disable local threshold subtraction while leaving the original integrand unchanged.",
           "type": "boolean"
         },
         "esurface_existence_threshold": {
@@ -5456,12 +5913,15 @@
           "minimum": 0.0
         },
         "integrated_ct_settings": {
+          "description": "Configuration for analytically integrated counterterm contributions.",
           "$ref": "#/$defs/IntegratedCounterTermSettings"
         },
         "local_ct_settings": {
+          "description": "Configuration for local ultraviolet counterterms in the numerical integrand.",
           "$ref": "#/$defs/LocalCounterTermSettings"
         },
         "overlap_settings": {
+          "description": "Strategy used to choose centers shared by overlapping threshold surfaces.",
           "$ref": "#/$defs/OverlapSettings"
         },
         "radial_root_residual_tolerance": {
@@ -5493,6 +5953,7 @@
     "ThreeDRep": {
       "oneOf": [
         {
+          "description": "Check the selected graph for supported energy-representation kinematics.",
           "type": "object",
           "properties": {
             "Validate": {
@@ -5505,6 +5966,7 @@
           ]
         },
         {
+          "description": "Construct and export the selected graph's three-dimensional expression.",
           "type": "object",
           "properties": {
             "Build": {
@@ -5518,19 +5980,37 @@
         }
       ]
     },
+    "ThreeDRepresentationSelection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepresentationMode"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RepresentationMode"
+          },
+          "minItems": 1
+        }
+      ]
+    },
     "ThresholdSubtractionSettings": {
       "type": "object",
       "properties": {
         "assume_positive_external_energies": {
+          "description": "Simplify existence tests by assuming all external-state energies are positive.",
           "type": "boolean"
         },
         "check_esurface_at_generation": {
+          "description": "Test E-surface existence against the active model while generating counterterms.",
           "type": "boolean"
         },
         "disable_integrated_ct": {
+          "description": "Generate local threshold counterterms without their integrated counterparts.",
           "type": "boolean"
         },
         "enable_thresholds": {
+          "description": "Generate local threshold counterterms for eligible E-surfaces.",
           "type": "boolean"
         },
         "esurface_existence_threshold": {
@@ -5540,6 +6020,7 @@
           "minimum": 0.0
         },
         "skip_thresholds_that_are_cuts": {
+          "description": "Omit threshold counterterms whose E-surface coincides with a physical cut.",
           "type": "boolean"
         }
       },
@@ -5549,12 +6030,15 @@
       "type": "object",
       "properties": {
         "disable_tropical_generation": {
+          "description": "Disable tropical subgraph table construction entirely.",
           "type": "boolean"
         },
         "panic_on_fail": {
+          "description": "Abort generation instead of reporting and skipping a failed tropical table construction.",
           "type": "boolean"
         },
         "target_omega": {
+          "description": "Target superficial degree used when classifying tropical subgraphs.",
           "type": "number",
           "format": "double"
         }
@@ -5579,16 +6063,20 @@
       "type": "object",
       "properties": {
         "dynamic_width": {
+          "description": "Derive the localization width dynamically from the sampled ultraviolet configuration.",
           "type": "boolean"
         },
         "force_uv_dampers_to_one": {
+          "description": "Replace ultraviolet localization dampers by one for diagnostic comparisons.",
           "type": "boolean"
         },
         "gaussian_width": {
+          "description": "Width of the Gaussian ultraviolet localization factor.",
           "type": "number",
           "format": "double"
         },
         "sliver_width": {
+          "description": "Width of the transition region used by the ultraviolet sliver damper.",
           "type": "number",
           "format": "double"
         },
@@ -5611,24 +6099,31 @@
       "type": "object",
       "properties": {
         "add_marker": {
+          "description": "Insert explicit marker functions around generated ultraviolet counterterms.",
           "type": "boolean"
         },
         "final_integrand": {
+          "description": "Dimensional representation used for the final locally subtracted integrand.",
           "$ref": "#/$defs/FinalIntegrandDimension"
         },
         "generate_integrated": {
+          "description": "Generate analytically integrated ultraviolet counterterms.",
           "type": "boolean"
         },
         "inner_products": {
+          "description": "Rewrite Lorentz contractions into scalar inner products during ultraviolet processing.",
           "type": "boolean"
         },
         "keep_marker": {
+          "description": "Preserve ultraviolet marker functions after counterterm orchestration.",
           "type": "boolean"
         },
         "local_uv_cts_from_expanded_4d_integrands": {
+          "description": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations.",
           "type": "boolean"
         },
         "orchestrator": {
+          "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
           "$ref": "#/$defs/UVOrchestrator"
         },
         "project_integrated_uv_cts_onto_tensor_integrals": {
@@ -5636,15 +6131,19 @@
           "type": "boolean"
         },
         "renormalization_prescription": {
+          "description": "Default and counterterm-specific renormalization approximation schemes.",
           "$ref": "#/$defs/RenormalizationPrescriptionSettings"
         },
         "softct": {
+          "description": "Generate soft ultraviolet counterterms where required by the selected prescription.",
           "type": "boolean"
         },
         "subtract_uv": {
+          "description": "Subtract generated ultraviolet counterterms from the final integrand.",
           "type": "boolean"
         },
         "vakint": {
+          "description": "Vakint backend configuration for integrated ultraviolet counterterms.",
           "$ref": "#/$defs/VakintSettings"
         }
       },
@@ -5654,7 +6153,7 @@
       "type": "object",
       "properties": {
         "analyse_analytically": {
-          "description": "Also derive analytic UV series (amplitudes only)",
+          "description": "Derive the analytic ultraviolet series in addition to sampled numerical values (amplitudes only).",
           "type": "boolean"
         },
         "cutkosky_cut": {
@@ -5685,12 +6184,12 @@
           ]
         },
         "max_scale_exponent": {
-          "description": "Maximum base-10 scaling exponent",
+          "description": "Ending base-10 exponent of the sampled ultraviolet scaling range.",
           "type": "number",
           "format": "double"
         },
         "min_scale_exponent": {
-          "description": "Minimum base-10 scaling exponent",
+          "description": "Starting base-10 exponent of the sampled ultraviolet scaling range.",
           "type": "number",
           "format": "double"
         },
@@ -5712,7 +6211,7 @@
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`",
           "anyOf": [
             {
               "$ref": "#/$defs/ProcessRef"
@@ -5776,75 +6275,61 @@
         "all"
       ]
     },
-    "UnitSurfaceSettings": {
-      "type": "object",
-      "properties": {
-        "n_3d_momenta": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "n_3d_momenta"
-      ]
-    },
-    "UnitVolumeSettings": {
-      "type": "object",
-      "properties": {
-        "n_3d_momenta": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "n_3d_momenta"
-      ]
-    },
     "VakintSettings": {
       "type": "object",
       "properties": {
         "additional_normalization": {
+          "description": "Extra symbolic normalization factor multiplied into every Vakint result.",
           "type": "string"
         },
         "alphaloop": {
+          "description": "AlphaLoop-specific master-integral substitution controls.",
           "$ref": "#/$defs/AlphaLoopSettings"
         },
         "clean_tmp_dir": {
+          "description": "Remove Vakint's temporary backend directory after a successful evaluation.",
           "type": "boolean"
         },
         "evaluation_methods": {
+          "description": "Ordered Vakint evaluation backends tried for each matched vacuum integral.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "fmft": {
+          "description": "FMFT-specific master-integral expansion and substitution controls.",
           "$ref": "#/$defs/FMFTSettings"
         },
         "form_exe_path": {
+          "description": "FORM executable used by analytic Vakint evaluation backends.",
           "type": "string"
         },
         "matad": {
+          "description": "MATAD-specific master-integral and substitution controls.",
           "$ref": "#/$defs/MATADSettings"
         },
         "normalization": {
+          "description": "Named normalization convention applied to matched vacuum integrals.",
           "type": "string"
         },
         "pysecdec": {
+          "description": "pySecDec precision, sample, and output-reuse controls.",
           "$ref": "#/$defs/PySecDecSettings"
         },
         "python_exe_path": {
+          "description": "Python interpreter used to invoke pySecDec.",
           "type": "string"
         },
         "run_time_decimal_precision": {
+          "description": "Decimal precision used when substituting backend results at run time.",
           "type": "integer",
           "format": "uint",
           "default": 100,
           "minimum": 0
         },
         "temporary_directory": {
+          "description": "Parent directory for temporary Vakint backend files; the system default is used when absent.",
           "type": [
             "string",
             "null"
@@ -5857,6 +6342,7 @@
       "type": "object",
       "properties": {
         "json_out": {
+          "description": "Write the validation result as JSON instead of printing it.",
           "type": [
             "string",
             "null"

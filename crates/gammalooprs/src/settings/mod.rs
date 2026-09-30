@@ -704,6 +704,55 @@ mod tests {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();
     }
+
+    #[test]
+    fn overlap_objectives_preserve_defaults_and_round_trip() {
+        use crate::{
+            settings::runtime::{OverlapCenterObjective, OverlapSettings},
+            utils::serde_utils::ShowDefaultsGuard,
+        };
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert_eq!(toml::to_string(&OverlapSettings::default()).unwrap(), "");
+            for (name, objective) in [
+                ("max_min_depth", OverlapCenterObjective::MaxMinDepth),
+                (
+                    "relaxed_chebyshev",
+                    OverlapCenterObjective::RelaxedChebyshev,
+                ),
+                ("min_sum", OverlapCenterObjective::MinSum),
+            ] {
+                let parsed: OverlapSettings =
+                    toml::from_str(&format!("objective = '{name}'\nenable_heuristics = false"))
+                        .unwrap();
+                assert_eq!(parsed.objective, objective);
+                assert!(!parsed.enable_heuristics);
+                assert!(
+                    parsed.try_origin,
+                    "the master gate preserves the configured heuristic"
+                );
+                let restored: OverlapSettings =
+                    toml::from_str(&toml::to_string(&parsed).unwrap()).unwrap();
+                assert_eq!(restored, parsed);
+                let binary = bincode::encode_to_vec(&parsed, bincode::config::standard()).unwrap();
+                let (restored, _): (OverlapSettings, _) =
+                    bincode::decode_from_slice(&binary, bincode::config::standard()).unwrap();
+                assert_eq!(restored, parsed);
+            }
+        }
+        {
+            let _guard = ShowDefaultsGuard::new(true);
+            let defaults = toml::to_string(&OverlapSettings::default()).unwrap();
+            assert!(defaults.contains("objective = \"max_min_depth\""));
+            assert!(defaults.contains("enable_heuristics = true"));
+        }
+        assert!(toml::from_str::<OverlapSettings>("objective='unknown'").is_err());
+        let _guard = ShowDefaultsGuard::new(true);
+        let schema = serde_json::to_value(schemars::schema_for!(OverlapSettings)).unwrap();
+        assert!(schema.to_string().contains("relaxed_chebyshev"));
+        assert!(schema.to_string().contains("min_sum"));
+        assert_eq!(schema["properties"]["enable_heuristics"]["default"], true);
+    }
     #[test]
     fn test_h_function_settings_serialize_deserialize() {
         use crate::settings::runtime::HFunctionSettings;

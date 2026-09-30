@@ -171,7 +171,7 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
         .finish();
     let numerator = &originals * soft;
     let proposals = graph
-        .soft_momentum_routing_proposals(std::slice::from_ref(&numerator), active)?
+        .soft_momentum_routing_proposals(std::slice::from_ref(&numerator), active, true)?
         .into_iter()
         .map(|mut factors| factors.pop().unwrap())
         .collect::<Vec<_>>();
@@ -1808,6 +1808,74 @@ fn cut_valid_ids_host_one_inner_representative_per_outer_sector() -> Result<()> 
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn localized_ltd_maps_keep_distinct_numerators_without_production_hosts() -> Result<()> {
+    let graph = two_edge_graph()?;
+    let production = [[1, 1], [1, -1]]
+        .into_iter()
+        .map(|directions| {
+            energy_map(
+                edgevec(directions),
+                directions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(edge, sign)| LinearEnergyExpr::ose(EdgeIndex(edge), i64::from(sign)))
+                    .collect(),
+            )
+        })
+        .collect::<TiVec<OrientationID, _>>();
+    let mut options = graph.denominator_only_cff_3d_expression_options();
+    options.representation = three_dimensional_reps::RepresentationMode::Ltd;
+    let pattern = OrientationPattern::default();
+    let cutset = CutSet::empty(graph.n_hedges());
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, true),
+    );
+    let mut branches = Vec::new();
+    let index = CutCFFIndex::new_all_none();
+    // Selected LTD residues need not retain any production orientation ID.
+    // Equal physical directions also do not identify equal numerator maps.
+    for (sample, weight) in [(2, 5), (3, 7)] {
+        let reduced = energy_map(
+            edgevec([0, 0]),
+            vec![
+                LinearEnergyExpr::uniform_scale(sample),
+                LinearEnergyExpr::zero(),
+            ],
+        );
+        for (selector_id, body) in localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::num(weight),
+            &graph.empty_subgraph(),
+            &[],
+            Some(&BTreeSet::new()),
+            None,
+        )? {
+            branches.push(OrientationIntegrandBranch {
+                selector_id,
+                source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
+                integrands: [(index, body)].into_iter().collect(),
+            });
+        }
+    }
+    let keyed = DirectResidueBranches::from_transient(&OrientationIntegrands(branches))?;
+    assert_eq!(keyed.iter_keys().count(), 2);
+    let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2);
+    let actual = keyed
+        .iter_keys()
+        .try_fold(Atom::Zero, |sum, (key, terms)| {
+            let mapped = key.map_numerator(localizer.orientation, &graph, &numerator)?;
+            Ok::<_, color_eyre::Report>(sum + mapped * terms.iter().next().unwrap().1)
+        })?;
+    assert_eq!(
+        actual,
+        Atom::num(83) * Atom::var(GS.numerator_sampling_scale).pow(2)
+    );
     Ok(())
 }
 

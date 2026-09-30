@@ -87,6 +87,10 @@ impl<'a> Localizer<'a> {
                 orientation_pattern,
             )?
         } else {
+            let analysis_numerators = analysis_numerators
+                .into_iter()
+                .map(|numerator| numerator.borrow().clone())
+                .collect::<Vec<_>>();
             let capacity_started = std::time::Instant::now();
             debug_tags!(#generation, #profile, #uv, #summary;
                 stage = "outer_cff_capacity_start",
@@ -94,30 +98,63 @@ impl<'a> Localizer<'a> {
             );
             // Match the external CFF domain used by graph generation: initial
             // cuts and tree edges carry no internal numerator-energy capacity.
-            let excluded_edges = graph
-                .iter_edges_of(&graph.initial_state_cut)
-                .chain(graph.iter_edges_of(&graph.tree_edges))
-                .map(|(_, edge, _)| edge);
-            options.energy_degree_bounds = Some(
-                graph.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
-                    analysis_numerators,
+            options.energy_degree_bounds = if options.representation
+                == three_dimensional_reps::generation::RepresentationMode::Cff
+            {
+                let excluded_edges = graph
+                    .iter_edges_of(&graph.initial_state_cut)
+                    .chain(graph.iter_edges_of(&graph.tree_edges))
+                    .map(|(_, edge, _)| edge);
+                Some(graph.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                    &analysis_numerators,
                     excluded_edges,
                     1,
-                )?,
-            );
+                )?)
+            } else {
+                None
+            };
             debug_tags!(#generation, #profile, #uv, #summary;
                 stage = "outer_cff_capacity_done",
                 elapsed_ms = capacity_started.elapsed().as_secs_f64() * 1000.0,
                 bounds = ?options.energy_degree_bounds,
                 "Analyzed independent factorized numerator ranks"
             );
-            graph.cff(
+            match graph.cff(
                 &contract_subgraph,
                 self.cutset,
                 orientation_pattern,
                 &options,
                 None,
-            )?
+            ) {
+                Err(error)
+                    if matches!(
+                        error.downcast_ref::<three_dimensional_reps::generation::GenerationError>(),
+                        Some(
+                            three_dimensional_reps::generation::GenerationError::LtdRepeatedPropagatorsRequireEnergyBounds
+                                | three_dimensional_reps::generation::GenerationError::LtdResidueRequiresEnergyBounds
+                        )
+                    ) =>
+                {
+                    // Contraction and threshold localization can change which
+                    // poles are raised. Analyze the independent numerators only
+                    // when this actual source needs their polynomial jets.
+                    options.energy_degree_bounds = Some(graph.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                        &analysis_numerators,
+                        graph.iter_edges_of(&graph.initial_state_cut)
+                            .chain(graph.iter_edges_of(&graph.tree_edges))
+                            .map(|(_, edge, _)| edge),
+                        1,
+                    )?);
+                    graph.cff(
+                        &contract_subgraph,
+                        self.cutset,
+                        orientation_pattern,
+                        &options,
+                        None,
+                    )?
+                }
+                result => result?,
+            }
         };
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
@@ -334,6 +371,21 @@ impl<'a> Localizer<'a> {
         production_orientation_id: Option<OrientationID>,
     ) -> Result<Vec<(OrientationID, Atom)>> {
         let production = self.orientation.exact_orientations()?;
+        if self.orientation.cff_options()?.representation
+            == three_dimensional_reps::generation::RepresentationMode::Ltd
+        {
+            // Localization changes LTD's affine map. It need not extend any
+            // production orientation, and its selected physical residue is
+            // already authoritative. Retain it once under a bookkeeping key;
+            // the branch's source map continues to own its numerator arguments.
+            let id = self
+                .orientation
+                .orientation_ids()?
+                .into_iter()
+                .next()
+                .ok_or_else(|| eyre!("LTD projection has no production residue maps"))?;
+            return Ok(vec![(id, reduced_expression.clone())]);
+        }
         if let Some(id) = production_orientation_id {
             if valid_production_ids.is_some_and(|valid| !valid.contains(&id)) {
                 return Ok(Vec::new());
@@ -459,26 +511,30 @@ impl<'a> Localizer<'a> {
             "Preparing bounded soft-momentum routing proposals"
         );
         let preparation_started = std::time::Instant::now();
-        let mut proposals = graph.soft_momentum_routing_proposals(numerators, active_edges)?;
+        let optimize = self.orientation.cff_options()?.representation
+            == three_dimensional_reps::generation::RepresentationMode::Cff;
+        let mut proposals =
+            graph.soft_momentum_routing_proposals(numerators, active_edges, optimize)?;
         let proposal_preparation_time = preparation_started.elapsed();
         let prepared_candidates = proposals.len();
         let setup_started = std::time::Instant::now();
-        if to_contract.is_empty() && self.orientation.root_expression().is_some() {
-            // Existing root maps own this source; do not regenerate a different
-            // capacity while pretending to reuse its production expression.
+        let root_reuse = to_contract.is_empty() && self.orientation.root_expression().is_some();
+        if !optimize || root_reuse {
+            // LTD needs an exact soft routing but no capacity optimization.
+            // Existing root maps also already own their source's routing.
             let numerator = proposals.remove(0);
             drop(proposals);
             debug_tags!(#generation, #profile, #uv, #summary;
                 stage = "outer_cff_routing_selection",
                 graph = %graph.name,
-                root_reuse = true,
+                root_reuse,
                 prepared_candidates,
                 admitted_candidates = 0,
                 selected_proposal = 0,
                 proposal_preparation_ms = proposal_preparation_time.as_secs_f64() * 1000.0,
                 setup_ms = setup_started.elapsed().as_secs_f64() * 1000.0,
                 elapsed_ms = selection_started.elapsed().as_secs_f64() * 1000.0,
-                "Selected the existing root CFF routing without native generation"
+                "Selected the baseline routing without capacity scoring"
             );
             let projected = self.projected_cff(
                 graph,
@@ -561,6 +617,7 @@ impl<'a> Localizer<'a> {
             self.cutset,
             &OrientationPattern::default(),
             &options,
+            None,
         )?;
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
@@ -568,7 +625,7 @@ impl<'a> Localizer<'a> {
         Ok((numerator, projected))
     }
 
-    fn project_cff(
+    pub(in crate::uv::approx) fn project_cff(
         self,
         graph: &Graph,
         to_contract: &SuBitGraph,
@@ -583,7 +640,13 @@ impl<'a> Localizer<'a> {
         let has_selected_residue = self.cutset.residue_selector.lu.is_some()
             || self.cutset.residue_selector.left_th_cut.is_some()
             || self.cutset.residue_selector.right_th_cut.is_some();
-        let valid_production_ids = if has_selected_residue && to_contract.is_empty() {
+        let valid_production_ids = if self.orientation.cff_options()?.representation
+            == three_dimensional_reps::RepresentationMode::Ltd
+        {
+            // The selected source maps already own the complete LTD residue
+            // sum. Reprojecting production maps cannot constrain their hosts.
+            None
+        } else if has_selected_residue && to_contract.is_empty() {
             Some(
                 cff.terms
                     .iter()

@@ -1,6 +1,5 @@
 general:
   debug: 0
-  use_ltd: false
 integrand:
   type: gamma_loop
 kinematics:

@@ -10,6 +10,191 @@ use super::*;
 
 #[test]
 #[serial]
+fn display_and_generation_timings_follow_saved_representation_payloads() -> Result<()> {
+    use gammaloop_api::state::State;
+    use three_dimensional_reps::RepresentationMode::{Cff, Ltd};
+
+    let test_name = "display_generated_representations";
+    let root = get_tests_workspace_path().join(test_name);
+    let mut cli = get_test_cli(None, &root, Some(test_name.to_owned()), true)?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands=false global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            r#"set default-runtime string '
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0,0.0,0.0,5.0],[5.0,0.0,0.0,-5.0],[5.0,3.0,0.0,4.0],"dependent"]
+helicities = [0,0,0,0]
+[subtraction]
+disable_threshold_subtraction = false
+'"#,
+        ],
+    )?;
+    let mut expected = Vec::new();
+    for (name, modes, compiled) in [
+        ("cff", vec![Cff], false),
+        ("ltd", vec![Ltd], true),
+        ("mixed", vec![Ltd, Cff], true),
+        ("mixed_cpp", vec![Ltd, Cff], true),
+        ("cross", vec![Ltd, Cff], true),
+    ] {
+        let process_name = format!("display_{name}");
+        let graph_path = if name == "cross" {
+            cli.run_command(
+                r#"set default-runtime string '
+[kinematics.externals.data]
+momenta = [[4.0,0.0,0.0,0.0]]
+helicities = [0]
+'"#,
+            )?;
+            // The scalar test numerator also defines the degree-two insertion,
+            // which has no interaction rule in scalars-default.
+            let dot = fs::read_to_string("tests/resources/graphs/dotted_bubble.dot")?.replacen(
+                "num = 1",
+                "num = 1\n    node [num=1]",
+                1,
+            );
+            let path = root.join("dotted_bubble_scalar.dot");
+            fs::write(&path, dot)?;
+            path
+        } else {
+            std::path::PathBuf::from("tests/resources/graphs/scalar_box.dot")
+        };
+        let process = ProcessRef::Unqualified(process_name.clone());
+        let integrand_name = name.to_owned();
+        cli.run_command(&format!(
+            "import graphs {} -p {process_name} -i {name}",
+            graph_path.display()
+        ))?;
+        assert!(
+            cli.state
+                .get_integrand_info(Some(&process), Some(&integrand_name))
+                .is_err()
+        );
+        cli.run_command("display processes")?;
+        cli.run_command(&format!("display integrands -p {process_name}"))?;
+        cli.cli_settings
+            .global
+            .generation
+            .uv
+            .local_uv_cts_from_expanded_4d_integrands = modes.contains(&Ltd);
+        cli.cli_settings
+            .global
+            .generation
+            .three_dimensional_representations = modes.clone();
+        cli.cli_settings.global.generation.evaluator.compile = compiled;
+        cli.cli_settings.global.generation.compile.compilation_mode = if name == "mixed_cpp" {
+            gammalooprs::settings::global::CompilationMode::Cpp
+        } else {
+            gammalooprs::settings::global::CompilationMode::Symjit
+        };
+        cli.run_command(&format!("generate existing -p {process_name} -i {name}"))?;
+
+        // Generation settings can change after building a payload. Display must
+        // report the frozen programs and native maps, not these next-build options.
+        cli.cli_settings
+            .global
+            .generation
+            .three_dimensional_representations = vec![Cff];
+        let info = cli
+            .state
+            .get_integrand_info(Some(&process), Some(&integrand_name))?;
+        assert_eq!(info.generated_representations, modes);
+        assert_eq!(
+            matches!(
+                info.kind,
+                gammaloop_api::integrand_info::IntegrandKind::CrossSection
+            ),
+            name == "cross"
+        );
+        assert_eq!(info.graph_count, 1);
+        assert_eq!(info.graph_groups.len(), 1);
+        let group = &info.graph_groups[0];
+        assert_eq!(group.complete_residue_sum, modes.contains(&Ltd));
+        let counts = &group.graphs[0].native_residue_counts;
+        assert_eq!(
+            counts.iter().map(|(mode, _)| *mode).collect::<Vec<_>>(),
+            modes
+        );
+        assert!(counts.iter().all(|(_, count)| *count > 0));
+        if modes.contains(&Ltd) {
+            if name != "cross" {
+                assert_eq!(counts.iter().find(|(mode, _)| *mode == Ltd).unwrap().1, 4);
+            }
+            assert_eq!(
+                group.orientations.len(),
+                1,
+                "native LTD residues share one complete-sum execution entry"
+            );
+            assert_eq!(group.orientations[0].orientation_id, 0);
+            assert!(group.orientations[0].signature.is_empty());
+            assert!(group.orientation_edge_ids.is_empty());
+        } else {
+            assert!(
+                group.orientations.len() > 1,
+                "CFF retains orientation-local execution"
+            );
+        }
+
+        let summary = cli.state.generation_summary(info.process_id, name).unwrap();
+        assert_eq!(summary.reports.len(), 1);
+        let stats = &summary.reports[0].stats;
+        assert_eq!(
+            stats
+                .representations
+                .iter()
+                .map(|row| row.representation)
+                .collect::<Vec<_>>(),
+            modes
+        );
+        let mut accounted = stats.shared_stats();
+        assert!(accounted.total_time > Duration::ZERO);
+        for row in &stats.representations {
+            assert!(row.timings.evaluator_count > 0);
+            assert!(row.timings.expression_build_time() > Duration::ZERO);
+            assert!(row.timings.evaluator_spenso_time > Duration::ZERO);
+            assert!(row.timings.evaluator_symbolica_time > Duration::ZERO);
+            assert_eq!(
+                row.timings.evaluator_compile_time > Duration::ZERO,
+                compiled
+            );
+            accounted.merge_in_place(&row.timings);
+        }
+        assert_eq!(
+            accounted, stats.timings,
+            "shared and per-mode measurements must partition each stage exactly"
+        );
+        let saved_summary = serde_json::to_value(summary)?;
+        cli.run_command(&format!("display integrands -p {process_name} -i {name}"))?;
+        expected.push((integrand_name, info, saved_summary));
+    }
+    cli.save_state()?;
+    cli.state = State::load(root.clone(), None, None)?;
+    cli.state.activate_loaded_integrand_backends(false)?;
+    for (name, before, summary) in expected {
+        let process_name = &before.process_name;
+        let process = ProcessRef::Unqualified(process_name.clone());
+        let loaded = cli.state.get_integrand_info(Some(&process), Some(&name))?;
+        assert_eq!(loaded, before);
+        assert_eq!(
+            serde_json::to_value(
+                cli.state
+                    .generation_summary(loaded.process_id, &name)
+                    .unwrap()
+            )?,
+            summary
+        );
+        cli.run_command(&format!("display integrands -p {process_name} -i {name}"))?;
+    }
+    clean_test(root);
+    Ok(())
+}
+
+#[test]
+#[serial]
 #[allow(clippy::type_complexity)]
 fn diagnostic_shifted_double_poles_validate_and_build_with_exact_energy_bounds() -> Result<()> {
     let test_name = "threedreps_diagnostic_shifted_double_poles";
@@ -85,6 +270,25 @@ fn diagnostic_shifted_double_poles_validate_and_build_with_exact_energy_bounds()
             artifact["energy_degree_bounds"],
             serde_json::to_value(expected_bounds)?
         );
+
+        let ltd_path = test_root.join(format!("{integrand}_ltd.json"));
+        cli.run_command(&format!(
+            "3drep build -p diagnostic_shifted_double_poles -i {integrand} -g 0 --representation ltd --workspace-path {} --json-out {} --no-pretty",
+            workspace_path.display(), ltd_path.display(),
+        ))?;
+        let ltd = serde_json::from_str::<JsonValue>(&fs::read_to_string(ltd_path)?)?;
+        assert_eq!(ltd["family"], "ltd");
+        assert_eq!(
+            ltd["validation"]["repeated_groups"],
+            artifact["validation"]["repeated_groups"]
+        );
+        assert_eq!(
+            ltd["energy_degree_bounds"],
+            artifact["energy_degree_bounds"]
+        );
+        let expression =
+            serde_json::from_value::<ThreeDExpression<OrientationID>>(ltd["expression"].clone())?;
+        assert!(!expression.orientations.is_empty());
 
         if matches!(integrand, "qsq" | "affine" | "factorized") {
             let process_ref =
@@ -281,15 +485,31 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
         gammalooprs::settings::global::UniformNumeratorSamplingScale::None
     );
 
-    let ltd_error = cli
-        .run_command(
-            "3Drep build -p threedreps_box_build -i default -g 0 --representation ltd --no-save-json --no-pretty",
-        )
-        .unwrap_err();
+    let ltd_path = test_root.join("ltd.json");
+    cli.run_command(&format!(
+        "3drep build -p threedreps_box_build -i default -g 0 --representation ltd --workspace-path {} --json-out {} --no-color",
+        workspace_path.display(), ltd_path.display(),
+    ))?;
+    let artifact = serde_json::from_str::<JsonValue>(&fs::read_to_string(&ltd_path)?)?;
+    assert_eq!(artifact["family"], "ltd");
+    assert!(artifact["energy_degree_bounds"].is_null());
+    let ltd =
+        serde_json::from_value::<ThreeDExpression<OrientationID>>(artifact["expression"].clone())?;
+    assert_eq!(ltd.orientations.len(), 4);
+    assert!(ltd.orientations.iter().any(|row| {
+        row.loop_energy_map
+            .iter()
+            .any(|energy| !energy.external_terms.is_empty())
+    }));
+    cli.run_command(
+        "3drep build -p threedreps_box_build -i default -g 0 --family ltd --no-save-json --no-pretty --no-color --show-details-for-residue 0",
+    )?;
+    // This diagnostic constructs symbolic maps only; numerical evaluation remains
+    // in the regular generated-integrand commands.
+    assert!(cli.run_command("3drep evaluate").is_err());
     assert!(
-        format!("{ltd_error:?}").contains(
-            "three-dimensional representation mode Ltd is not implemented; only CFF is currently supported"
-        )
+        cli.run_command("3drep build -g 0 --representation unknown")
+            .is_err()
     );
 
     clean_test(test_root);

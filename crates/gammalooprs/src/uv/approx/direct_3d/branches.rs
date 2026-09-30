@@ -449,6 +449,7 @@ impl DirectResidueBranches {
         let lhs = symbol!("gammalooprs::uv::numerator_family")
             .call_args(std::iter::once(scope.1.clone()).chain(parameters.iter().cloned()));
         let entry = Arc::new(FnMapEntry {
+            inlining: Default::default(),
             lhs,
             rhs,
             args: parameters
@@ -672,6 +673,7 @@ impl DirectResidueBranches {
             };
             probes.push(
                 FnMapEntry {
+                    inlining: Default::default(),
                     rhs: if normalized.is_zero() {
                         Atom::Zero
                     } else {
@@ -766,6 +768,7 @@ impl DirectResidueBranches {
                 );
                 rhs += &lhs * delta.pow(Atom::num(exponent));
                 retained.push(Arc::new(FnMapEntry {
+                    inlining: Default::default(),
                     lhs,
                     rhs: coefficient,
                     args: entry.args.clone(),
@@ -920,6 +923,7 @@ mod tests {
                 );
                 let tag = DirectResidueBranches::numerator_scope().1;
                 let definition = Arc::new(FnMapEntry {
+                    inlining: Default::default(),
                     lhs: function!(family, &tag, s, z),
                     rhs: body,
                     args: vec![s.into(), z.into()],
@@ -1041,6 +1045,7 @@ mod tests {
                 &c
             );
         let definition = Arc::new(FnMapEntry {
+            inlining: Default::default(),
             lhs: function!(family, &tag, parameter),
             rhs: body,
             args: vec![parameter.into()],
@@ -1103,6 +1108,7 @@ mod tests {
             let call = family.call_args([tag.clone()]);
             let body = &g * (&a + &b * &delta) * (&c + &d * &delta);
             let definition = Arc::new(FnMapEntry {
+                inlining: Default::default(),
                 lhs: call.clone(),
                 rhs: body.clone(),
                 args: vec![],
@@ -1200,6 +1206,7 @@ mod tests {
                 .enumerate()
                 .map(|(index, rhs)| {
                     Arc::new(FnMapEntry {
+                        inlining: Default::default(),
                         lhs: family.call_args(
                             std::iter::once(tags[index].clone()).chain(parameters.iter().cloned()),
                         ),
@@ -1319,6 +1326,7 @@ mod tests {
             let tag = DirectResidueBranches::numerator_scope().1;
             let call = family.call_args([tag.clone()]);
             let entry = Arc::new(FnMapEntry {
+                inlining: Default::default(),
                 lhs: call.clone(),
                 rhs: body,
                 args: vec![],
@@ -1376,6 +1384,7 @@ mod tests {
         ];
         for (rhs, root) in cases {
             let entry = Arc::new(FnMapEntry {
+                inlining: Default::default(),
                 lhs: lhs.clone(),
                 rhs,
                 args: vec![parameter.into()],

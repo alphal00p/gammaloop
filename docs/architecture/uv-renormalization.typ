@@ -1,7 +1,8 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-08-17 against `c9f4e32acd2c`
+#strong[Reviewed:] 2026-09-27 for shared four-dimensional preparation and
+per-representation projection.
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -52,6 +53,24 @@ modes:
 The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
+
+Generation supplies all requested three-dimensional representations in
+their configured order to one orchestrator call. Each backend unfolds its
+forest once and computes the local four-dimensional Taylor terms and
+integrated Vakint counterterms during the first representation pass.
+Subsequent passes reuse those values and rebuild the cut-dependent 3D
+projection and final integrand for the selected representation. Each
+completed result is extracted before the next pass replaces the transient
+cut store. `compare` performs this shared preparation independently for
+each backend and compares the result for every requested representation.
+
+Projection caches remain local to a representation pass. Exact source and
+native-generation cache identities also include the full generation
+options, including the representation and occurrence-local bounds. Cached
+payloads retain their certified numerator assignment; reuse never turns
+independent Taylor sources into one capacity or coefficient sum. An LTD
+source contributes its complete residue sum once, with its own numerator
+maps, rather than once per possible production-orientation host.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
@@ -160,7 +179,9 @@ paths from their common root. At a union it:
 The construction operates over an arbitrary number of components and is
 not special-cased for a two-component spectacles graph.
 
-The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, performs the factorized minimax EMR dispatch needed for derivative-created occurrences, and only then projects that completed term to CFF. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized EMR capacity assignment. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+
+Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
 == Marker Representation
 <marker-representation>
@@ -244,6 +265,8 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
+- LTD uses the projected local-4D route. Direct local-3D Taylor
+  subtraction and orientation-local evaluation remain CFF-only.
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

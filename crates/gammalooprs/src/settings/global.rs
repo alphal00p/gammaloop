@@ -6,6 +6,7 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::prelude::*;
+pub use three_dimensional_reps::RepresentationMode;
 
 use crate::{
     GammaLoopContext,
@@ -29,9 +30,15 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
-#[derive(Default)]
 pub struct GenerationSettings {
     // Generation Time settings
+    /// Three-dimensional representations to generate; the first is the default for stability levels.
+    #[serde(
+        deserialize_with = "GenerationSettings::deserialize_three_dimensional_representations",
+        skip_serializing_if = "GenerationSettings::is_default_three_dimensional_representations"
+    )]
+    #[schemars(with = "ThreeDRepresentationSelection")]
+    pub three_dimensional_representations: Vec<RepresentationMode>,
     /// Symbolic simplification, contraction, optimization, and compilation controls for evaluators.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator: EvaluatorSettings,
@@ -71,17 +78,111 @@ pub struct GenerationSettings {
     pub explicit_orientation_sum_only: bool,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(untagged)]
+enum ThreeDRepresentationSelection {
+    One(RepresentationMode),
+    Many(#[schemars(length(min = 1))] Vec<RepresentationMode>),
+}
+
+impl Default for GenerationSettings {
+    fn default() -> Self {
+        Self {
+            three_dimensional_representations: vec![RepresentationMode::Cff],
+            evaluator: Default::default(),
+            feyngen: Default::default(),
+            orientation_pattern: Default::default(),
+            uniform_numerator_sampling_scale: Default::default(),
+            compile: Default::default(),
+            tropical_subgraph_table: Default::default(),
+            threshold_subtraction: Default::default(),
+            vector_polarization_sum_gauge: Default::default(),
+            uv: Default::default(),
+            force_cuts: Default::default(),
+            override_lmb_heuristics: false,
+            explicit_orientation_sum_only: false,
+        }
+    }
+}
+
 impl GenerationSettings {
+    fn deserialize_three_dimensional_representations<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<RepresentationMode>, D::Error> {
+        let selected = ThreeDRepresentationSelection::deserialize(deserializer)?;
+        let mut selected = match selected {
+            ThreeDRepresentationSelection::One(mode) => vec![mode],
+            ThreeDRepresentationSelection::Many(modes) => modes,
+        };
+        if selected.is_empty() {
+            return Err(serde::de::Error::custom(
+                "three_dimensional_representations must contain at least one representation",
+            ));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        selected.retain(|mode| seen.insert(*mode));
+        Ok(selected)
+    }
+
+    fn is_default_three_dimensional_representations(modes: &[RepresentationMode]) -> bool {
+        show_defaults_helper(modes == [RepresentationMode::Cff])
+    }
+
+    pub(crate) fn requires_complete_orientation_sum(&self) -> bool {
+        self.explicit_orientation_sum_only
+            || self
+                .three_dimensional_representations
+                .contains(&RepresentationMode::Ltd)
+    }
+
+    /// Validate generation and its initial runtime settings before any process work.
+    pub fn validate_for_runtime(
+        &self,
+        runtime: &crate::settings::RuntimeSettings,
+    ) -> EyreResult<()> {
+        self.validate_explicit_orientation_sum_options()?;
+        crate::integrands::process::validate_process_runtime_settings(
+            runtime,
+            self.requires_complete_orientation_sum(),
+            &self.three_dimensional_representations,
+        )
+    }
+
     pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
-        if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
+        if self.three_dimensional_representations.is_empty() {
+            return Err(eyre!(
+                "`global.generation.three_dimensional_representations` must contain at least one representation"
+            ));
+        }
+        let distinct = self
+            .three_dimensional_representations
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if distinct.len() != self.three_dimensional_representations.len() {
+            return Err(eyre!(
+                "Programmatically constructed `global.generation.three_dimensional_representations` must be normalized to unique representations, preserving the first occurrence of each mode"
+            ));
+        }
+        if self
+            .three_dimensional_representations
+            .contains(&RepresentationMode::Ltd)
+            && !self.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.generation.three_dimensional_representations` containing `ltd` requires `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true`"
+            ));
+        }
+        if self.uv.local_uv_cts_from_expanded_4d_integrands
+            && !self.requires_complete_orientation_sum()
+        {
             return Err(eyre!(
                 "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` requires `global.generation.explicit_orientation_sum_only = true` because projected 4D counterterms have term-local CFF orientation sums"
             ));
         }
 
-        if self.explicit_orientation_sum_only && self.orientation_pattern.pat.is_some() {
+        if self.requires_complete_orientation_sum() && self.orientation_pattern.pat.is_some() {
             return Err(eyre!(
-                "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
+                "For complete residue summation, `global.generation.orientation_pattern` must be unset (explicit_orientation_sum_only or LTD generation)"
             ));
         }
 
@@ -91,7 +192,117 @@ impl GenerationSettings {
 
 #[cfg(test)]
 mod generation_settings_tests {
-    use super::{GenerationSettings, OrientationPattern};
+    use super::{GenerationSettings, OrientationPattern, RepresentationMode};
+
+    #[test]
+    fn representation_selection_preserves_order_and_rejects_empty_or_unknown_modes() {
+        let _guard = crate::utils::serde_utils::ShowDefaultsGuard::new(false);
+        assert_eq!(
+            GenerationSettings::default().three_dimensional_representations,
+            [RepresentationMode::Cff]
+        );
+        for input in [
+            r#"three_dimensional_representations = "ltd""#,
+            r#"three_dimensional_representations = ["ltd", "ltd"]"#,
+        ] {
+            let settings: GenerationSettings = toml::from_str(input).unwrap();
+            assert_eq!(
+                settings.three_dimensional_representations,
+                [RepresentationMode::Ltd]
+            );
+        }
+        let settings: GenerationSettings =
+            toml::from_str(r#"three_dimensional_representations = ["ltd", "cff", "ltd"]"#).unwrap();
+        assert_eq!(
+            settings.three_dimensional_representations,
+            [RepresentationMode::Ltd, RepresentationMode::Cff]
+        );
+        assert!(
+            toml::to_string(&settings)
+                .unwrap()
+                .contains(r#"three_dimensional_representations = ["ltd", "cff"]"#)
+        );
+        for input in [
+            "three_dimensional_representations = []",
+            r#"three_dimensional_representations = ["unknown"]"#,
+        ] {
+            assert!(toml::from_str::<GenerationSettings>(input).is_err());
+        }
+        let schema = serde_json::to_value(schemars::schema_for!(GenerationSettings)).unwrap();
+        assert!(schema["properties"]["three_dimensional_representations"].is_object());
+        assert!(schema["properties"].get("3dreps").is_none());
+        let error = toml::from_str::<GenerationSettings>(r#"3dreps = ["ltd"]"#).unwrap_err();
+        assert!(error.to_string().contains("unknown field `3dreps`"));
+        let defaults = GenerationSettings::default();
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("three_dimensional_representations")
+        );
+        drop(_guard);
+        let _guard = crate::utils::serde_utils::ShowDefaultsGuard::new(true);
+        let encoded = toml::to_string(&defaults).unwrap();
+        assert!(encoded.contains(r#"three_dimensional_representations = ["cff"]"#));
+        assert_eq!(
+            toml::from_str::<GenerationSettings>(&encoded).unwrap(),
+            defaults
+        );
+    }
+
+    #[test]
+    fn programmatic_representation_selection_rejects_duplicates() {
+        let settings = GenerationSettings {
+            three_dimensional_representations: vec![
+                RepresentationMode::Cff,
+                RepresentationMode::Cff,
+            ],
+            ..Default::default()
+        };
+        let error = settings
+            .validate_explicit_orientation_sum_options()
+            .unwrap_err();
+        assert!(error.to_string().contains("must be normalized"));
+    }
+
+    #[test]
+    fn ltd_requires_four_d_uv_and_implies_complete_summation() {
+        let mut settings = GenerationSettings {
+            three_dimensional_representations: vec![
+                RepresentationMode::Ltd,
+                RepresentationMode::Cff,
+            ],
+            ..Default::default()
+        };
+        assert!(settings.requires_complete_orientation_sum());
+        assert!(!settings.explicit_orientation_sum_only);
+        assert!(
+            settings
+                .validate_explicit_orientation_sum_options()
+                .unwrap_err()
+                .to_string()
+                .contains("local_uv_cts_from_expanded_4d_integrands = true")
+        );
+        settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
+        settings
+            .validate_explicit_orientation_sum_options()
+            .unwrap();
+        settings.orientation_pattern = OrientationPattern::from_user_pattern("(+)").unwrap();
+        assert!(
+            settings
+                .validate_explicit_orientation_sum_options()
+                .unwrap_err()
+                .to_string()
+                .contains("orientation_pattern")
+        );
+        settings.three_dimensional_representations.clear();
+        assert!(
+            settings
+                .validate_explicit_orientation_sum_options()
+                .unwrap_err()
+                .to_string()
+                .contains("at least one")
+        );
+    }
 
     #[test]
     fn projected_4d_cff_requires_an_unfiltered_explicit_orientation_sum() {

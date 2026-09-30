@@ -133,7 +133,7 @@ fn aaa() {
                             Atom::num(edge_id.0 as i64),
                             Atom::from(ExpandedIndex::from_iter([i])),
                         ],
-                        format!("Q({edge_id}, {i})"),
+                        Default::default(),
                         vec![],
                         graph.loop_momentum_basis.loop_atom(
                             edge_id,

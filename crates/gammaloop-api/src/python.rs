@@ -22,8 +22,12 @@ use gammalooprs::{
     utils::tracing::LogLevel,
 };
 use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
-use linnet::half_edge::involution::Orientation;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+
+mod residue_map;
+use residue_map::{
+    PyLinearEnergyExpression, PyResidue, PyResidueMap, PyResidueMapKey, PyResidueVariant,
+};
 
 use crate::{
     commands::{
@@ -239,6 +243,11 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
     m.add_class::<PySettingsValue>()?;
+    m.add_class::<PyLinearEnergyExpression>()?;
+    m.add_class::<PyResidueMapKey>()?;
+    m.add_class::<PyResidue>()?;
+    m.add_class::<PyResidueVariant>()?;
+    m.add_class::<PyResidueMap>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -365,7 +374,7 @@ impl PySettingsValue {
 
     /// Convert the complete detached value tree to ordinary Python containers and scalars.
     fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py_builtin_from_settings_value(py, &self.value)
+        py_builtin_from_json_value(py, &self.value)
     }
 
     #[gen_stub(skip)]
@@ -532,11 +541,11 @@ fn py_object_from_settings_value<'py>(
             )?;
             Ok(value.into_bound(py).into_any())
         }
-        _ => py_builtin_from_settings_value(py, value),
+        _ => py_builtin_from_json_value(py, value),
     }
 }
 
-fn py_builtin_from_settings_value<'py>(
+fn py_builtin_from_json_value<'py>(
     py: Python<'py>,
     value: &JsonValue,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -548,14 +557,14 @@ fn py_builtin_from_settings_value<'py>(
         JsonValue::Array(items) => {
             let list = PyList::empty(py);
             for item in items {
-                list.append(py_builtin_from_settings_value(py, item)?)?;
+                list.append(py_builtin_from_json_value(py, item)?)?;
             }
             Ok(list.into_any())
         }
         JsonValue::Object(map) => {
             let dict = PyDict::new(py);
             for (key, value) in map {
-                dict.set_item(key, py_builtin_from_settings_value(py, value)?)?;
+                dict.set_item(key, py_builtin_from_json_value(py, value)?)?;
             }
             Ok(dict.into_any())
         }
@@ -611,6 +620,132 @@ mod settings_wrapper_tests {
             let general = settings_dict.get_item("general").unwrap();
             assert!(general
                 .get_item("generate_events")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+        });
+    }
+
+    #[test]
+    fn settings_snapshots_preserve_generated_representation_order_and_stability_choice() {
+        use gammalooprs::settings::GlobalSettings;
+        use three_dimensional_reps::RepresentationMode;
+
+        Python::initialize();
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+three_dimensional_representations = ["ltd", "cff", "ltd"]
+[generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+        let encoded = render_smart_toml(&global).unwrap();
+        let restored: GlobalSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored.generation.three_dimensional_representations,
+            [RepresentationMode::Ltd, RepresentationMode::Cff]
+        );
+        let mut runtime = RuntimeSettings::default();
+        runtime.stability.levels[0].three_dimensional_representation =
+            Some(RepresentationMode::Cff);
+        let encoded = render_smart_toml(&runtime).unwrap();
+        let restored_runtime: RuntimeSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored_runtime.stability.levels[0].three_dimensional_representation,
+            Some(RepresentationMode::Cff)
+        );
+        let global_snapshot =
+            PySettingsValue::from_settings(&restored, "global settings", "global").unwrap();
+        let runtime_snapshot =
+            PySettingsValue::from_settings(&restored_runtime, "runtime settings", "runtime")
+                .unwrap();
+        Python::attach(|py| {
+            let generation = Py::new(py, restored.generation.clone()).unwrap();
+            assert!(generation
+                .bind(py)
+                .hasattr("three_dimensional_representations")
+                .unwrap());
+            assert!(!generation
+                .bind(py)
+                .hasattr("three_d_representations")
+                .unwrap());
+            let level = Py::new(py, restored_runtime.stability.levels[0]).unwrap();
+            assert!(level
+                .bind(py)
+                .hasattr("three_dimensional_representation")
+                .unwrap());
+            assert!(!level.bind(py).hasattr("representation").unwrap());
+            let modes = global_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("generation")
+                .unwrap()
+                .get_item("three_dimensional_representations")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap();
+            assert_eq!(modes, ["ltd", "cff"]);
+            let mode = runtime_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("stability")
+                .unwrap()
+                .get_item("levels")
+                .unwrap()
+                .get_item(0)
+                .unwrap()
+                .get_item("three_dimensional_representation")
+                .unwrap()
+                .extract::<String>()
+                .unwrap();
+            assert_eq!(mode, "cff");
+        });
+        let schema = serde_json::to_value(schemars::schema_for!(GlobalSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representations"));
+        let schema = serde_json::to_value(schemars::schema_for!(RuntimeSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representation"));
+    }
+
+    #[test]
+    fn runtime_settings_snapshot_exposes_overlap_objectives() {
+        use gammalooprs::settings::runtime::OverlapCenterObjective;
+        Python::initialize();
+        let settings: RuntimeSettings = toml::from_str(
+            "[subtraction.overlap_settings]\nobjective='min_sum'\nenable_heuristics=false",
+        )
+        .unwrap();
+        let restored: RuntimeSettings =
+            toml::from_str(&render_smart_toml(&settings).unwrap()).unwrap();
+        assert_eq!(
+            restored.subtraction.overlap_settings.objective,
+            OverlapCenterObjective::MinSum
+        );
+        let snapshot =
+            PySettingsValue::from_settings(&restored, "runtime settings", "runtime").unwrap();
+        Python::attach(|py| {
+            let overlap = snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("subtraction")
+                .unwrap()
+                .get_item("overlap_settings")
+                .unwrap();
+            assert_eq!(
+                overlap
+                    .get_item("objective")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "min_sum"
+            );
+            assert!(!overlap
+                .get_item("enable_heuristics")
                 .unwrap()
                 .extract::<bool>()
                 .unwrap());
@@ -893,6 +1028,8 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
+    /// Native residue-map counts as (representation, count), in generation order.
+    pub native_residue_counts: Vec<(String, usize)>,
     /// Threshold directives requested for this graph, including implicit defaults.
     pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
     /// Resolved graph-local threshold registry, when generated metadata is available.
@@ -1109,9 +1246,11 @@ pub struct PyIntegrandGraphGroupInfo {
     pub group_id: usize,
     /// Graphs in this group, with the representative graph marked as master.
     pub graphs: Vec<PyIntegrandGraphInfo>,
+    /// Whether every native residue is evaluated through the complete-sum layout.
+    pub complete_residue_sum: bool,
     /// Edge identifiers that establish the ordering of every orientation signature.
     pub orientation_edge_ids: Vec<usize>,
-    /// Available causal-flow orientations for the representative graph.
+    /// Runtime execution orientations; a complete-sum slot is not a native residue key.
     pub orientations: Vec<PyIntegrandOrientationInfo>,
     /// Available loop-momentum bases for the representative graph.
     pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
@@ -1136,6 +1275,8 @@ pub struct PyIntegrandInfo {
     pub integrand_name: String,
     /// ``"amplitude"`` or ``"cross section"``.
     pub kind: String,
+    /// Generated representations, in persisted generation order.
+    pub generated_representations: Vec<String>,
     /// Compilation backend frozen into the generated integrand.
     pub generation_backend: String,
     /// Backend-specific compilation options, when configured.
@@ -1817,13 +1958,15 @@ impl PyIntegrationResult {
     }
 }
 
-/// Outcome and cost of one numerical-stability precision level.
+/// Outcome and cost of one stability attempt, including precision and representation.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
     /// Numerical precision used for this stability level.
     pub precision: String,
+    /// Generated three-dimensional representation evaluated at this level.
+    pub three_dimensional_representation: String,
     /// Estimated relative accuracy, or ``None`` when it could not be estimated.
     pub estimated_relative_accuracy: Option<f64>,
     pub estimated_decimal_digits: Option<f64>,
@@ -1920,7 +2063,8 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.is_nan)
     }
 
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
+    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
+    /// Each attempt records its precision and representation; precision may repeat.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.inner
@@ -1933,6 +2077,7 @@ impl PySampleEvaluationResult {
                     .iter()
                     .map(|result| PyStabilityResult {
                         precision: result.precision.to_string(),
+                        three_dimensional_representation: result.representation.to_string(),
                         estimated_relative_accuracy: result
                             .estimated_relative_accuracy
                             .map(|value| value.0),
@@ -2040,7 +2185,8 @@ impl PyEvaluationResult {
         self.sample().is_nan()
     }
 
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
+    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
+    /// Each attempt records its precision and representation; precision may repeat.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.sample().stability_results()
@@ -2789,6 +2935,11 @@ fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGr
         graph_id: graph.graph_id,
         name: graph.name,
         is_master: graph.is_master,
+        native_residue_counts: graph
+            .native_residue_counts
+            .into_iter()
+            .map(|(mode, count)| (mode.to_string(), count))
+            .collect(),
         threshold_counterterm_directives: graph
             .threshold_counterterm_directives
             .into_iter()
@@ -3032,6 +3183,7 @@ fn py_integrand_graph_group_info_from_info(
             .into_iter()
             .map(py_integrand_graph_info_from_info)
             .collect(),
+        complete_residue_sum: group.complete_residue_sum,
         orientation_edge_ids: group.orientation_edge_ids,
         orientations: group
             .orientations
@@ -3063,6 +3215,11 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
         process_name: info.process_name,
         integrand_name: info.integrand_name,
         kind: info.kind.to_string(),
+        generated_representations: info
+            .generated_representations
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         generation_backend: info
             .generation_compilation
             .active_backend_name()
@@ -4134,11 +4291,12 @@ impl GammaLoopAPI {
             .collect())
     }
 
-    /// Return the causal-flow orientations generated for one graph.
+    /// Return a detached snapshot of one graph's persisted native residue map.
     ///
-    /// Each returned dictionary maps an edge id to ``1`` (default), ``-1``
-    /// (reversed), or ``0`` (undirected). Supply process and integrand selectors when
-    /// the active state does not identify a unique integrand.
+    /// Keys retain the complete direction vector and exact ordered affine loop and
+    /// edge energy maps. Values retain every native residue ID and all scalar
+    /// variants, with exact Fraction coefficients and unexpanded denominator trees.
+    /// This is graph-level generation data, not the evaluated UV/threshold catalogue.
     ///
     /// Parameters
     /// ----------
@@ -4147,86 +4305,97 @@ impl GammaLoopAPI {
     /// process_id : int, optional
     ///     Numeric process identifier; omit when process selection is unambiguous.
     /// integrand_name : str, optional
-    ///     Integrand containing the graph; omit when integrand selection is unambiguous.
+    ///     Integrand containing the graph; omit when selection is unambiguous.
+    /// three_dimensional_representation : str, optional
+    ///     ``cff`` or ``ltd``; defaults to the first representation generated for
+    ///     this integrand, independently of current mutable generation settings.
     ///
     /// Returns
     /// -------
-    /// list[dict[int, int]]
-    ///     One edge-direction mapping per generated orientation.
-    #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
-    pub(crate) fn get_orientations(
+    /// ResidueMap
+    ///     Detached native entries, shared surfaces and persisted normalization metadata.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the graph or representation is unavailable or the integrand is ungenerated.
+    #[pyo3(signature = (graph_name, process_id=None, integrand_name=None, three_dimensional_representation=None))]
+    pub(crate) fn get_residue_map(
         &self,
         graph_name: String,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> Result<Vec<HashMap<usize, i8>>> {
+        three_dimensional_representation: Option<String>,
+    ) -> PyResult<PyResidueMap> {
+        use three_dimensional_reps::RepresentationMode;
         let (pid, name) = self
             .gammaloop_state
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
-            .map_err(|e| {
-                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
-            })?;
-
-        let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
+            .map_err(to_py_value_error)?;
+        let resolved = self
+            .gammaloop_state
+            .process_list
+            .get_integrand(pid, &name)
+            .map_err(to_py_value_error)?;
+        let generated_modes = resolved
+            .require_generated()
+            .map_err(to_py_value_error)?
+            .generated_representations();
+        let representation = match three_dimensional_representation.as_deref() {
+            Some("cff") => RepresentationMode::Cff,
+            Some("ltd") => RepresentationMode::Ltd,
+            Some(mode) => {
+                return Err(exceptions::PyValueError::new_err(format!(
+                    "Unknown three-dimensional representation '{mode}'; expected 'cff' or 'ltd'"
+                )));
+            }
+            None => *generated_modes.first().ok_or_else(|| {
+                exceptions::PyValueError::new_err(
+                    "No three-dimensional representation was generated for this integrand",
+                )
+            })?,
+        };
+        if !generated_modes.contains(&representation) {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "Representation '{representation}' was not generated for integrand '{name}'"
+            )));
+        }
+        let missing_graph = || {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' was not found in integrand '{name}'"
+            ))
+        };
+        let expression = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let cff = amplitudes
-                    .get(&name)
-                    .unwrap()
+                let amplitude = amplitudes.get(&name).ok_or_else(missing_graph)?;
+                let graph = amplitude
                     .graphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
+                    .ok_or_else(missing_graph)?;
+                graph
                     .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap();
-
-                cff.expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .representations
+                    .get(&representation)
+                    .map(|data| &data.expression)
             }
-
             ProcessCollection::CrossSections(cross_sections) => {
-                let cff = cross_sections
-                    .get(&name)
-                    .unwrap()
+                let cross_section = cross_sections.get(&name).ok_or_else(missing_graph)?;
+                let graph = cross_section
                     .supergraphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
-                    .derived_data
-                    .global_cff_expression
-                    .as_ref()
-                    .unwrap();
-
-                cff.expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .ok_or_else(missing_graph)?;
+                graph.derived_data.expressions.get(&representation)
             }
-        };
-
-        Ok(orientations
-            .into_iter()
-            .map(|orientation| {
-                let mut result = HashMap::new();
-                for (edge_id, direction) in orientation.into_iter() {
-                    let direction = match direction {
-                        Orientation::Default => 1,
-                        Orientation::Reversed => -1,
-                        Orientation::Undirected => 0,
-                    };
-                    result.insert(edge_id.0, direction);
-                }
-                result
-            })
-            .collect())
+        }
+        .ok_or_else(|| {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' has no generated '{representation}' residue map"
+            ))
+        })?;
+        Ok(PyResidueMap::new(graph_name, expression))
     }
 
     /// Serialize the active physics model as JSON.

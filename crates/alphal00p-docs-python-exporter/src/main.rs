@@ -239,7 +239,44 @@ fn validate_exact_surface(
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     match component {
         #[cfg(feature = "gammaloop")]
-        "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
+        "gammaloop-python" => {
+            let mut stub_info = gammaloop_api::python::stub_info()?;
+            let module = stub_info
+                .modules
+                .get_mut("gammaloop._gammaloop")
+                .ok_or("GammaLoop inventory has no extension module")?;
+            // pyo3-stub-gen 0.17.2 emits `other` as keyword-capable for derived
+            // equality, but PyO3 exposes the native slot as `(self, value, /)`.
+            for name in ["LinearEnergyExpression", "ResidueMapKey"] {
+                let class = module
+                    .class
+                    .values_mut()
+                    .find(|class| class.name == name)
+                    .ok_or_else(|| format!("GammaLoop inventory has no {name}"))?;
+                let methods = class
+                    .methods
+                    .get_mut("__eq__")
+                    .ok_or_else(|| format!("{name} inventory has no derived equality"))?;
+                let [method] = methods.as_mut_slice() else {
+                    return Err(format!("{name} must have one derived equality method").into());
+                };
+                if method.parameters.positional_only.len()
+                    + method.parameters.positional_or_keyword.len()
+                    != 1
+                {
+                    return Err(format!("{name} derived equality must have one argument").into());
+                }
+                for parameter in &mut method.parameters.positional_or_keyword {
+                    parameter.name = "value";
+                    parameter.kind = pyo3_stub_gen::type_info::ParameterKind::PositionalOnly;
+                }
+                method
+                    .parameters
+                    .positional_only
+                    .append(&mut method.parameters.positional_or_keyword);
+            }
+            Ok(("gammaloop._gammaloop", stub_info))
+        }
         #[cfg(feature = "linnet")]
         "linnet-py" => Ok(("linnet_py", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
@@ -557,7 +594,7 @@ def validate(runtime_module, stub_source):
             "def combine_diagrams(self, value: builtins.bool) -> None:\n        r\"\"\"\n        Write all diagrams of an integrand to one file during filesystem export.",
             "Create an evenly binned continuous histogram accumulator.\n\n        Parameters\n        ----------\n        title : str",
             "Resolve a relative string path or array index.\n\n        Parameters\n        ----------\n        key : str or int",
-            "Return the causal-flow orientations generated for one graph.\n\n        Each returned dictionary maps an edge id to ``1`` (default), ``-1``\n        (reversed), or ``0`` (undirected). Supply process and integrand selectors when\n        the active state does not identify a unique integrand.\n\n        Parameters\n        ----------\n        graph_name : str",
+            "Return a detached snapshot of one graph's persisted native residue map.\n\n        Keys retain the complete direction vector and exact ordered affine loop and\n        edge energy maps. Values retain every native residue ID and all scalar\n        variants, with exact Fraction coefficients and unexpanded denominator trees.\n        This is graph-level generation data, not the evaluated UV/threshold catalogue.\n\n        Parameters\n        ----------\n        graph_name : str",
         ] {
             assert!(rendered.contains(excerpt), "missing `{excerpt}`");
         }

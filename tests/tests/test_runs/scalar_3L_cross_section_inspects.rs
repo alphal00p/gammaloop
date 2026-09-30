@@ -5,13 +5,14 @@ use gammalooprs::{
     graph::Autogen,
     integrands::evaluation::PreciseEvaluationResultOutput,
     processes::ProcessCollection,
+    settings::global::RepresentationMode,
     utils::{ArbPrec, FloatLike, symbolica_ext::DOD},
 };
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use std::time::Instant;
 use symbolica::{
-    domains::float::{Real, SingleFloat},
+    domains::float::{Real, RealLike, SingleFloat},
     parse,
 };
 
@@ -19,9 +20,8 @@ use symbolica::{
 // local and integrated UV counterterms together with threshold counterterms.
 // Feature-isolation diagnostics belong in separately named tests so they cannot
 // silently weaken this production-route comparison.
-// The current three CFF routes compare orientation-local and explicit-sum 3D UV
-// with the projected local-4D construction. Proper LTD will append a fourth
-// route to this same local-comparison matrix.
+// Compare orientation-local and explicit-sum CFF with local UV from 3D, then
+// CFF and LTD with local UV from 4D. LTD residues are always summed together.
 
 const DEFAULT_FINAL_STATES: &str = "{scalar_0 scalar_0, scalar_0 scalar_0 scalar_1}";
 const SAMPLE_POINT: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
@@ -215,6 +215,7 @@ enum ScalarLocalUvRoute {
     OrientationLocal3dParametric,
     Explicit3d,
     Projected4d,
+    Projected4dLtd,
 }
 
 #[derive(Clone, Copy)]
@@ -247,8 +248,12 @@ fn assert_scalar_uv_profile(
     assert!(generation.uv.subtract_uv);
     assert!(generation.uv.generate_integrated);
     assert!(generation.threshold_subtraction.enable_thresholds);
+    assert!(!generation.threshold_subtraction.disable_integrated_ct);
     assert_eq!(
-        generation.explicit_orientation_sum_only,
+        generation.explicit_orientation_sum_only
+            || generation
+                .three_dimensional_representations
+                .contains(&RepresentationMode::Ltd),
         !mode.per_orientation(),
         "{} needs the matching orientation-sum mode",
         mode.label(),
@@ -400,6 +405,7 @@ fn setup_scalar_3l_cross_section_cli(
             ScalarLocalUvRoute::OrientationLocal3dParametric => (false, false, false),
             ScalarLocalUvRoute::Explicit3d => (true, false, false),
             ScalarLocalUvRoute::Projected4d => (true, true, false),
+            ScalarLocalUvRoute::Projected4dLtd => (false, true, false),
         };
     let evaluator_method = if summed_evaluator {
         "Summed"
@@ -412,14 +418,13 @@ fn setup_scalar_3l_cross_section_cli(
         Some(test_name.to_string()),
         true,
     )?;
-
     run_commands(
         &mut cli,
         &[
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed={summed_evaluator} global.generation.evaluator.summed_function_map=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false"
+                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed={summed_evaluator} global.generation.evaluator.summed_function_map=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.disable_integrated_ct=false global.generation.threshold_subtraction.check_esurface_at_generation=false"
             ),
             &format!(
                 r#"set default-runtime string '
@@ -456,6 +461,17 @@ helicities = [0]
             ),
         ],
     )?;
+    cli.cli_settings
+        .global
+        .generation
+        .three_dimensional_representations =
+        vec![
+            if matches!(local_uv_route, ScalarLocalUvRoute::Projected4dLtd) {
+                RepresentationMode::Ltd
+            } else {
+                RepresentationMode::Cff
+            },
+        ];
     run_commands(&mut cli, graph_commands)?;
     // Keep every momentum-dependent probe on the graph element that owns it.
     // Splitting a dot product across its two edges preserves the shared Lorentz
@@ -506,6 +522,7 @@ helicities = [0]
     assert!(generation.uv.subtract_uv);
     assert!(generation.uv.generate_integrated);
     assert!(generation.threshold_subtraction.enable_thresholds);
+    assert!(!generation.threshold_subtraction.disable_integrated_ct);
     assert!(
         !cli.default_runtime_settings
             .subtraction
@@ -631,19 +648,19 @@ fn run_scalar_3l_cross_section_case_impl(
     let certify_zero = |cli: &gammaloop_integration_tests::CLIState,
                         process: &str,
                         integrand: &str|
-     -> Result<bool> {
+     -> Result<CertifiedZeroWeights> {
         use gammalooprs::{utils::GS, uv::uv_graph::UVE};
         use linnet::half_edge::{involution::EdgeIndex, subgraph::Inclusion};
         use symbolica::atom::{Atom, AtomCore};
         use three_dimensional_reps::ThreeDGraphSource;
 
         if integrand != "numerator" {
-            return Ok(false);
+            return Ok(CertifiedZeroWeights::default());
         }
-        let edge = match case.numerator {
-            NumeratorChoice::SquaredEdge { edge, .. }
-            | NumeratorChoice::QuarticEdge { edge, .. } => EdgeIndex(edge),
-            _ => return Ok(false),
+        let (edge, rank) = match case.numerator {
+            NumeratorChoice::SquaredEdge { edge, .. } => (EdgeIndex(edge), 2),
+            NumeratorChoice::QuarticEdge { edge, .. } => (EdgeIndex(edge), 4),
+            _ => return Ok(CertifiedZeroWeights::default()),
         };
         let (id, name) = cli.state.find_integrand_ref(
             Some(&ProcessRef::Unqualified(process.to_string())),
@@ -679,7 +696,7 @@ fn run_scalar_3l_cross_section_case_impl(
                 .any(|momentum| coefficient.contains_symbol(momentum))
             || !graph.underlying[edge].mass_atom().is_zero()
         {
-            return Ok(false);
+            return Ok(CertifiedZeroWeights::default());
         }
         assert_eq!(
             original.collect_factors(),
@@ -694,7 +711,7 @@ fn run_scalar_3l_cross_section_case_impl(
             .iter()
             .find(|(_, physical)| **physical == edge.0)
         else {
-            return Ok(false);
+            return Ok(CertifiedZeroWeights::default());
         };
         let denominator_ids = parsed.denominator_internal_edge_ids();
         let Some(denominator) = parsed
@@ -702,7 +719,7 @@ fn run_scalar_3l_cross_section_case_impl(
             .iter()
             .find(|line| line.edge_id == local && denominator_ids.contains(&local))
         else {
-            return Ok(false);
+            return Ok(CertifiedZeroWeights::default());
         };
         // The full affine momentum and mass must define a unique simple pole.
         // Comparing only loop rows would incorrectly merge shifted propagators.
@@ -722,23 +739,95 @@ fn run_scalar_3l_cross_section_case_impl(
                 })
                 .count()
                 == 1;
-        if !simple
-            || source.cuts.is_empty()
-            || !source
-                .cuts
-                .iter()
-                .all(|cut| cut.cut.as_subgraph().includes(&graph[&edge].1))
-        {
-            return Ok(false);
+        if !simple {
+            return Ok(CertifiedZeroWeights::default());
         }
-        // Every physical cut crosses this simple massless denominator. Its
-        // original numerator vanishes on that cut, so the complete source is zero.
-        Ok(true)
+        // These connected scalar fixtures have six cubic vertices and eight
+        // internal lines at three loops. Each phi^3 coupling has mass dimension
+        // one, so 4L - 2I + V - 1 (decay flux) + rank = 1 + rank.
+        // Use the same physical E_cm convention as stability_reference_scale.
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 3);
+        assert_eq!(denominator_ids.len(), 8);
+        assert_eq!(graph.initial_state_cut.iter_edges(graph).count(), 1);
+        let vertices = graph
+            .underlying
+            .iter_nodes()
+            .filter_map(|(_, _, vertex)| vertex.vertex_rule.as_ref())
+            .collect_vec();
+        assert_eq!(vertices.len(), 6);
+        assert!(vertices.iter().all(|vertex| vertex.particles.len() == 3
+            && vertex.name.starts_with("V_3_SCALAR_")));
+        let settings = cross_sections[&name]
+            .integrand
+            .as_ref()
+            .unwrap()
+            .get_settings();
+        assert!(!settings.general.disable_flux_factor);
+        let mut zeros = CertifiedZeroWeights {
+            dimensionless_tolerance: F(ArbPrec::default().epsilon()).sqrt().to_f64(),
+            e_cm: settings.kinematics.e_cm,
+            energy_dimension: 1 + rank,
+            ..Default::default()
+        };
+        // This fixture has one actual source graph. The physical CutId inventory
+        // is independent of its LMB sampling channels.
+        for (cut_id, cut) in source.cuts.iter_enumerated() {
+            let key = (0, cut_id.0);
+            let zero_original = cut.cut.as_subgraph().includes(&graph[&edge].1);
+            if zero_original {
+                zeros.original_cuts.insert(key);
+            }
+            let associations = &source.derived_data.cut_threshold_associations[cut_id];
+            if zero_original
+                || associations
+                    .left
+                    .iter()
+                    .chain(&associations.right)
+                    .all(|threshold| threshold.threshold_boundary_edges.contains(&edge))
+            {
+                zeros.threshold_cuts.insert(key);
+            }
+        }
+        zeros.all_cuts_zero =
+            !source.cuts.is_empty() && zeros.original_cuts.len() == source.cuts.len();
+        let info = cli.state.get_integrand_info(
+            Some(&ProcessRef::Unqualified(process.to_owned())),
+            Some(&name),
+        )?;
+        for group in &info.graph_groups {
+            for graph in &group.graphs {
+                if let Some(registry) = &graph.threshold_counterterms {
+                    for component in &registry.components {
+                        for (cut_id, _) in source.cuts.iter_enumerated() {
+                            let key = (graph.graph_id, cut_id.0);
+                            let zero_threshold = component.variant_ids.iter().any(|variant_id| {
+                                let variant = &registry.variants[*variant_id];
+                                // Scalar default multipliers are dimensionless; both bare
+                                // and weighted decomposition values have physical units.
+                                assert!(variant.multiplier.is_none());
+                                variant.associations.iter().any(|association| {
+                                    association.cut_id == Some(cut_id.0)
+                                        && association.threshold_edges.contains(&edge.0)
+                                })
+                            });
+                            if zeros.original_cuts.contains(&key) || zero_threshold {
+                                zeros.threshold_components.insert((
+                                    key.0,
+                                    key.1,
+                                    component.component_id,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(zeros)
     };
 
     let total_started = Instant::now();
     let owned_numerators = [(numerator_process.as_str(), "numerator", case.numerator)];
-    // The complete scalar matrix keeps its three-way local comparison, while
+    // The complete scalar matrix keeps its four-way local comparison, while
     // the per-orientation and summed profiles cover the six default probes
     // that span the relevant Taylor orders and UV-forest structure. Reuse the
     // generated numerator states so profiling needs no additional generation.
@@ -853,14 +942,27 @@ fn run_scalar_3l_cross_section_case_impl(
         case.graph,
         generation_started.elapsed()
     );
+    let mut ltd_4d = setup_scalar_3l_cross_section_cli(
+        &format!(
+            "{test_scope}_{}_ltd_local_4d",
+            case.graph.to_ascii_lowercase()
+        ),
+        ScalarLocalUvRoute::Projected4dLtd,
+        &graph_command_refs,
+        &owned_numerators,
+        &integrand_command_refs,
+        exercise_orientation_local_3d,
+    )?;
     if profile_scalar_uv_routes {
-        assert_scalar_uv_profile(
-            &mut cff_4d,
-            case,
-            &numerator_process,
-            "numerator",
-            ScalarUvProfileMode::CompleteResidueSum,
-        )?;
+        for cli in [&mut cff_4d, &mut ltd_4d] {
+            assert_scalar_uv_profile(
+                cli,
+                case,
+                &numerator_process,
+                "numerator",
+                ScalarUvProfileMode::CompleteResidueSum,
+            )?;
+        }
     }
     for (evaluation_index, (process, integrand, label)) in evaluations.into_iter().enumerate() {
         let evaluation_started = Instant::now();
@@ -886,6 +988,13 @@ fn run_scalar_3l_cross_section_case_impl(
             &sample_point,
             &[],
         )?;
+        let ltd_4d_result = evaluate_xspace_process_with_events(
+            &mut ltd_4d,
+            &process,
+            &integrand,
+            &sample_point,
+            &[],
+        )?;
         if exercise_orientation_local_3d {
             println!(
                 "scalar {} local-UV route projected local-4D: evaluation {:?}",
@@ -893,11 +1002,17 @@ fn run_scalar_3l_cross_section_case_impl(
                 evaluation_started.elapsed()
             );
         }
+        let zero_weights = certify_zero(&cff_4d, &process, &integrand)?;
+        assert_eq!(zero_weights, certify_zero(&cff_3d, &process, &integrand)?);
+        assert_eq!(zero_weights, certify_zero(&ltd_4d, &process, &integrand)?);
+        let zero_source = zero_weights.all_cuts_zero;
+        let has_zero_weights = !zero_weights.original_cuts.is_empty()
+            || !zero_weights.threshold_cuts.is_empty()
+            || !zero_weights.threshold_components.is_empty();
         if let Some(localized_3d_results) = &localized_3d_results {
-            let (localized_3d_result, localized_3d_arb, zero_source) =
+            let (localized_3d_result, localized_3d_arb, localized_zero_weights) =
                 &localized_3d_results[evaluation_index];
-            assert_eq!(*zero_source, certify_zero(&cff_3d, &process, &integrand)?);
-            assert_eq!(*zero_source, certify_zero(&cff_4d, &process, &integrand)?);
+            assert_eq!(localized_zero_weights, &zero_weights);
             let route_totals = [
                 (
                     "orientation-local local-3D",
@@ -911,12 +1026,16 @@ fn run_scalar_3l_cross_section_case_impl(
                     "projected local-4D",
                     complex_ff64(&cff_4d_result.sample.evaluation.integrand_result),
                 ),
+                (
+                    "LTD local-4D",
+                    complex_ff64(&ltd_4d_result.sample.evaluation.integrand_result),
+                ),
             ];
             for (route, total) in route_totals {
                 assert!(
                     total.re.is_finite()
                         && total.im.is_finite()
-                        && (*zero_source || total.re.hypot(total.im) > 0.0),
+                        && (zero_source || total.re.hypot(total.im) > 0.0),
                     "scalar {} {label} {route} total must be finite and nonzero unless the source certifies a vanishing cut, got {total:e}",
                     case.graph
                 );
@@ -924,12 +1043,15 @@ fn run_scalar_3l_cross_section_case_impl(
             let arb_started = Instant::now();
             let explicit_3d_arb = evaluate_arb(&mut cff_3d, &process, &integrand)?;
             let projected_4d_arb = evaluate_arb(&mut cff_4d, &process, &integrand)?;
-            if *zero_source {
-                let zero_tolerance = F(localized_3d_arb.re.0.epsilon()).sqrt();
+            let ltd_4d_arb = evaluate_arb(&mut ltd_4d, &process, &integrand)?;
+            if zero_source {
+                let zero_tolerance = F(localized_3d_arb.re.0.epsilon()).sqrt()
+                    * F::<ArbPrec>::from_f64(zero_weights.e_cm).powi(zero_weights.energy_dimension);
                 for (route, actual) in [
                     ("orientation-local local-3D", localized_3d_arb),
                     ("explicit-sum local-3D", &explicit_3d_arb),
                     ("projected local-4D", &projected_4d_arb),
+                    ("LTD local-4D", &ltd_4d_arb),
                 ] {
                     assert!(
                         actual.norm().re <= zero_tolerance,
@@ -942,6 +1064,7 @@ fn run_scalar_3l_cross_section_case_impl(
             for (route, actual) in [
                 ("orientation-local local-3D", localized_3d_arb),
                 ("projected local-4D", &projected_4d_arb),
+                ("LTD local-4D", &ltd_4d_arb),
             ] {
                 let distance = (actual.clone() - explicit_3d_arb.clone()).norm().re;
                 let actual_norm = actual.norm().re;
@@ -963,33 +1086,73 @@ fn run_scalar_3l_cross_section_case_impl(
                     .into_iter()
                     .all(|value| value.re.is_finite() && value.im.is_finite());
                 assert!(
-                    finite && (*zero_source || relative_distance <= precision_tolerance),
+                    finite && (zero_source || relative_distance <= precision_tolerance),
                     "scalar {} {label} {route} differs from precise explicit-sum local-3D: actual={actual:e}, reference={explicit_3d_arb:e}, relative delta={relative_distance:e}, tolerance={precision_tolerance:e}",
                     case.graph,
                 );
             }
             println!(
-                "scalar {} local-UV three-route Arb comparison: {:?}, exact source zero={zero_source}",
+                "scalar {} local-UV four-route Arb comparison: {:?}, exact source zero={zero_source}",
                 case.graph,
                 arb_started.elapsed()
             );
         }
-        assert_complex_approx_eq(
-            complex_ff64(&cff_4d_result.sample.evaluation.integrand_result),
-            complex_ff64(&cff_3d_result.sample.evaluation.integrand_result),
-            format!(
-                "scalar {} {label} Double total: CFF local-4D vs CFF local-3D",
-                case.graph
-            ),
-        );
+        if zero_source {
+            // Retain the adaptive/Double checks at the f64 API's precision,
+            // independently for every route, in addition to the stronger Arb
+            // zero check above. A zero has no meaningful relative denominator.
+            let physical_scale = zero_weights.e_cm.powi(zero_weights.energy_dimension);
+            let tolerance = f64::EPSILON.sqrt() * physical_scale;
+            let mut adaptive_results = vec![
+                ("CFF local-3D", &cff_3d_result),
+                ("CFF local-4D", &cff_4d_result),
+                ("LTD local-4D", &ltd_4d_result),
+            ];
+            if let Some(results) = &localized_3d_results {
+                adaptive_results.push((
+                    "orientation-local CFF local-3D",
+                    &results[evaluation_index].0,
+                ));
+            }
+            for (route, result) in adaptive_results {
+                let value = complex_ff64(&result.sample.evaluation.integrand_result);
+                assert!(
+                    value.re.is_finite()
+                        && value.im.is_finite()
+                        && value.re.hypot(value.im) <= tolerance,
+                    "scalar {} {label} {route} adaptive zero: {value:e}, E_cm scale={}, tolerance={tolerance:e}",
+                    case.graph,
+                    physical_scale
+                );
+            }
+        } else {
+            assert_complex_approx_eq(
+                complex_ff64(&cff_4d_result.sample.evaluation.integrand_result),
+                complex_ff64(&cff_3d_result.sample.evaluation.integrand_result),
+                format!(
+                    "scalar {} {label} Double total: CFF local-4D vs CFF local-3D",
+                    case.graph
+                ),
+            );
+            assert_complex_approx_eq(
+                complex_ff64(&ltd_4d_result.sample.evaluation.integrand_result),
+                complex_ff64(&cff_4d_result.sample.evaluation.integrand_result),
+                format!(
+                    "scalar {} {label} Double total: LTD local-4D vs CFF local-4D",
+                    case.graph
+                ),
+            );
+        }
         // Retain the Double total checks above. Individual UV-subtracted event
         // components suffer cancellations hidden at the complete-integrand scale;
         // compare those factorized payloads in Quad at the same strict tolerance.
-        for cli in [&mut cff_3d, &mut cff_4d] {
+        // Exact zero certificates use Arb before applying dimensioned zero bounds.
+        let rich_precision = if has_zero_weights { "Arb" } else { "Quad" };
+        for cli in [&mut cff_3d, &mut cff_4d, &mut ltd_4d] {
             cli.run_command(&format!(
                 r#"set process -p {process} -i {integrand} string '
 [stability]
-levels = [{{ precision = "Quad", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
+levels = [{{ precision = "{rich_precision}", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
 '"#,
             ))?;
         }
@@ -1007,6 +1170,13 @@ levels = [{{ precision = "Quad", required_precision_for_re = 1e-12, required_pre
             &sample_point,
             &[],
         )?;
+        let ltd_4d_result = evaluate_xspace_process_with_events(
+            &mut ltd_4d,
+            &process,
+            &integrand,
+            &sample_point,
+            &[],
+        )?;
         assert_evaluation_outputs_match(
             &cff_4d_result.sample.evaluation,
             &cff_3d_result.sample.evaluation,
@@ -1014,12 +1184,36 @@ levels = [{{ precision = "Quad", required_precision_for_re = 1e-12, required_pre
                 "scalar 3L cross-section {} {label} rich inspect parity: CFF local-4D vs CFF local-3D",
                 case.graph
             ),
+            if has_zero_weights {
+                EventWeightComparison::CertifiedZeros {
+                    individual_orders: true,
+                    weights: &zero_weights,
+                }
+            } else {
+                EventWeightComparison::IndividualOrders
+            },
+        );
+        assert_evaluation_outputs_match(
+            &ltd_4d_result.sample.evaluation,
+            &cff_4d_result.sample.evaluation,
+            &format!(
+                "scalar 3L cross-section {} {label} rich inspect parity: LTD local-4D vs CFF local-4D",
+                case.graph
+            ),
+            if has_zero_weights {
+                EventWeightComparison::CertifiedZeros {
+                    individual_orders: false,
+                    weights: &zero_weights,
+                }
+            } else {
+                EventWeightComparison::PhysicalResidues
+            },
         );
     }
 
     if exercise_orientation_local_3d {
         println!(
-            "scalar {} local-UV three-route acceptance: total {:?}",
+            "scalar {} local-UV four-route acceptance: total {:?}",
             case.graph,
             total_started.elapsed()
         );
@@ -1027,6 +1221,7 @@ levels = [{{ precision = "Quad", required_precision_for_re = 1e-12, required_pre
 
     clean_test(&cff_3d.cli_settings.state.folder);
     clean_test(&cff_4d.cli_settings.state.folder);
+    clean_test(&ltd_4d.cli_settings.state.folder);
     Ok(())
 }
 

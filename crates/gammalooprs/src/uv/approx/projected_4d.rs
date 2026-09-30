@@ -104,6 +104,8 @@ pub(crate) struct Local4dProjectionContext {
     pub(crate) canonical_preparation_builds: usize,
     pub(crate) source_preparation_builds: usize,
     pub(crate) projected_component_requests: usize,
+    /// Measured representation-independent 4D/canonical/source preparation.
+    pub(crate) shared_preparation_time: Duration,
 }
 
 impl Default for Local4dProjectionContext {
@@ -116,6 +118,7 @@ impl Default for Local4dProjectionContext {
             canonical_preparation_builds: 0,
             source_preparation_builds: 0,
             projected_component_requests: 0,
+            shared_preparation_time: Duration::ZERO,
         }
     }
 }
@@ -140,6 +143,7 @@ impl Local4dProjectionContext {
         let projection_started = Instant::now();
         let sector = Arc::new(raw.canonical_projection(graph)?);
         let projection_time = projection_started.elapsed();
+        self.shared_preparation_time += projection_time;
         let bytes = raw.accounted_bytes()
             + sector.accounted_bytes()
             + 2 * std::mem::size_of::<PreparationKey>()
@@ -213,7 +217,21 @@ impl Localizer<'_> {
             let raw_reports = sector
                 .active_components
                 .iter()
-                .map(|(owners, _, _)| {
+                .enumerate()
+                .map(|(component, (owners, _, _))| {
+                    // Class powers already identify repeated exact poles in
+                    // this component, including degenerate physical owners.
+                    // Ordinary LTD needs no energy degree analysis, even for
+                    // a diagnostic report; raised LTD retains the raw report
+                    // alongside its certified occurrence-local sampling bounds.
+                    let needs_bounds = options.representation
+                        == three_dimensional_reps::RepresentationMode::Cff
+                        || term.powers.iter().any(|(class, power)| {
+                            *power > 1 && sector.class(*class).component == component
+                        });
+                    if !needs_bounds {
+                        return Ok(EnergyPowerCapMap::default());
+                    }
                     let owners = graph
                         .iter_edges_of(owners)
                         .filter_map(|(pair, edge, data)| {
@@ -230,7 +248,7 @@ impl Localizer<'_> {
                 stage = "raw_physical_degree_report",
                 components = raw_reports.len(),
                 elapsed_ms = raw_degree_started.elapsed().as_secs_f64() * 1000.0,
-                "Analyzed raw physical ownership for degree reporting"
+                "Prepared raw physical degree reports"
             );
             let mut component_denominators = vec![Vec::new(); sector.active_components.len()];
             let mut residual_factor = Atom::one();
@@ -486,6 +504,7 @@ impl Localizer<'_> {
             let lhs = symbol!("gammalooprs::uv::numerator_family")
                 .call_args(std::iter::once(scope.clone()).chain(parameters.iter().cloned()));
             let entry = Arc::new(FnMapEntry {
+                inlining: Default::default(),
                 lhs,
                 rhs: numerator,
                 args: parameters
@@ -549,6 +568,7 @@ impl Projected4dApproximation<'_> {
         // owned by the separately integrated branch; no cograph is attached here.
         let normalization_started = Instant::now();
         let sectors = local.projection_sectors();
+        context.shared_preparation_time += normalization_started.elapsed();
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "sector_grouping",
             raw_sectors = local.active_sectors().len(),
@@ -650,6 +670,68 @@ mod tests {
         subgraph::{InternalSubGraph, SubSetOps},
     };
     use symbolica::atom::{AtomCore, FunctionBuilder};
+
+    #[test]
+    fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph ordinary_ltd_taylor {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 mass=2]
+        })?;
+        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
+        let mut coefficient = numerator;
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let mass_squared = Atom::num((usize::from(edge) + 1).pow(2));
+            let polynomial = (1..=3).fold(
+                GS.emr_mom(edge, GS.cind(0)).pow(2) - &mass_squared,
+                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
+            );
+            coefficient *= GS
+                .den(usize::from(edge), momentum, mass_squared, polynomial)
+                .pow(-1);
+        }
+        let full = graph.full_filter();
+        let canonical = FourDSector::new(
+            coefficient,
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        )
+        .canonical_projection(&graph)?;
+        assert!(
+            canonical
+                .terms
+                .iter()
+                .all(|term| term.powers.values().all(|p| *p == 1))
+        );
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let mut options = graph.denominator_only_cff_3d_expression_options();
+        options.representation = three_dimensional_reps::RepresentationMode::Ltd;
+        options.energy_degree_bounds = None;
+        let reports = std::sync::Mutex::new(Vec::new());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true)
+                .with_energy_degree_bound_reports(&reports),
+        );
+        let projected = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &canonical,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        assert_eq!(projected.numerators().len(), 1);
+        let reports = reports.into_inner().unwrap();
+        assert_eq!(reports.len(), 1);
+        assert!(reports[0].physical_parent_bounds.is_empty());
+        assert!(reports[0].assigned_cff_source_bounds.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {

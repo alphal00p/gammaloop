@@ -3,6 +3,7 @@
 
 import builtins
 import enum
+import fractions
 import numpy
 import numpy.typing
 import os
@@ -298,7 +299,8 @@ class EvaluationResult:
     @property
     def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        Ordered stability-level attempts, or ``None`` when metadata was omitted.
+        Each attempt records its precision and representation; precision may repeat.
         """
     @property
     def event_groups(self) -> builtins.list[EventGroup]:
@@ -696,13 +698,14 @@ class GammaLoopAPI:
             Per graph, a list of ``(loop_edges, external_edges, edge_signatures)``
             tuples. Each signature contains its loop and external coefficients.
         """
-    def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:
+    def get_residue_map(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, three_dimensional_representation: typing.Optional[builtins.str] = None) -> ResidueMap:
         r"""
-        Return the causal-flow orientations generated for one graph.
+        Return a detached snapshot of one graph's persisted native residue map.
 
-        Each returned dictionary maps an edge id to ``1`` (default), ``-1``
-        (reversed), or ``0`` (undirected). Supply process and integrand selectors when
-        the active state does not identify a unique integrand.
+        Keys retain the complete direction vector and exact ordered affine loop and
+        edge energy maps. Values retain every native residue ID and all scalar
+        variants, with exact Fraction coefficients and unexpanded denominator trees.
+        This is graph-level generation data, not the evaluated UV/threshold catalogue.
 
         Parameters
         ----------
@@ -711,12 +714,20 @@ class GammaLoopAPI:
         process_id : int, optional
             Numeric process identifier; omit when process selection is unambiguous.
         integrand_name : str, optional
-            Integrand containing the graph; omit when integrand selection is unambiguous.
+            Integrand containing the graph; omit when selection is unambiguous.
+        three_dimensional_representation : str, optional
+            ``cff`` or ``ltd``; defaults to the first representation generated for
+            this integrand, independently of current mutable generation settings.
 
         Returns
         -------
-        list[dict[int, int]]
-            One edge-direction mapping per generated orientation.
+        ResidueMap
+            Detached native entries, shared surfaces and persisted normalization metadata.
+
+        Raises
+        ------
+        ValueError
+            If the graph or representation is unavailable or the integrand is ungenerated.
         """
     def get_model(self) -> builtins.str:
         r"""
@@ -1481,6 +1492,11 @@ class IntegrandGraph:
         Whether this graph is the representative graph of its group.
         """
     @property
+    def native_residue_counts(self) -> builtins.list[tuple[builtins.str, builtins.int]]:
+        r"""
+        Native residue-map counts as (representation, count), in generation order.
+        """
+    @property
     def threshold_counterterm_directives(self) -> builtins.list[ThresholdCountertermDirective]:
         r"""
         Threshold directives requested for this graph, including implicit defaults.
@@ -1507,6 +1523,11 @@ class IntegrandGraphGroup:
         Graphs in this group, with the representative graph marked as master.
         """
     @property
+    def complete_residue_sum(self) -> builtins.bool:
+        r"""
+        Whether every native residue is evaluated through the complete-sum layout.
+        """
+    @property
     def orientation_edge_ids(self) -> builtins.list[builtins.int]:
         r"""
         Edge identifiers that establish the ordering of every orientation signature.
@@ -1514,7 +1535,7 @@ class IntegrandGraphGroup:
     @property
     def orientations(self) -> builtins.list[IntegrandOrientation]:
         r"""
-        Available causal-flow orientations for the representative graph.
+        Runtime execution orientations; a complete-sum slot is not a native residue key.
         """
     @property
     def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:
@@ -1561,6 +1582,11 @@ class IntegrandInfo:
     def kind(self) -> builtins.str:
         r"""
         ``"amplitude"`` or ``"cross section"``.
+        """
+    @property
+    def generated_representations(self) -> builtins.list[builtins.str]:
+        r"""
+        Generated representations, in persisted generation order.
         """
     @property
     def generation_backend(self) -> builtins.str:
@@ -1753,6 +1779,39 @@ class IntegrationTableComponentResult:
     def max_weight_impact(self) -> builtins.float: ...
 
 @typing.final
+class LinearEnergyExpression:
+    r"""
+    Immutable exact affine energy expression, retaining native term order.
+    """
+    @property
+    def internal_terms(self) -> tuple[tuple[int, fractions.Fraction], ...]:
+        r"""
+        Ordered ``(internal_edge_id, Fraction)`` terms multiplying on-shell energies.
+        """
+    @property
+    def external_terms(self) -> tuple[tuple[int, fractions.Fraction], ...]:
+        r"""
+        Ordered ``(external_edge_id, Fraction)`` terms multiplying external energies.
+        """
+    @property
+    def uniform_scale_coeff(self) -> fractions.Fraction:
+        r"""
+        Exact coefficient of the independent numerator sampling scale M.
+        """
+    @property
+    def constant(self) -> fractions.Fraction:
+        r"""
+        Exact constant energy shift.
+        """
+    @property
+    def canonical_string(self) -> builtins.str:
+        r"""
+        Native symbolic form for diagnostics; equality uses the exact stored terms.
+        """
+    def __eq__(self, value: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+
+@typing.final
 class MaxWeightInfoEntry:
     r"""
     Largest observed contribution for one signed integration component.
@@ -1765,6 +1824,139 @@ class MaxWeightInfoEntry:
     def max_eval(self) -> builtins.float: ...
     @property
     def coordinates(self) -> typing.Optional[builtins.str]: ...
+
+@typing.final
+class Residue:
+    r"""
+    One expression-local residue entry; several native IDs can share the same key.
+    """
+    @property
+    def native_id(self) -> builtins.int:
+        r"""
+        Native expression-local ID, independent of runtime execution slots.
+        """
+    @property
+    def label(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def numerator_map_index(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def variants(self) -> builtins.list[ResidueVariant]: ...
+
+@typing.final
+class ResidueMap:
+    r"""
+    Detached snapshot of one graph's persisted native 3D representation.
+
+    This is the generated graph-level residue map, not the evaluated UV/threshold
+    catalogue or a partition into independently integrable LTD contributions.
+    """
+    @property
+    def graph_name(self) -> builtins.str: ...
+    @property
+    def representation(self) -> builtins.str: ...
+    @property
+    def entries(self) -> dict[ResidueMapKey, list[Residue]]:
+        r"""
+        New dict keyed by immutable native residue identities; every native ID is retained.
+        """
+    @property
+    def surfaces(self) -> dict:
+        r"""
+        Shared native surface records, keyed by tagged ``(kind, id)`` references.
+        Unit and infinite surfaces use literal references with ID None.
+        """
+    @property
+    def residual_denominators(self) -> list:
+        r"""
+        Unintegrated four-dimensional denominator records, preserving edge ID and power.
+        """
+    @property
+    def energy_factor_ownership(self) -> builtins.str: ...
+    @property
+    def energy_factor_components(self) -> list:
+        r"""
+        Source components with their edge IDs, energy ownership and both prefactor signs.
+        """
+    @property
+    def denominator_only_global_prefactor_sign(self) -> builtins.int: ...
+    @property
+    def core_global_prefactor_sign(self) -> builtins.int: ...
+
+@typing.final
+class ResidueMapKey:
+    r"""
+    Immutable native residue identity, independent of IDs, labels and scalar variants.
+    """
+    @property
+    def directions(self) -> tuple[int, ...]:
+        r"""
+        Complete native edge-direction vector: default 1, reversed -1, undirected 0.
+        """
+    @property
+    def loop_energy_map(self) -> tuple[LinearEnergyExpression, ...]:
+        r"""
+        Exact affine energies in native loop-coordinate order.
+        """
+    @property
+    def edge_energy_map(self) -> tuple[LinearEnergyExpression, ...]:
+        r"""
+        Exact affine energies in native internal-edge order.
+        """
+    @property
+    def canonical_string(self) -> builtins.str:
+        r"""
+        The native ``residue_map_key()`` diagnostic string.
+        """
+    def __eq__(self, value: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+
+@typing.final
+class ResidueVariant:
+    r"""
+    One scalar variant of a native residue, with unexpanded denominator topology.
+    """
+    @property
+    def origin(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def prefactor(self) -> fractions.Fraction:
+        r"""
+        Exact scalar prefactor, including the separately recorded absorbed signs.
+        """
+    @property
+    def half_edges(self) -> builtins.list[builtins.int]:
+        r"""
+        Ordered edge occurrences supplying factors ``1/(2 E_edge)``; repetitions remain.
+        """
+    @property
+    def denominator_edges(self) -> builtins.list[builtins.int]:
+        r"""
+        Ordered original denominator-edge occurrences, including repeated edges.
+        """
+    @property
+    def denominator_surface_signs(self) -> dict:
+        r"""
+        Absorbed orientation signs keyed by tagged surface references.
+        """
+    @property
+    def denominator_edge_support_signs(self) -> dict:
+        r"""
+        Absorbed routing signs keyed by ordered tuples of denominator-edge support.
+        """
+    @property
+    def uniform_scale_power(self) -> builtins.int:
+        r"""
+        Power of ``1/M`` multiplying this variant.
+        """
+    @property
+    def numerator_surfaces(self) -> builtins.list[tuple[builtins.str, typing.Optional[builtins.int]]]:
+        r"""
+        Ordered numerator-surface references, preserving multiplicities.
+        """
+    @property
+    def denominator(self) -> dict:
+        r"""
+        Native tree: root ID (or None) and nodes with surface, children and parent IDs.
+        """
 
 @typing.final
 class SampleEvaluationResult:
@@ -1814,7 +2006,8 @@ class SampleEvaluationResult:
     @property
     def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        Ordered stability-level attempts, or ``None`` when metadata was omitted.
+        Each attempt records its precision and representation; precision may repeat.
         """
     @property
     def event_groups(self) -> builtins.list[EventGroup]:
@@ -1954,12 +2147,17 @@ class SlotIntegrationResult:
 @typing.final
 class StabilityResult:
     r"""
-    Outcome and cost of one numerical-stability precision level.
+    Outcome and cost of one stability attempt, including precision and representation.
     """
     @property
     def precision(self) -> builtins.str:
         r"""
         Numerical precision used for this stability level.
+        """
+    @property
+    def three_dimensional_representation(self) -> builtins.str:
+        r"""
+        Generated three-dimensional representation evaluated at this level.
         """
     @property
     def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:

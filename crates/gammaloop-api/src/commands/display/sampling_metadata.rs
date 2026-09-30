@@ -237,7 +237,10 @@ impl SamplingMetadata {
                     },
                 )
             {
-                return Err(eyre!("Cannot export sampling for '{}': explicit selectors changed the canonical channel IDs or definitions", graph.name));
+                return Err(eyre!(
+                    "Cannot export sampling for '{}': explicit selectors changed the canonical channel IDs or definitions",
+                    graph.name
+                ));
             }
         }
         Ok(())

@@ -251,7 +251,9 @@ fn compute_legacy_forest(
         crate::utils::vakint()?,
         orientation,
         &generation_settings.uv,
-    )
+        true,
+    )?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -283,6 +285,7 @@ fn export_hedge_poset_forest(
             eyre!("Computed UV forest export requires its stored production CFF expression")
         })?,
         &generation_settings.uv,
+        true,
     )?;
     node_terms.extend(
         forests
@@ -553,18 +556,22 @@ mod tests {
                         let graph = &amplitudes["default"].graphs[0];
                         (
                             &graph.graph,
-                            graph.derived_data.cff_expression.as_ref().unwrap(),
-                            graph.derived_data.resolved_integrand()?,
+                            &graph.derived_data.representations
+                                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                                .expression,
+                            graph.derived_data.representations
+                                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                                .resolved_integrand()?,
                         )
                     }
                     ProcessCollection::CrossSections(cross_sections) => {
                         let graph = &cross_sections["default"].supergraphs[0];
                         (
                             &graph.graph,
-                            graph.derived_data.global_cff_expression.as_ref().unwrap(),
-                            graph
-                                .derived_data
-                                .cut_paramatric_integrand
+                            &graph.derived_data.expressions
+                                [&three_dimensional_reps::generation::RepresentationMode::Cff],
+                            graph.derived_data.cut_parametric_integrands
+                                [&three_dimensional_reps::generation::RepresentationMode::Cff]
                                 .iter()
                                 .map(|integrand| integrand.integrands.resolved())
                                 .collect::<color_eyre::Result<Vec<_>>>()?
@@ -575,7 +582,10 @@ mod tests {
                         )
                     }
                 };
-                let options = graph.production_cff_3d_expression_options(&settings.generation)?;
+                let options = graph.production_3d_expression_options(
+                    &settings.generation,
+                    settings.generation.three_dimensional_representations[0],
+                )?;
                 let orientation = OrientationProjection::exact_expression(
                     production,
                     &options,
@@ -695,7 +705,10 @@ mod tests {
             generation.uv.final_integrand,
             crate::uv::settings::FinalIntegrandDimension::ThreeD
         );
-        let options = graph.production_cff_3d_expression_options(&generation)?;
+        let options = graph.production_3d_expression_options(
+            &generation,
+            generation.three_dimensional_representations[0],
+        )?;
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let production = graph.generate_3d_expression_for_integrand(
             &[],

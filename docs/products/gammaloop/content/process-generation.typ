@@ -148,10 +148,77 @@ A reproducible run keeps its stages explicit:
 
 - import or select the model before resolving a process specification;
 - generate the process and inspect the retained diagrams;
-- generate the requested integrand representation;
+- generate the requested integrand representations;
 - set kinematics, sampling, stability, and subtraction settings;
 - evaluate samples or run an integration command block;
 - exit with persistence enabled when the state should be resumed.
+
+== Choose three-dimensional representations
+
+`global.generation.three_dimensional_representations` selects the representations built for an integrand. Its default is
+`["cff"]`; `"ltd"` and `["ltd", "cff"]` are also valid. The list must be nonempty, and duplicate
+entries are removed while preserving the first occurrence. The first entry supplies the default
+representation for stability levels that omit `three_dimensional_representation`.
+
+LTD requires `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` and automatically
+selects complete residue sums. Generation orientation filters and runtime selection or sampling of
+individual orientations are unavailable for these integrands: LTD's cancellation of H-surfaces
+requires summing its residues. Both representations share the generated graph, physical cuts,
+threshold geometry, and four-dimensional UV counterterms.
+
+Integrand generation validates these options and the initial runtime settings before generating
+diagrams or clearing existing processes. Requests with `--only-diagrams` defer integrand validation
+until an integrand is requested.
+
+// docs-example: syntax
+```toml
+[global.generation]
+three_dimensional_representations = ["ltd", "cff"]
+
+[global.generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+```
+
+Each entry of `runtime.stability.levels` can set `three_dimensional_representation = "cff"` or `three_dimensional_representation = "ltd"`, provided that
+representation was generated. Repeated precisions are allowed: a ladder may try double-precision
+LTD, then double-precision CFF, then a higher precision. LTD is typically faster to evaluate;
+CFF avoids H-surface cancellations and can be more stable. The numerical result, cut weights,
+and threshold-counterterm weights agree after the complete sums.
+For a degenerate higher-order pole, this comparison includes all derivative-order
+pieces of the same physical cut or threshold residue. Individual pieces can differ
+between representations; contributions for different cuts or observables remain
+separate.
+
+`display processes` and `display integrands` report the representations actually stored in each
+integrand, in generation order. Changing `global.generation.three_dimensional_representations` does not change that inventory;
+imported diagrams without an integrand are marked as not generated. The detailed orientation
+view distinguishes native residue-map keys from runtime execution slots. For example, an LTD
+triacontagon has 30 native keys and one complete-sum execution slot. Shared graph topology, cuts,
+and threshold geometry appear once.
+
+The generation summary and `display integrand -p <process> -i <integrand> --category generation` divide accumulated graph work
+into an aggregate row, shared preparation, and ordered representation rows. CFF and LTD each
+have expression preparation, Spenso contraction, Symbolica evaluator construction, and compilation
+timings. Common graph preparation, four-dimensional UV work, and helper programs are counted
+once in the shared row. Percentages use the aggregate duration; graph jobs can overlap when
+generation runs in parallel, so the summed durations are not elapsed process time. Saved states
+retain the same inventory and timing breakdown.
+
+The `3drep` diagnostic (also spelled `3Drep`) builds the selected graph's symbolic
+expression directly, without UV or threshold subtraction. Select LTD with
+`3drep build -g 0 --representation ltd --no-color`; `validate` checks its input
+topology. This diagnostic choice is independent of the integrand's generated
+representation list. It does not generate an auxiliary CFF expression.
+
+The LTD summary displays each affine loop-energy key using internal on-shell
+energies `OSE[i]`, external energies `E[i]`, and any numerator sampling scale `M`.
+It lists E/H surfaces, exact prefactors, factor powers, and denominator trees.
+The numerator is shared across the map. Use `--show-details-for-residue 0` for
+the full loop/edge maps and terms of row 0; the existing
+`--show-details-for-orientation` spelling also works. A quoted
+`"<label>|N<map>|<variant>"` selector disambiguates maps with the same orientation
+label. These selectors inspect symbolic terms; numerical evaluation uses the
+ordinary integrand commands and sums all LTD residues.
 
 == Select integration slots and targets
 

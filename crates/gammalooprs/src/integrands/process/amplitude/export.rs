@@ -87,6 +87,7 @@ fn export_generic_evaluator<T: ExportAtomTo>(
         exprs,
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
+        zero_components: evaluator.zero_components.clone(),
     })
 }
 
@@ -163,7 +164,13 @@ fn export_evaluator_map<T: ExportAtomTo>(
 }
 
 fn standalone_rust_script() -> String {
-    include_str!("standalone_template.rs").to_string()
+    include_str!("standalone_template.rs").replace(
+        "use crate::integrands::process::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};",
+        &format!(
+            "mod retained_dual {{\n{}\n}}\nuse retained_dual::{{RetainedFunctionDefinition, build_dual_evaluator}};",
+            include_str!("../retained_dual.rs"),
+        ),
+    )
 }
 
 pub trait ExportAtomTo: Sized {
@@ -270,22 +277,19 @@ impl AmplitudeIntegrand {
                         .map(|entry| entry.archive())
                         .collect::<Result<Vec<_>>>()?;
 
-                    let original_integrand = export_evaluator_stack(
-                        &term.original_integrand,
-                        orientation_start,
-                        residue_map_id_start,
-                        multiplicative_offset,
-                        representative_input.clone(),
-                    )?;
-
+                    let original_integrand = term.original_integrand.iter().map(|(representation, evaluator)| {
+                        Ok((representation.to_string(), export_evaluator_stack(
+                            evaluator, orientation_start, residue_map_id_start,
+                            multiplicative_offset, representative_input.clone(),
+                        )?))
+                    }).collect::<Result<BTreeMap<_,_>>>()?;
                     let export_counterterm = |counterterm: &crate::subtraction::amplitude_counterterm::AmplitudeCountertermEvaluator| {
-                        export_evaluator_map(
-                            &counterterm.evaluator_stacks,
-                            orientation_start,
-                            residue_map_id_start,
-                            multiplicative_offset,
-                            &representative_input,
-                        )
+                        counterterm.evaluator_stacks.iter().map(|(representation, stacks)| {
+                            Ok((representation.to_string(), export_evaluator_map(
+                                stacks, orientation_start, residue_map_id_start,
+                                multiplicative_offset, &representative_input,
+                            )?))
+                        }).collect::<Result<BTreeMap<_,_>>>()
                     };
                     let threshold_counterterms = if term.threshold_counterterm.legacy_equivalent {
                         term.threshold_counterterm
@@ -388,6 +392,12 @@ impl AmplitudeIntegrand {
             .collect::<Result<Vec<_>>>()?;
         Ok(StandaloneEvaluatorArchive {
             version: STANDALONE_EVALUATORS_VERSION,
+            three_d_representations: self
+                .data
+                .three_d_representations
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             numeric_target,
             symbolica_state,
             graph_terms,
@@ -515,6 +525,10 @@ impl AmplitudeIntegrand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "standalone_template.rs"]
+mod standalone_template_tests;
 
 #[cfg(test)]
 mod tests {

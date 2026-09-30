@@ -141,6 +141,8 @@ features = [
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
+# Match the retained-call serialization version used by the backend regressions.
+symjit = "=2.26.3"
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]
@@ -154,7 +156,7 @@ fjcore = []
 higher_loops = []
 pyo3-extension-module = ["pyo3/extension-module"]
 python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
-python_api = ["pyo3"]
+python_api = ["pyo3", "three-dimensional-reps/python_api"]
 # insta.opt-level = 3
 python_stubgen = ["dep:pyo3-stub-gen", "python_api"]
 
