@@ -222,11 +222,7 @@ impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
     }
 
     pub fn self_dual_slice(&self) -> &[Slot<R, Aind>] {
-        if self.base_start >= self.structure.len() {
-            &self.structure[..]
-        } else {
-            &self.structure[self.base_start..]
-        }
+        &self.structure[..self.n_self_dual()]
     }
 
     pub fn n_self_dual(&self) -> usize {
@@ -530,6 +526,12 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         let a = self.structure.remove(i);
         let b = self.structure.remove(j);
         assert!(a.matches(&b), "cannot trace unmatched slots {a} and {b}");
+        // Each removed slot in front of a partition moves that partition's start down.
+        for start in [&mut self.base_start, &mut self.dual_start] {
+            if *start != usize::MAX {
+                *start -= usize::from(j < *start) + usize::from(i < *start);
+            }
+        }
     }
 
     fn trace_out(&mut self) {
@@ -962,6 +964,48 @@ pub mod test {
         println!("{:?}", b);
         println!("{}", a.merge(&b).unwrap().0);
         println!("{}", b.merge(&a).unwrap().0);
+    }
+
+    #[test]
+    fn partition_slices_split_representation_kinds() {
+        let self_dual = Euclidean {}.new_slot(4, 2).to_lib();
+        let upper = Lorentz {}.new_slot(3, 1).to_lib();
+        let lower = Lorentz {}.new_slot(3, 3).to_lib().dual();
+        let structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([lower, self_dual, upper]).into_canonical();
+
+        assert_eq!(structure.self_dual_slice(), [self_dual]);
+        assert_eq!(structure.base_slice(), [upper]);
+        assert_eq!(structure.dual_slice(), [lower]);
+    }
+
+    #[test]
+    fn trace_keeps_remaining_slots_contractible() {
+        // Tracing removes slots in front of later partitions. The slots left
+        // behind must keep their variance, or merging misses their contraction.
+        let traced = Lorentz {}.new_slot(3, 0).to_lib();
+        let lower = Lorentz {}.new_slot(3, 1).to_lib().dual();
+        let mut dualizable: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([traced, lower, traced.dual()]).into_canonical();
+        dualizable.trace_out();
+        assert_eq!(dualizable.dual_slice(), [lower]);
+        assert!(dualizable.base_slice().is_empty());
+
+        let euclidean = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = lower.dual();
+        let mut self_dual: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([euclidean, euclidean, upper]).into_canonical();
+        self_dual.trace_out();
+        assert_eq!(self_dual.base_slice(), [upper]);
+        assert!(self_dual.self_dual_slice().is_empty());
+
+        for (structure, remaining) in [(dualizable, lower), (self_dual, upper)] {
+            let partner: OrderedStructure<LibraryRep> =
+                Canonicalized::from_iter([remaining.dual()]).into_canonical();
+            let (merged, common, _, _) = structure.merge(&partner).unwrap();
+            assert!(merged.is_scalar());
+            assert_eq!(common.n_included(), 1);
+        }
     }
 
     #[cfg(feature = "shadowing")]
