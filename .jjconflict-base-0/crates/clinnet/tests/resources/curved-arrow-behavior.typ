@@ -13,6 +13,22 @@
   let path = curve.path(source, sink)
   let geometry-checks = ()
 
+  // Either single move raises the collision cost, but moving both lowers it.
+  // The host-certified annealing search must cross this barrier and retain
+  // the original candidate records, including their integer cost types.
+  let candidate(left, cost) = (
+    bounds: (left: left, right: left + 1, bottom: 0, top: 1), cost: cost,
+  )
+  let labels = (
+    (candidates: (candidate(0, 0.001), candidate(11.3495, 0))),
+    (candidates: (candidate(10, 0.001), candidate(1.3495, 0))),
+  )
+  assert.eq(
+    cbor.encode(drawing._relax-label-placements(labels, (), label-padding: 0)),
+    cbor.encode(labels.map(label => label.candidates.last())),
+    message: "annealing crosses an energy barrier without changing candidate records",
+  )
+
   // The batched sampler must retain the exact arithmetic of scalar prefix
   // trimming, including endpoint clamps, degenerate curves and mixed segments.
   for sampled in (
@@ -211,14 +227,17 @@
       let identity = cetz.matrix.ident(4)
       // Batching path drawing preserves CeTZ primitives, including disconnected
       // or empty subpaths and transforms that collapse distinct endpoints.
-      for sampled in (
-        path, straight, curved,
-        curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close()),
-        curve.path(curve.move-to((0, 0)), curve.move-to((1, 1)), curve.line-to((2, 3))),
-        curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.move-to((3, 2)), curve.line-to((4, 1))),
+      for (sampled, unit) in (
+        (path, 1), (straight, 1), (curved, 1),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close()), 1),
+        (curve.path(curve.move-to((0, 0)), curve.move-to((1, 1)), curve.line-to((2, 3))), 1),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.move-to((3, 2)), curve.line-to((4, 1))), 1),
+        (curve.path(curve.move-to((-0.0, 0.0)), curve.quad-to((1, 3), (2, 0))), 1.75),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.line-to((1, 1)), curve.close()), -0.25),
+        (curved, 1pt),
       ) {
         let primitives = {
-          for (origin, closed, segments) in curve.to-cetz-data(sampled) {
+          for (origin, closed, segments) in curve.to-cetz-data(sampled, unit: unit) {
             let current = origin
             for (kind, ..args) in segments {
               if kind == "l" { cetz.draw.line(current, args.last()) }
@@ -234,9 +253,11 @@
           cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
         ) {
           let local = ctx + (transform: transform)
-          let actual = curve.to-cetz(sampled).first()(local)
+          let actual = curve.to-cetz(sampled, unit: unit).first()(local)
           let expected = cetz.draw.merge-path(primitives).first()(local)
           assert.eq(actual.drawables, expected.drawables, message: "batched path geometry")
+          assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+            cbor.encode(expected.drawables.map(d => d.segments)), message: "batched path coordinates")
           assert.eq(actual.ctx.prev, expected.ctx.prev, message: "batched path context")
         }
       }

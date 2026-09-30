@@ -449,6 +449,8 @@ struct ForceBuffers {
     edges: EdgeVec<Vector3<f64>>,
     projected_vertices: NodeVec<Vector3<f64>>,
     projected_edges: EdgeVec<Vector3<f64>>,
+    node_points: NodeVec<Point3<f64>>,
+    edge_points: EdgeVec<Point3<f64>>,
 }
 
 impl ForceBuffers {
@@ -458,6 +460,8 @@ impl ForceBuffers {
             edges: vec![Vector3::zero(); edges].into(),
             projected_vertices: vec![Vector3::zero(); nodes].into(),
             projected_edges: vec![Vector3::zero(); edges].into(),
+            node_points: vec![Point3::origin(); nodes].into(),
+            edge_points: vec![Point3::origin(); edges].into(),
         }
     }
 
@@ -474,6 +478,14 @@ impl ForceBuffers {
         V: HasPointConstraint,
         N: NodeStorageOps<NodeData = V> + Clone,
     {
+        for &node in &workset.active_nodes {
+            self.node_points[node] =
+                point3_from_point(state.vertex_points[node], node_z[node], scale);
+        }
+        for &edge in &workset.active_edges {
+            self.edge_points[edge] =
+                point3_from_point(state.edge_points[edge], edge_z[edge], scale);
+        }
         let forces_v = &mut self.vertices;
         let forces_e = &mut self.edges;
         for (_, force) in forces_v.iter_mut() {
@@ -485,13 +497,13 @@ impl ForceBuffers {
 
         // Vertex-vertex repulsion. Fixed vertices still act as static sources, but
         // we only accumulate forces that can reach a planar or raw-depth degree of freedom.
-        for &ni in &workset.force_nodes {
-            let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
-            for &nj in &workset.active_nodes {
-                if ni == nj {
+        for (i, &ni) in workset.active_nodes.iter().enumerate() {
+            let pi = self.node_points[ni];
+            for &nj in &workset.active_nodes[i + 1..] {
+                if !workset.force_node[ni] && !workset.force_node[nj] {
                     continue;
                 }
-                let pj = point3_from_point(state.vertex_points[nj], node_z[nj], scale);
+                let pj = self.node_points[nj];
                 let d = pi - pj;
                 let dist = d.magnitude();
                 if dist <= 1e-9 {
@@ -500,7 +512,14 @@ impl ForceBuffers {
                 let dir = d / dist;
                 let fmag = 0.5 * energy.c_vv / (dist + energy.eps).powi(2);
                 let f = dir * fmag;
-                forces_v[ni] += f;
+                // Lower-index reactions arrive before this node's own pairs,
+                // retaining the original neighbor order in every sum.
+                if workset.force_node[ni] {
+                    forces_v[ni] += f;
+                }
+                if workset.force_node[nj] {
+                    forces_v[nj] -= f;
+                }
             }
         }
 
@@ -509,12 +528,12 @@ impl ForceBuffers {
             // Evaluate each pair once. Node-major traversal retains each
             // vertex's edge order and each edge's node order when summing.
             for &ni in &workset.active_nodes {
-                let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
+                let pi = self.node_points[ni];
                 for &ei in &workset.active_edges {
                     if !workset.force_node[ni] && !workset.force_edge[ei] {
                         continue;
                     }
-                    let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
+                    let pe = self.edge_points[ei];
                     let d = pi - pe;
                     let dist = d.magnitude();
                     if dist <= 1e-9 {
@@ -535,14 +554,14 @@ impl ForceBuffers {
 
         // Springs and local edge-edge repulsion around nodes.
         for &ni in &workset.active_nodes {
-            let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
+            let pi = self.node_points[ni];
             let edges = &workset.incident_edges[ni];
 
             for &ei in edges {
                 if !workset.force_node[ni] && !workset.force_edge[ei] {
                     continue;
                 }
-                let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
+                let pe = self.edge_points[ei];
                 let d = pi - pe;
                 let dist = d.magnitude();
                 if dist <= 1e-9 {
@@ -568,8 +587,8 @@ impl ForceBuffers {
                     if !workset.force_edge[ea] && !workset.force_edge[eb] {
                         continue;
                     }
-                    let pa = point3_from_point(state.edge_points[ea], edge_z[ea], scale);
-                    let pb = point3_from_point(state.edge_points[eb], edge_z[eb], scale);
+                    let pa = self.edge_points[ea];
+                    let pb = self.edge_points[eb];
                     let d = pa - pb;
                     let dist = d.magnitude();
                     if dist <= 1e-9 {
@@ -599,8 +618,8 @@ impl ForceBuffers {
                     if !workset.force_edge[ei] && !workset.force_edge[ej] {
                         continue;
                     }
-                    let pi = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
-                    let pj = point3_from_point(state.edge_points[ej], edge_z[ej], scale);
+                    let pi = self.edge_points[ei];
+                    let pj = self.edge_points[ej];
                     let d = pi - pj;
                     let dist = d.magnitude();
                     if dist <= 1e-9 {
@@ -667,10 +686,7 @@ impl ForceBuffers {
         // Center gravity (if enabled).
         if energy.c_center != 0.0 {
             for &ni in &workset.force_nodes {
-                forces_v[ni] += center_gravity_force(
-                    point3_from_point(state.vertex_points[ni], node_z[ni], scale),
-                    energy.c_center,
-                );
+                forces_v[ni] += center_gravity_force(self.node_points[ni], energy.c_center);
             }
         }
 

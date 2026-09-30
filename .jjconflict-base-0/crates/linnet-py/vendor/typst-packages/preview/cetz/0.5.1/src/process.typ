@@ -30,7 +30,14 @@
       }
 
       points += if d.type == "path" {
-        path-util.bounds(d.segments)
+        if d.segments == () { () } else {
+          let result = path-util._bounds-aabb(d.segments)
+          if result.finite {
+            (result.bounds.low, result.bounds.high)
+          } else {
+            path-util.bounds(d.segments)
+          }
+        }
       } else if d.type == "content" {
         let (x, y, _, w, h,) = d.pos + (d.width, d.height)
         ((x - w / 2, y - h / 2, 0.0), (x + w / 2, y + h / 2, 0.0))

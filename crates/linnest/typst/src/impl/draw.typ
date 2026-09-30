@@ -60,58 +60,24 @@
 }
 
 #let _draw-identity-targets(ctx, targets) = {
-  let drawables = ()
-  let previous = none
-  let place = none
-  for target in targets {
-    // Consecutive samples share their link and box size. Resolve their content
-    // once, while preserving coordinate hooks and context updates for each hit.
-    if target.body != previous {
-      place = cetz.draw.prepare-content(ctx, target.body, padding: 0)
-      previous = target.body
-    }
-    let position = none
-    (ctx, position) = cetz.coordinate.resolve(ctx, target.position)
-    let result = place(ctx, position)
-    ctx = result.ctx
-    drawables += result.drawables
+  if "content-many" not in cetz.draw {
+    let result = cetz.process.many(ctx, targets.map(target => {
+      cetz.draw.floating(cetz.draw.content(target.position, target.body, padding: 0))
+    }).flatten(), compute-bounds: false)
+    return (ctx: result.ctx, drawables: result.drawables)
   }
-  (ctx: ctx, drawables: cetz.drawable.apply-tags(drawables, cetz.drawable.TAG.no-bounds))
+  cetz.draw.content-many(ctx, targets, padding: 0, tags: (cetz.drawable.TAG.no-bounds,))
 }
 
 #let _edge-identity-targets(ctx, parts, hrefs) = {
   let targets = ()
-  let paths = parts.map(part => curve-api.path(..part.segments.map(curve-api.from-cubic)))
-  let lengths = paths.map(curve-api.length)
-  let total = lengths.sum()
-  let offset = 0
-  for (part, path, length) in parts.zip(paths, lengths) {
-    if part.visible and length > 0 {
-      // Pick the endpoint half-edges in the outer quarters of arc length.
-      // Keep the two central quarters separately tagged for half-edge highlighting.
-      for quarter in range(4) {
-        let start = calc.max(0, total * quarter / 4 - offset)
-        let end = calc.min(length, total * (quarter + 1) / 4 - offset)
-        if start >= end { continue }
-        let region = curve-api.trim(path, start-outset: start, end-outset: length - end)
-        for segment in curve-api.segments(region) {
-          // The maximum control-polygon step bounds the cubic's derivative, so
-          // adjacent targets overlap even on highly nonuniform curves.
-          let speed = 3 * calc.max(
-            _point-distance(segment.start, segment.control-start),
-            _point-distance(segment.control-start, segment.control-end),
-            _point-distance(segment.control-end, segment.end),
-          )
-          let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
-          for step in range(steps + 1) {
-            targets += _identity-target(
-              curve-api.cubic-point(segment, step / steps), hrefs.at(quarter),
-            )
-          }
-        }
-      }
-    }
-    offset += length
+  // Preserve arc-length quarters and the control-polygon sampling bound while
+  // batching path construction, trimming and de Casteljau evaluation.
+  for (region, points) in curve-api.region-samples(
+    parts, regions: 4, unit: ctx.length / 1pt, step: 4,
+  ) {
+    let body = link(hrefs.at(region), box(width: 8pt, height: 8pt))
+    targets += points.map(point => (position: point, body: body))
   }
   targets
 }
@@ -997,7 +963,10 @@
       label-pos,
       auto,
     ))
-    let lengths = paths.map(path => curve-api.length(path, accuracy: accuracy))
+    let lengths = ()
+    for path in paths {
+      lengths.push(curve-api.length(path, accuracy: accuracy))
+    }
     let half-length = lengths.at(index)
     let split-outset = calc.min(
       half-length,
@@ -1893,9 +1862,10 @@
   let element = cetz.draw.content((0, 0), label, padding: 0, ..label-style)
   let measured = element.first()(ctx)
   let origin = cetz.matrix.mul4x4-vec3(ctx.transform, (0, 0, 0))
-  let corners = ("north-west", "north-east", "south-west", "south-east").map(
-    anchor => cetz.vector.sub((measured.anchors)(anchor), origin),
-  )
+  let corners = ()
+  for anchor in ("north-west", "north-east", "south-west", "south-east") {
+    corners.push(cetz.vector.sub((measured.anchors)(anchor), origin))
+  }
   let total = if path == none { 0 } else { curve-api.length(path, accuracy: accuracy) }
   let preferred = calc.clamp(total / 2 + shift, 0, total)
   let movable = placement and fixed-position == none and clear-box and _style-value(style, "label-slide") and total > accuracy
@@ -1971,24 +1941,33 @@
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let geometry = _plugin.label_collision_geometry(cbor.encode((
+  let geometry = cbor.encode((
     placements: placements.map(label => (
       edge: label.at("edge", default: none),
       candidates: label.candidates.map(candidate => (bounds: candidate.bounds, cost: candidate.cost)),
     )),
     obstacles: obstacles, label-padding: label-padding,
     obstacle-padding: _label-collision-padding.obstacles,
-  )))
+  ))
   let math = (
     temperatures: range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)),
     exponentials: (), pair-padding: _label-collision-padding.labels,
   )
   let result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
-  // Native exp is only a prediction. Replay with Typst's exact results until
-  // every acceptance calculation is certified. Each replay extends the exact
-  // execution prefix, so even differing platform math cannot change the result.
+  // Native exp is only a prediction. Its value only affects comparisons with
+  // RNG thresholds, so Typst can certify all decisions through their interval.
+  // A mismatch replays with exact host values, extending the verified prefix.
   while result.missing.len() > 0 {
-    math.exponentials += result.missing.map(argument => (argument, calc.exp(argument)))
+    let verified = true
+    for check in result.missing {
+      let probability = calc.exp(check.argument)
+      math.exponentials.push((check.argument, probability))
+      // Negate the original comparison to certify every rejection.
+      verified = (verified
+        and (check.lower == none or check.lower < probability)
+        and (check.upper == none or not (check.upper < probability)))
+    }
+    if verified { break }
     result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
   }
   placements.enumerate().map(((i, label)) => {
@@ -2859,13 +2838,14 @@
           )
           node-boxes.push(box)
           if not boundary {
-            let corners = ((-1, -1), (-1, 1), (1, -1), (1, 1)).map(sign => (
-              cetz.matrix.mul4x4-vec3(ctx.transform, (
+            let corners = ()
+            for sign in ((-1, -1), (-1, 1), (1, -1), (1, 1)) {
+              corners.push(cetz.matrix.mul4x4-vec3(ctx.transform, (
                 _point-x(pos) + sign.at(0) * node-width / 2,
                 _point-y(pos) + sign.at(1) * node-height / 2,
                 0,
-              ))
-            ))
+              )))
+            }
             label-obstacles.push((
               left: calc.min(..corners.map(p => p.at(0))),
               right: calc.max(..corners.map(p => p.at(0))),
@@ -3761,8 +3741,12 @@
 
         // Measure the graph before overlays and reuse its processed drawables,
         // so custom drawing callbacks run once and named anchors remain available.
+        let drawable-elements = ()
+        for element in elements.flatten() {
+          if element != none { drawable-elements.push(element) }
+        }
         let rendered = cetz.process.many(
-          ctx, elements.flatten().filter(element => element != none),
+          ctx, drawable-elements,
           compute-bounds: type(options.draw-after) == function,
         )
         let overlay = options.draw-after

@@ -1673,6 +1673,117 @@ fn solve_tridiagonal(
     Ok(solution)
 }
 
+#[derive(Deserialize)]
+struct RegionPart {
+    segments: Vec<CubicBezierSpec>,
+    visible: bool,
+}
+
+#[derive(Deserialize)]
+struct RegionSamplesSpec {
+    parts: Vec<RegionPart>,
+    regions: usize,
+    #[serde(deserialize_with = "deserialize_f64")]
+    unit: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    step: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    accuracy: f64,
+}
+
+impl RegionSamplesSpec {
+    fn samples(self) -> Result<Vec<(usize, Vec<CurvePoint>)>, String> {
+        let accuracy = validate_positive_accuracy(self.accuracy)?;
+        if self.regions == 0
+            || !self.unit.is_finite()
+            || !(self.step.is_finite() && self.step > 0.0)
+        {
+            return Err("Region sampling needs positive regions/step and a finite unit".into());
+        }
+        let paths: Vec<_> = self
+            .parts
+            .iter()
+            .map(|part| {
+                let mut path = BezPath::new();
+                let mut previous = None;
+                for &segment in &part.segments {
+                    if previous != Some(segment.start) {
+                        path.move_to(segment.start);
+                    }
+                    path.curve_to(segment.control_start, segment.control_end, segment.end);
+                    previous = Some(segment.end);
+                }
+                path
+            })
+            .collect();
+        let lengths: Vec<f64> = paths
+            .iter()
+            .map(|p| p.segments().map(|s| s.arclen(accuracy)).sum())
+            .collect();
+        let total: f64 = lengths.iter().sum();
+        let mut offset = 0.0;
+        let mut samples = Vec::new();
+        for ((part, path), length) in self.parts.iter().zip(paths).zip(lengths) {
+            if part.visible && length > 0.0 {
+                for region in 0..self.regions {
+                    let start = 0.0f64.max(total * region as f64 / self.regions as f64 - offset);
+                    let end =
+                        length.min(total * (region + 1) as f64 / self.regions as f64 - offset);
+                    if start >= end {
+                        continue;
+                    }
+                    let trimmed = trim_path(TrimPathSpec {
+                        path: path.clone(),
+                        start_outset: start,
+                        end_outset: length - end,
+                        accuracy,
+                    })?;
+                    let mut points = Vec::new();
+                    for segment in trimmed.path.segments().map(CubicBezierSpec::drawable) {
+                        let distance = |a: CurvePoint, b: CurvePoint| {
+                            let dx = a.x - b.x;
+                            let dy = a.y - b.y;
+                            (dx * dx + dy * dy).sqrt()
+                        };
+                        let speed = 3.0
+                            * distance(segment.start, segment.control_start)
+                                .max(distance(segment.control_start, segment.control_end))
+                                .max(distance(segment.control_end, segment.end));
+                        let steps = (speed * self.unit / self.step).ceil().max(1.0);
+                        if !(steps.is_finite() && steps < usize::MAX as f64) {
+                            return Err("Region sampling count is too large".into());
+                        }
+                        let steps = steps as usize;
+                        for step in 0..=steps {
+                            let t = step as f64 / steps as f64;
+                            let lerp = |a: CurvePoint, b: CurvePoint| CurvePoint {
+                                x: a.x + (b.x - a.x) * t,
+                                y: a.y + (b.y - a.y) * t,
+                            };
+                            let ab = lerp(segment.start, segment.control_start);
+                            let bc = lerp(segment.control_start, segment.control_end);
+                            let cd = lerp(segment.control_end, segment.end);
+                            points.push(lerp(lerp(ab, bc), lerp(bc, cd)));
+                        }
+                    }
+                    samples.push((region, points));
+                }
+            }
+            offset += length;
+        }
+        Ok(samples)
+    }
+}
+
+pub fn curve_region_samples_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: RegionSamplesSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize region sample spec: {err}"))?;
+    encode_cbor(&spec.samples()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2868,5 +2979,86 @@ mod tests {
         assert_eq!(curves[1].start, point(1.0, 1.0));
         assert_eq!(curves[1].end, point(2.0, 0.0));
         assert_eq!(output.path.segments().count(), 2);
+    }
+}
+
+#[cfg(test)]
+mod region_sampling_tests {
+    use super::*;
+
+    fn part(start: f64, end: f64, visible: bool) -> RegionPart {
+        RegionPart {
+            visible,
+            segments: vec![CubicBezierSpec {
+                start: CurvePoint { x: start, y: 0.0 },
+                end: CurvePoint { x: end, y: 0.0 },
+                control_start: CurvePoint {
+                    x: start + (end - start) / 3.0,
+                    y: 0.0,
+                },
+                control_end: CurvePoint {
+                    x: start + (end - start) * 2.0 / 3.0,
+                    y: 0.0,
+                },
+            }],
+        }
+    }
+
+    fn request(parts: Vec<RegionPart>) -> RegionSamplesSpec {
+        RegionSamplesSpec {
+            parts,
+            regions: 4,
+            unit: 0.0,
+            step: 4.0,
+            accuracy: 0.001,
+        }
+    }
+
+    #[test]
+    fn hidden_parts_retain_their_arc_length_regions() {
+        let samples = request(vec![part(0.0, 4.0, false), part(4.0, 8.0, true)])
+            .samples()
+            .unwrap();
+        assert_eq!(
+            samples.iter().map(|group| group.0).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+        assert_eq!(samples[0].1.first().unwrap().x, 4.0);
+        assert!((samples[1].1.last().unwrap().x - 8.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn both_ends_of_each_region_are_sampled() {
+        let samples = request(vec![part(0.0, 4.0, true)]).samples().unwrap();
+        assert!(samples.iter().all(|(_, points)| points.len() == 2));
+        for adjacent in samples.windows(2) {
+            assert!(
+                (adjacent[0].1.last().unwrap().x - adjacent[1].1.first().unwrap().x).abs() < 0.001
+            );
+        }
+    }
+
+    #[test]
+    fn empty_and_zero_length_parts_produce_no_samples() {
+        assert!(request(vec![]).samples().unwrap().is_empty());
+        assert!(
+            request(vec![part(0.0, 0.0, true)])
+                .samples()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn invalid_sampling_parameters_are_rejected() {
+        let mut zero_regions = request(vec![]);
+        zero_regions.regions = 0;
+        assert!(zero_regions.samples().is_err());
+        let mut zero_step = request(vec![]);
+        zero_step.step = 0.0;
+        assert!(zero_step.samples().is_err());
+        let mut infinite_scale = request(vec![]);
+        infinite_scale.unit = f64::INFINITY;
+        assert!(infinite_scale.samples().is_err());
     }
 }

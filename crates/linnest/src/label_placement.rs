@@ -3,9 +3,9 @@
 //! Keep the operation order in sync with CeTZ's matrix/vector arithmetic. Text
 //! measurement and candidate enumeration remain in Typst; this batches the
 //! per-candidate transforms, collision costs and search without changing positions,
-//! costs, or tie-breaking. Typst certifies every exponential used by the search.
+//! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 #[derive(Deserialize)]
 struct Frame {
@@ -216,7 +216,6 @@ struct CollisionSpec {
     obstacle_padding: f64,
 }
 
-#[derive(Deserialize, Serialize)]
 struct CollisionGeometry {
     boxes: Vec<Vec<Bounds>>,
     areas: Vec<Vec<f64>>,
@@ -282,7 +281,37 @@ struct SearchMath {
 struct SearchResult {
     choices: Vec<usize>,
     costs: Vec<ciborium::Value>,
-    missing: Vec<f64>,
+    missing: Vec<ExponentialCheck>,
+}
+
+#[derive(Serialize)]
+struct ExponentialCheck {
+    argument: f64,
+    lower: Option<f64>,
+    upper: Option<f64>,
+    #[serde(skip)]
+    probability: f64,
+}
+
+impl ExponentialCheck {
+    fn new(argument: f64) -> Self {
+        Self {
+            argument,
+            lower: None,
+            upper: None,
+            probability: argument.exp(),
+        }
+    }
+
+    fn accept(&mut self, threshold: f64) -> bool {
+        let accept = threshold < self.probability;
+        if accept {
+            self.lower = Some(self.lower.map_or(threshold, |lower| lower.max(threshold)));
+        } else {
+            self.upper = Some(self.upper.map_or(threshold, |upper| upper.min(threshold)));
+        }
+        accept
+    }
 }
 
 impl CollisionGeometry {
@@ -311,7 +340,7 @@ impl CollisionGeometry {
             .map(|&(argument, value)| (argument.to_bits(), value))
             .collect();
         let mut missing = Vec::new();
-        let mut pending = BTreeSet::new();
+        let mut pending = BTreeMap::new();
         let mut choices = vec![0; count];
         let mut best_choices = choices.clone();
         let mut energy = Cost::Integer(0);
@@ -369,20 +398,21 @@ impl CollisionGeometry {
                         } else {
                             -delta.float() / temperature
                         };
-                        let probability = match exponentials.get(&argument.to_bits()) {
-                            Some(&value) => value,
+                        let threshold = f64::from(random) / 4_294_967_296.0;
+                        match exponentials.get(&argument.to_bits()) {
+                            Some(&value) => threshold < value,
                             None => {
-                                if pending.insert(argument.to_bits()) {
-                                    missing.push(argument);
-                                }
-                                // Prediction only. The caller must supply Typst's
-                                // results and replay until `missing` is empty.
-                                // Every replay extends the verified execution
-                                // prefix even if this platform's exp differs.
-                                argument.exp()
+                                let index =
+                                    *pending.entry(argument.to_bits()).or_insert_with(|| {
+                                        missing.push(ExponentialCheck::new(argument));
+                                        missing.len() - 1
+                                    });
+                                // Exp affects only acceptance comparisons. The host
+                                // verifies their strict lower/inclusive upper bounds,
+                                // or supplies exact values and replays after a mismatch.
+                                missing[index].accept(threshold)
                             }
-                        };
-                        f64::from(random) / 4_294_967_296.0 < probability
+                        }
                     } else {
                         false
                     };
@@ -433,6 +463,12 @@ impl CollisionSpec {
                 .obstacles
                 .iter()
                 .filter(|obstacle| !obstacle.belongs_to(label) || obstacle.self_loop)
+                // An obstacle outside the union cannot overlap any candidate.
+                // Retain its zero term so the additions below stay unchanged.
+                .map(|obstacle| {
+                    (extent.overlap(obstacle.bounds, self.obstacle_padding) != 0.0)
+                        .then_some(obstacle)
+                })
                 .collect();
             let mut areas = Vec::with_capacity(boxes.len());
             let mut costs = Vec::with_capacity(boxes.len());
@@ -444,7 +480,10 @@ impl CollisionSpec {
                 // Keep zero terms too: adding them converts integer costs to
                 // floats. Preserve both obstacle order and numeric types.
                 for obstacle in &relevant {
-                    cost += bounds.overlap(obstacle.bounds, self.obstacle_padding) / area.max(1e-9);
+                    let overlap = obstacle.map_or(0.0, |obstacle| {
+                        bounds.overlap(obstacle.bounds, self.obstacle_padding)
+                    });
+                    cost += overlap / area.max(1e-9);
                 }
                 costs.push(if relevant.is_empty() {
                     candidate.cost.clone()
@@ -553,18 +592,12 @@ pub fn candidates_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::encode_cbor(&spec.candidates()?)
 }
 
-pub fn collision_geometry_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+pub fn search_bytes(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
     let spec: CollisionSpec = ciborium::de::from_reader(arg)
-        .map_err(|error| format!("Invalid label collision geometry: {error}"))?;
-    crate::graph_api::encode_cbor(&spec.geometry()?)
-}
-
-pub fn search_bytes(geometry: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
-    let geometry: CollisionGeometry = ciborium::de::from_reader(geometry)
         .map_err(|error| format!("Invalid label collision geometry: {error}"))?;
     let math: SearchMath = ciborium::de::from_reader(math)
         .map_err(|error| format!("Invalid label search math: {error}"))?;
-    crate::graph_api::encode_cbor(&geometry.search(&math)?)
+    crate::graph_api::encode_cbor(&spec.geometry()?.search(&math)?)
 }
 
 pub fn obstacle_boxes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -576,6 +609,22 @@ pub fn obstacle_boxes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exponential_checks_keep_strict_acceptance_and_inclusive_rejection_bounds() {
+        let mut check = ExponentialCheck::new(0.0);
+        assert!(check.accept(0.75));
+        assert!(!check.accept(1.0));
+        assert!(check.accept(0.0));
+        assert!(!check.accept(2.0));
+        assert_eq!((check.lower, check.upper), (Some(0.75), Some(1.0)));
+        for argument in [f64::NEG_INFINITY, f64::NAN] {
+            let mut check = ExponentialCheck::new(argument);
+            assert!(!check.accept(0.0));
+            assert!(!check.accept(0.5));
+            assert_eq!((check.lower, check.upper), (None, Some(0.0)));
+        }
+    }
 
     #[test]
     fn host_exponentials_override_speculation_and_finish_a_verified_search() {
@@ -623,7 +672,7 @@ mod tests {
                 break;
             }
             math.exponentials
-                .extend(result.missing.iter().map(|&argument| (argument, 0.0)));
+                .extend(result.missing.iter().map(|check| (check.argument, 0.0)));
             result = geometry.search(&math).unwrap();
         }
         assert!(result.missing.is_empty());
@@ -720,6 +769,12 @@ mod tests {
             spec.geometry().unwrap().costs[0][0],
             ciborium::Value::Float(0.0)
         );
+        spec.placements[0].candidates[0].cost = ciborium::Value::Float(-0.0);
+        let ciborium::Value::Float(cost) = spec.geometry().unwrap().costs[0][0] else {
+            panic!("an unowned obstacle must convert the cost to a float");
+        };
+        assert_eq!(cost.to_bits(), 0.0_f64.to_bits());
+        spec.placements[0].candidates[0].cost = ciborium::Value::Integer(0.into());
         spec.obstacles.clear();
         assert_eq!(
             spec.geometry().unwrap().costs[0][0],

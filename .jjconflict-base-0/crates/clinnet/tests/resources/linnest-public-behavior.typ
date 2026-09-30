@@ -10,6 +10,7 @@
 #weighted-cut-behavior
 #import "named-map-behavior.typ"
 #include "identity-target-behavior.typ"
+#include "cetz-bounds-behavior.typ"
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)

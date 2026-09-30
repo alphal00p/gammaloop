@@ -3,9 +3,16 @@
 // Keep the user-facing drawing functions and their documentation here. The
 // helper-heavy implementation lives in `impl/draw.typ`.
 
-#import "impl/draw.typ" as _impl
+// Keep wrapper captures limited to their implementation functions.
+#import "impl/draw.typ": (
+  _label-collision-padding as _impl-label-collision-padding,
+  _overlay-style as _impl-overlay-style,
+  draw as _impl-draw,
+  edge-halves as _impl-edge-halves,
+  to-cetz-edge-halves as _impl-to-cetz-edge-halves,
+)
 
-#let _overlay-style = _impl._overlay-style
+#let _overlay-style = _impl-overlay-style
 
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
@@ -30,7 +37,7 @@
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
 ) = {
-  _impl.edge-halves(
+  _impl-edge-halves(
     edge,
     nodes,
     (
@@ -71,7 +78,7 @@
   /// CeTZ style for the sink half edge. -> dictionary
   sink-style: (:),
 ) = {
-  _impl.to-cetz-edge-halves(
+  _impl-to-cetz-edge-halves(
     edge,
     nodes,
     (
@@ -304,7 +311,7 @@
   /// Adds to the base label–label and label–obstacle clearances; zero restores
   /// those base boxes. Affects sliding/side choices, not the normal label gap.
   /// -> int | float
-  label-collision-padding: _impl._label-collision-padding.extra,
+  label-collision-padding: _impl-label-collision-padding.extra,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,
@@ -523,7 +530,7 @@
   /// Draw subgraph shading below the normal half-edge style. -> bool
   subgraph-edge-underlay: true,
 ) = {
-  _impl.draw(
+  _impl-draw(
     graph,
     (
       scope: scope,
