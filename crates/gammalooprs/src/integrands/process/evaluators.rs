@@ -1438,7 +1438,7 @@ impl EvaluatorStack {
                 AtomView::Fun(_) | AtomView::Pow(_) => true,
                 AtomView::Add(_) => {
                     !has_family(part)
-                        || (part != root && !dangling(part).is_some_and(|slots| !slots.is_empty()))
+                        || (part != root && dangling(part).is_none_or(|slots| slots.is_empty()))
                 }
                 _ => false,
             });
