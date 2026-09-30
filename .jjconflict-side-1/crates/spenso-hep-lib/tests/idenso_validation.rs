@@ -273,7 +273,7 @@ fn color_three_trace_antisymmetric_part_matches_structure_constant() {
         idenso::color_t!(c),
         idenso::color_t!(b)
     );
-    let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
+    let rhs = Atom::i() * idenso::color_idx!(2, idenso::cof!(3)) * idenso::color_f!(a, b, c);
 
     assert_valid(lhs, rhs, &scalar_constants());
 }
@@ -295,7 +295,7 @@ fn color_explicit_three_trace_antisymmetric_part_matches_structure_constant() {
     let acb = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
         * function!(CS.t, c.to_atom(), j.to_atom(), k.dual().to_atom())
         * function!(CS.t, b.to_atom(), k.to_atom(), i.dual().to_atom());
-    let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
+    let rhs = Atom::i() * idenso::color_idx!(2, idenso::cof!(3)) * idenso::color_f!(a, b, c);
 
     assert_valid(abc - acb, rhs, &scalar_constants());
 }
@@ -523,8 +523,12 @@ fn color_four_generator_trace_decomposition_matches_direct_trace() {
                     idenso::color_t!(x)
                 )
             )
-        - Atom::var(CS.tr) / Atom::num(6) * idenso::color_f!(a, c, x) * idenso::color_f!(b, d, x)
-        + Atom::var(CS.tr) / Atom::num(3) * idenso::color_f!(a, d, x) * idenso::color_f!(b, c, x);
+        - idenso::color_idx!(2, idenso::cof!(3)) / Atom::num(6)
+            * idenso::color_f!(a, c, x)
+            * idenso::color_f!(b, d, x)
+        + idenso::color_idx!(2, idenso::cof!(3)) / Atom::num(3)
+            * idenso::color_f!(a, d, x)
+            * idenso::color_f!(b, c, x);
 
     assert_valid(lhs, rhs, &scalar_constants());
 }
@@ -568,9 +572,6 @@ fn assert_case_valid(case: &ReferenceCase) -> ReferenceValidationRow {
 
 fn scalar_constants() -> HashMap<Atom, Complex64> {
     let mut constants = HashMap::new();
-    insert_scalar(&mut constants, CS.ca, 3.);
-    insert_scalar(&mut constants, CS.cf, 4. / 3.);
-    insert_scalar(&mut constants, CS.tr, 0.5);
     insert_scalar(&mut constants, CS.nc, 3.);
     insert_scalar_aliases(&mut constants, "m", 5.);
     insert_scalar_aliases(&mut constants, "c1", 7.);

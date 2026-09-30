@@ -59,7 +59,7 @@ initialize!(|| {
         let _ = RS.force_in_initializer().a_;
         let _ = AGS.force_in_initializer().gamma;
         let _ = *EPSILON_SYMBOL.force_in_initializer();
-        let _ = CS.force_in_initializer().cf;
+        let _ = CS.force_in_initializer().cas;
         let _ = ETS.force_in_initializer().delta;
         let _ = ETS.force_in_initializer().metric;
     });

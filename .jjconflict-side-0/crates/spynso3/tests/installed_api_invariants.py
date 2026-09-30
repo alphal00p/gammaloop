@@ -46,7 +46,7 @@ class InvariantDisplayTests(unittest.TestCase):
         self.assertEqual(tensor.to_expression(), expression)
         return mathml(rich)
 
-    def test_compact_and_explicit_invariants_match_their_scalar_symbols(self):
+    def test_compact_and_explicit_invariants_agree_across_renderers(self):
         f, a = self.fundamental, self.adjoint
         for typed, name, compact, explicit in (
             (f.casimir(), "CF", "CF", "C2(F)"),
@@ -55,18 +55,13 @@ class InvariantDisplayTests(unittest.TestCase):
         ):
             for style, expected in (("compact", compact), ("explicit", explicit)):
                 settings = DisplaySettings(invariant_style=style)
-                for expression in (typed, S(f"spenso::{name}")):
-                    with self.subTest(
-                        name=name, style=style, expression=str(expression)
-                    ):
-                        root = self.assert_renderers_agree(
-                            expression, expected, settings
-                        )
-                        self.assertTrue(list(root.iter("msub")))
-                        self.assertEqual(
-                            TensorExpression(expression).to_latex(settings=settings),
-                            "$$" + to_typst(expression, settings=settings) + "$$",
-                        )
+                with self.subTest(name=name, style=style):
+                    root = self.assert_renderers_agree(typed, expected, settings)
+                    self.assertTrue(list(root.iter("msub")))
+                    self.assertEqual(
+                        TensorExpression(typed).to_latex(settings=settings),
+                        "$$" + to_typst(typed, settings=settings) + "$$",
+                    )
         self.assert_renderers_agree(S("spenso::Nc"), "Nc", DisplaySettings())
         self.assertEqual(DisplaySettings().invariant_style, "compact")
         with self.assertRaisesRegex(ValueError, "invariant_style"):

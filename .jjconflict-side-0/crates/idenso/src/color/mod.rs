@@ -51,10 +51,6 @@ pub struct ColorSymbols {
     pub fundamental_rep: Symbol,
     /// Symbol backing the color adjoint representation function.
     pub adjoint_rep: Symbol,
-    /// The adjoint Casimir symbol, i.e. CA = Nc
-    pub ca: Symbol,
-    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = T_F d_A/d_F.
-    pub cf: Symbol,
     /// The generator symbol
     pub t: Symbol,
     /// The structure constant symbol i.e. [T^a, T^b] = i f^{abc} T^c
@@ -69,8 +65,6 @@ pub struct ColorSymbols {
     pub idx: Symbol,
     /// Dummy adjoint-index symbol used in color trace decompositions.
     pub trace_dummy: Symbol,
-    /// The trace constant symbol i.e. Tr(T^a T^b) = TR delta^{ab}. Usually TR=1/2
-    pub tr: Symbol,
     /// The number of colors symbol (i.e. the dimension of the fundamental representation) usually Nc=3
     pub nc: Symbol,
 }
@@ -375,33 +369,15 @@ impl ColorInvariantPrintKind {
         }
     }
 
-    fn constant(atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
-        let settings = SpensoPrintSettings::resolve(opt)?.presentation;
-        let AtomView::Var(variable) = atom else {
+    fn color_count(atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        if !matches!(atom, AtomView::Var(_)) {
             return None;
-        };
-        let symbol = variable.get_symbol();
-        let (head, label) = match symbol.get_name() {
-            "spenso::CA" => ("C", "A"),
-            "spenso::CF" => ("C", "F"),
-            "spenso::TR" => ("T", "R"),
-            "spenso::Nc" => ("N", "c"),
-            _ => return None,
-        };
-        let out = if settings.explicit_invariants && head != "N" {
-            let rep = if head == "T" { "F" } else { label };
-            if settings.symbol_scripts {
-                format!("{}_2({rep})", if head == "T" { "I" } else { head })
-            } else {
-                format!(
-                    "{}(2,{rep})",
-                    Self::function_head(if head == "T" { "idx" } else { "cas" }, opt)
-                )
-            }
-        } else if settings.symbol_scripts {
-            format!("{head}_{label}")
+        }
+        let settings = SpensoPrintSettings::resolve(opt)?.presentation;
+        let out = if settings.symbol_scripts {
+            "N_c".to_owned()
         } else {
-            Self::function_head(symbol.get_stripped_name(), opt)
+            Self::function_head("Nc", opt)
         };
         Some(Self::colorize(&out, opt))
     }
@@ -563,8 +539,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
                 _=>None}
 
         }),
-        ca: symbol!("spenso::CA";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
-        cf: symbol!("spenso::CF";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt), eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
         gram: symbol!("spenso::gram"; Real, Scalar; print = |a, opt, _state| {
             ColorInvariantPrintKind::Gram.print(a, opt)
@@ -582,8 +556,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        tr: symbol!("spenso::TR";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
-        nc: symbol!("spenso::Nc";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        nc: symbol!("spenso::Nc";Real; print = |a, opt, _| ColorInvariantPrintKind::color_count(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
 };
 }

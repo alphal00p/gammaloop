@@ -19,7 +19,7 @@ from pathlib import Path
 
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import TensorExpression
+from symbolica.community.tensor import Representation, TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 spec = json.loads(model.to_json())
@@ -31,7 +31,7 @@ for propagator in spec["propagators"]:
             "/spenso::dot(UFO::P(spenso::mink(4)),UFO::P(spenso::mink(4))))"
         )
 model = hep.Model.from_json(json.dumps(spec))
-D, eps, M, mUV, x, integral, xi, s, dA, CA = S(
+D, eps, M, mUV, x, integral, xi, s, dA = S(
     "ghost_uv::D",
     "ghost_uv::eps",
     "ghost_uv::M",
@@ -41,16 +41,15 @@ D, eps, M, mUV, x, integral, xi, s, dA, CA = S(
     "ghost_uv::xi",
     "ghost_uv::s",
     "ghost_uv::dA",
-    "ghost_uv::CA",
 )
+CA = Representation.coad(dA).casimir()
 K, P, gs = S("gammalooprs::K", "gammalooprs::P", "UFO::G")
-mink, coad, metric, hedge, f, cas = S(
+mink, coad, metric, hedge, f = S(
     "spenso::mink",
     "spenso::coad",
     "spenso::g",
     "gammalooprs::hedge",
     "spenso::f",
-    "spenso::cas",
 )
 idx, dim, a, b, c, arguments = S(
     "ghost_uv::idx_",
@@ -153,7 +152,6 @@ for pdg in (9000005, -9000005):
                 .to_expression()
                 .to_dots()
                 .to_expression()
-                .replace(cas(2, coad(dA)), CA)
             )
             scalar = family.rewrite_numerator(
                 kinematics.apply(reducer.reduce(tensor)), [x]

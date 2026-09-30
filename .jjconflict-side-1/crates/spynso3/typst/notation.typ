@@ -798,13 +798,8 @@
   label
 }
 
-#let _color-constant(name, settings) = {
-  if settings.invariant-style == "explicit" and name != "Nc" {
-    let head = if name == "TR" { $I$ } else { $C$ }
-    let rep = if name == "CA" { $A$ } else { $F$ }
-    if settings.symbol-scripts { math.attach(head, b: $2$) + _parentheses(rep) }
-    else { math.op(if name == "TR" { "idx" } else { "cas" }) + _parentheses($2,#rep$) }
-  } else if settings.symbol-scripts {
+#let _color-label(name, settings) = {
+  if settings.symbol-scripts {
     (CA: $C_A$, CF: $C_F$, TR: $T_R$, Nc: $N_c$).at(name)
   } else { math.op(name) }
 }
@@ -823,7 +818,7 @@
       else if kind == "cas" and rep.identity == "spenso::coad" { "CA" }
       else if kind == "idx" and rep.identity == "spenso::cof" { "TR" }
       else { none }
-    if name != none { return _color-constant(name, settings) }
+    if name != none { return _color-label(name, settings) }
   }
   let head = if kind == "cas" { $C$ } else if kind == "idx" { $I$ } else { $G$ }
   let arguments = args.slice(1).map(arg => _color-representation(arg, ctx, settings))
@@ -912,10 +907,7 @@
   }
   let defaults = core.notation(
     heads: _merge(_merge(_default-heads, (
-      "spenso::CA": ctx => _color-constant("CA", settings),
-      "spenso::CF": ctx => _color-constant("CF", settings),
-      "spenso::TR": ctx => _color-constant("TR", settings),
-      "spenso::Nc": ctx => _color-constant("Nc", settings),
+      "spenso::Nc": ctx => _color-label("Nc", settings),
     )), settings.print-heads),
     calls: (
       "spenso::bracket": ctx => {

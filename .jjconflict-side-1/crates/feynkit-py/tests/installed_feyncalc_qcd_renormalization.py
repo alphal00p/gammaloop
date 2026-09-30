@@ -27,6 +27,7 @@ from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import feynkit as hep
 from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import (
+    Representation,
     TensorExpression,
 )
 
@@ -42,7 +43,9 @@ D, epsilon, M, mUV, coordinate, integral, xi, s, Nf = S(
     "qcd_ren::s",
     "qcd_ren::Nf",
 )
-Nc, dA, CF, CA = S("qcd_ren::Nc", "qcd_ren::dA", "qcd_ren::CF", "qcd_ren::CA")
+Nc, dA = S("qcd_ren::Nc", "qcd_ren::dA")
+CF = Representation.cof(Nc).casimir()
+CA = Representation.coad(dA).casimir()
 specification = json.loads(model.to_json())
 for propagator in specification["propagators"]:
     if propagator["particle"] == "g":
@@ -56,9 +59,7 @@ K, P, mass, gs = S("gammalooprs::K", "gammalooprs::P", "UFO::MB", "UFO::G")
 mink, bis, gamma, metric = S(
     "spenso::mink", "spenso::bis", "spenso::gamma", "spenso::g"
 )
-cof, coad, cas, trace_index = S(
-    "spenso::cof", "spenso::coad", "spenso::cas", "spenso::idx"
-)
+cof, coad = S("spenso::cof", "spenso::coad")
 index, dim, wave, mu, nu, left, right = S(
     "qcd_ren::index_",
     "qcd_ren::dim_",
@@ -201,14 +202,18 @@ for kind, incoming, outgoing, loops, vertices, count in [
             .to_expression()
             .to_expression()
         )
-        # CF and CA are display names for shared representation-aware invariants;
+        # CF and CA are the shared representation-aware invariants;
         # the quark-loop trace uses the conventional fundamental index TR=1/2.
-        numerator = (
-            numerator.replace(cas(2, cof(Nc)), CF)
-            .replace(cas(2, coad(dA)), CA)
-            .replace(trace_index(2, cof(Nc)), one / 2)
-            .replace(dA, 2 * fundamental_dimension * CF)
-            .replace(Nc, fundamental_dimension)
+        numerator = numerator.replace_multiple(
+            [
+                # Keep invariant representation labels fixed while rewriting
+                # scalar dimension factors. Earlier matches protect their subtrees.
+                Replacement(CF, CF),
+                Replacement(CA, CA),
+                Replacement(Representation.cof(Nc).dynkin_index(), one / 2),
+                Replacement(dA, 2 * fundamental_dimension * CF),
+                Replacement(Nc, fundamental_dimension),
+            ]
         )
         # Keep the unexpanded graph numerator for the independent direct IRR path.
         raw_numerator = numerator
@@ -592,11 +597,17 @@ for kind, incoming, outgoing, count, qcd_order in [
             .to_expression()
         )
         numerator = (
-            numerator.replace(cas(2, cof(Nc)), CF)
-            .replace(cas(2, coad(dA)), CA)
-            .replace(trace_index(2, cof(Nc)), one / 2)
-            .replace(dA, 2 * fundamental_dimension * CF)
-            .replace(Nc, fundamental_dimension)
+            numerator.replace_multiple(
+                [
+                    # Keep invariant representation labels fixed while rewriting
+                    # scalar dimension factors. Earlier matches protect their subtrees.
+                    Replacement(CF, CF),
+                    Replacement(CA, CA),
+                    Replacement(Representation.cof(Nc).dynkin_index(), one / 2),
+                    Replacement(dA, 2 * fundamental_dimension * CF),
+                    Replacement(Nc, fundamental_dimension),
+                ]
+            )
             .replace(mink(dim, index), mink(D, index))
             .replace(mink(dim), mink(D))
         )

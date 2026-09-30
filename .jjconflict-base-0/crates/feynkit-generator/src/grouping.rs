@@ -10,9 +10,11 @@ use feynkit_graph::{
 };
 use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
 use idenso::{
-    CookMode, CookSettings, IndexTooling,
+    CookMode, CookSettings, IndexTooling, cof,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
+    color_idx,
     dirac::{AGS, spinor_matrix_structure},
+    rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
     tensor::{SymbolicTensor, inference::TensorInferenceError},
 };
@@ -1019,7 +1021,7 @@ fn evaluate_tensor_sample(
     );
     let color_replacements = [
         Replacement::new(Atom::var(CS.nc), Atom::num(3)),
-        Replacement::new(Atom::var(CS.tr), Atom::num(1) / Atom::num(2)),
+        Replacement::new(color_idx!(2, cof!(RS.d_)), Atom::num(1) / Atom::num(2)),
     ];
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
@@ -1386,12 +1388,25 @@ fn expressions_equal(left: &Atom, right: &Atom) -> Result<bool, TensorInferenceE
 }
 
 fn expression_is_scalar(expression: &Atom, scalar_names: &BTreeSet<String>) -> bool {
-    let color_scalars = [CS.nc, CS.ca, CS.cf, CS.tr, CS.cas, CS.idx, CS.gram];
-    expression.get_all_symbols(true).iter().all(|symbol| {
-        symbol.is_scalar()
-            || color_scalars.contains(symbol)
-            || scalar_names.contains(symbol.get_stripped_name())
-    })
+    let mut scalar = true;
+    expression.visitor(&mut |atom| {
+        if !scalar {
+            return false;
+        }
+        let symbol = match atom {
+            AtomView::Var(variable) => variable.get_symbol(),
+            AtomView::Fun(function) => function.get_symbol(),
+            _ => return true,
+        };
+        // Scalar functions own their metadata: representation labels inside
+        // a Casimir or Dynkin index are not open tensor factors.
+        if symbol.is_scalar() {
+            return false;
+        }
+        scalar = symbol == CS.nc || scalar_names.contains(symbol.get_stripped_name());
+        scalar
+    });
+    scalar
 }
 
 fn canonical_topology(
@@ -1921,6 +1936,17 @@ mod tests {
             check_canonical_numerator: true,
             ..GraphGroupingOptions::default()
         }
+    }
+
+    #[test]
+    fn invariant_ratios_are_scalar_without_exposing_representation_metadata() {
+        let coefficient = idenso::color_cas!(2, idenso::coad!(8))
+            * idenso::color_cas!(2, cof!(3)).pow(-2)
+            * color_idx!(2, cof!(3));
+        let scalars = BTreeSet::new();
+        assert!(expression_is_scalar(&coefficient, &scalars));
+        let tensor = test_atom("spenso::g(spenso::coad(8,a),spenso::coad(8,b))");
+        assert!(!expression_is_scalar(&(coefficient * tensor), &scalars));
     }
 
     #[test]

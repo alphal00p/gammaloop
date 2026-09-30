@@ -10,7 +10,9 @@ use colored::Colorize;
 use gammalooprs::model::ModelGammaLoopExt;
 use gammalooprs::uv::ApproximationType;
 use idenso::{
+    coad, cof,
     color::{ColorSimplifySettings, CS},
+    color_cas, color_idx,
     tensor::SymbolicTensor,
     CookMode, CookSettings,
 };
@@ -142,10 +144,10 @@ impl Renormalize {
 
             if self.align_to_rqft {
                 part = (part
-                    .replace(CS.tr)
+                    .replace(color_idx!(2, cof!(3)))
                     .with(Atom::num((1, 2)))
                     .replace(CS.nc)
-                    .with(CS.ca)
+                    .with(color_cas!(2, coad!(8)))
                     .replace(parse!("UFO::aS"))
                     .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
                     / 8)

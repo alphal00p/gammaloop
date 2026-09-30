@@ -361,20 +361,30 @@ fn color_invariant_printing_preserves_degree_representations_and_dimensions() {
             assert_eq!(atom.to_bare_ordered_string(), original);
         }
     }
-    for (symbol, compact, explicit) in [
-        (CS.cf, "C_F", "C_2(F)"),
-        (CS.ca, "C_A", "C_2(A)"),
-        (CS.tr, "T_R", "I_2(F)"),
-        (CS.nc, "N_c", "N_c"),
-    ] {
+    for explicit in [false, true] {
         assert_eq!(
-            Atom::var(symbol).printer(options(false, false)).to_string(),
-            compact
+            Atom::var(CS.nc)
+                .printer(options(explicit, false))
+                .to_string(),
+            "N_c"
         );
-        assert_eq!(
-            Atom::var(symbol).printer(options(true, false)).to_string(),
-            explicit
-        );
+    }
+}
+
+#[test]
+fn dimensioned_invariant_powers_evaluate_independently() {
+    test_initialize();
+    for (dimension, adjoint_dimension, fundamental_value) in
+        [(3, 8, Atom::num((4, 3))), (5, 24, Atom::num((12, 5)))]
+    {
+        let fundamental = ColorFundamental {}.to_symbolic([Atom::num(dimension)]);
+        let adjoint = ColorAdjoint {}.to_symbolic([Atom::num(adjoint_dimension)]);
+        let index = color_idx!(2, fundamental.clone());
+        let casimir = color_cas!(2, fundamental);
+        let expression =
+            color_cas!(2, adjoint) * casimir.pow(Atom::num(-2)) * index.pow(Atom::num(3));
+        let expected = Atom::num(dimension) / fundamental_value.pow(Atom::num(2)) / Atom::num(8);
+        assert_eq!(expression.to_cof_dimension_invariants(), expected);
     }
 }
 
@@ -397,7 +407,7 @@ fn cof_dimension_invariant_rules_substitute_supported_fundamental_cases() {
         ((n.clone().pow(Atom::num(2)) - Atom::num(1)) / (Atom::num(2) * n.clone())).expand()
     );
     assert_eq!(
-        color_cas!(2, coad_n).to_cof_dimension_invariants(),
+        color_cas!(2, coad_n.clone()).to_cof_dimension_invariants(),
         n.clone()
     );
     assert_eq!(
@@ -405,7 +415,7 @@ fn cof_dimension_invariant_rules_substitute_supported_fundamental_cases() {
         Atom::num(3)
     );
     assert_eq!(
-        (Atom::var(CS.ca) * Atom::var(CS.tr) * default_adjoint_dimension)
+        (color_cas!(2, coad_n) * color_idx!(2, cof_n.clone()) * default_adjoint_dimension)
             .to_cof_dimension_invariants()
             .expand(),
         (n.clone() * (Atom::num(1) / Atom::num(2)) * (n.clone().pow(Atom::num(2)) - Atom::num(1)))
@@ -1283,7 +1293,7 @@ fn three_loop_pole_part_color() {
                 * f(coad(8, hedge(6)), coad(8, hedge(9)), coad(8, vertex(3, 1))))
             * 1
             / 64
-            * CA
+            * cas(2, coad(8))
             * dot(P(0, mink(4)), P(0, mink(4)))
             * g(coad(8, hedge(4)), coad(8, hedge(6)))
             * gs
@@ -1316,7 +1326,10 @@ fn three_loop_pole_part_color() {
             ]);
 
     let common = parse_lit!(
-        CA * eps ^ (-3) * gs ^ 6 * cas(2, coad(8)) ^ 2 * dot(P(0, mink(4)), P(0, mink(4))),
+        cas(2, coad(8)) * eps
+            ^ (-3) * gs
+            ^ 6 * cas(2, coad(8))
+            ^ 2 * dot(P(0, mink(4)), P(0, mink(4))),
         default_namespace = "spenso"
     );
     let expected_coefficient = parse_lit!(
@@ -2071,7 +2084,7 @@ fn colored_matrix_element() -> (Atom, Atom) {
             default_namespace = "spenso"
         ),
         parse_lit!(
-            -4 * TR
+            -4 * idx(2, cof(Nc))
                 ^ 2 * Nc * G
                 ^ 4 * (Nc - 1) * (Nc + 1) * (D - 2)
                 ^ -2 * (-2 * dot(Q(0), Q(1)) * dot(Q(2), Q(2)) + dot(Q(0), Q(1)) * dot(Q(2), Q(3))
@@ -2468,8 +2481,7 @@ fn ratio_simplify() {
             .into_expression();
 
     assert_snapshot!(simplified.collect_with_map(|a| {
-        matches!(a, AtomView::Var(a) if a.get_symbol() == CS.tr || a.get_symbol() == CS.ca || a.get_symbol() == CS.cf)
-            || matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
+        matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
     }).into_inner().unwrap_collect().collect_factors().to_bare_ordered_string(), @"-𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
 }
 
