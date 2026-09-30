@@ -533,12 +533,7 @@ impl SlotContraction {
                         self.observations
                             .as_ref()
                             .and_then(|observed| observed.region(factor))
-                            .is_none_or(|region| {
-                                region
-                                    .representations
-                                    .iter()
-                                    .any(|rep| rep.base() == representation.base())
-                            })
+                            .is_none_or(|region| region.has_chain_channel(representation))
                     });
                 if relevant {
                     let next = expression.collect_chains(representation, collect, traces);

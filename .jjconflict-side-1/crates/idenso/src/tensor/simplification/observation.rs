@@ -14,7 +14,7 @@ use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
         abstract_index::AbstractIndex,
-        representation::LibraryRep,
+        representation::{LibraryRep, RepName},
         slot::{SlotMatch, SlotMatcher},
     },
 };
@@ -67,6 +67,9 @@ thread_local! {
 pub(crate) struct RegionObservation {
     pub(crate) counts: [usize; HEAD_COUNT],
     pub(crate) representations: HashSet<LibraryRep>,
+    // Possible matrix channels, including existing chain endpoints. Merely
+    // mentioning a representation in a vector or scalar dot is insufficient.
+    chain_channels: HashSet<LibraryRep>,
     pub(crate) leaves: HashSet<Atom>,
     reserved_indices: HashSet<AbstractIndex>,
     indices: usize,
@@ -85,6 +88,7 @@ impl Default for RegionObservation {
         Self {
             counts: [0; HEAD_COUNT],
             representations: HashSet::new(),
+            chain_channels: HashSet::new(),
             leaves: HashSet::new(),
             reserved_indices: HashSet::new(),
             indices: 0,
@@ -101,6 +105,10 @@ impl Default for RegionObservation {
 }
 
 impl RegionObservation {
+    pub(crate) fn has_chain_channel(&self, representation: LibraryRep) -> bool {
+        self.chain_channels.contains(&representation.base())
+    }
+
     pub(crate) fn contraction_sources(
         &self,
         settings: crate::tensor::ContractSettings<'_>,
@@ -130,7 +138,45 @@ impl RegionObservation {
                 self.leaves.insert(node.to_owned());
                 self.intrinsic &=
                     super::super::inference::InterfaceInference::intrinsic_normalization_head(head);
-                self.dots |= head.has_tag(&SPENSO_TAG.rank1);
+                let rank_one = head.has_tag(&SPENSO_TAG.rank1);
+                self.dots |= rank_one;
+                let vector_argument = rank_one.then(|| slots.vector_argument(function)).flatten();
+                if head != ETS.metric
+                    && vector_argument.is_none()
+                    && function.get_nargs() >= 2
+                    && matches!(slot, SlotMatch::Other)
+                {
+                    // Observe direct ports while this function is already being
+                    // visited. Index payloads remain opaque; only representation,
+                    // variance and dimension constrain a possible matrix channel.
+                    // Compact ports can become explicit when the shared notation
+                    // owner opens a composite dot, so retain those candidates.
+                    let mut ports = Vec::new();
+                    for argument in function.iter() {
+                        let endpoint = match slots.classify(argument) {
+                            SlotMatch::Explicit(port) => slots
+                                .representation(port)
+                                .ok()
+                                .map(|rep| (rep, port.dimension())),
+                            _ => slots.compact_representation(argument).and_then(|port| {
+                                slots
+                                    .parse_representation::<LibraryRep>(argument)
+                                    .ok()
+                                    .map(|rep| (rep.rep, port.dimension()))
+                            }),
+                        };
+                        let Some((representation, dimension)) = endpoint else {
+                            continue;
+                        };
+                        for &(previous, previous_dimension) in &ports {
+                            if dimension == previous_dimension && representation.matches(&previous)
+                            {
+                                self.chain_channels.insert(representation.base());
+                            }
+                        }
+                        ports.push((representation, dimension));
+                    }
+                }
                 // Compact vectors have no explicit endpoint to substitute.
                 // Retain actual source ports during the existing observation,
                 // rather than treating every rank-one head as remaining work.
@@ -142,8 +188,7 @@ impl RegionObservation {
                             self.metric_sources.insert(rep);
                         }
                     }
-                } else if head.has_tag(&SPENSO_TAG.rank1)
-                    && let Some(argument) = slots.vector_argument(function)
+                } else if let Some(argument) = vector_argument
                     && let SlotMatch::Explicit(port) = slots.classify(argument)
                     && let Ok(rep) = slots.representation(port)
                 {
@@ -222,6 +267,8 @@ impl RegionObservation {
         }
         self.representations
             .extend(other.representations.iter().copied());
+        self.chain_channels
+            .extend(other.chain_channels.iter().copied());
         self.leaves.extend(other.leaves.iter().cloned());
         self.reserved_indices
             .extend(other.reserved_indices.iter().copied());
@@ -277,6 +324,17 @@ enum ScalarPolynomialForm {
 }
 
 impl DomainObservations {
+    /// The regional inventory was collected with the initial candidate walk or
+    /// replacement observation. Unknown producer facts must remain conservative.
+    pub(crate) fn has_chain_channel(&self, representation: LibraryRep) -> bool {
+        !self.is_closed_scalar()
+            && (!self.candidates.traversal_complete
+                || self
+                    .regions
+                    .values()
+                    .any(|region| region.has_chain_channel(representation)))
+    }
+
     /// Certify intrinsic scalar syntax with no local identity or contraction work.
     /// The producer owns this proof, including its compact vector metadata.
     pub(crate) fn closed_scalar(needs_dots: bool) -> Self {
@@ -668,6 +726,37 @@ impl SettledRegions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chain_admission_observes_dimensions_variance_and_surviving_regions() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::new_dual("chain_observation::R").unwrap();
+        let r = rep.new_rep(3);
+        let r4 = rep.new_rep(4);
+        let a = SPENSO_TAG.tensor_symbol("chain_observation::A");
+        let b = SPENSO_TAG.tensor_symbol("chain_observation::B");
+        let first = r.to_symbolic([Atom::num(1)]);
+        let compatible = r.dual().to_symbolic([Atom::num(2)]);
+        let same_variance = r.to_symbolic([Atom::num(2)]);
+        let other_dimension = r4.dual().to_symbolic([Atom::num(2)]);
+        let matrix = |head, right: &Atom| symbolica::function!(head, &first, right);
+        for right in [&same_variance, &other_dimension] {
+            let expression = matrix(a, right);
+            assert!(!DomainObservations::initial(expression.as_view()).has_chain_channel(rep));
+        }
+        let metric = symbolica::function!(ETS.metric, &first, &compatible);
+        let first = matrix(a, &compatible);
+        let second = matrix(b, &compatible);
+        let expression = &first + &second;
+        let observed = DomainObservations::initial(expression.as_view());
+        let initial = INITIAL_SCANS.with(|count| count.get());
+        assert!(observed.has_chain_channel(rep));
+        let surviving = observed.updated((&metric + second).as_view());
+        assert!(surviving.has_chain_channel(rep));
+        let finished = surviving.updated((&metric * Atom::num(2)).as_view());
+        assert!(!finished.has_chain_channel(rep));
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), initial);
+    }
 
     #[test]
     fn scalar_certificate_excludes_work_without_fabricating_regional_inventory() {

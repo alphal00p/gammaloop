@@ -400,12 +400,14 @@ impl SymbolicTensor<PartialStructure> {
         }
         if settings.collect_chains || settings.collect_traces {
             result.root.observe_replacement(self);
+            let updated = result.root.reduction_observations();
             let mut representations = self
                 .reduction_observations()
                 .representations
                 .iter()
                 .copied()
                 .filter(|rep| settings.permits(*rep))
+                .filter(|rep| updated.has_chain_channel(*rep))
                 .map(|rep| rep.base())
                 .collect::<Vec<_>>();
             representations.sort_unstable();
@@ -416,7 +418,7 @@ impl SymbolicTensor<PartialStructure> {
             let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
                     .expanding(settings.expand)
-                    .observed(result.root.reduction_observations());
+                    .observed(updated);
             let contractor = match result.root.shallow_graph() {
                 Ok(graph) => contractor.planned(
                     result.root.expression.clone(),

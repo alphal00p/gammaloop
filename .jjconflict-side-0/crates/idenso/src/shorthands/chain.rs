@@ -18,6 +18,10 @@ use symbolica::{
 use symbolica_utils::PatternReplacement;
 
 use crate::W_;
+#[cfg(test)]
+thread_local! {
+    pub(crate) static CHAINIFY_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 static SINGLE_LENGTH_NORM: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let sd_rep = self_dual_!(1; W_.d_, W_.i_);
 
@@ -302,6 +306,8 @@ impl<'a> Chain for AtomView<'a> {
         // Both endpoints must use this representation. Terminal metric/epsilon
         // expressions often have no such slots; avoid building a replacement
         // and invoking its matcher at every unrelated function in that case.
+        #[cfg(test)]
+        CHAINIFY_CALLS.with(|count| count.set(count.get() + 1));
         if !self.contains_symbol(representation.symbol()) {
             return self.to_owned();
         }

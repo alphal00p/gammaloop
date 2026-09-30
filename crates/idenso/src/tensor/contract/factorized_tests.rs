@@ -34,6 +34,86 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 }
 
 #[test]
+fn chain_admission_skips_finished_open_tensor_coefficients() {
+    use crate::Cookable;
+    use crate::shorthands::chain::CHAINIFY_CALLS;
+    use crate::tensor::simplification::observation::INITIAL_SCANS;
+    setup();
+    let reps = crate::test_support::test_initialize();
+    let label = spenso::index_symbol!("fused_raw_routing::chain_channel_edge");
+    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([symbolica::function!(label, i)]));
+    let coefficient = Atom::add_many((0..128).map(|i| {
+        let x = Atom::var(symbolica::symbol!(&format!(
+            "fused_raw_routing::channel_coefficient_{i}"
+        )));
+        x * input("spenso::g(p(17,spenso::mink(4)),q(23,spenso::mink(4)))").pow(i % 4 + 1)
+    }));
+    let vector = |name, slot: &Atom| {
+        FunctionBuilder::new(SPENSO_TAG.rank_one_tensor_symbol(name))
+            .add_arg(slot)
+            .finish()
+    };
+    let source = SymbolicTensor::infer(
+        (&coefficient * spenso::g!(&a, &b)
+            + coefficient.pow(2)
+                * vector("fused_raw_routing::p", &a)
+                * vector("fused_raw_routing::q", &b))
+        .cook_indices(),
+    )
+    .unwrap();
+    source.reduction_observations();
+    let scans = INITIAL_SCANS.with(|count| count.get());
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let result = source.contract(Default::default()).unwrap();
+    assert_eq!(result.expression, source.expression);
+    assert_eq!(result.structure, source.structure);
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(CHAINIFY_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+}
+
+#[test]
+fn chain_admission_updates_channels_after_vector_substitution() {
+    use crate::shorthands::chain::CHAINIFY_CALLS;
+    setup();
+    let source = input(
+        "(t(spenso::mink(4,a),spenso::mink(4,i))+u(spenso::mink(4,a),spenso::mink(4,i)))*p(spenso::mink(4,i))*q(spenso::mink(4,b))",
+    );
+    let expected = input(
+        "(t(spenso::mink(4,a),p(spenso::mink(4)))+u(spenso::mink(4,a),p(spenso::mink(4))))*q(spenso::mink(4,b))",
+    );
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let result = contract(&source);
+    assert_eq!(result.expression, expected);
+    assert_eq!(CHAINIFY_CALLS.with(|count| count.get()), 0);
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+}
+
+#[test]
+fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
+    use crate::{shorthands::chain::CHAINIFY_CALLS, tensor::ContractSettings};
+    setup();
+    let source = SymbolicTensor::infer(input("(x+y)^7*(t(spenso::mink(4,i),spenso::mink(4,j))*u(spenso::mink(4,j),spenso::mink(4,i))+z)^2")).unwrap();
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let untraced = source
+        .contract(ContractSettings {
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(!untraced.expression.contains_symbol(SPENSO_TAG.trace));
+    assert!(CHAINIFY_CALLS.with(|count| count.get()) > 0);
+    let traced = untraced.contract(Default::default()).unwrap();
+    assert!(traced.expression.contains_symbol(SPENSO_TAG.trace));
+    assert_eq!(traced.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(traced.structure, source.structure);
+    let expected = input(
+        "(x+y)^7*(spenso::trace(spenso::mink(4),spenso::cyclic(t(spenso::in,spenso::out),u(spenso::in,spenso::out)))+z)^2",
+    );
+    assert_eq!(traced.expression, expected);
+}
+
+#[test]
 fn factored_contracts_opaque_sum_products() {
     setup();
     let source = input(
