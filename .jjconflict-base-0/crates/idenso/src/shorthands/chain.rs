@@ -321,8 +321,6 @@ impl<'a> Chain for AtomView<'a> {
             args.iter()
                 .all(|arg| !arg.contains_symbol(T.chain_in) && !arg.contains_symbol(T.chain_out))
         };
-        let tensor_alias = spenso::tensor_symbol!("idenso::tensor_alias");
-        let scalar_alias = symbolica::symbol!("idenso::scalar_alias"; Scalar);
         let replacement = Replacement::new(
             function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
             function!(
@@ -335,13 +333,13 @@ impl<'a> Chain for AtomView<'a> {
         .when(
             W_.a_.filter_match(move |a| {
                 matches!(a, Match::FunctionName(a)
-                    if *a != T.chain && *a != T.trace && *a != ETS.metric && *a != tensor_alias && *a != scalar_alias)
+                    if *a != T.chain && *a != T.trace && *a != ETS.metric)
             }) & W_.a___.filter_match(no_ports)
                 & W_.b___.filter_match(no_ports)
                 & W_.c___.filter_match(no_ports),
         )
         .max_level(0);
-        let opaque_heads = [T.chain, T.trace, tensor_alias, scalar_alias];
+        let opaque_heads = [T.chain, T.trace];
         let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
         // An unchanged pruning assignment in replace_map rebuilds ancestors
         // and invokes their normalizers. Keep borrowed children until this
@@ -411,15 +409,9 @@ impl<'a> Chain for AtomView<'a> {
                 }
                 let (left, right, _, _) = spenso::structure::slot::SlotMatcher::default()
                     .compact_inner_product_parts::<AbstractIndex>(function)?;
-                // This raw operation cannot register a new literal alias spelling.
-                // Either operand may be relabelled by compact materialization, even
-                // when only the other one supplies the selected chain endpoints.
-                if left.contains_symbol(tensor_alias) || right.contains_symbol(tensor_alias) {
-                    return None;
-                }
                 // Select with the existing endpoint rule, including its opaque-head
                 // and placeholder restrictions. Existing chains already own their
-                // endpoints; tensor alias ports must stay literal registry keys.
+                // endpoints.
                 // Either operand may carry the selected endpoints, as in gamma·p.
                 let selected = [left, right].into_iter().any(|operand| {
                     operand
@@ -555,15 +547,14 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap();
-                assert_eq!(result.root().structure, source.structure);
+                assert_eq!(result.structure, source.structure);
                 assert_eq!(
-                    result.resolved().unwrap().to_dots().unwrap().expression,
+                    result.to_dots().unwrap().expression,
                     expected,
                     "compact={compact}, chained={chained}\ninput={expression}\nchainify={chainified}\njoin={}\nmetric-first={:?}\nchains={:?}\nexplicit-gamma={:?}",
                     chainified.join_chains(Bispinor {}.into()),
                     source
                         .contract(Default::default())
-                        .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                     source
                         .simplify_algebra(&crate::tensor::AlgebraSettings {
@@ -574,7 +565,6 @@ mod tests {
                             epsilon: false,
                             ..Default::default()
                         })
-                        .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                     source
                         .undo_dots()
@@ -585,35 +575,7 @@ mod tests {
                                 ..Default::default()
                             })
                         )
-                        .and_then(|value| value.resolved())
                         .map(|value| value.expression),
-                );
-                let aliased = source.alias_handle().unwrap();
-                let dag = std::sync::Arc::new(
-                    aliased
-                        .clone()
-                        .with_aliases([(aliased, source.clone())])
-                        .unwrap(),
-                );
-                assert_eq!(
-                    dag.simplify_algebra(&crate::tensor::AlgebraSettings {
-                        gamma: Some(GammaSimplifySettings::default()),
-                        epsilon: true,
-                        ..Default::default()
-                    })
-                    .unwrap()
-                    .contract(crate::tensor::ContractSettings {
-                        collect_chains: false,
-                        collect_traces: false,
-                        ..Default::default()
-                    })
-                    .unwrap()
-                    .resolved()
-                    .unwrap()
-                    .to_dots()
-                    .unwrap()
-                    .expression,
-                    expected,
                 );
             }
         }
@@ -724,116 +686,10 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap();
-            assert_eq!(actual.root().structure, source.structure);
+            assert_eq!(actual.structure, source.structure);
             let expected = Atom::num(2) * spenso::p!(&spectator) * g!(&left, &right);
-            assert_eq!(
-                (actual.resolved().unwrap().expression - expected).expand(),
-                Atom::Zero
-            );
+            assert_eq!((actual.expression - expected).expand(), Atom::Zero);
         }
-    }
-
-    #[test]
-    fn compact_dot_chainification_preserves_literal_alias_ports() {
-        use crate::tensor::SymbolicTensor;
-        use spenso::structure::partial::PartialStructure;
-
-        let reps = test_initialize();
-        let compact = reps.mink4.to_symbolic([]);
-        let body = SymbolicTensor::<PartialStructure>::infer(gamma!(
-            bis!(4, 93721),
-            bis!(4, 93722),
-            &compact
-        ))
-        .unwrap();
-        let handle = body.alias_handle().unwrap();
-        let input = function!(T.dot, &handle.expression, spenso::p!(&compact));
-        assert_eq!(input.chainify(Bispinor {}.into()), input);
-
-        let gamma = gamma!(bis!(4, 93722), bis!(4, 93723), &compact);
-        for (input, expected) in [
-            (
-                function!(T.dot, &handle.expression, &gamma),
-                function!(
-                    T.dot,
-                    &handle.expression,
-                    gamma.chainify(Bispinor {}.into())
-                ),
-            ),
-            (
-                function!(T.dot, &gamma, &handle.expression),
-                function!(
-                    T.dot,
-                    gamma.chainify(Bispinor {}.into()),
-                    &handle.expression
-                ),
-            ),
-        ] {
-            let actual = input.chainify(Bispinor {}.into());
-            assert_eq!(actual, expected);
-            assert_eq!(actual.chainify(Bispinor {}.into()), actual);
-        }
-
-        // A scalar alias is an opaque coefficient, never a compact port owner.
-        let scalar =
-            SymbolicTensor::<PartialStructure>::infer(Atom::var(symbol!("compact_alias_weight")))
-                .unwrap()
-                .alias_handle()
-                .unwrap();
-        let weighted = function!(T.dot, &scalar.expression * &gamma, spenso::p!(&compact));
-        let actual = weighted.chainify(Bispinor {}.into());
-        assert!(!actual.contains_symbol(T.dot));
-        assert!(
-            actual
-                .replace(scalar.expression.to_pattern())
-                .with(Atom::Zero)
-                .is_zero()
-        );
-    }
-
-    #[test]
-    fn chain_collection_keeps_literal_alias_ports_opaque() {
-        use crate::tensor::SymbolicTensor;
-        use spenso::structure::partial::PartialStructure;
-
-        test_initialize();
-        let body = SymbolicTensor::<PartialStructure>::infer(gamma!(
-            bis!(4, 93601),
-            bis!(4, 93603),
-            spenso::mink!(4, 93605)
-        ))
-        .unwrap();
-        let handle = body.alias_handle().unwrap();
-        assert_eq!(
-            handle.expression.chainify(Bispinor {}.into()),
-            handle.expression
-        );
-        let original = handle.expression.clone();
-        let source = std::sync::Arc::new(
-            handle
-                .clone()
-                .with_aliases([(handle, body.clone())])
-                .unwrap(),
-        );
-        let collected = source
-            .simplify_algebra(&crate::tensor::AlgebraSettings {
-                gamma: Some(crate::dirac::GammaSimplifySettings {
-                    output: crate::dirac::GammaOutput::Chains,
-                    ..Default::default()
-                }),
-                epsilon: false,
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(collected.root().expression, original);
-        assert_eq!(
-            collected
-                .resolved()
-                .unwrap()
-                .expression
-                .undo_single_length(),
-            body.expression
-        );
     }
 
     #[test]
@@ -1165,8 +1021,6 @@ mod tests {
                     }),
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .expression,
             &spin * &color_composed

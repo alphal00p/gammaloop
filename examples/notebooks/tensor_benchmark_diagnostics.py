@@ -195,7 +195,7 @@ def keep_rest():
                 if oracle is not None
                 else None,
                 output=atom(output).format_plain(),
-                rank=output.root.structure.rank,
+                rank=output.structure.rank,
                 preserves_outer_scalar_factor=bool(atom(output).contains(1 + x))
                 if name in ("factored_scalar", "nested_sum")
                 else None,
@@ -216,7 +216,7 @@ def keep_rest():
                 gamma_value = gamma_value + gam(*indices, rep(S("r3rest::nu")))
             source = metric(rep(S("r3rest::mu")), rep(S("r3rest::nu"))) * gamma_value
             for method in ("contract", "simplify_algebra"):
-                settings = dict(gamma=True, epsilon=True)
+                settings = dict(color=False, gamma=True, epsilon=True)
                 operation = lambda value: (
                     value.simplify_algebra(**settings)
                     if method == "simplify_algebra"
@@ -235,7 +235,9 @@ def keep_rest():
                 if output is not None:
                     row["output"] = atom(output).format_plain()
                     expected_gamma = (
-                        gamma_value.simplify_algebra(gamma=True, epsilon=True)
+                        gamma_value.simplify_algebra(
+                            color=False, gamma=True, epsilon=True
+                        )
                         if method == "simplify_algebra"
                         else gamma_value
                     )

@@ -230,7 +230,7 @@ from symbolica.community.tensor import Representation, TensorExpression
 fund = Representation.cof(3)
 identity = TensorExpression.g(fund, fund.dual())
 indexed_identity = identity("i", "j")
-assert identity("i", "i").contract().to_expression().to_expression() == E("3")
+assert identity("i", "i").contract().to_expression() == E("3")
 ```
 
 The same constructor supports symbolic dimensions. Distinct symbolic dimensions
@@ -383,7 +383,7 @@ chain or trace collection without evaluating algebraic identities. Independently
 with their existing dimension and gamma5 conventions. Its default enables none;
 `simplify_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
 contractions. No nested contraction settings or implicit global expansion is involved.
-The result retains aliases and reports `Complete`, `Deferred`, or `Capped` through
+The result is a `TensorExpression` and reports `Complete`, `Deferred`, or `Capped` through
 `reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
 remaining expression. Explicit `expand()` requests polynomial materialization.
 

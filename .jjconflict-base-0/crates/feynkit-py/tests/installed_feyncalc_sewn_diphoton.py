@@ -91,7 +91,6 @@ for coordinate_index in (0, 1):
                 .contract(collect_chains=False, collect_traces=False)
                 .expand()
                 .contract(collect_chains=False, collect_traces=False)
-                .to_expression()
                 .to_dots()
             )
             assert scalar.is_scalar

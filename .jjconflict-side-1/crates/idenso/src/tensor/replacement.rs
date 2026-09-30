@@ -7,7 +7,7 @@ use std::{
 
 use spenso::structure::{partial::PartialStructure, slot::SlotMatcher};
 use symbolica::{
-    atom::{AliasedAtom, Atom, AtomOrView, AtomView, Symbol},
+    atom::{Atom, AtomOrView, AtomView, Symbol},
     id::{
         AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction,
         ReplaceWith, WrappedMatchStack,
@@ -18,7 +18,6 @@ use symbolica::{
 
 use super::{
     SymbolicTensor,
-    aliases::AliasInterfaces,
     composition::{self, ExplicitIndexOccurrences},
     inference::{InterfaceInference, TensorInferenceError},
 };
@@ -196,21 +195,6 @@ impl SymbolicTensor<PartialStructure> {
                 Ok(result)
             }
         }
-    }
-}
-
-impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
-    /// Apply one ordered rule set to the root and reachable definition bodies.
-    /// Registered uses remain literal leaves; definitions are never resolved.
-    /// Each original domain uses the ordinary replacement owner's local caches.
-    pub fn replace_rules(self: &Arc<Self>, rules: &[TensorRule<'_>]) -> Result<Arc<Self>> {
-        if rules.is_empty() {
-            return Ok(Arc::clone(self));
-        }
-        self.map_domains(|source, _observe| {
-            let next = source.replace_rules(rules)?;
-            Ok((next, Vec::new()))
-        })
     }
 }
 
@@ -477,83 +461,6 @@ mod tests {
     fn typed(expression: Atom) -> SymbolicTensor<PartialStructure> {
         let raw = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
         SymbolicTensor::checked_parts(raw.expression, raw.structure).unwrap()
-    }
-
-    #[test]
-    fn aliased_rule_stage_preserves_registry_and_original_domain_schedule() {
-        crate::test_support::test_initialize();
-        let f = spenso::tensor_symbol!("alias_rule_f");
-        let g = spenso::tensor_symbol!("alias_rule_g");
-        let h = spenso::tensor_symbol!("alias_rule_h");
-        let a = slot(81861);
-        let f = leaf(f, std::slice::from_ref(&a));
-        let g = leaf(g, std::slice::from_ref(&a));
-        let h = leaf(h, &[a]);
-        let body = typed(&f + &g);
-        let handle = body.alias_handle().unwrap();
-        let unused = typed(f.clone());
-        let unused_handle = unused.alias_handle().unwrap();
-        let source = Arc::new(
-            typed(&handle.expression + &f)
-                .with_aliases([
-                    (handle.clone(), body),
-                    (unused_handle.clone(), unused.clone()),
-                ])
-                .unwrap(),
-        );
-        let rules = [
-            TensorRule::new(f.to_pattern(), g.clone().into(), None, 0).unwrap(),
-            TensorRule::new(g.to_pattern(), h.clone().into(), None, 0).unwrap(),
-        ];
-        let result = source.replace_rules(&rules).unwrap();
-        assert_eq!(result.root().expression, &handle.expression + &g);
-        assert_eq!(result.resolved().unwrap().expression, 2 * &g + &h);
-        assert!(result.aliases().unwrap().contains(&(unused_handle, unused)));
-        let identity = TensorRule::new(f.to_pattern(), f.into(), None, 0).unwrap();
-        assert!(Arc::ptr_eq(
-            &source,
-            &source.replace_rules(&[identity]).unwrap()
-        ));
-    }
-
-    #[test]
-    fn aliased_rule_callbacks_visit_reachable_bodies_once_and_check_rank_loss() {
-        crate::test_support::test_initialize();
-        let f = spenso::tensor_symbol!("alias_rule_callback_f");
-        let g = spenso::tensor_symbol!("alias_rule_callback_g");
-        let a = slot(81863);
-        let f = leaf(f, std::slice::from_ref(&a));
-        let g = leaf(g, &[a]);
-        let body = typed(f.clone());
-        let handle = body.alias_handle().unwrap();
-        let unused_handle = body.alias_handle().unwrap();
-        let source = Arc::new(
-            typed(&handle.expression + &f)
-                .with_aliases([(handle, body.clone()), (unused_handle, body)])
-                .unwrap(),
-        );
-        let calls = Arc::new(AtomicUsize::new(0));
-        let count = Arc::clone(&calls);
-        let rhs = g.clone();
-        let rule = TensorRule::new(
-            f.to_pattern(),
-            ReplaceWith::Map(Box::new(move |_| {
-                count.fetch_add(1, Ordering::SeqCst);
-                rhs.clone()
-            })),
-            None,
-            0,
-        )
-        .unwrap();
-        let result = source.replace_rules(&[rule]).unwrap();
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        assert_eq!(result.resolved().unwrap().expression, 2 * g);
-        let invalid = TensorRule::new(f.to_pattern(), Atom::one().into(), None, 0).unwrap();
-        let root = source.expression.get_root().clone();
-        let definitions = source.expression.get_aliases().clone();
-        assert!(source.replace_rules(&[invalid]).is_err());
-        assert_eq!(source.expression.get_root(), &root);
-        assert_eq!(source.expression.get_aliases(), &definitions);
     }
 
     #[test]

@@ -6,12 +6,14 @@ its notation-conversion contract are documented
 in `docs/products/idenso/content/api.typ`. The final source-qualified results,
 verification gates and remaining limitations are recorded below. Correctness and
 consolidation are the acceptance criteria; measured speedups are not required.
+Historical alias-enabled measurements below describe the implementation preserved
+on `tensor-aliases-preserved`. The current reduction API returns only `TensorExpression`.
 
 == API and consolidation
 
 The Rust reduction operations are `contract(ContractSettings)` and
 `simplify_algebra(AlgebraSettings)`, on the existing `SymbolicTensor` abstraction
-and its existing alias-capable owner. `contract_ports` remains the explicit
+returning the same typed carrier with an Atom payload. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
 the existing optional contraction order, and a per-domain change budget.
@@ -26,7 +28,7 @@ for example, a Python `Representation.mink(4)` filter does not restrict permissi
 to four-dimensional slots. Actual connections must still satisfy dimension,
 variance and positional port compatibility.
 Python exposes both operations through explicit keyword-only parameters on
-`TensorExpression` and `AliasedTensorExpression`. For example,
+`TensorExpression`. For example,
 `expr.contract(representations=[lorentz], collect_traces=False)` and
 `expr.simplify_algebra(gamma=True, gamma_ordering="canonical", color=True)`.
 The binding lowers those parameters into the existing Rust settings; it owns no
@@ -57,10 +59,9 @@ an explicit ambient structural contraction where the old family wrapper also
 performed that work. Former metric-only callers disable chain and trace
 collection so migration does not silently enable new transformations.
 
-Both public reductions lower into one domain queue. The root and each shared
-alias definition retain regional head multiplicities, boundary observations,
-and dependency edges from the existing candidate scanner. Actual replacements
-invalidate the affected observations and dependent call sites. Cached shallow
+Both public reductions lower into one domain queue. The expression retains
+regional head multiplicities and boundary observations from the existing
+candidate scanner. Actual replacements invalidate the affected observations. Cached shallow
 structural graphs and unchanged interfaces are reused. The existing contraction
 implementation handles structural work requested directly or needed by an
 identity. Family kernels retain their specialized algebra. Neither reduction
@@ -71,9 +72,8 @@ shared planning and contraction paths.
 == Invariant ownership and caller migration
 
 `SymbolicTensor` retains the expression, ordered partial interface, typed-zero
-metadata and trusted validation facts. Its existing `AliasInterfaces` plus
-`AliasedAtom` owner retains shared definitions, source/target port associations
-and definition proofs. Spenso's ordered structures, slot matcher and fast
+metadata and trusted validation facts. Reduction and collection return that
+same typed carrier without creating alias definitions. Spenso's ordered structures, slot matcher and fast
 syntactic inference own representation compatibility, variance and logical slot
 order. The shared depth-one parser builds planning boundaries and reuses those
 interfaces; it is not a second tensor carrier. `SimplificationCandidates` supplies
@@ -81,8 +81,8 @@ regional head counts and index observations in its existing traversal. The
 single Idenso domain queue owns eligibility, dependency invalidation, budgets
 and completion. The existing slot contractor owns metric/vector substitutions;
 shared collection primitives own dots, oriented chains and unevaluated traces.
-Family kernels own gamma, colour and epsilon identities. Explicit alias
-materialization and Python object wrapping remain separate boundaries.
+Family kernels own gamma, colour and epsilon identities. Explicit arithmetic
+expansion and Python object wrapping remain separate boundaries.
 
 The migration removes repeated whole-family scheduling, global epsilon
 permission inferred from registry presence, whole-alias-table progress comparison,
@@ -90,7 +90,7 @@ and contraction hidden inside a notation conversion. Trusted continuations pass
 observations and interfaces forward; callbacks that can change rank invalidate
 the affected proof. Initial domain scans and replacement-region observations are
 distinct: the latter are required for new syntax and do not rescan unchanged
-alias definitions. Fresh-name discovery also reuses the observed written indices,
+regions. Fresh-name discovery also reuses the observed written indices,
 including indices inside opaque metadata.
 
 The following caller inventory records permissions and required output, rather
@@ -115,7 +115,7 @@ than assuming that every historical method name meant the same work. Here
   [Resolved and reversibly uncooked numerator Atom; stage order retained],
   [GammaLoop evaluator preprocessing],
   [When `do_algebra`: gamma, colour with fundamental-dimension invariants, epsilon, ambient contraction; otherwise no reduction],
-  [Alias-capable tensor retained for the existing component-network evaluator],
+  [Plain typed tensor, reversibly uncooked at the existing component-network boundary],
   [UV analytic reduction before Vakint],
   [Canonical gamma plus epsilon, ambient contraction and pure dot conversion],
   [Resolved uncooked Atom with compact scalar products; unsupported sigma input remains rejected],
@@ -131,7 +131,7 @@ than assuming that every historical method name meant the same work. Here
   [Native reference/FORM examples],
   [Explicit gamma or epsilon settings and matching ambient contractions; notation conversion is a separately named phase],
   [Each example's original resolved, factored or explicitly expanded result],
-  [Notebook typed and shared-alias routes],
+  [Notebook typed tensor routes],
   [Explicit gamma/colour/epsilon settings per case; matching ambient contractions; no new global expansion],
   [Same requested scalar or tensor expression; designated cases explicitly expand, with unrelated scalar spectators retained],
 )
@@ -142,7 +142,41 @@ The detailed source-location inventory is retained in
 unrelated numerical network `ContractionSettings` is not the removed Idenso
 orchestration type and remains unchanged.
 
+== Current plain-tensor migration
+
+The tensor alias owner, definition registry, materializer, Python wrapper and
+alias display controls have been removed. Reduction and collection return the
+same typed carrier with an Atom payload, ordered interfaces, regional candidate
+observations and cached completed requests. `Complete`, `Deferred` and `Capped`
+remain distinct; unfinished results retain their exact expression.
+
+The generated quark notebook uses an explicit 128-step budget because its single
+root domain now accounts for work previously split across definitions. Its
+completed 525-term edge-momentum result exactly matches the preserved alias
+snapshot; routing gives 1,386 terms. The gluonic notebook resumes its exact
+result once after the contractor's 64 MiB frontier cap, then requires completion
+before explicit expansion. Its 6,001-term scalar agrees exactly with the saved
+alias result. The plain factored intermediate occupies about 70.6 MB when
+printed, so the notebook displays only a short preview of the final polynomial.
+Final installed-notebook smoke runs took 18.81 s and 15.46 s, respectively,
+including diagram generation, projection, algebra and materialization. These
+unpinned timings carry no speedup claim.
+
+Validation includes independent HEP component oracles, eight Higgs Monte Carlo
+and generated-ladder checks, 75 notebook/API checks, nine evaluator regressions
+and four staged-family Python checks. Python defaults enable gamma and colour;
+callers that isolate a family explicitly disable the other. The existing
+`installed_amplitude` dummy-label spelling assertion also fails before reduction
+on the preserved build. Three long trace-component checks exceeded the debug
+runner's 60-second limit and passed unchanged with the local algebra and tensor
+packages compiled at optimization level 2.
+
 == Source and environment
+
+The remaining sections record the historical alias-enabled implementation and
+its validation runs. Their source paths, phase measurements and completion
+claims refer to the named snapshots preserved on `tensor-aliases-preserved`,
+rather than the current plain-tensor implementation described above.
 
 The initial Git revision was `0f5a7d89789fa61b439808751bd3a7654c797cb0`, with
 preexisting user changes. Their full binary-diff SHA-256 is

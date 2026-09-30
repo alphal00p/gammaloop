@@ -80,7 +80,6 @@ amplitude = sum(terms, E("0"))
 operator = kin.apply(
     TensorExpression(amplitude)
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_dots()
 )
 amplitude = operator.to_expression()
@@ -100,17 +99,17 @@ generic = (amplitude * adjoint * colors * gluon.color**2 / dA**2).replace(
 print("color contraction", flush=True)
 colored = (
     TensorExpression(generic, intern="flattened")
-    .simplify_algebra(color=True)
+    .simplify_algebra(gamma=False, color=True)
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_expression()
     .replace(dA, N**2 - 1)
 )
 colored = (
     TensorExpression(colored)
-    .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .simplify_algebra(
+        gamma=False, color=True, color_substitute_cof_dimension_invariants=True
+    )
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_expression()
 )
 # Physical axial references pair the two incoming and the two outgoing gluons.
@@ -122,11 +121,7 @@ for i, j in enumerate((1, 0, 3, 2)):
     projector = kin.apply(projector)
     print("polarization", i, "start", flush=True)
     tensor = TensorExpression(result * projector)
-    tensor = (
-        tensor.contract(collect_chains=False, collect_traces=False)
-        .to_expression()
-        .to_dots()
-    )
+    tensor = tensor.contract(collect_chains=False, collect_traces=False).to_dots()
     result = tensor.to_expression()
     result = kin.apply(result).replace(u, -s - t)
     print("polarization", i, "done", flush=True)

@@ -140,7 +140,7 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
 }
 
 #[test]
-fn alias_admission_preserves_scalar_metadata_and_mixed_auto_representations() {
+fn contraction_preserves_scalar_metadata_and_mixed_auto_representations() {
     crate::test_support::test_initialize();
     let euc = LibraryRep::from(Euclidean {}).new_rep(2);
     let mink = LibraryRep::from(Minkowski {}).new_rep(4);
@@ -161,12 +161,7 @@ fn alias_admission_preserves_scalar_metadata_and_mixed_auto_representations() {
             .collect::<Vec<_>>(),
         [euc, mink]
     );
-    let handle = value.alias_handle().unwrap();
-    let registered = handle
-        .clone()
-        .with_aliases([(handle, value.clone())])
-        .unwrap();
-    let restored = registered.resolved().unwrap();
+    let restored = value.contract(Default::default()).unwrap();
     assert_eq!(restored.structure, value.structure);
     assert_eq!(restored.expression, value.expression);
 }
@@ -244,11 +239,7 @@ fn unchanged_ordered_products_keep_raw_and_encoded_auto_ports() {
             original,
             "raw and encoded AUTO ports both retain their ordered bracket"
         );
-        let result = source
-            .contract(Default::default())
-            .unwrap()
-            .resolved()
-            .unwrap();
+        let result = source.contract(Default::default()).unwrap();
         assert_eq!(result.expression(), source.expression());
         assert_eq!(result.structure(), source.structure());
         if encoded {

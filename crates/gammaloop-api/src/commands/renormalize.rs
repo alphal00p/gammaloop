@@ -132,8 +132,7 @@ impl Renormalize {
                     collect_traces: false,
                     ..Default::default()
                 })?
-                .to_dots()?
-                .resolved()?;
+                .to_dots()?;
             let simplified = cooking.uncook(simplified.expression().as_view());
             part = state
                 .model

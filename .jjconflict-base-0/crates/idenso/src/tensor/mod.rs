@@ -48,7 +48,6 @@ use symbolica::{
 
 use crate::NetworkToolingError;
 
-pub mod aliases;
 mod canonicalize;
 mod collection;
 #[cfg(test)]
@@ -172,9 +171,7 @@ where
 /// The structure is independent of the expression, so a zero can retain its rank.
 /// Checked construction and rewriting validate interfaces when callbacks can
 /// change them; structure mappings retain the symbolic payload.
-/// The payload defaults to `Atom`; borrowed views and Symbolica's `AliasedAtom`
-/// use the same storage type. Aliased definitions retain their logical layouts in
-/// [`aliases::AliasInterfaces`], separate from their single Symbolica registry.
+/// The payload defaults to `Atom`; borrowed views use the same tensor carrier.
 #[derive(Debug, Clone)]
 pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
     pub(crate) structure: S,
@@ -193,11 +190,6 @@ pub(crate) struct TensorProofs {
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
-    pub(super) prerequisites: bool,
-    // The admitted literal body certifies occurrence-local bindings even when
-    // source and target definitions are reduced at different times.
-    pub(super) literal_origin:
-        Option<std::sync::Arc<SymbolicTensor<spenso::structure::partial::PartialStructure>>>,
     pub(super) frontier: simplification::ReductionStatus,
     pub(super) shallow_graph: OnceLock<Result<std::sync::Arc<SymbolicNet<AbstractIndex>>, String>>,
     pub(super) leaf_interfaces: OnceLock<spenso::network::parsing::LeafInterfaceCache>,

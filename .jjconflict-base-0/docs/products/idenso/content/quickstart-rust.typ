@@ -40,7 +40,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expression = g!(mink!(4, 0), mink!(4, 1)) * vector!(p, mink!(4, 1));
     let reduced = SymbolicTensor::infer(expression)?
         .contract(Default::default())?
-        .resolved()?
         .into_expression();
 
     assert_eq!(reduced, vector!(p, mink!(4, 0)));

@@ -1,7 +1,7 @@
-//! Candidate and dependency facts retained by an immutable domain. The initial
+//! Candidate facts retained by an immutable domain. The initial
 //! inventory and regional observations come from the same syntactic traversal.
 
-use super::super::{SymbolicTensor, aliases::TENSOR_ALIAS_SYMBOL};
+use super::super::SymbolicTensor;
 use crate::{
     dirac::AGS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
@@ -20,7 +20,7 @@ use spenso::{
 };
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, LazyLock, OnceLock},
+    sync::{Arc, LazyLock},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
@@ -66,7 +66,6 @@ thread_local! {
 #[derive(Clone, Debug)]
 pub(crate) struct RegionObservation {
     pub(crate) counts: [usize; HEAD_COUNT],
-    pub(crate) literals: HashSet<Atom>,
     pub(crate) representations: HashSet<LibraryRep>,
     pub(crate) leaves: HashSet<Atom>,
     reserved_indices: HashSet<AbstractIndex>,
@@ -85,7 +84,6 @@ impl Default for RegionObservation {
     fn default() -> Self {
         Self {
             counts: [0; HEAD_COUNT],
-            literals: HashSet::new(),
             representations: HashSet::new(),
             leaves: HashSet::new(),
             reserved_indices: HashSet::new(),
@@ -113,7 +111,6 @@ impl RegionObservation {
         match node {
             AtomView::Var(variable) => {
                 self.head(variable.get_symbol());
-                self.literals.insert(node.to_owned());
             }
             AtomView::Fun(function) => {
                 let head = function.get_symbol();
@@ -145,12 +142,6 @@ impl RegionObservation {
                     self.vector_sources.insert(rep);
                 }
 
-                if head == *TENSOR_ALIAS_SYMBOL
-                    || head == symbolica::symbol!("idenso::scalar_alias"; Scalar)
-                    || head == SPENSO_TAG.scalar
-                {
-                    self.literals.insert(node.to_owned());
-                }
                 if let SlotMatch::Explicit(slot) = slot {
                     self.indices += 1;
                     self.max_indices += 1;
@@ -221,7 +212,6 @@ impl RegionObservation {
         for (count, additional) in self.counts.iter_mut().zip(other.counts) {
             *count += additional;
         }
-        self.literals.extend(other.literals.iter().cloned());
         self.representations
             .extend(other.representations.iter().copied());
         self.leaves.extend(other.leaves.iter().cloned());
@@ -263,7 +253,6 @@ pub(crate) struct DomainObservations {
     pub(crate) candidates: SimplificationCandidates<HEAD_COUNT>,
     regions: HashMap<Atom, Arc<RegionObservation>>,
     scopes: HashMap<Atom, Arc<RegionObservation>>,
-    literals: OnceLock<HashSet<Atom>>,
     // A producer can establish scalar closure without collecting syntactic
     // regions. Missing regions remain unknown to arbitrary collector predicates.
     scalar_form: Option<ScalarPolynomialForm>,
@@ -282,8 +271,6 @@ enum ScalarPolynomialForm {
 impl DomainObservations {
     /// Certify intrinsic scalar syntax with no local identity or contraction work.
     /// The producer owns this proof, including its compact vector metadata.
-    /// Referenced scalar definitions retain their independent scheduled work;
-    /// literal dependencies remain exact and lazy.
     pub(crate) fn closed_scalar(needs_dots: bool) -> Self {
         Self {
             candidates: SimplificationCandidates {
@@ -298,7 +285,6 @@ impl DomainObservations {
             },
             regions: HashMap::new(),
             scopes: HashMap::new(),
-            literals: OnceLock::new(),
             scalar_form: Some(if needs_dots {
                 ScalarPolynomialForm::Metrics
             } else {
@@ -324,7 +310,7 @@ impl DomainObservations {
     }
 
     /// Establish local scalar closure from observations and a caller-proven scalar
-    /// interface. Work inside referenced definitions remains independently scheduled.
+    /// interface.
     pub(crate) fn can_certify_scalar(&self) -> bool {
         self.is_closed_scalar()
             || (self.candidates.complete
@@ -343,37 +329,6 @@ impl DomainObservations {
         region
             .certifies_scalar_syntax()
             .then(|| Self::closed_scalar(region.dots || region.counts[17] > 0))
-    }
-
-    /// Recover only exact literal occurrences when dependency admission needs
-    /// them. Slot dimensions and index payloads stay opaque, as in the shared
-    /// candidate walker; this does not construct regional observation caches.
-    pub(crate) fn literals(&self, expression: AtomView<'_>) -> &HashSet<Atom> {
-        self.literals.get_or_init(|| {
-            let mut literals = HashSet::new();
-            let mut slots = SlotMatcher::default();
-            let scalar_alias = symbolica::symbol!("idenso::scalar_alias"; Scalar);
-            expression.visitor(&mut |node| {
-                match node {
-                    AtomView::Var(_) => {
-                        literals.insert(node.to_owned());
-                    }
-                    AtomView::Fun(function) => {
-                        let head = function.get_symbol();
-                        if head == *TENSOR_ALIAS_SYMBOL
-                            || head == scalar_alias
-                            || head == SPENSO_TAG.scalar
-                        {
-                            literals.insert(node.to_owned());
-                        }
-                        return matches!(slots.classify(node), SlotMatch::Other);
-                    }
-                    _ => {}
-                }
-                true
-            });
-            literals
-        })
     }
 
     fn regions(expression: AtomView<'_>) -> Vec<AtomView<'_>> {
@@ -502,10 +457,6 @@ impl DomainObservations {
             .values()
             .flat_map(|region| region.reserved_indices.iter().copied())
             .collect();
-        let literals: HashSet<_> = regions
-            .values()
-            .flat_map(|region| region.literals.iter().cloned())
-            .collect();
         let representations = regions
             .values()
             .flat_map(|region| region.representations.iter().copied())
@@ -514,7 +465,6 @@ impl DomainObservations {
             candidates,
             regions,
             scopes,
-            literals: OnceLock::from(literals),
             scalar_form: None,
             representations,
             epsilon_degree,
@@ -572,7 +522,6 @@ impl DomainObservations {
     }
 
     /// No permitted metric/vector endpoint remains in this observed domain.
-    /// Tensor alias ports can hide a source head and must be exposed separately.
     pub(crate) fn excludes_contraction_sources(
         &self,
         settings: crate::tensor::ContractSettings<'_>,
@@ -582,10 +531,6 @@ impl DomainObservations {
         }
         self.candidates.complete
             && self.candidates.traversal_complete
-            && !self.literals.get().unwrap().iter().any(|literal| {
-                matches!(literal.as_view(), AtomView::Fun(function)
-                    if function.get_symbol() == *TENSOR_ALIAS_SYMBOL)
-            })
             && self.regions.values().all(|region| {
                 !(settings.metrics
                     && region
@@ -688,27 +633,21 @@ impl SettledRegions {
         complete: bool,
         operation: impl FnOnce(
             SymbolicTensor<PartialStructure>,
-        ) -> Result<
-            (SymbolicTensor<PartialStructure>, Vec<super::Definition>),
-            super::TensorInferenceError,
-        >,
-    ) -> Result<
-        (SymbolicTensor<PartialStructure>, Vec<super::Definition>),
-        super::TensorInferenceError,
-    > {
+        )
+            -> Result<SymbolicTensor<PartialStructure>, super::TensorInferenceError>,
+    ) -> Result<SymbolicTensor<PartialStructure>, super::TensorInferenceError> {
         let key = (source.expression.clone(), source.structure.logical_slots());
         if complete && self.inputs.contains(&key) {
             #[cfg(test)]
             REUSED_KERNEL_REGIONS.with(|count| count.set(count.get() + 1));
-            return Ok((source, Vec::new()));
+            return Ok(source);
         }
         let intrinsic = complete && source.normalization_is_intrinsic();
         let result = operation(source)?;
         if intrinsic
-            && result.1.is_empty()
-            && result.0.proofs.frontier == super::ReductionStatus::Complete
-            && result.0.expression == key.0
-            && result.0.structure.logical_slots() == key.1
+            && result.proofs.frontier == super::ReductionStatus::Complete
+            && result.expression == key.0
+            && result.structure.logical_slots() == key.1
         {
             let bytes = key.0.as_view().get_byte_size().saturating_add(
                 key.1
@@ -729,46 +668,6 @@ impl SettledRegions {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn lazy_literals_match_observation_without_entering_slot_metadata() {
-        crate::test_support::test_initialize();
-        let x = Atom::var(symbolica::symbol!("lazy_literals::x"));
-        let dimension_symbol = symbolica::symbol!("lazy_literals::dimension");
-        let dimension = Atom::var(dimension_symbol);
-        let index = Atom::var(symbolica::symbol!("lazy_literals::index"));
-        let slot = spenso::mink!(dimension_symbol, &index);
-        let compact = spenso::mink!(dimension_symbol);
-        let scalar_alias = symbolica::function!(
-            symbolica::symbol!("idenso::scalar_alias"; Scalar),
-            Atom::num(99123)
-        );
-        let expression = symbolica::function!(
-            symbolica::symbol!("lazy_literals::wrapper"),
-            &slot,
-            &compact,
-            &scalar_alias,
-            &x
-        );
-        let scanned = DomainObservations::initial(expression.as_view());
-        let lazy = DomainObservations::closed_scalar(false);
-        assert_eq!(
-            lazy.literals(expression.as_view()),
-            scanned.literals(expression.as_view())
-        );
-        assert!(lazy.literals(expression.as_view()).contains(&x));
-        assert!(lazy.literals(expression.as_view()).contains(&scalar_alias));
-        assert!(!lazy.literals(expression.as_view()).contains(&dimension));
-        assert!(!lazy.literals(expression.as_view()).contains(&index));
-        assert!(lazy.region(expression.as_view()).is_none());
-
-        let cancelled = &x - &x;
-        assert!(
-            DomainObservations::closed_scalar(false)
-                .literals(cancelled.as_view())
-                .is_empty()
-        );
-    }
 
     #[test]
     fn scalar_certificate_excludes_work_without_fabricating_regional_inventory() {
@@ -801,7 +700,6 @@ mod tests {
         let certified = observed.certify_scalar_region(spectator.as_view()).unwrap();
         assert!(certified.is_closed_scalar());
         assert!(!certified.needs_dot_normalization());
-        assert!(certified.literals.get().is_none());
         assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
         assert!(observed.certify_scalar_region(tensor.as_view()).is_none());
         assert!(observed.certify_scalar_region(x.as_view()).is_none());

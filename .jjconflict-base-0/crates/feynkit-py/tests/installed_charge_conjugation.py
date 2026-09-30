@@ -44,7 +44,6 @@ assert (
     square.simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
-    .to_expression()
     == -identity.to_expression()
 )
 
@@ -56,10 +55,10 @@ sandwich = TensorExpression(chain_head(bis_i, bis_j, c, gamma_mu, c))
 transposed_sandwich = TensorExpression(chain_head(bis_i, bis_j, c, transposed_mu, c))
 assert sandwich.simplify_algebra(gamma=True, epsilon=True).contract(
     collect_chains=False, collect_traces=False
-).to_expression().to_expression() == chain_head(bis_i, bis_j, transposed_mu)
+).to_expression() == chain_head(bis_i, bis_j, transposed_mu)
 assert transposed_sandwich.simplify_algebra(gamma=True, epsilon=True).contract(
     collect_chains=False, collect_traces=False
-).to_expression().to_expression() == chain_head(bis_i, bis_j, gamma_mu)
+).to_expression() == chain_head(bis_i, bis_j, gamma_mu)
 
 # The public chain builder selects each matrix channel; no sewing indices are
 # manufactured here. A product of transposes retains the original factor order.
@@ -74,16 +73,13 @@ word = scalar * chain(
     open_charge,
 )
 expected = -scalar * chain_head(bis_i, bis_j, transposed_mu, transposed_nu)
-reduced = (
-    word.simplify_algebra(gamma=True, epsilon=True)
-    .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
+reduced = word.simplify_algebra(gamma=True, epsilon=True).contract(
+    collect_chains=False, collect_traces=False
 )
 assert reduced.to_expression() == expected
 assert (
     reduced.simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_expression()
     == reduced.to_expression()
 )
@@ -102,14 +98,12 @@ for dim in (E("4"), dimension):
             compact.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
-            .to_expression()
             == expected_slash
         )
     else:
         assert (
             compact.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_expression()
             == compact.to_expression()
         )
@@ -119,7 +113,6 @@ for dim in (E("4"), dimension):
         assert (
             ordinary_word.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_expression()
             == ordinary_word.to_expression()
         )

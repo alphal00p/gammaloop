@@ -67,22 +67,17 @@ for sign in (1, -1):
     assert conjugate.dirac_adjoint().to_expression() == color.to_expression()
     norm = (
         TensorExpression(color.to_expression() * conjugate.to_expression())
-        .simplify_algebra(epsilon=True)
+        .simplify_algebra(gamma=False, color=False, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
     )
     assert norm.is_scalar
     assert norm.to_expression() == E("6")
     # One incoming triplet is averaged; the two distinct outgoing species are summed.
-    average = (
-        TensorExpression(
-            model.particle_by_pdg(sign * (pdg_base + 1)).color_sum(
-                S("i"), S("i"), average=True
-            )
+    average = TensorExpression(
+        model.particle_by_pdg(sign * (pdg_base + 1)).color_sum(
+            S("i"), S("i"), average=True
         )
-        .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
-    )
+    ).contract(collect_chains=False, collect_traces=False)
     assert average.to_expression() == E("1")
     print(
         f"Generated {'Epsilon' if sign > 0 else 'EpsilonBar'}: dual conjugate, norm 6 passed"

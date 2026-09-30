@@ -24,40 +24,33 @@ for colors in (2, 3, 5):
         (generator("c", "i", "k") * generator("b", "k", "j")).to_expression() / 2
         - identity.to_expression() * adjoint.g("b", "c").to_expression() / (4 * colors)
     )
-    reduced = (
-        mixed.simplify_algebra(
-            color=True, color_substitute_cof_dimension_invariants=True
-        )
-        .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
-    )
+    reduced = mixed.simplify_algebra(
+        gamma=False, color=True, color_substitute_cof_dimension_invariants=True
+    ).contract(collect_chains=False, collect_traces=False)
     assert reduced.to_expression().expand() == (
-        expected.simplify_algebra(color=True)
+        expected.simplify_algebra(gamma=False, color=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_expression()
         .expand()
     )
     assert (
-        reduced.simplify_algebra(color=True)
+        reduced.simplify_algebra(gamma=False, color=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_expression()
         == reduced.to_expression()
     )
-    disabled = dict(color=True, color_evaluate_traces=False, color_expand_fierz=False)
-    preserved = (
-        mixed.simplify_algebra(**disabled)
-        .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
+    disabled = dict(
+        gamma=False, color=True, color_evaluate_traces=False, color_expand_fierz=False
+    )
+    preserved = mixed.simplify_algebra(**disabled).contract(
+        collect_chains=False, collect_traces=False
     )
     assert preserved.to_expression() != reduced.to_expression()
     assert (
         preserved.simplify_algebra(
-            color=True, color_substitute_cof_dimension_invariants=True
+            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
         )
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_expression()
         == reduced.to_expression()
     )
@@ -67,12 +60,10 @@ for colors in (2, 3, 5):
     closed = TensorExpression(trace.to_expression() * other_trace.to_expression())
     trace_norm = (
         closed.simplify_algebra(
-            color=True, color_substitute_cof_dimension_invariants=True
+            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
         )
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
     )
     assert trace_norm.is_scalar
     assert trace_norm.to_expression() == E(str((colors**2 - 1) * (colors**2 - 2))) / (

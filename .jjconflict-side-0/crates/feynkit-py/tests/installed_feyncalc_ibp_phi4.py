@@ -340,7 +340,6 @@ for loops, ct_order in [(1, 1), (0, 2)]:
         numerator = (
             TensorExpression(numerator)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
             .to_expression()
         )
@@ -581,7 +580,6 @@ for loops, order in [(1, 1), (0, 2)]:
         numerator = (
             TensorExpression(numerator)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
             .to_expression()
         )

@@ -75,7 +75,6 @@ for references in (None, {2: P(3), 3: P(2)}, {2: P(0), 3: P(0)}):
     scalar = (
         expression.simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_dots()
     )
     result = kin.apply(scalar.to_expression())

@@ -192,14 +192,12 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
         });
         assert_eq!(result.expression(), &p!(mink!(4, 921001)));
         assert_eq!(clocks.entries[Phase::Admission as usize].calls, 1);
         assert!(clocks.entries[Phase::InterfaceDiscovery as usize].calls > 0);
         assert!(clocks.entries[Phase::Contraction as usize].calls > 0);
-        assert!(clocks.entries[Phase::Materialization as usize].calls > 0);
+        assert_eq!(clocks.entries[Phase::Materialization as usize].calls, 0);
         assert_eq!(clocks.outcomes, [("contract", ReductionStatus::Complete)]);
         for entry in clocks.entries {
             assert_eq!(entry.depth, 0);
@@ -219,7 +217,7 @@ mod tests {
             collect_traces: false,
             ..Default::default()
         };
-        let owner = std::sync::Arc::new(source.contract(settings).unwrap());
+        let owner = source.contract(settings).unwrap();
         let ((rerun, capped), clocks) = measure("completion outcomes", || {
             (
                 owner.contract(settings).unwrap(),
@@ -231,8 +229,11 @@ mod tests {
                     .unwrap(),
             )
         });
-        assert!(std::sync::Arc::ptr_eq(&owner, &rerun));
-        assert_eq!(capped.root().expression(), source.expression());
+        assert!(std::sync::Arc::ptr_eq(
+            owner.reduction_observations(),
+            rerun.reduction_observations()
+        ));
+        assert_eq!(capped.expression(), source.expression());
         assert_eq!(
             clocks.outcomes,
             [

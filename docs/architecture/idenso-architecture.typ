@@ -84,18 +84,13 @@ an explicit exception for metadata: its first marker selects the basis component
 while its final argument is the sole tensor port. This does not admit a second
 component marker on arbitrary rank-one functions.
 
-Aliased results use the same tensor with Symbolica's `AliasedAtom` payload and
-`AliasInterfaces` structure. Symbolica owns the single registry of literal
-definitions; Idenso retains the root layout and each handle/body's declared
-logical layout. Re-inferring those layouts from normalized syntax would lose
-port order. Registration checks encoded interfaces, branch consistency, index
-multiplicity, conflicting definitions and cycles. A fresh literal handle is
-registered for each port labelling; a relabelled use is not a parametric lookup.
-Resolution is explicit and checks the resulting interface, including callback
-rank changes. Expansion is a separate explicit operation; the evaluator consumes
-the alias registry directly. The Python `AliasedTensorExpression` only converts
-typed arguments, invokes callbacks, retains presentation descriptors, and wraps
-these shared operations. Scalar outputs use the same class.
+Reduction and collection return the same symbolic tensor with a plain Atom
+payload and ordered partial interface. Generated sums remain factorized inside
+that expression; no alias registry or separate result wrapper is created.
+Python returns `TensorExpression` for both scalar and open-tensor results.
+`to_expression()` exposes the ordinary Symbolica Atom and `expand()` explicitly
+distributes it. The optional aliased implementation and its measurements are
+preserved separately on the `tensor-aliases-preserved` jj bookmark.
 
 `TensorRule` owns a Symbolica pattern, RHS, conditions and matching settings.
 Wildcard closure and eligible literal RHS interfaces are checked once. A rule
@@ -109,22 +104,20 @@ Factorized metric/vector contraction is owned by
 `SymbolicTensor<PartialStructure>::contract`. It uses the existing component
 reducer: only one selected factor contributes alternatives at a time, while
 remaining factors carry occurrence-local port overrides. Equal remaining states
-share a coefficient; identical coefficient bodies share a literal alias. Scalar
+share a coefficient. Scalar
 spectators, disconnected components and foreign sectors remain factorized.
 The current state key retains original factor identity and port bindings, so it
 can under-merge different bindings that normalize to equal factors. This is a
 performance limitation, not an algebraic equivalence assumption.
 
 Contraction, rule application and polynomial materialization are separate
-operations. `AliasedTensorExpression.expand()` evaluates the existing definition
-DAG forward with a variable table local to each definition. An additive root
-merges its emitted summands in one bulk construction, avoiding a global dense
-variable table. Alias uses inside opaque functions and callback-
-sensitive bodies retain the ordinary checked resolution path before the
-explicit expansion. An evaluator consumes the DAG directly.
+operations. `TensorExpression.expand()` explicitly materializes arithmetic
+sums and products while preserving the checked external tensor interface.
+User callbacks retain their checked boundaries. Kernel observations avoid
+re-inferring known interfaces solely because a trusted transformation returned.
 
 Frontier growth is bounded before processing the next factor. The current guard
-counts generated alternatives and estimates state/definition bytes; it is not a
+counts generated alternatives and estimates state bytes; it is not a
 strict heap cap on coefficient buffers. If the guard fires, the result retains
 exact pending factors, and its internal completion flag remains false. It must
 not be certified as fully contracted. Callback-sensitive inputs continue through
@@ -144,8 +137,8 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
-Closed gamma traces emit factored local identities into the existing literal alias
-registry. Four-dimensional short-word and symbolic-dimensional recurrence rules
+Closed gamma traces emit factored local identities into the tensor expression.
+Four-dimensional short-word and symbolic-dimensional recurrence rules
 share that result owner. The interface proof checks dimensions, surviving ports,
 unresolved identities and normalization behavior. Callback-sensitive output is
 validated rather than inheriting the original interface blindly. Neither trace
@@ -174,7 +167,7 @@ Spenso execution and reconstructs the final atom from zero, one, or the result t
 The owned network remains the boundary for concrete component execution and
 structural consumers which need owned tensors. Symbolic contraction instead
 reads Spenso's borrowed operation graph. Public tensor transformations return
-the shared typed tensor or its aliased specialization; raw `Atom` utilities are
+the shared typed tensor; raw `Atom` utilities are
 explicit lower-level boundaries.
 
 == Rewrite families and execution flow
@@ -187,7 +180,7 @@ authorizes its required contractions without enabling unrelated identities.
 Each family retains its internal kernel:
 
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
-  wrap all indices or only dummies, form adjoints, and alias tensor subexpressions;
+  wrap all indices or only dummies, and form adjoints;
 - Typed `collect` and `coefficient_list` use the shared graph/tape owner to retain selected
   representation sectors while keeping unrelated coefficients factored;
 - the shared component contractor and internal chain/dot normalization own metric
@@ -205,10 +198,9 @@ Settings objects are part of the semantics. Gamma ordering and trace evaluation,
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
 change the result form. Reproducible callers record the exact settings; the
 planner chooses eligible work using candidate counts, prerequisites and estimated
-growth. The root and each shared alias definition receive one initial candidate
-scan. Regional replacements update occurrence counts and dependency edges;
-unchanged definitions are not rescanned. Per-family settled regions and explicit
-change flags drive local fixed points, without comparing the complete alias table.
+growth. The expression receives one initial candidate scan. Regional replacements
+update occurrence counts; unchanged regions are not rescanned. Per-family settled
+regions and explicit change flags drive local fixed points.
 The same observations retain explicit metric and vector source ports by
 representation. Their absence can certify a completed structural fallback even
 when compact vectors or repeated gamma ports remain. Head occurrence alone
@@ -221,12 +213,8 @@ regional updates without rescanning an unchanged sum; powered scopes retain
 their separate multiplicity checks.
 
 Algebra prerequisites use these same observations to discharge free-port
-definitions before contraction setup or budget accounting. Individual domain
-contractions borrow the shared registry and return only newly bound or emitted
-definitions. The alias owner looks up nested bindings and their original
-admission proofs on demand; it does not copy unrelated definitions. The
-collector materializes its mutable registry view only when a selected connection
-requires exposing a non-scalar alias.
+regions before contraction setup or budget accounting. Unselected scalar
+spectators and unrelated tensor factors remain opaque to the collector.
 
 The same domain retains its depth-one graph and exact opaque-leaf interfaces.
 When a trusted intrinsic rewrite changes topology, unchanged leaves reuse their
@@ -249,29 +237,21 @@ checked result construction. It does not acquire a trusted interface merely
 because a substitution was algebraically a contraction. The example
 `g(a,b)*T(a)` whose normalizer turns `T(b)` into a scalar remains a rejection.
 
-Ordered substitutions carry committed alias-port changes into the existing
-literal-use registry. Discovery probes and refused linear branches discard
-those observations; a product that vanishes publishes none. The alias owner
-registers the rewritten definition with its checked surviving interface before
-publishing the result, including when the ordered fallback exposes more work
-for the component reducer. Literal relabellings use the pass's original
-uncontracted templates. Completed bodies are staged separately and published
-together, so traversal order cannot compare definitions at different rewrite
-stages. Exact imaginary coefficients remain scalar leaves of the same graph.
+Ordered substitutions publish the checked surviving interface, including when
+the ordered fallback exposes more work for the component reducer. Discovery
+probes and refused linear branches do not publish speculative observations.
+Exact imaginary coefficients remain scalar leaves of the same graph.
 
-The retained repeated-index observations decide whether a domain can contract
-across literal alias boundaries. Disjoint
-open definitions stay opaque; their sums are not visited merely because they
+The retained repeated-index observations decide which factor boundaries can
+contract. Disjoint open factors stay opaque; their sums are not visited merely because they
 contain metrics. Sum alternatives and powers retain the scanner's established
 scope rules. Public `ReductionStatus` distinguishes `Complete`, `Deferred` and
-`Capped` relative to the requested work. Deferred work can expose its registered definitions
-and is checked again by the domain scheduler; an exhausted
-frontier is retained exactly and never restarted by this exposure. Neither
+`Capped` relative to the requested work. Deferred work is checked again only
+when its inputs change; an exhausted frontier is retained exactly. Neither
 state is certified complete merely because its algebraic output is valid.
 
-Epsilon simplification uses the same selected collector with the literal
-registry. This exposes epsilon bodies and their incident metric/vector factors,
-so antisymmetry also acts across alias boundaries. Unrelated definitions and
+Epsilon simplification uses the same selected collector. It exposes epsilon
+bodies and their incident metric/vector factors. Unrelated factors and
 callback-sensitive templates remain opaque.
 
 `contract_ports` is the separate logical binary composition operation.
@@ -284,11 +264,10 @@ execution boundary and leaves unrelated factors untouched.
 
 The former network Schoonschip engine, its traversal/order strategy family and
 duplicate metric collector have been removed. The shared tensor scheduler runs
-one fixed point over the root and reachable definitions, carrying observations
+one fixed point over affected expression regions, carrying observations
 and completion proofs when their invariants allow it. It retains the exact
-completed settings for an unchanged root and alias registry, so alternating
-previously completed operations reuse the sealed allocation. An actual root or
-definition change invalidates those completion facts; callback boundaries retain
+completed settings for an unchanged expression. An actual expression
+change invalidates those completion facts; callback boundaries retain
 their existing invalidation rules. Status describes the current request, and
 capped or deferred requests never enter the completed-settings cache. Budgets
 retain exact unfinished work and do not certify it complete.
@@ -315,8 +294,7 @@ matcher identifies the contracted implicit axis in each operand; both ordered
 and partial inference retain the other ports. Gamma chain assembly exposes only
 inner products containing a selected gamma or chain endpoint, through Spenso's
 existing shorthand materializer. Scalar dot coefficients and unrelated sectors
-remain opaque. Alias definitions are handled by the typed alias owner rather
-than guessed by the raw chain walker.
+remain opaque.
 
 Index wrapping is an ownership operation. `list_dangling` discovers external slots through the
 shared parser's structure-only construction; `wrap_indices(scope, dummies_only=True)` scopes non-external explicit indices; its default scopes all explicit indices while leaving unresolved
@@ -356,10 +334,10 @@ from reduction.
 
 == Ownership and error boundaries
 
-The public tensor operations retain the logical interface, typed zeros and alias
+The public tensor operations retain the logical interface, typed zeros and
 metadata in `SymbolicTensor`. Spynso converts arguments, dispatches to this
 owner, translates errors and wraps the result. Symbolica owns atom memory,
-normalization and literal alias definitions; Spenso owns graph topology,
+normalization; Spenso owns graph topology,
 logical layouts and component execution.
 
 Structural entry points are fallible. Inference and certified tensor rewrites
@@ -379,18 +357,15 @@ arbitrary user rewrites cannot claim it. Callback-sensitive results retain
 their checked boundary, and unresolved positional ports retain their identity
 checks.
 
-Alias roots and definitions carry the same certificates through domain passes.
-An unchanged registered association is not readmitted merely because another
-domain changed. New definitions still check their literal association, and the
-registry still rejects missing definitions, conflicts and cycles. Validation
-does not imply contraction completion or absence of user normalizers: those
+Unchanged regions carry the same certificates through planner operations.
+Validation does not imply contraction completion or absence of user normalizers: those
 are separate facts, and mutable payload or interface access invalidates them.
 Graph scratch interfaces containing encoded open-port identities are converted
 to public logical ports before acquiring a validation certificate.
 
-The #link("../../examples/reproducers/trusted-gamma-algebra/report.typ")[gamma
-and alias-domain measurement] records the before/after public-call timings and
-the exact-output qualification protocol.
+The historical gamma and alias-domain measurement, including its exact-output
+qualification protocol, is preserved with the optional alias implementation on
+`tensor-aliases-preserved`.
 
 Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
 error. A successful return therefore means the configured rewrite reached its fixed point, not

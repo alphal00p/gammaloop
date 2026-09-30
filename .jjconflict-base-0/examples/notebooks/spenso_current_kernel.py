@@ -502,9 +502,7 @@ def _(AUTO, Representation, TensorExpression, mo, trace):
         _gamma(AUTO, AUTO, lorentz("mu")),
         _gamma(AUTO, AUTO, lorentz("nu")),
     )
-    reduced_trace = gamma_trace.simplify_algebra(
-        gamma=True, epsilon=True
-    ).to_expression()
+    reduced_trace = gamma_trace.simplify_algebra(gamma=True, epsilon=True)
     assert (
         reduced_trace.to_expression() - 4 * lorentz.g("mu", "nu").to_expression()
     ).expand() == 0

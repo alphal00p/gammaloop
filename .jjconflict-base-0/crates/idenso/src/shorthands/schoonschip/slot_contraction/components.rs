@@ -32,9 +32,8 @@ enum Argument<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum TensorSource<'a> {
+enum TensorSource {
     Function(Symbol),
-    Literal(AtomView<'a>),
     Factor(usize),
 }
 
@@ -45,7 +44,7 @@ enum Variable<'a> {
     Dot(usize, [usize; 2]),
     Vector(usize, AtomView<'a>),
     Metric([AtomView<'a>; 2]),
-    Tensor(TensorSource<'a>, Vec<Argument<'a>>),
+    Tensor(TensorSource, Vec<Argument<'a>>),
 }
 
 #[derive(Clone, Copy)]
@@ -67,7 +66,7 @@ struct Node<'a> {
 // Only a key for the existing tensor plan: exact non-internal arguments and
 // (argument position, space) for internal ports. No new tensor semantics.
 type TensorKey<'a> = (
-    TensorSource<'a>,
+    TensorSource,
     Vec<(usize, Argument<'a>)>,
     Vec<(usize, usize)>,
 );
@@ -123,8 +122,7 @@ struct ComponentSum<'a, 'b> {
     contracted: bool,
     inference: InterfaceInference,
     tensor_ports: AHashMap<AtomView<'a>, Vec<(usize, AtomView<'a>)>>,
-    tensors: Vec<(TensorSource<'a>, Vec<Argument<'a>>)>,
-    literal_relabellings: std::cell::RefCell<Vec<(Atom, Atom)>>,
+    tensors: Vec<(TensorSource, Vec<Argument<'a>>)>,
     opaque_factors: Vec<(AtomView<'a>, Vec<AtomView<'a>>, PartialStructure)>,
     factor_roots: Vec<Option<usize>>,
     overrides: Vec<(AtomView<'a>, Argument<'a>)>,
@@ -367,7 +365,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             inference: InterfaceInference::default(),
             tensor_ports: AHashMap::new(),
             tensors: Vec::new(),
-            literal_relabellings: Default::default(),
             opaque_factors: Vec::new(),
             factor_roots: Vec::new(),
             overrides: Vec::new(),
@@ -403,16 +400,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     .add_arg(second)
                     .finish()
             }
-            Variable::Tensor(
-                source @ (TensorSource::Function(_) | TensorSource::Literal(_)),
-                arguments,
-            ) => {
-                let head = match source {
-                    TensorSource::Function(head) => *head,
-                    TensorSource::Literal(AtomView::Fun(function)) => function.get_symbol(),
-                    _ => unreachable!("literal tensor source is a function"),
-                };
-                let mut function = FunctionBuilder::new(head);
+            Variable::Tensor(TensorSource::Function(head), arguments) => {
+                let mut function = FunctionBuilder::new(*head);
                 for argument in arguments {
                     function = match *argument {
                         Argument::Original(value) => function.add_arg(value),
@@ -423,15 +412,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                         }
                     };
                 }
-                let result = function.finish();
-                if let TensorSource::Literal(source) = source
-                    && *source != result.as_view()
-                {
-                    self.literal_relabellings
-                        .borrow_mut()
-                        .push((source.to_owned(), result.clone()));
-                }
-                result
+                function.finish()
             }
             Variable::Tensor(TensorSource::Factor(position), arguments) => {
                 return self.emit_factor(*position, arguments);
@@ -1015,13 +996,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         };
         let tensor = self.tensors.len();
         self.tensors.push((
-            if head == spenso::tensor_symbol!("idenso::tensor_alias") {
-                // Different literal definitions may share an owner/head. Keep
-                // the exact registered use in the key and its rewrite record.
-                TensorSource::Literal(value)
-            } else {
-                TensorSource::Function(head)
-            },
+            TensorSource::Function(head),
             function.iter().map(|arg| self.argument(arg)).collect(),
         ));
         for (position, slot) in ports {
@@ -1285,8 +1260,6 @@ mod tests {
                 let restricted = SymbolicTensor::infer(expression.clone())
                     .unwrap()
                     .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
-                    .unwrap()
-                    .resolved()
                     .unwrap();
                 if position == 0 {
                     assert_eq!(restricted.expression(), &expression);
@@ -1294,8 +1267,6 @@ mod tests {
                 assert!(restricted.expression().contains(&spectator));
                 let complete = restricted
                     .contract(Default::default())
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .to_dots()
                     .unwrap();
@@ -1337,28 +1308,18 @@ mod tests {
                 .contract_factorized(source.as_view(), None, true)
                 .expect("registered explicit indices admit the same factorized frontier");
             assert!(result.status == ReductionStatus::Complete);
-            let mut resolved = symbolica::atom::AliasedAtom::from(result.root);
-            for (handle, body) in result.aliases {
-                resolved.register_alias(handle, body);
-            }
-            assert_eq!(resolved.into_inner(), expected);
+            assert_eq!(result.root, expected);
             let result = SymbolicTensor::infer(source)
                 .unwrap()
                 .contract(Default::default())
                 .unwrap();
             assert!(
                 result.contraction_complete(),
-                "status={:?}, root={}, aliases={:?}",
+                "status={:?}, expression={}",
                 result.reduction_status(),
-                result.root().expression(),
-                result
-                    .aliases()
-                    .unwrap()
-                    .iter()
-                    .map(|(handle, body)| (handle.expression().clone(), body.expression().clone()))
-                    .collect::<Vec<_>>()
+                result.expression(),
             );
-            assert_eq!(result.resolved().unwrap().expression(), &expected);
+            assert_eq!(result.expression(), &expected);
         }
     }
 
@@ -2317,7 +2278,7 @@ mod tests {
                         // original dummy representatives. Compare their exact
                         // alpha key, including all free ports and metadata.
                         let expected = SlotContraction::new()
-                            .run(product.as_view(), false, true, &mut Vec::new())
+                            .run(product.as_view(), false, true)
                             .normalize_dots()
                             + Atom::num(1);
                         let source = product + Atom::num(1);
@@ -2560,7 +2521,7 @@ mod tests {
         // tensor identities deliberately do not get an alpha representative.
         let product = input("g(mink(4,a),mink(4,b))*t(mink(4,a))*t(mink(4,b))");
         let expected = SlotContraction::new()
-            .run(product.as_view(), false, true, &mut Vec::new())
+            .run(product.as_view(), false, true)
             .normalize_dots()
             + Atom::num(1);
         let source = product + Atom::num(1);
@@ -2604,10 +2565,10 @@ mod tests {
         let first = input(&format!("g(mink(4,mu5),mink(4,mu6))*{}", vertex("mu5")));
         let second = input(&format!("g(mink(4,mu6),mink(4,mu11))*{}", vertex("mu11")));
         let old_first = SlotContraction::new()
-            .run(first.as_view(), false, true, &mut Vec::new())
+            .run(first.as_view(), false, true)
             .normalize_dots();
         let old_second = SlotContraction::new()
-            .run(second.as_view(), false, true, &mut Vec::new())
+            .run(second.as_view(), false, true)
             .normalize_dots();
         assert_ne!(
             old_first, old_second,
@@ -2673,7 +2634,7 @@ mod tests {
                 .iter()
                 .map(|term| {
                     SlotContraction::new()
-                        .run(term.as_view(), false, false, &mut Vec::new())
+                        .run(term.as_view(), false, false)
                         .normalize_dots()
                 })
                 .collect::<Vec<_>>(),
@@ -2687,12 +2648,12 @@ mod tests {
         // The public bounded frontier retains the exact source rather than
         // restarting the declined work through an unbounded fallback.
         let value = SymbolicTensor::infer(source.clone()).unwrap();
-        let pending = Arc::new(value.contract(Default::default()).unwrap());
+        let pending = value.contract(Default::default()).unwrap();
         assert!(!pending.contraction_complete());
-        assert_eq!(pending.resolved().unwrap().expression, source);
+        assert_eq!(pending.expression, source);
         let again = pending.contract(Default::default()).unwrap();
         assert!(!again.contraction_complete());
-        assert_eq!(again.resolved().unwrap(), pending.resolved().unwrap());
+        assert_eq!(again, pending);
         // Keep the exact zero oracle on the existing explicit per-term
         // reference computed above; its mathematical expectation is unchanged.
         assert_eq!(
@@ -2738,7 +2699,7 @@ mod tests {
         let after_contraction = Atom::add_many(
             terms
                 .iter()
-                .map(|term| SlotContraction::new().run(term, false, true, &mut Vec::new()))
+                .map(|term| SlotContraction::new().run(term, false, true))
                 .collect::<Vec<_>>(),
         );
         let after_dots = after_contraction.normalize_dots();
@@ -2988,7 +2949,7 @@ mod tests {
         let result = typed
             .contract(Default::default())
             .unwrap()
-            .expanded()
+            .expanded(None, false)
             .unwrap();
         assert_eq!(result.expression, Atom::Zero);
         assert_eq!(result.structure, typed.structure);

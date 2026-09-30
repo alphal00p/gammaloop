@@ -723,7 +723,7 @@ fn custom_dual_metrics_keep_observed_port_order() {
                 );
                 let contracted = tensor.contract(Default::default()).unwrap();
                 assert!(contracted.contraction_complete());
-                let result = contracted.resolved().unwrap();
+                let result = contracted;
                 assert_eq!(result.expression(), &target);
                 assert_eq!(result.structure(), tensor.structure());
                 assert!(

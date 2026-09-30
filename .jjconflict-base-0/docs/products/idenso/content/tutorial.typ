@@ -43,7 +43,7 @@ q = TensorName.vector("q")
 expression = g(mu, nu) * q(mu)
 
 free_before = expression.list_dangling()
-reduced = expression.contract().to_expression()
+reduced = expression.contract()
 free_after = reduced.list_dangling()
 
 assert len(free_before) == 1
@@ -53,8 +53,8 @@ print("reduced:", reduced)
 ```
 
 The typed product carries a `bracket` contraction. `contract()` handles that structure
-and ordinary indexed products through the same shared contractor. `to_expression()` resolves
-the returned aliases; `expand()` is a separate, explicit materialization operation.
+and ordinary indexed products through the same shared contractor. `to_expression()` returns
+the ordinary Symbolica expression; `expand()` is a separate, explicit materialization operation.
 
 Run `python metric_first.py`. Success means both rank assertions pass, the metric is removed from
 the reduced expression, and the result is a rank-one expression carrying `nu`. The rewrite is

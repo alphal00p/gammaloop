@@ -1,6 +1,11 @@
 #set text(size: 10pt)
 = Tensor consolidation measurements
 
+This document records historical alias-enabled snapshots preserved on
+`tensor-aliases-preserved`. Implementation names, source paths and measurements
+below describe those snapshots. The current reduction API returns plain typed
+tensors; see #link("../../docs/architecture/unified-tensor-reduction.typ")[the current API and ownership summary].
+
 `fermion_ladder.py` remains the entry point for the notebook and command-line
 benchmarks. `--suite consolidation` adds the R3/M0 case inventory without
 changing the existing ladder algebra. The default is three rounds. Each round

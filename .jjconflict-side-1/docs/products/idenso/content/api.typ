@@ -11,7 +11,7 @@ rewrite families:
 - `IndexTooling` covers canonicalization, conjugation, index wrapping, and dangling-index
   inspection for Symbolica atoms;
 - `Cookable`, `CookSettings`, and the cook filters control reversible or flattening encodings;
-- `SymbolicTensor::collect` retains selected sectors in the shared alias registry;
+- `SymbolicTensor::collect` collects selected sectors while retaining factorization;
   `coefficient_list` returns typed selected sectors and their factored coefficients;
 - `dirac`, `color`, `epsilon`, and shorthand modules implement algebra-specific rewrites;
 - `representations::initialize` installs the standard representation and tensor symbols.
@@ -61,27 +61,29 @@ momentum = TensorName.vector("p")
 expression = metric(mu, nu) * momentum(mu)
 
 external_indices = expression.list_dangling()
-reduced = expression.contract().to_expression()
+reduced = expression.contract()
 assert len(external_indices) == 1
 assert len(reduced.list_dangling()) == 1
 assert reduced == momentum(nu)
 ```
 
-`contract()` returns an `AliasedTensorExpression` and reports whether contraction is complete.
+`contract()` returns a `TensorExpression` and reports whether contraction is complete.
 Use `contract(rank_one=False, collect_chains=False, collect_traces=False)` for metrics only. `contract_ports(rhs, left=..., right=...)`
 is the separate binary operation on selected logical ports. `to_dots()` changes notation;
 request `contract()` first when repeated explicit indices need contraction.
-Resolve aliases with `to_expression()`, or explicitly distribute the result with `expand()`.
+Use `to_expression()` for ordinary Symbolica algebra, or explicitly distribute the result with `expand()`.
 
 `simplify_algebra(...)` selects gamma, color, and epsilon identities
-independently. Its default enables no identity family; `simplify_algebra(gamma=True, color=True, epsilon=True)` enables
+independently. Its Python default enables gamma and color identities; `simplify_algebra(epsilon=True)` enables
 all three. Flat keyword arguments such as `gamma_ordering="canonical"`,
 `gamma_evaluate_traces=False`, and `color_expand_fierz=False` specify family
-conventions and requested output. Supplying a family option requires explicitly
-enabling that family. Dimensions belong to representations. Enabled identities authorize their necessary
+conventions and requested output. Supplying a family option requires
+that family to be enabled. Dimensions belong to representations. Enabled identities authorize their necessary
 structural contractions; emitting an epsilon does not itself enable epsilon identities.
 The default `contract="fully"` also performs structural contractions, including
-closed colour deltas, without enabling colour generator identities. No trailing
+closed colour deltas. Python's default `color=True` separately enables colour
+generator identities; `color=False` disables those identities while retaining
+delta contraction. No trailing
 `contract()` is needed to obtain the colour dimension. `contract="dots"` requests
 the same work plus canonical dot notation. `contract="selected"` requires
 `representations=[...]` and permits additional connections only in those
@@ -115,13 +117,13 @@ rank-one tensor requires its final structural port.
 
 `undo_dots()` introduces compatible dummy indices for scalar products. `undo_trace()`
 opens a trace as a closed indexed chain without evaluation; `undo_chain()` then exposes
-its ordered factors. These operations preserve tensor interfaces, aliases, and unrelated
+its ordered factors. These operations preserve tensor interfaces and unrelated
 factorization. They unfold notation currently present and cannot recover an expression's
 history after algebraic reduction. There is no aggregate `undo_all` operation.
 
 Results report `reduction_status` as `Complete`, `Deferred`, or `Capped`.
 Completion is relative to enabled capabilities and output requirements. Budget exhaustion
-retains the exact unfinished tensor and its aliases; rerunning may make further progress.
+retains the exact unfinished tensor; rerunning may make further progress.
 A zero `max_passes` budget preserves eligible work and reports `Capped`.
 Completed reruns are stable. Global arithmetic distribution remains an explicit `expand()` request.
 Color dimension invariants are selected with

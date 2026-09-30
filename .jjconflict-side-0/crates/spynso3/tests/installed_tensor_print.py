@@ -1,6 +1,7 @@
 """Run with the installed Spenso extension and its optional Typst renderer."""
 
 import re
+import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -61,7 +62,17 @@ class TensorPrintTests(unittest.TestCase):
                 operators = [node.text for node in root.iter("mo")]
                 self.assertNotIn("(", operators)
                 self.assertNotIn(")", operators)
-                self.assertNotIn("+", operators)
+                if source == "x-2i*y":
+                    # Symbolica orders terms by symbol registration. Both exact
+                    # orders retain the negative imaginary coefficient compactly.
+                    visible = re.sub(
+                        r"\s+",
+                        "",
+                        unicodedata.normalize("NFKC", "".join(root.itertext())),
+                    )
+                    self.assertIn(visible, ("x−2iy", "−2iy+x"))
+                else:
+                    self.assertNotIn("+", operators)
 
     def test_head_mapping_keeps_arguments_coordinates_and_styles(self):
         name = TensorName(

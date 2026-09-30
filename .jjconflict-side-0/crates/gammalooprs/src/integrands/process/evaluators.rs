@@ -25,11 +25,12 @@ use spenso::{
         DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
         MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
         PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SequentialExtract, SequentialRef,
-        SmallestDegree, TensorNetworkError,
+        SmallestDegree,
         parsing::{
             AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShadowedStructure,
             ShorthandParsing, StrictTensorFilter,
         },
+        store::TensorScalarStoreMapping,
         tags::SPENSO_TAG,
     },
     shadowing::{
@@ -724,7 +725,7 @@ impl EvaluatorStack {
             atom_index,
             settings,
             tensor_map,
-            |net, scalar_aliases, registry, term_index| {
+            |net, scalar_aliases, term_index| {
                 let root = match net.result_scalar()? {
                     ExecutionResult::One => Atom::num(1),
                     ExecutionResult::Zero => Atom::Zero,
@@ -734,8 +735,6 @@ impl EvaluatorStack {
                 let input_bytes = root.as_view().get_byte_size();
                 let (root, aliases) = net
                     .aliased_atom(scalar_aliases, root)
-                    .try_mul(registry)
-                    .map_err(|handle| eyre!("conflicting scalar alias {handle}"))?
                     .into_inner_with_aliases();
                 let mut handles = aliases.keys().cloned().collect::<Vec<_>>();
                 handles.sort();
@@ -789,8 +788,7 @@ impl EvaluatorStack {
 
     fn retain_component_scalar_alias(scalar: &Atom) -> bool {
         // Keep guards visible until they enclose the complete branch, including
-        // neighboring inverses. Dependency-order admission propagates visibility
-        // through retained tensor and scalar definitions.
+        // neighboring inverses.
         scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
             && [
                 OrientationID::symbol(),
@@ -807,7 +805,7 @@ impl EvaluatorStack {
         atom_index: usize,
         settings: &EvaluatorSettings,
         tensor_map: Option<&ParsingTensorMap<'_>>,
-        mut finish: impl FnMut(&ParsingNet, &ScalarAliases, &AliasedAtom, usize) -> Result<AliasedAtom>,
+        mut finish: impl FnMut(&ParsingNet, &ScalarAliases, usize) -> Result<AliasedAtom>,
     ) -> Result<AliasedAtom> {
         let atom_started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
@@ -843,13 +841,13 @@ impl EvaluatorStack {
                     ..Default::default()
                 })?
         } else {
-            Arc::new(input.with_aliases([])?)
+            input
         };
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_normalization_done",
             atom_index,
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Admitted evaluator input with retained tensor definitions"
+            "Admitted evaluator tensor input"
         );
         let execute = |net: &mut ParsingNet| -> Result<()> {
             macro_rules! execute_min_result_rank {
@@ -947,21 +945,19 @@ impl EvaluatorStack {
             },
             ..Default::default()
         };
-        let (mut net, registry) = network_input.to_network(
+        let network_expression = cooking.uncook(network_input.expression().as_view());
+        let net = ParsingNet::try_from_view_with_function_library(
+            network_expression.as_view(),
             TENSORLIB.read().unwrap().deref(),
             FUN_LIB.deref(),
             &parse_settings,
-            Some(&cooking),
-            |net| execute(net).map_err(TensorNetworkError::Other),
-            |tensor| match tensor_map {
-                Some(map) => map(tensor).map_err(TensorNetworkError::Other),
-                None => Ok(tensor),
-            },
-            Self::retain_component_scalar_alias,
         )?;
-        // All store IDs belong to this one retained-root network. Merge its
-        // scalar aliases with the shared registry before the finishers' single
-        // scoping pass; no original-summand reconstruction is needed.
+        let mut net = net.map_result(Ok::<_, eyre::Report>, |tensor| match tensor_map {
+            Some(map) => map(tensor),
+            None => Ok(tensor),
+        })?;
+        // Component-network scalar storage remains independent of symbolic
+        // tensor reduction. The finishers scope those scalar references once.
         let term_index = 0;
         let scalar_aliases =
             net.alias_scalar_refs(|_, scalar| Self::retain_component_scalar_alias(scalar));
@@ -975,7 +971,7 @@ impl EvaluatorStack {
             "Prepared finite tensor contractions through retained sums"
         );
         execute(&mut net)?;
-        let result = finish(&net, &scalar_aliases, &registry, term_index).map_err(|error| {
+        let result = finish(&net, &scalar_aliases, term_index).map_err(|error| {
             error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
         });
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
@@ -1538,7 +1534,7 @@ impl EvaluatorStack {
                 family_index,
                 settings,
                 None,
-                |net, scalar_aliases, registry, term_index| {
+                |net, scalar_aliases, term_index| {
                     let tensor = match net.result_tensor(TENSORLIB.read().unwrap().deref())? {
                         ExecutionResult::One => return Ok(Atom::num(1).into()),
                         ExecutionResult::Zero => return Ok(Atom::Zero.into()),
@@ -1551,8 +1547,6 @@ impl EvaluatorStack {
                     let tags = vec![Atom::num(family_index), Atom::num(term_index)];
                     let (_, aliases) = net
                         .aliased_atom(scalar_aliases, Atom::Zero)
-                        .try_mul(registry)
-                        .map_err(|handle| eyre!("conflicting scalar alias {handle}"))?
                         .into_inner_with_aliases();
                     let mut handles = aliases.keys().cloned().collect::<Vec<_>>();
                     handles.sort();

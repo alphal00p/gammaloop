@@ -124,12 +124,11 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(self.clone());
         }
         let intrinsic = self.normalization_is_intrinsic();
-        let mut result = if expression.is_zero() || intrinsic {
+        let result = if expression.is_zero() || intrinsic {
             Self::from_validated_parts(expression, self.structure.clone())
         } else {
             self.with_rewritten_expression(expression)?
         };
-        result.proofs.literal_origin = self.proofs.literal_origin.clone();
         if intrinsic && let Some(observations) = observations {
             let _ = result
                 .proofs
@@ -4388,8 +4387,6 @@ pub(crate) mod tests {
                             ..Default::default()
                         })
                         .unwrap()
-                        .resolved()
-                        .unwrap()
                         .into_expression(),
                         crate::tensor::SymbolicTensor::infer(
                             (expected.expression).as_atom_view().to_owned(),
@@ -4407,8 +4404,6 @@ pub(crate) mod tests {
                             collect_traces: false,
                             ..Default::default()
                         })
-                        .unwrap()
-                        .resolved()
                         .unwrap()
                         .into_expression(),
                     ),
@@ -4652,8 +4647,6 @@ pub(crate) mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression();
                     assert_ne!(expected, value.expression);
@@ -5798,8 +5791,6 @@ pub(crate) mod tests {
             let contracted = SymbolicTensor::infer(delta * symbolica::function!(vector, &slot))
                 .unwrap()
                 .contract(Default::default())
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .expand_dots()
                 .unwrap();

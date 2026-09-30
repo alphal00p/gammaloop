@@ -6407,11 +6407,7 @@ mod tests {
             .unwrap();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let source = SymbolicTensor::infer(cooking.cook((numerator * metric).as_view())).unwrap();
-        let result = source
-            .contract(Default::default())
-            .unwrap()
-            .resolved()
-            .unwrap();
+        let result = source.contract(Default::default()).unwrap();
         let result = result.to_dots().unwrap();
         let scalar = cooking.uncook(result.expression().as_view());
         assert_eq!(
@@ -6528,8 +6524,6 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap();
             cooking.uncook(result.expression().as_view())
         };
@@ -6601,8 +6595,6 @@ mod tests {
                     epsilon: true,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap();
             cooking.uncook(result.expression().as_view())
         };
@@ -6728,8 +6720,6 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap();
         assert_eq!(cooking.uncook(result.expression().as_view()), expected);
     }

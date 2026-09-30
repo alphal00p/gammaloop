@@ -63,8 +63,6 @@ fn main() {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression()
             .nterms();
         let repeats = if n < 12 { 100 } else { 20 };
@@ -87,8 +85,6 @@ fn main() {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression(),
                 );

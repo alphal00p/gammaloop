@@ -53,7 +53,7 @@ safe_product = (
 
 assert len(safe_product.list_dangling()) == 2
 assert (
-    safe_product.contract(rank_one=False).to_expression().to_expression()
+    safe_product.contract(rank_one=False).to_expression()
     == p(nu).to_expression() * q(rho).to_expression()
 )
 ```
@@ -134,7 +134,7 @@ remain symbolic; this does not claim a general higher-rank invariant reduction.
 == Shared structural contraction
 
 `contract()` reads the borrowed Spenso factor graph and applies Idenso’s shared component
-reducer. It retains generated sums as literal aliases and uses the ordered substitution owner
+reducer. It retains generated sums in factored form and uses the ordered substitution owner
 when callbacks require it. Scalar coefficients stay factored. Concrete tensor-network execution
 remains a separate Spenso operation when component data are required. Avoid substituting scalar
 parameters too early: this can increase expression size without changing tensor incidence.

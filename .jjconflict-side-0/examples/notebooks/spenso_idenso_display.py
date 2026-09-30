@@ -274,10 +274,8 @@ def _(
 
     atlas_gamma_tensor = TensorExpression.dirac_gamma(4)
     atlas_slash = (
-        (atlas_gamma_tensor(AUTO, AUTO, "lambda") * atlas_p(1, atlas_mink("lambda")))
-        .contract()
-        .to_expression()
-    )
+        atlas_gamma_tensor(AUTO, AUTO, "lambda") * atlas_p(1, atlas_mink("lambda"))
+    ).contract()
     atlas_chain_factors = (
         atlas_gamma_tensor(AUTO, AUTO, "mu"),
         atlas_slash,
@@ -459,10 +457,8 @@ def _(Representation, TensorExpression, mu, p):
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
     # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
     metric_product = metric.to_expression() * p(1, mu).to_expression()
-    simplified_tensor = (
-        TensorExpression(metric_product)
-        .contract(rank_one=False, collect_chains=False, collect_traces=False)
-        .to_expression()
+    simplified_tensor = TensorExpression(metric_product).contract(
+        rank_one=False, collect_chains=False, collect_traces=False
     )
     simplified_atom = simplified_tensor.to_expression()
     return metric_product, simplified_atom, simplified_tensor
@@ -486,7 +482,7 @@ def _(
                 "## 3. Idenso transformation on a TensorExpression\n\n"
                 "`TensorExpression` validates the Symbolica input. Its "
                 "`contract(rank_one=False, collect_chains=False, collect_traces=False)` method contracts metrics while retaining "
-                "the typed external interface. `to_expression()` resolves its aliases."
+                "the typed external interface. `to_expression()` returns the ordinary Symbolica expression."
             ),
             mo.hstack(
                 [
@@ -518,7 +514,7 @@ def _(
 @app.cell
 def _(TensorExpression, mu, p, q):
     indexed_product = p(1, mu).to_expression() * q(2, mu).to_expression()
-    dotted_tensor = TensorExpression(indexed_product).contract().to_expression()
+    dotted_tensor = TensorExpression(indexed_product).contract()
     dotted_atom = dotted_tensor.to_expression()
     return dotted_atom, dotted_tensor, indexed_product
 

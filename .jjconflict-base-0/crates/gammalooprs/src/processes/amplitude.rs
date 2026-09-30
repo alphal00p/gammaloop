@@ -1130,8 +1130,7 @@ impl AmplitudeGraph {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            })?
-            .resolved()?;
+            })?;
         let four_dimensional_numerator = cooking.uncook(simplified.expression().as_view());
         let after_gamma_plain = four_dimensional_numerator.to_plain_string();
         crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;

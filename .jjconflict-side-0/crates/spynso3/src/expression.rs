@@ -48,9 +48,7 @@ use symbolica::{
 };
 
 use crate::{
-    ModuleInit, SliceOrIntOrExpanded, Spensor,
-    aliases::AliasedTensorExpression,
-    display,
+    ModuleInit, SliceOrIntOrExpanded, Spensor, display,
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
@@ -111,8 +109,8 @@ impl AutoIndex {
 /// to choose a contraction, or ``compose`` to choose matrix channels.
 /// Arithmetic with Tensor or TensorNetwork operands returns a TensorNetwork.
 ///
-/// Simplification may retain shared subexpressions in an AliasedTensorExpression;
-/// its ``to_expression()`` returns a TensorExpression when materialization is needed.
+/// Reductions preserve this tensor type and keep unrelated sums factorized.
+/// Use ``to_expression()`` to access the underlying Symbolica expression.
 ///
 /// Pass ``intern="indices"`` to reversibly encode compound index labels, or
 /// ``intern="flattened"`` to create readable names. Both modes operate only on
@@ -262,7 +260,7 @@ impl TensorExpression {
         )
     }
 
-    /// Both symbolic payload forms use Symbolica's evaluator state and options.
+    /// Build a scalar evaluator with Symbolica's shared state and options.
     pub(crate) fn build_evaluator(
         py: Python<'_>,
         builder: EvaluatorBuilder<'_>,
@@ -1660,12 +1658,14 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Apply selected tensor identities while retaining shared subexpressions.
+    /// Apply selected tensor identities while preserving unrelated factorization.
     ///
     /// Parameters
     /// ----------
-    /// gamma, color, epsilon : bool, default False
-    ///     Enable only the selected identity families and their prerequisite contractions.
+    /// gamma, color : bool, default True
+    ///     Enable Dirac and color identities and their prerequisite contractions.
+    /// epsilon : bool, default False
+    ///     Enable epsilon identities and their prerequisite contractions.
     /// contract : {"fully", "dots", "selected", "none"}, default "fully"
     ///     Additional structural work: all contractions, all plus dot notation,
     ///     only selected representations, or only identity prerequisites.
@@ -1694,15 +1694,15 @@ impl TensorExpression {
     /// color_substitute_cof_dimension_invariants : bool, optional
     ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
     /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Maximum successful transformations in the expression; zero is allowed.
     ///     Capped results retain exact unfinished work. Family-specific options require
     ///     the corresponding family to be enabled. None selects its native default.
     ///
     /// Returns
     /// -------
-    /// AliasedTensorExpression
-    ///     Exact reduced algebra with shared definitions and a reduction_status.
-    ///     to_expression() resolves definitions; expand() additionally distributes sums.
+    /// TensorExpression
+    ///     Exact reduced algebra with a reduction_status.
+    ///     expand() explicitly distributes sums.
     ///
     /// Notes
     /// -----
@@ -1717,13 +1717,14 @@ impl TensorExpression {
     /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> gamma = TensorExpression.dirac_gamma(4)
     /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> result = expression.simplify_algebra(gamma=True)
-    /// >>> result.to_expression().rank
+    /// >>> result = expression.simplify_algebra()
+    /// >>> result.rank
     /// 2
-    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
         &self,
+        py: Python<'_>,
         gamma: bool,
         color: bool,
         epsilon: bool,
@@ -1743,7 +1744,7 @@ impl TensorExpression {
         color_expand_fierz: Option<bool>,
         color_substitute_cof_dimension_invariants: Option<bool>,
         max_steps_per_domain: usize,
-    ) -> PyResult<AliasedTensorExpression> {
+    ) -> PyResult<Py<Self>> {
         let settings = crate::simplification::algebra_settings(
             gamma,
             color,
@@ -1765,11 +1766,7 @@ impl TensorExpression {
             .value
             .simplify_algebra(&settings)
             .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            value,
-            self.name,
-            self.name_args.clone(),
-        ))
+        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
     }
 
     /// Give explicit indices a scope that separates them from other copies.
@@ -1983,8 +1980,7 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Equivalent algebra in the requested notation, retaining shared definitions
-    ///     when called on an AliasedTensorExpression.
+    ///     Equivalent algebra in the requested notation.
     ///
     /// Notes
     /// -----
@@ -2009,8 +2005,7 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Equivalent algebra in the requested notation, retaining shared definitions
-    ///     when called on an AliasedTensorExpression.
+    ///     Equivalent algebra in the requested notation.
     ///
     /// Notes
     /// -----
@@ -2817,6 +2812,41 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    /// Report completion under the last reduction settings and budget.
+    ///
+    /// Returns
+    /// -------
+    /// ReductionStatus
+    ///     Complete, Deferred, or Capped. Unfinished results remain exact and can be
+    ///     passed to contract() or simplify_algebra() again.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
+    /// >>> TensorExpression(3).contract().reduction_status == ReductionStatus.Complete
+    /// True
+    #[getter]
+    fn reduction_status(&self) -> crate::simplification::PyReductionStatus {
+        self.value.reduction_status().into()
+    }
+
+    /// Whether symbolic metric/vector contraction is certified complete.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False also covers a value not yet contracted or stopped before completion.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> TensorExpression(3).contract().contraction_complete
+    /// True
+    #[getter]
+    fn contraction_complete(&self) -> bool {
+        self.value.contraction_complete()
+    }
+
     /// Contract compatible indices and collect compact matrix products.
     ///
     /// Parameters
@@ -2836,14 +2866,14 @@ impl TensorExpression {
     /// order : sequence of int, optional
     ///     Requested factor contraction order; None uses the planner's default.
     /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Maximum successful transformations in the expression; zero is allowed.
     ///     Inspect reduction_status for exact unfinished work.
     ///
     /// Returns
     /// -------
-    /// AliasedTensorExpression
-    ///     An exact result retaining shared definitions. Inspect reduction_status for
-    ///     unfinished work; to_expression() resolves definitions without distributing sums.
+    /// TensorExpression
+    ///     An exact result preserving unrelated factorization. Inspect reduction_status
+    ///     for unfinished work.
     ///
     /// Notes
     /// -----
@@ -2858,12 +2888,13 @@ impl TensorExpression {
     /// >>> p = TensorName.vector("p")(space)
     /// >>> expression = TensorExpression.g(space)("i", "j") * p("j")
     /// >>> result = expression.contract()
-    /// >>> result.to_expression().rank
+    /// >>> result.rank
     /// 1
     #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=16))]
     #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
+        py: Python<'_>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
         representations: Option<Vec<Bound<'_, PyAny>>>,
         metrics: bool,
@@ -2872,7 +2903,7 @@ impl TensorExpression {
         collect_traces: bool,
         order: Option<Vec<usize>>,
         max_steps_per_domain: usize,
-    ) -> PyResult<AliasedTensorExpression> {
+    ) -> PyResult<Py<Self>> {
         let representations = crate::simplification::contraction_representations(representations)?;
         let settings = idenso::tensor::ContractSettings {
             representations: representations.as_deref(),
@@ -2887,11 +2918,7 @@ impl TensorExpression {
             .value
             .contract(settings)
             .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            Arc::new(value),
-            self.name,
-            self.name_args.clone(),
-        ))
+        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
     }
 
     #[doc = python_doc!("TensorExpression.contract_ports")]
@@ -4345,8 +4372,6 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression();
             let actual = infer_interface(&simplified).unwrap();
             assert_eq!(actual.canonical(), expected.canonical(), "{simplified}");
@@ -4384,8 +4409,6 @@ mod tests {
                         epsilon: true,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .expression()
             )
@@ -4448,7 +4471,7 @@ mod tests {
                             product
                                 .contract(Default::default())
                                 .unwrap()
-                                .expanded()
+                                .expanded(None, false)
                                 .unwrap()
                                 .to_dots()
                                 .unwrap()
@@ -4494,8 +4517,6 @@ mod tests {
                     product
                         .contract(Default::default())
                         .unwrap()
-                        .resolved()
-                        .unwrap()
                         .into_expression(),
                     expected
                 );
@@ -4532,8 +4553,6 @@ mod tests {
         let projected = contracted
             .contract(Default::default())
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression();
         // Network contraction produces valid slashed gamma factors inside the trace.
         let interface = infer_interface(&projected)
@@ -4561,14 +4580,12 @@ mod tests {
                         * vector.clone()
                         * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
-                    let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?.resolved().map_err(TensorExpression::inference_error)?)?;
+                    let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?)?;
                     let kwargs = pyo3::types::PyDict::new(py);
                     kwargs.set_item("gamma", true)?;
                     kwargs.set_item("gamma_output", "chains")?;
                     let collected = compact.bind(py).call_method("simplify_algebra", (), Some(&kwargs))?;
-                    let collected = collected.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-                    let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
-                    let collected = collected.borrow(py);
+                    let collected = collected.extract::<PyRef<'_, TensorExpression>>()?;
                     let expected = infer_interface(&original)?;
                     assert_eq!(collected.interface().canonical(), expected.canonical());
                     let atom = &collected.atom();
@@ -5114,10 +5131,7 @@ mod tests {
                 let cooked = cooked.extract::<Py<TensorExpression>>()?;
                 assert_eq!(cooked.borrow(py).interface().canonical().order(), rank);
                 if rank == 0 {
-                    let simplified = cooked
-                        .bind(py)
-                        .call_method0("contract")?
-                        .call_method0("to_expression")?;
+                    let simplified = cooked.bind(py).call_method0("contract")?;
                     let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
                     assert_eq!(*simplified.atom(), Atom::num(3));
                 }
@@ -5275,10 +5289,7 @@ mod tests {
                 wrapped.borrow(py).interface(),
                 tensor.borrow(py).interface()
             );
-            let simplified = wrapped
-                .bind(py)
-                .call_method0("contract")?
-                .call_method0("to_expression")?;
+            let simplified = wrapped.bind(py).call_method0("contract")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
                 *simplified.atom(),
@@ -5652,10 +5663,7 @@ mod tests {
                     Some(name),
                     vec![Atom::num(7)],
                 )?;
-                let result = expression
-                    .bind(py)
-                    .call_method0("contract")?
-                    .call_method0("to_expression")?;
+                let result = expression.bind(py).call_method0("contract")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_eq!(*result.atom(), expected, "contract");
                 assert_eq!(
@@ -5724,7 +5732,6 @@ mod tests {
                     gamma_expression
                         .bind(py)
                         .call_method("simplify_algebra", (), Some(&kwargs))?;
-                let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
                     *result.atom(),
@@ -5773,26 +5780,19 @@ mod tests {
             kwargs.set_item("collect_chains", false)?;
             kwargs.set_item("collect_traces", false)?;
             let metric_only = tensor.bind(py).call_method("contract", (), Some(&kwargs))?;
-            let value = metric_only.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let value = metric_only.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
-                value
-                    .value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
+                value.value.expression(),
                 &(spenso::p!(&nu) * spenso::q!(&nu))
             );
             assert!(!value.value.contraction_complete());
             let again = metric_only.call_method("contract", (), Some(&kwargs))?;
-            let again = again.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-            assert_eq!(again.value.root(), value.value.root());
+            let again = again.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(again.value, value.value);
             let full = metric_only.call_method0("contract")?;
-            let full = full.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let full = full.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
-                full.value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
+                full.value.expression(),
                 &spenso::g!(spenso::p!(spenso::mink!(4)), spenso::q!(spenso::mink!(4)))
             );
             assert!(full.value.contraction_complete());
@@ -5892,15 +5892,8 @@ mod tests {
             let simplified = cooked
                 .bind(py)
                 .call_method("contract", (), Some(&contraction))?;
-            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-            assert_eq!(
-                simplified
-                    .value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
-                &Atom::num(3)
-            );
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(simplified.value.expression(), &Atom::num(3));
             Ok(())
         })
         .unwrap();
@@ -5926,10 +5919,10 @@ mod tests {
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
             let simplified = original.bind(py).call_method0("simplify_algebra")?;
-            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             let simplified = simplified
                 .value
-                .expanded()
+                .expanded(None, false)
                 .map_err(TensorExpression::inference_error)?;
             assert_ne!(simplified.expression(), &atom);
             assert_eq!(simplified.expression(), expanded.borrow(py).atom());
@@ -6051,10 +6044,10 @@ mod tests {
                     );
                 }
                 let simplified = original.bind(py).call_method0("simplify_algebra")?;
-                let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+                let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
                 let simplified = simplified
                     .value
-                    .expanded()
+                    .expanded(None, false)
                     .map_err(TensorExpression::inference_error)?;
                 assert_eq!(
                     simplified.structure().logical_slots(),
@@ -6707,8 +6700,7 @@ mod tests {
             kwargs.set_item("color", true)?;
             let simplified = tensor
                 .bind(py)
-                .call_method("simplify_algebra", (), Some(&kwargs))?
-                .call_method0("to_expression")?;
+                .call_method("simplify_algebra", (), Some(&kwargs))?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert!(simplified.interface().canonical().is_scalar());
             assert_eq!(

@@ -171,7 +171,6 @@ pub(crate) fn atom_contract(atom_str: &str) -> Result<String> {
             collect_traces: false,
             ..Default::default()
         })?
-        .resolved()?
         .to_dots()?
         .into_expression();
     Ok(format!(

@@ -1463,8 +1463,6 @@ mod tests {
                 ..Default::default()
             })
             .expect("test-only contraction must succeed")
-            .resolved()
-            .expect("test-only aliases must resolve")
             .expand_dots()
             .expect("test-only component expansion must succeed");
             cooking.uncook(value.as_view())
@@ -1760,8 +1758,6 @@ mod tests {
                     ..Default::default()
                 })
                 .expect("test-only contraction must succeed")
-                .resolved()
-                .expect("test-only aliases must resolve")
                 .expand_dots()
                 .expect("test-only component expansion must succeed");
                 cooking.uncook(value.as_view())
@@ -2063,7 +2059,6 @@ mod tests {
                             collect_traces: false,
                             ..Default::default()
                         })?
-                        .resolved()?
                         .to_dots()?;
                 let explicit_taylor_sum =
                     cooking.uncook(explicit_taylor_sum.expression().as_view());
@@ -2158,7 +2153,6 @@ mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })?
-                    .resolved()?
                     .expand_dots()?;
                 expression = cooking.uncook(value.as_view());
                 let rescale = Atom::var(GS.rescale);
@@ -2409,7 +2403,6 @@ mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })?
-                    .resolved()?
                     .expand_dots()?;
                 expression = cooking.uncook(value.as_view());
                 expression = scalarize(expression)?;

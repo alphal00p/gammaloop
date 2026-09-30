@@ -47,7 +47,6 @@ for pdg, sign, ket_name, bra_name in (
         .simplify_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
-        .to_expression()
     )
     assert (traced - sign * 2 * mass).expand() == E("0")
 

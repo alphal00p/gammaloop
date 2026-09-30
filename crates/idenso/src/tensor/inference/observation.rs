@@ -608,8 +608,6 @@ mod tests {
             let contracted = value
                 .contract(Default::default())
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .to_dots()
                 .unwrap();
             SymbolicTensor::<PartialStructure>::validate_atom(contracted.expression()).unwrap();

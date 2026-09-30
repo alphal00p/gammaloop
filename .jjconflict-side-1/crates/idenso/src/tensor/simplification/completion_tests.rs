@@ -1,84 +1,70 @@
 use super::*;
 use crate::gamma;
 use spenso::{g, mink, p, q, trace};
-use symbolica::atom::AtomCore;
+use symbolica::atom::{Atom, AtomCore};
 
 #[test]
 fn alternating_completed_policies_reuse_the_shared_carrier_and_contraction_proof() {
     crate::test_support::test_initialize();
-    let body = SymbolicTensor::infer(p!(mink!(4, 99501)) * q!(mink!(4, 99501))).unwrap();
-    let handle = body.alias_handle().unwrap();
-    let root = SymbolicTensor::infer(handle.expression.pow(3)).unwrap();
-    let value = Arc::new(root.with_aliases([(handle, body)]).unwrap());
+    let value =
+        SymbolicTensor::infer((Atom::one() + p!(mink!(4, 99501)) * q!(mink!(4, 99501))).pow(3))
+            .unwrap();
     let contracted = value.contract(Default::default()).unwrap();
     let settings = AlgebraSettings::hep();
     let completed = contracted.simplify_algebra(&settings).unwrap();
-    assert_eq!(completed.root(), contracted.root());
-    assert_eq!(completed.aliases().unwrap(), contracted.aliases().unwrap());
+    assert_eq!(completed, contracted);
     assert!(completed.contraction_complete());
 
     for _ in 0..3 {
         let structural = completed.contract(Default::default()).unwrap();
-        assert!(Arc::ptr_eq(&completed, &structural));
+        assert!(Arc::ptr_eq(
+            completed.reduction_observations(),
+            structural.reduction_observations()
+        ));
         let algebra = structural.simplify_algebra(&settings).unwrap();
-        assert!(Arc::ptr_eq(&completed, &algebra));
+        assert!(Arc::ptr_eq(
+            completed.reduction_observations(),
+            algebra.reduction_observations()
+        ));
         assert_eq!(algebra.reduction_status(), ReductionStatus::Complete);
     }
 
-    // An explicit callback boundary invalidates facts even if the callback
-    // happens to preserve every expression in this invocation.
-    let mut calls = 0;
-    let mapped = completed
-        .map_aliases(|_, body| {
-            calls += 1;
-            Ok(body)
-        })
-        .unwrap();
-    assert!(calls > 0);
+    // A newly admitted expression does not inherit completion facts.
+    let mapped = SymbolicTensor::infer(completed.expression.clone()).unwrap();
     assert!(mapped.proofs.reduction.is_none());
     assert!(!mapped.contraction_complete());
 }
 
 #[test]
-fn root_or_definition_changes_invalidate_previously_completed_policies() {
+fn expression_changes_invalidate_previously_completed_policies() {
     let reps = crate::test_support::test_initialize();
     let mu = mink!(4, 99511);
     let nu = mink!(4, 99512);
     let expression = trace!(reps.bis4.to_symbolic([]); [gamma!(&mu), gamma!(&nu)]);
-    let body = SymbolicTensor::infer(expression).unwrap();
-    let handle = body.alias_handle().unwrap();
-    let values = [
-        Arc::new(body.clone().with_aliases([]).unwrap()),
-        Arc::new(handle.clone().with_aliases([(handle, body)]).unwrap()),
-    ];
+    let value = SymbolicTensor::infer(expression).unwrap();
     let settings = AlgebraSettings {
         gamma: Some(GammaSimplifySettings::default()),
         contract: AlgebraContraction::None,
         ..Default::default()
     };
     let structural_policy = ReductionRequest::Contract(Default::default()).policy();
-    for value in values {
-        let contracted = value.contract(Default::default()).unwrap();
-        assert!(contracted.contraction_complete());
-        let reduced = contracted.simplify_algebra(&settings).unwrap();
-        assert_eq!(
-            reduced.expanded().unwrap().expression,
-            Atom::num(4) * g!(&mu, &nu)
-        );
-        assert!(!reduced.contraction_complete());
-        assert!(
-            !reduced
-                .proofs
-                .reduction
-                .as_ref()
-                .unwrap()
-                .completed
-                .contains(&structural_policy)
-        );
-        let completed = reduced.contract(Default::default()).unwrap();
-        assert!(!Arc::ptr_eq(&reduced, &completed));
-        assert!(completed.contraction_complete());
-    }
+    let contracted = value.contract(Default::default()).unwrap();
+    assert!(contracted.contraction_complete());
+    let reduced = contracted.simplify_algebra(&settings).unwrap();
+    assert_eq!(reduced.expression.expand(), Atom::num(4) * g!(&mu, &nu));
+    assert!(!reduced.contraction_complete());
+    assert!(
+        !reduced
+            .proofs
+            .reduction
+            .as_ref()
+            .unwrap()
+            .completed
+            .contains(&structural_policy)
+    );
+    let completed = reduced.contract(Default::default()).unwrap();
+    assert_eq!(reduced, completed);
+    assert!(completed.contraction_complete());
 }
 
 #[test]
@@ -102,9 +88,7 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
     let repeated = capped.simplify_algebra(&settings).unwrap();
     assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
     assert_eq!(repeated.reduction_status(), ReductionStatus::Capped);
-    assert!(!Arc::ptr_eq(&capped, &repeated));
-    assert_eq!(repeated.root(), completed.root());
-    assert_eq!(repeated.aliases().unwrap(), completed.aliases().unwrap());
+    assert_eq!(repeated, completed);
     assert_eq!(
         repeated.proofs.reduction.as_ref().unwrap().completed.len(),
         1
@@ -112,8 +96,11 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
     let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
-        &restored,
-        &restored.simplify_algebra(&disabled).unwrap()
+        restored.reduction_observations(),
+        restored
+            .simplify_algebra(&disabled)
+            .unwrap()
+            .reduction_observations()
     ));
 }
 
@@ -141,8 +128,7 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
     let repeated = deferred.contract(settings).unwrap();
     assert_eq!(deferred.reduction_status(), ReductionStatus::Deferred);
     assert_eq!(repeated.reduction_status(), ReductionStatus::Deferred);
-    assert!(!Arc::ptr_eq(&deferred, &repeated));
-    assert_eq!(repeated.resolved().unwrap().expression, expression);
+    assert_eq!(repeated.expression, expression);
     assert_eq!(
         repeated.proofs.reduction.as_ref().unwrap().completed.len(),
         1
@@ -150,7 +136,10 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
     let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
-        &restored,
-        &restored.simplify_algebra(&disabled).unwrap()
+        restored.reduction_observations(),
+        restored
+            .simplify_algebra(&disabled)
+            .unwrap()
+            .reduction_observations()
     ));
 }

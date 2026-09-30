@@ -142,46 +142,10 @@ class TensorOperationsTests(unittest.TestCase):
                 )
             self.assertEqual(len(calls), expected_calls)
 
-    def test_typed_aliases_retain_order_metadata_and_callback_errors(self):
-        source = self.A(self.x, self.rep("j"), self.rep("i"))
-        value = sp.AliasedTensorExpression.from_expression(source)
-        self.assertEqual(value.root.structure.slots, source.structure.slots)
-        self.assertEqual(value.to_expression(), source)
-        handle, body = value.aliases[0]
-        self.assertEqual(body.structure.slots, source.structure.slots)
-        self.assertEqual(body.structure.arguments, (self.x,))
-        self.assertEqual(handle.structure.slots, source.structure.slots)
-        calls = []
-
-        def identity(body):
-            calls.append(body.structure.arguments)
-            return body
-
-        mapped = value.map_aliases(identity)
-        self.assertEqual(calls, [(self.x,)])
-        self.assertEqual(mapped.to_expression(), source)
-        self.assertEqual(mapped.aliases[0][1].structure.arguments, (self.x,))
-        zero = value.map_aliases(lambda body: 0 * body)
-        self.assertEqual(zero.to_expression().to_expression(), E("0"))
-        self.assertEqual(zero.to_expression().structure.slots, source.structure.slots)
-
-        def failing(_):
-            raise LookupError("alias callback sentinel")
-
-        with self.assertRaisesRegex(LookupError, "alias callback sentinel"):
-            value.map_aliases(failing)
-        with self.assertRaisesRegex(ValueError, "interface"):
-            value.map_aliases(lambda _: sp.TensorExpression(E("1")))
-
-    def test_nested_scalar_aliases_use_the_existing_symbolica_evaluator(self):
-        inner = sp.AliasedTensorExpression.from_expression(
-            sp.TensorExpression((self.x + 1) ** 3)
-        )
-        outer = sp.TensorExpression(S("api_operations::outer_alias"))
-        body = (inner.root + 2) ** 2
-        value = sp.AliasedTensorExpression(outer, inner.aliases + [(outer, body)])
+    def test_nested_scalar_expression_uses_the_existing_symbolica_evaluator(self):
+        value = sp.TensorExpression(((self.x + 1) ** 3 + 2) ** 2)
         expected = ((self.x + 1) ** 3 + 2) ** 2
-        self.assertEqual(value.to_expression().to_expression(), expected)
+        self.assertEqual(value.to_expression(), expected)
         self.assertEqual(value.expand().to_expression(), expected.expand())
         evaluator = value.evaluator([self.x], iterations=1, n_cores=1)
         self.assertEqual(evaluator.evaluate([[2.0]])[0][0], 841.0)
@@ -238,24 +202,18 @@ class TensorOperationsTests(unittest.TestCase):
                         else source.to_dots()
                     )
                     self.assertIsNot(result, source)
-                    typed = (
-                        result.to_expression()
-                        if method == "simplify_algebra"
-                        else result
-                    )
-                    self.assertEqual(typed.to_expression(), expression)
-                    self.assertEqual(typed.structure, structure)
+                    self.assertIsInstance(result, sp.TensorExpression)
+                    self.assertEqual(result.to_expression(), expression)
+                    self.assertEqual(result.structure, structure)
                     rerun = (
                         getattr(result, method)(gamma=True, epsilon=True)
                         if method == "simplify_algebra"
                         else result.to_dots()
                     )
                     self.assertIsNot(rerun, result)
-                    typed_rerun = (
-                        rerun.to_expression() if method == "simplify_algebra" else rerun
-                    )
-                    self.assertEqual(typed_rerun.to_expression(), expression)
-                    self.assertEqual(typed_rerun.structure, structure)
+                    self.assertIsInstance(rerun, sp.TensorExpression)
+                    self.assertEqual(rerun.to_expression(), expression)
+                    self.assertEqual(rerun.structure, structure)
                     self.assertEqual(source.structure, structure)
 
     def test_simultaneous_renaming_and_explicit_reindex(self):
@@ -497,15 +455,13 @@ class TensorOperationsTests(unittest.TestCase):
     def test_simplification_presets_and_expansion_control(self):
         a = self.A(self.rep("i"))
         expression = (self.x + 1) * (self.y + 1) * a
-        self.assertEqual(expression.simplify_algebra().to_expression(), expression)
+        self.assertEqual(expression.simplify_algebra(), expression)
         self.assertEqual(expression.simplify_algebra().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
         self.assertEqual(
             metric.simplify_algebra(contract="none").expand(), metric.expand()
         )
-        self.assertEqual(
-            metric.simplify_algebra().to_expression(), self.A(self.rep("j"))
-        )
+        self.assertEqual(metric.simplify_algebra(), self.A(self.rep("j")))
         gamma = sp.TensorExpression.dirac_gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         simplified = chain.simplify_algebra(gamma=True, color=True, epsilon=True)
@@ -513,13 +469,13 @@ class TensorOperationsTests(unittest.TestCase):
             simplified.expand(),
             simplified.simplify_algebra(gamma=True, color=True, epsilon=True).expand(),
         )
-        self.assertEqual(simplified.root.rank, 2)
+        self.assertEqual(simplified.rank, 2)
         d = S("api_operations::D")
         symbolic_metric = sp.TensorExpression.g(sp.Representation.mink(d))("mu", "mu")
         self.assertEqual(symbolic_metric.simplify_algebra().expand().to_expression(), d)
         capped = chain.simplify_algebra(gamma=True, max_steps_per_domain=0)
         self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
-        self.assertEqual(capped.to_expression(), chain)
+        self.assertEqual(capped, chain)
         bounded = chain.simplify_algebra(gamma=True, max_steps_per_domain=1)
         self.assertIn(
             bounded.reduction_status,

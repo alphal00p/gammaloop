@@ -135,8 +135,6 @@ impl Case {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression(),
                 repeated: false,
             });

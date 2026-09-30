@@ -382,8 +382,7 @@ impl Forest {
                     collect_traces: false,
                     ..Default::default()
                 })?
-                .to_dots()?
-                .resolved()?;
+                .to_dots()?;
             let atom = cooking.uncook(reduced.expression().as_view());
 
             debug_tags!(#generation, #uv, #graph, #term;
@@ -428,8 +427,7 @@ impl Forest {
                         .with_mode(CookMode::ReversibleEncoding)
                         .with_representation_payloads(true, true);
                     let collected = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-                        .collect(color)?
-                        .resolved()?;
+                        .collect(color)?;
                     Ok(cooking.uncook(collected.expression().as_view()))
                 })?;
             sum = Some(match sum {

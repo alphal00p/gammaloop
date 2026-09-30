@@ -1059,7 +1059,6 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "contract",
         ]),
         "spynso3" => Ok(&[
-            "AliasedTensorExpression",
             "BroadcastFunction",
             "CanonicalizationError",
             "ColorSimplifySettings",
