@@ -54,7 +54,9 @@ use symbolica::{
 };
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
+use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
@@ -1825,10 +1827,29 @@ impl<const N: u32> VarFloat<N> {
             return Self::from_f64_exact_binary(x);
         }
 
-        let valid = Float::parse(format!("{}", x)).unwrap();
-        VarFloat {
-            float: rug::Float::with_val(N, valid),
+        // Decimal parsing can acquire a process-wide locale lock. Cache repeated
+        // settings/model values per worker, including the target precision in the
+        // key: a thread-local static is shared by all const-generic instantiations.
+        thread_local! {
+            static CACHE: RefCell<HashMap<(u32, u64), Float>> = RefCell::default();
         }
+        CACHE.with_borrow_mut(|cache| {
+            let key = (N, x.to_bits());
+            if let Some(float) = cache.get(&key) {
+                return Self {
+                    float: float.clone(),
+                };
+            }
+            let valid = Float::parse(format!("{}", x)).unwrap();
+            let float = Float::with_val(N, valid);
+            // Dynamic inputs must not cause unbounded retention. Eviction only
+            // repeats the identical conversion; it never changes its semantics.
+            if cache.len() == 1024 {
+                cache.clear();
+            }
+            cache.insert(key, float.clone());
+            Self { float }
+        })
     }
 
     pub(crate) fn from_f64(x: f64) -> Self {
@@ -1932,12 +1953,29 @@ impl QuadFloat {
             return Self::from_f64_exact_binary(x);
         }
 
-        SymbolicaFloat::parse(
-            &format!("{}", x),
-            Some(DoubleFloat::default().get_precision()),
-        )
-        .unwrap()
-        .into()
+        // Keep decimal promotion (not exact-binary embedding), but avoid the
+        // parser's locale lock for repeated settings/model values on each worker.
+        // Bit keys distinguish signed zero and need no model/settings invalidation.
+        thread_local! {
+            static CACHE: RefCell<HashMap<u64, QuadFloat>> = RefCell::default();
+        }
+        CACHE.with_borrow_mut(|cache| {
+            let key = x.to_bits();
+            if let Some(value) = cache.get(&key) {
+                return *value;
+            }
+            let value = SymbolicaFloat::parse(
+                &format!("{}", x),
+                Some(DoubleFloat::default().get_precision()),
+            )
+            .unwrap()
+            .into();
+            if cache.len() == 1024 {
+                cache.clear();
+            }
+            cache.insert(key, value);
+            value
+        })
     }
 
     fn from_f64(x: f64) -> Self {
@@ -4531,10 +4569,10 @@ pub(crate) fn global_parameterize<T: FloatLike>(
             let angle_offset = n_loop_momenta;
             let mut momenta = Vec::with_capacity(n_loop_momenta);
             for (i, radius_i) in radii.iter().enumerate() {
-                let phi = F::<T>::from_f64(2.) * zero.PI() * &x[angle_offset + 2 * i];
-                jac *= F::<T>::from_f64(2.) * zero.PI();
-                let cos_theta = -&one + F::<T>::from_f64(2.) * &x[angle_offset + 2 * i + 1];
-                jac *= F::<T>::from_f64(2.);
+                let phi = zero.from_i64(2) * zero.PI() * &x[angle_offset + 2 * i];
+                jac *= zero.from_i64(2) * zero.PI();
+                let cos_theta = -&one + zero.from_i64(2) * &x[angle_offset + 2 * i + 1];
+                jac *= zero.from_i64(2);
                 let sin_theta = (&one - cos_theta.square()).sqrt();
                 momenta.push([
                     radius_i * &sin_theta * phi.cos(),
@@ -4552,8 +4590,8 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 );
             }
             let mut branch_x = x.to_vec();
-            let branch_settings = if x[0] < F::<T>::from_f64(0.5) {
-                branch_x[0] = &x[0] * F::<T>::from_f64(2.0);
+            let branch_settings = if x[0] < (&one / one.from_i64(2)) {
+                branch_x[0] = &x[0] * zero.from_i64(2);
                 ParameterizationSettings {
                     mode: ParameterizationMode::Spherical,
                     mapping: settings.mapping.clone(),
@@ -4563,7 +4601,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                     sampling_channels: Default::default(),
                 }
             } else {
-                branch_x[0] = (&x[0] - F::<T>::from_f64(0.5)) * F::<T>::from_f64(2.0);
+                branch_x[0] = (&x[0] - (&one / one.from_i64(2))) * zero.from_i64(2);
                 ParameterizationSettings {
                     mode: ParameterizationMode::SphericalCommonRadial,
                     mapping: settings.mapping.clone(),
@@ -4574,7 +4612,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 }
             };
             let (momenta, jac) = global_parameterize(&branch_x, e_cm, &branch_settings);
-            (momenta, jac * F::<T>::from_f64(2.0))
+            (momenta, jac * zero.from_i64(2))
         }
         ParameterizationMode::MomentumSpace => (x.as_chunks::<3>().0.to_vec(), one),
     }
@@ -4637,16 +4675,16 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             let y = cartesian_xs[cartesian_xs.len() - 2].clone();
             let x = cartesian_xs[cartesian_xs.len() - 1].clone();
             let xphi = if x < zero {
-                &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * x.atan2(&y)
+                &one + (&one / one.from_i64(2)) * zero.FRAC_1_PI() * x.atan2(&y)
             } else {
-                F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * x.atan2(&y)
+                (&one / one.from_i64(2)) * zero.FRAC_1_PI() * x.atan2(&y)
             };
             xs.push(xphi);
-            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
+            inv_jac /= zero.from_i64(2) * zero.PI();
 
             for (i, x) in cartesian_xs[..cartesian_xs.len() - 2].iter().enumerate() {
-                xs.push(F::<T>::from_f64(0.5) * (&one + x / k_r_sq.sqrt()));
-                inv_jac /= F::<T>::from_f64(2.);
+                xs.push((&one / one.from_i64(2)) * (&one + x / k_r_sq.sqrt()));
+                inv_jac /= zero.from_i64(2);
                 let angular_power = cartesian_xs.len() - 3 - i;
                 if angular_power > 0 {
                     inv_jac /= (&one - (x * x / &k_r_sq)).sqrt().pow(angular_power as u64);
@@ -4717,9 +4755,9 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
 
             let phi_x = |x: &F<T>, y: &F<T>| {
                 if y < &zero {
-                    &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+                    &one + (&one / one.from_i64(2)) * zero.FRAC_1_PI() * y.atan2(x)
                 } else {
-                    F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+                    (&one / one.from_i64(2)) * zero.FRAC_1_PI() * y.atan2(x)
                 }
             };
 
@@ -4787,9 +4825,9 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
 
             for (mom, radius_i) in moms.iter().zip(radii.iter()) {
                 xs.push(phi_x(&mom.px, &mom.py));
-                inv_jac /= F::<T>::from_f64(2.) * zero.PI();
-                xs.push(F::<T>::from_f64(0.5) * (&one + &mom.pz / radius_i));
-                inv_jac /= F::<T>::from_f64(2.);
+                inv_jac /= zero.from_i64(2) * zero.PI();
+                xs.push((&one / one.from_i64(2)) * (&one + &mom.pz / radius_i));
+                inv_jac /= zero.from_i64(2);
             }
 
             (xs, inv_jac)
@@ -4820,7 +4858,7 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 global_inv_parameterize(moms, e_cm.clone(), &spherical_settings);
             let (_, common_inv_jac) = global_inv_parameterize(moms, e_cm, &common_radial_settings);
             if let Some(first_x) = xs.first_mut() {
-                *first_x = &*first_x / F::<T>::from_f64(2.0);
+                *first_x = &*first_x / zero.from_i64(2);
             }
             (xs, product_inv_jac + common_inv_jac)
         }
@@ -4896,11 +4934,11 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                     radius
                 }
             };
-            let phi = F::<T>::from_f64(2.) * zero.PI() * &x[1];
-            jac *= F::<T>::from_f64(2.) * zero.PI();
+            let phi = zero.from_i64(2) * zero.PI() * &x[1];
+            jac *= zero.from_i64(2) * zero.PI();
 
-            let cos_theta = -&one + F::<T>::from_f64(2.) * &x[2]; // out of range
-            jac *= F::<T>::from_f64(2.);
+            let cos_theta = -&one + zero.from_i64(2) * &x[2]; // out of range
+            jac *= zero.from_i64(2);
             let sin_theta = (&one - cos_theta.square()).sqrt();
 
             l_space[0] = &radius * &sin_theta * phi.cos();
@@ -4980,9 +5018,9 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
     let k_r = k_r_sq.sqrt();
 
     let x2 = if y < &zero {
-        &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+        &one + (&one / one.from_i64(2)) * zero.FRAC_1_PI() * y.atan2(x)
     } else {
-        F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+        (&one / one.from_i64(2)) * zero.FRAC_1_PI() * y.atan2(x)
     };
 
     // cover the degenerate case
@@ -5014,9 +5052,9 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
         }
     };
 
-    let x3 = F::<T>::from_f64(0.5) * (&one + z / &k_r);
-    jac /= F::<T>::from_f64(2.) * zero.PI();
-    jac /= F::<T>::from_f64(2.);
+    let x3 = (&one / one.from_i64(2)) * (&one + z / &k_r);
+    jac /= zero.from_i64(2) * zero.PI();
+    jac /= zero.from_i64(2);
     jac /= k_r.square();
 
     let x = [x1, x2, x3];
@@ -5500,6 +5538,77 @@ fn exact_binary_cube_promotion_preserves_original_value_and_settings_policy() {
     check::<f64>();
     check::<QuadFloat>();
     check::<ArbPrec>();
+}
+
+#[test]
+fn decimal_promotion_cache_preserves_parsing_and_precision() {
+    // Include non-binary decimals, signed zero, subnormals and overflow-range
+    // exponents. Repeat after more unique inputs than the cache can retain.
+    let mut inputs = vec![
+        0.0,
+        -0.0,
+        0.1,
+        -0.3,
+        1.0,
+        0.5,
+        f64::MIN_POSITIVE,
+        f64::from_bits(1),
+        f64::MAX,
+        -f64::MAX,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NAN,
+    ];
+    inputs.extend((0..1200).map(|i| f64::from_bits(0x3fb999999999999a + i)));
+    for _ in 0..2 {
+        for &input in &inputs {
+            let expected: QuadFloat = if input.is_finite() {
+                SymbolicaFloat::parse(
+                    &input.to_string(),
+                    Some(DoubleFloat::default().get_precision()),
+                )
+                .unwrap()
+                .into()
+            } else {
+                QuadFloat::from_f64_exact_binary(input)
+            };
+            // Hit the cache as well as populating it. Conversion back to f64
+            // additionally checks the sign of zero and non-finite handling.
+            for _ in 0..2 {
+                let actual = QuadFloat::from_f64_decimal(input);
+                if input.is_nan() {
+                    assert!(F(actual).is_nan());
+                } else {
+                    assert_eq!(actual, expected);
+                    assert_eq!(
+                        F(actual).into_f64().to_bits(),
+                        F(expected).into_f64().to_bits()
+                    );
+                }
+            }
+            // Interleave precisions on one thread; the numeric spelling alone
+            // must never let a lower-precision result satisfy a higher request.
+            for precision in [256, 1000, 256, 1000] {
+                let actual = match precision {
+                    256 => VarFloat::<256>::from_f64_decimal(input).float,
+                    1000 => VarFloat::<1000>::from_f64_decimal(input).float,
+                    _ => unreachable!(),
+                };
+                let expected = if input.is_finite() {
+                    Float::with_val(precision, Float::parse(input.to_string()).unwrap())
+                } else {
+                    Float::with_val(precision, input)
+                };
+                assert_eq!(actual.prec(), precision);
+                if input.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_eq!(actual, expected);
+                    assert_eq!(actual.is_sign_negative(), expected.is_sign_negative());
+                }
+            }
+        }
+    }
 }
 
 #[test]

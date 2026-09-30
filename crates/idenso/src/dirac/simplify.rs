@@ -1109,7 +1109,7 @@ impl DiracSimplifier<'_> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
         if factors.is_empty() {
-            return Self::simplify_trace_terminal(f.as_view());
+            return Self::simplify_trace_terminal(trace!(rep).as_view());
         }
 
         let mut factor_kinds = DiracFactorKinds::default();

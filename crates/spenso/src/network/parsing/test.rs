@@ -3,7 +3,7 @@ use crate::network::NetworkState;
 use crate::network::library::symbolic::ETS;
 use crate::structure::OrderedStructure;
 use crate::structure::abstract_index::AIND_SYMBOLS;
-use crate::structure::representation::{Lorentz, Minkowski, RepName};
+use crate::structure::representation::{Euclidean, Lorentz, Minkowski, RepName};
 use crate::{broadcast_symbol, chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
 use symbolica::{atom::FunctionBuilder, function, symbol};
 
@@ -459,6 +459,36 @@ fn parse_single_factor_trace_closes_dualizable_links() {
 
     parsed.simple_execute();
     assert!(parsed.result_scalar().is_ok());
+}
+
+#[test]
+fn self_traced_factor_contracts_its_remaining_slot() {
+    // Tracing a factor with itself must leave its other slot contractible,
+    // whichever representation is traced and whatever the slot's variance.
+    let lorentz = Lorentz {}.new_rep(3);
+    let euclidean = Euclidean {}.new_rep(2);
+    let dualizable_trace = tensor!(dualizable_trace_a, slot!(lorentz, j))
+        * tensor!(
+            dualizable_trace_b,
+            slot!(lorentz, i),
+            slot!(lorentz.dual(), j),
+            slot!(lorentz.dual(), i)
+        );
+    let self_dual_trace = tensor!(self_dual_trace_a, slot!(lorentz.dual(), j))
+        * tensor!(
+            self_dual_trace_b,
+            slot!(euclidean, i),
+            slot!(euclidean, i),
+            slot!(lorentz, j)
+        );
+
+    for expr in [dualizable_trace, self_dual_trace] {
+        let mut parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        parsed.simple_execute();
+        assert!(parsed.result_scalar().is_ok(), "{expr}");
+    }
 }
 
 #[test]
