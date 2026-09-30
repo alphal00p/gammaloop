@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": boundary, callout, source-link, product-link
 
 #let python = [
 = Python tensor workflows
@@ -380,12 +380,17 @@ the returned network, or execute it to completion.
 `expression.contract(...)` performs structural contractions and optional
 chain or trace collection without evaluating algebraic identities. Independently,
 `expression.simplify_algebra(...)` selects gamma, color, and epsilon families
-with their existing dimension and gamma5 conventions. Its default enables none;
+with their existing dimension and gamma5 conventions. Python enables gamma and
+colour by default, while epsilon is opt-in;
 `simplify_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
 contractions. No nested contraction settings or implicit global expansion is involved.
 The result is a `TensorExpression` and reports `Complete`, `Deferred`, or `Capped` through
 `reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
 remaining expression. Explicit `expand()` requests polynomial materialization.
+The default budget is `None` (unlimited). The
+#product-link("idenso", page: "reference/interfaces/", label: "Idenso reduction guide")
+explains contraction modes, distribution permissions, representation filters and
+family-specific output settings with typed examples.
 
 == Numerical evaluation
 
@@ -693,8 +698,8 @@ display for those settings. Source-only methods reject unsupported settings rath
 silently ignoring them.
 
 
-Contract a momentum with a gamma matrix, then collect its bispinor channel to display
-slash notation. Chain collection keeps the ordered factors and leaves Dirac traces
+Select chain output to contract a momentum with a gamma matrix and collect its
+bispinor channel for slash notation. Chain collection keeps the ordered factors and leaves Dirac traces
 unevaluated. The result remains a `TensorExpression` with its two bispinor ports.
 
 // docs-example: compile
@@ -704,7 +709,7 @@ from symbolica.community.tensor import Representation, TensorExpression, TensorN
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.contract().simplify_algebra(gamma=True, gamma_output='chains').to_expression()
+pslash = indexed.simplify_algebra(color=False, gamma_output="chains")
 pslash.formatted()
 ```
 
@@ -740,8 +745,8 @@ the documentation site, including in standalone offline notebooks. Math defaults
 property `--spenso-math-font-size` on the notebook or an output container to change
 the base size; nested scripts retain their relative sizing.
 
-Idenso transformations still return ordinary Symbolica expressions. Module-level
-`spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
+Idenso reductions return typed `TensorExpression` values with these display methods.
+Call `to_expression()` explicitly when an ordinary Symbolica expression is needed.
 HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
 replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
 it must implement the expected notation interface and must not come from untrusted input.

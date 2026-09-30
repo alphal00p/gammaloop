@@ -31,6 +31,9 @@ pub enum AlgebraContraction {
     Fully,
     /// Full contraction and canonical index-free dot notation.
     Dots,
+    /// Structural contraction without multiplying out independent sum alternatives.
+    /// Enabled algebra identities retain their required local distribution.
+    Minimal,
     /// Additional connections selected by representation, not by tensor factor.
     Selected(Vec<spenso::structure::representation::LibraryRep>),
     /// Only the structural prerequisites of enabled identities.
@@ -81,6 +84,7 @@ pub(crate) enum ReductionPolicy {
         rank_one: bool,
         collect_chains: bool,
         collect_traces: bool,
+        expand: bool,
         order: Option<Vec<usize>>,
         max_passes: Option<usize>,
     },
@@ -116,6 +120,7 @@ impl ReductionRequest<'_> {
                 rank_one: settings.rank_one,
                 collect_chains: settings.collect_chains,
                 collect_traces: settings.collect_traces,
+                expand: settings.expand,
                 order: settings.order.map(<[_]>::to_vec),
                 max_passes: settings.max_passes,
             },
@@ -180,7 +185,10 @@ impl DomainPlan {
 }
 
 impl SymbolicTensor<PartialStructure> {
-    /// Reduce only the selected identity families, keeping scalar sums factored.
+    /// Apply the identity families and output policy in [`AlgebraSettings`],
+    /// preserving unrelated scalar factorization. Enabled identities authorize
+    /// their required contractions, including under [`AlgebraContraction::Minimal`].
+    /// The shared contraction planner reports completion relative to this policy.
     pub fn simplify_algebra(
         &self,
         settings: &AlgebraSettings,
@@ -239,6 +247,11 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Contract(settings) => settings,
             ReductionRequest::Algebra(settings) => match &settings.contract {
                 AlgebraContraction::None => prerequisite_settings,
+                AlgebraContraction::Minimal => ContractSettings {
+                    expand: false,
+                    max_passes: settings.max_passes,
+                    ..Default::default()
+                },
                 AlgebraContraction::Selected(representations) => ContractSettings {
                     representations: Some(representations),
                     ..Default::default()

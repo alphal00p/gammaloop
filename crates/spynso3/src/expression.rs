@@ -1658,68 +1658,222 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Apply selected tensor identities while preserving unrelated factorization.
+    /// Reduce enabled tensor identities and their required index contractions.
+    ///
+    /// Gamma and color identities are enabled by default; epsilon identities are
+    /// opt-in. The default also completes supported structural contractions, so
+    /// a second contract() call is normally unnecessary. The input is unchanged.
     ///
     /// Parameters
     /// ----------
     /// gamma, color : bool, default True
-    ///     Enable Dirac and color identities and their prerequisite contractions.
+    ///     Enable Dirac/Clifford and color identities, respectively. Each family
+    ///     authorizes the structural contractions required to apply its identities.
+    ///     Set the other families to False when requesting only one family.
     /// epsilon : bool, default False
-    ///     Enable epsilon identities and their prerequisite contractions.
-    /// contract : {"fully", "dots", "selected", "none"}, default "fully"
-    ///     Additional structural work: all contractions, all plus dot notation,
-    ///     only selected representations, or only identity prerequisites.
-    ///     Collecting a trace does not evaluate it or enable another identity family.
+    ///     Enable supported Levi-Civita pair contractions and their prerequisites.
+    ///     These can generate determinant sums. Epsilon tensors emitted by gamma
+    ///     reduction do not implicitly enable this option. Intrinsic antisymmetry
+    ///     normalization during construction is independent of this setting.
+    /// contract : {"fully", "dots", "minimal", "selected", "none"}, default "fully"
+    ///     Structural work in addition to enabled identities and their prerequisites:
+    ///
+    ///     - "fully": contract compatible metrics/identities and vectors, collect
+    ///       matrix chains, and close compatible chains into trace notation.
+    ///     - "dots": the same work, plus canonical dot notation for scalar products.
+    ///     - "minimal": perform structural contractions that do not multiply out
+    ///       independent sum alternatives. Boundary substitutions through existing
+    ///       sums and contractions within their branches are allowed. Products of
+    ///       sums stay factored when contracting them would require distribution.
+    ///     - "selected": the same structural operations, restricted to connections
+    ///       in representations. This does not restrict identity prerequisites.
+    ///     - "none": no additional structural pass. Enabled identities still get
+    ///       their prerequisite contractions; this does not disable all contraction.
+    ///
+    ///     These modes do not enable identity families. In particular, collecting
+    ///     a trace does not evaluate it, and contracting a color delta does not
+    ///     apply a generator or Fierz identity. "minimal" restricts additional
+    ///     structural work; enabled algebra identities retain their prerequisites
+    ///     and can still introduce sums. It is not a global ban on expansion.
     /// representations : sequence of Representation or RepresentationName, optional
-    ///     Required only for contract="selected"; an empty sequence permits no
-    ///     additional connections. Filters do not suppress identity prerequisites
-    ///     or intrinsic normalization already performed during construction.
+    ///     Required with contract="selected" and rejected with the other modes.
+    ///     Select connecting representation families, including their duals, rather
+    ///     than whole tensor factors. For example, Representation.mink(4) selects
+    ///     the Minkowski family, including symbolic-D instances; it does not change
+    ///     dimensions. Each connection must still have compatible dimensions and
+    ///     orientation. [] permits no additional index contractions or trace closure.
+    ///     Identity prerequisites and existing constructor normalization are unaffected.
     /// gamma_output : {"reduced", "chains"}, optional
-    ///     Apply Clifford identities (default), or only collect Dirac chains.
+    ///     Defaults to "reduced": apply supported Clifford and trace identities.
+    ///     "chains" collects Dirac chains/traces without Clifford reduction or
+    ///     trace evaluation, even if gamma_evaluate_traces=True. Explicit gamma0
+    ///     and gamma_conjugate preparation still applies when requested.
     /// gamma_ordering : {"repeated_pairs", "canonical"}, optional
-    ///     Open-chain ordering; defaults to repeated-pair reduction.
+    ///     Ordering for reduced open Dirac chains. The default "repeated_pairs"
+    ///     brings repeated indices together without fully sorting unrelated
+    ///     matrices. "canonical" orders the chain and can introduce metric-term
+    ///     sums through anticommutation. It is inactive for gamma_output="chains".
     /// gamma_evaluate_traces : bool, optional
-    ///     Evaluate closed Dirac traces; defaults to True for reduced output.
+    ///     Evaluate supported closed Dirac traces with reduced output; defaults to
+    ///     True. False retains trace notation while other enabled identities remain
+    ///     available. Trace normalization follows the spinor representation dimension.
     /// gamma0 : bool, optional
-    ///     Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+    ///     Apply gamma-zero factoring before chain collection; defaults to False.
+    ///     This controls the preparation pass, not every gamma-zero identity already
+    ///     included in reduced Dirac algebra.
     /// gamma_conjugate : bool, optional
-    ///     Rewrite complex-conjugated Dirac matrices; defaults to False.
+    ///     Rewrite explicitly complex-conjugated Dirac matrices before collection;
+    ///     defaults to False. This does not conjugate the input tensor.
     /// gamma_expand_three_gamma_epsilon : bool, optional
-    ///     Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
-    ///     to False. This does not enable epsilon identities.
+    ///     With reduced output, expand three compatible four-dimensional gammas
+    ///     in a gamma5/epsilon basis; defaults to False. This can introduce sums
+    ///     and epsilon tensors, but does not enable epsilon identities.
     /// color_evaluate_traces : bool, optional
-    ///     Evaluate supported closed color traces; defaults to True.
+    ///     Evaluate supported closed color traces; defaults to True. False retains
+    ///     unevaluated traces, but enabled Fierz identities may still join or change
+    ///     them. It does not disable the rest of color algebra.
     /// color_expand_fierz : bool, optional
-    ///     Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+    ///     Apply fundamental Fierz identities between different open chains or
+    ///     traces; defaults to True. This may introduce sums. False disables these
+    ///     cross-chain expansions, not every color identity or source of sums.
     /// color_substitute_cof_dimension_invariants : bool, optional
-    ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
+    ///     Write supported color invariants in terms of the fundamental SU(N)
+    ///     dimension, with T_F=1/2; defaults to False, retaining symbolic invariants.
+    ///     In the supported fundamental/adjoint spaces this gives
+    ///     C_F=(N**2-1)/(2*N) and C_A=N. The dimension comes from the representation:
+    ///     this does not set every color space to SU(3) or reduce arbitrary groups.
     /// max_steps_per_domain : int or None, default None
-    ///     Optional limit on successful transformations; None imposes no limit.
-    ///     Zero is allowed. Capped results retain exact unfinished work.
+    ///     Optional nonnegative limit on successful planner transformations in each
+    ///     active expression domain. None imposes no automatic work limit. This is
+    ///     not a bound on time, memory, terms, or work inside one kernel. Zero leaves
+    ///     eligible work untouched and reports Capped; an already completed request
+    ///     can still report Complete. Unfinished results remain exact.
     ///
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Exact reduced algebra with a reduction_status.
-    ///     expand() explicitly distributes sums.
+    ///     A typed result carrying its checked interface and reduction_status.
+    ///     No alias wrapper or separate materialization step is required.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     An option value is invalid, representations is missing or used with the
+    ///     wrong mode, a family-specific option is supplied for a disabled family,
+    ///     or a rewrite cannot produce a valid tensor interface.
     ///
     /// Notes
     /// -----
-    /// Enabled identities and permitted structural work reach a shared fixed point.
-    /// Closed color deltas produce their dimension even when color identities are off.
-    /// Each enabled family includes its necessary contractions, including with
-    /// contract="none". Unrelated sums stay factored. A capped result retains exact
-    /// unfinished work and can be simplified again. Family-specific options require
-    /// the corresponding family to be enabled; None selects its native default.
+    /// Select the families together; the shared planner schedules identities and
+    /// contractions until no further permitted work is found. Under "fully" and
+    /// "dots", a closed color delta produces its dimension even with color=False.
+    /// Under "none", an unrelated Lorentz numerator can remain indexed and factored
+    /// after its color sector is reduced. Use contract() for structural work alone.
+    ///
+    /// This is not a global arithmetic expansion. Planning starts with a shallow
+    /// view of factor interfaces and opens selected regions when needed. Necessary
+    /// local distribution and identity-generated sums are allowed; unrelated sums
+    /// and scalar coefficients stay factored. Request expand() explicitly when the
+    /// final output must be a fully expanded polynomial.
+    ///
+    /// Dimensions belong to the tensor representations. Set them before reduction,
+    /// for example with with_lorentz_dimension(D). Ordinary Clifford contractions
+    /// support compatible symbolic Lorentz dimensions. Four-dimensional gamma5,
+    /// axial-trace and epsilon-basis rules are not a general D-dimensional gamma5
+    /// prescription; changing D after evaluation cannot recover lost dimension factors.
+    ///
+    /// Family-specific None values use the defaults documented above. Even an
+    /// explicitly supplied False option requires its family to be enabled. Reusable
+    /// configurations are ordinary dictionaries passed with **options.
+    ///
+    /// Inspect reduction_status on the returned reduction result. Complete means
+    /// no eligible work remains under these settings, not under disabled families
+    /// or other output requirements. Deferred retains exact work the current
+    /// implementation could not finish. Capped means an explicit limit stopped it.
+    /// Rerunning a Complete result with the same settings is stable. Capped or
+    /// Deferred results can be passed back for further work, without a guarantee
+    /// that an unsupported Deferred case will progress. contraction_complete is a
+    /// separate structural certificate and can be False for a Complete "none" result.
+    ///
+    /// See Also
+    /// --------
+    /// contract : Structural contractions without enabling identities.
+    /// to_dots : Change surviving scalar-product notation without contracting indices.
+    /// expand : Explicit arithmetic distribution.
+    /// undo_trace : Unfold an existing trace without evaluating it.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> gamma = TensorExpression.dirac_gamma(4)
-    /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> result = expression.simplify_algebra()
-    /// >>> result.rank
-    /// 2
+    /// A closed Dirac word evaluates to 4*D even with no additional structural
+    /// pass. The spinor dimension remains four while the Lorentz dimension is D.
+    ///
+    /// >>> from symbolica import E, S
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> D = S("algebra_docs::D")
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4).with_lorentz_dimension(D)
+    /// >>> word = gamma("a", "b", "mu") * gamma("b", "a", "mu")
+    /// >>> result = word.simplify_algebra(color=False, contract="none")
+    /// >>> assert result.to_expression() == 4 * D
+    /// >>> assert result.reduction_status == sp.ReductionStatus.Complete
+    ///
+    /// Color-only reduction with explicit SU(3) invariants gives T^a T^a = 4/3 I.
+    /// Omit the invariant-substitution option to retain symbolic Casimirs.
+    ///
+    /// >>> fundamental = sp.Representation.cof(3)
+    /// >>> identity = sp.TensorExpression.g(fundamental, fundamental.dual())
+    /// >>> T = sp.TensorExpression.color_t(8, 3)
+    /// >>> pair = T("a", "i", "j") * T("a", "j", "k")
+    /// >>> color_only = dict(gamma=False, color=True, contract="none",
+    /// ...                   color_substitute_cof_dimension_invariants=True)
+    /// >>> assert pair.simplify_algebra(**color_only) == E("4/3") * identity("i", "k")
+    ///
+    /// Structural color-delta contraction is independent of color identities.
+    /// With both identity families disabled, "none" preserves this product;
+    /// "fully" and a matching "selected" filter produce its dimension.
+    ///
+    /// >>> cycle = identity("i", "j") * identity("j", "i")
+    /// >>> structural = dict(gamma=False, color=False)
+    /// >>> assert cycle.simplify_algebra(**structural, contract="none") == cycle
+    /// >>> assert cycle.simplify_algebra(**structural).to_expression() == 3
+    /// >>> selected = cycle.simplify_algebra(**structural, contract="selected",
+    /// ...                                    representations=[fundamental.name])
+    /// >>> assert selected.to_expression() == 3
+    /// >>> assert cycle.simplify_algebra(**structural, contract="selected",
+    /// ...                               representations=[]) == cycle
+    ///
+    /// "dots" includes scalar-product notation conversion. Epsilon reduction is
+    /// separately enabled; here the Euclidean identity epsilon_ijk epsilon_ijk = 6
+    /// is evaluated without gamma or color identities.
+    ///
+    /// >>> lorentz = sp.Representation.mink(4)
+    /// >>> p = sp.TensorName.vector("algebra_docs::p")(lorentz)
+    /// >>> q = sp.TensorName.vector("algebra_docs::q")(lorentz)
+    /// >>> dotted = (p("mu") * q("mu")).simplify_algebra(**structural, contract="dots")
+    /// >>> assert dotted == sp.dot(p, q)
+    /// >>> epsilon = sp.TensorExpression.levi_civita(sp.Representation.euc(3), rank=3)
+    /// >>> product = epsilon("i", "j", "k") * epsilon("i", "j", "k")
+    /// >>> assert product.simplify_algebra(**structural, epsilon=True).to_expression() == 6
+    ///
+    /// Minimal contraction leaves a product of tensor sums exact and factorized.
+    /// It can report Complete even though full contraction would do more work.
+    /// The equivalent structural-only request is contract(expand=False).
+    ///
+    /// >>> metric = sp.TensorExpression.g(lorentz)
+    /// >>> A = sp.TensorName("algebra_docs::A")(lorentz, lorentz)
+    /// >>> factored = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+    /// >>> minimal = factored.simplify_algebra(**structural, contract="minimal")
+    /// >>> assert minimal == factored
+    /// >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+    /// >>> assert minimal == factored.contract(expand=False)
+    /// >>> assert minimal != factored.contract()
+    ///
+    /// An explicit limit preserves the exact remaining expression. Continue by
+    /// calling the same operation without a limit; no manual expansion is needed.
+    ///
+    /// >>> pending = cycle.simplify_algebra(**structural, max_steps_per_domain=0)
+    /// >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+    /// >>> assert pending == cycle
+    /// >>> assert pending.simplify_algebra(**structural).to_expression() == 3
     #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
@@ -1728,7 +1882,7 @@ impl TensorExpression {
         gamma: bool,
         color: bool,
         epsilon: bool,
-        #[gen_stub(override_type(type_repr="typing.Literal['fully', 'dots', 'selected', 'none']", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Literal['fully', 'minimal', 'dots', 'selected', 'none']", imports=("typing")))]
         contract: &str,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
         representations: Option<Vec<Bound<'_, PyAny>>>,
@@ -2847,50 +3001,182 @@ impl TensorExpression {
         self.value.contraction_complete()
     }
 
-    /// Contract compatible indices and collect compact matrix products.
+    /// Contract compatible indices without applying tensor-algebra identities.
+    ///
+    /// Eliminate metrics and identity tensors, including closed dimension factors;
+    /// substitute vectors into compatible ports; form scalar products; and collect
+    /// ordered matrix chains and unevaluated traces. Matrix order and orientation
+    /// are preserved. The input is unchanged.
     ///
     /// Parameters
     /// ----------
     /// representations : sequence of Representation or RepresentationName, optional
-    ///     Filter connecting axes by representation name: None permits all, [] none.
-    ///     Compatible dimensions and orientations are still required. Intrinsic
-    ///     constructor normalization, including symmetric dots, is unaffected.
+    ///     Filter connections by representation family: None permits all, [] none.
+    ///     Families include dual representations. For example, Representation.mink(4)
+    ///     permits the Minkowski family, including symbolic-D slots; the 4 is not
+    ///     a dimension filter. Each connection must still satisfy dimension and
+    ///     orientation compatibility. Matching representation names alone is insufficient.
+    ///     The filter acts on connecting ports, not whole tensor factors: a Lorentz
+    ///     connection can enter a gamma matrix while its spinor ports survive.
+    ///     Chain assembly and trace closure also require a permitted connection.
     /// metrics : bool, default True
-    ///     Contract compatible metric tensors.
+    ///     Eliminate compatible metric/identity tensors by index substitution and
+    ///     evaluate closed metric loops to their representation dimension.
     /// rank_one : bool, default True
-    ///     Contract compatible rank-one tensors into scalar products.
+    ///     Substitute vectors into compatible tensor ports (Schoonschip notation)
+    ///     and contract vector pairs into scalar products. This can enter a gamma
+    ///     matrix without applying a gamma identity. False retains those connections.
     /// collect_chains : bool, default True
-    ///     Collect compatible matrix products into ordered chains.
+    ///     Represent connected matrix products as ordered chains without evaluating
+    ///     their matrices. False retains the indexed factors for open products.
     /// collect_traces : bool, default True
-    ///     Collect closed chains without evaluating traces. False preserves indexed closure.
+    ///     Represent compatible closed matrix products as unevaluated traces.
+    ///     False retains indexed closure, including when collect_chains=True.
+    ///     It does not unfold trace notation already present in the input.
+    /// expand : bool, default True
+    ///     Permit local arithmetic distribution required by a selected contraction.
+    ///     False performs the minimal structural work: substitute at boundaries
+    ///     and contract within existing sum branches, but do not multiply out
+    ///     independent sum alternatives. A product of tensor sums can therefore
+    ///     remain indexed and still be Complete under expand=False. Neither value
+    ///     requests global polynomial expansion; expand() is a separate operation.
     /// order : sequence of int, optional
-    ///     Requested factor contraction order; None uses the planner's default.
+    ///     Optional zero-based permutation of every normalized top-level factor,
+    ///     used for the initial contraction round. Factors follow Symbolica's
+    ///     normalized order, not necessarily the order in the Python source. None
+    ///     lets the planner choose. This affects scheduling, never matrix order;
+    ///     omit it unless you need to prescribe a factor order explicitly.
     /// max_steps_per_domain : int or None, default None
-    ///     Optional limit on successful transformations; None imposes no limit.
-    ///     Zero is allowed. Inspect reduction_status for exact unfinished work.
+    ///     Optional nonnegative limit on successful planner transformations in each
+    ///     active expression domain. None imposes no automatic work limit. This is
+    ///     not a limit on time, memory, generated terms, or work inside one kernel.
+    ///     Zero preserves eligible work and reports Capped; a request with no eligible
+    ///     work can still report Complete. All unfinished results remain exact.
     ///
     /// Returns
     /// -------
     /// TensorExpression
-    ///     An exact result preserving unrelated factorization. Inspect reduction_status
-    ///     for unfinished work.
+    ///     A typed result with its checked external interface and reduction_status.
+    ///     Unrelated scalar coefficients and sums remain factored. No alias wrapper
+    ///     or separate materialization step is required.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     order is not a permutation of all normalized top-level factors, or a
+    ///     substitution cannot produce a valid tensor interface.
     ///
     /// Notes
     /// -----
-    /// This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
-    /// color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
-    /// Polynomial expansion remains an explicit operation.
+    /// Contracting a color delta does not enable generator or Fierz identities.
+    /// Collecting a Dirac or color trace does not evaluate it. Use simplify_algebra()
+    /// for identities, contract_ports(rhs, left=..., right=...) for an explicit
+    /// binary port contraction, and to_tensor() for component-library evaluation.
+    /// With rank_one=False, collect_chains=False and collect_traces=False, only
+    /// metric/identity contraction is requested.
+    ///
+    /// Planning starts with a depth-one view of factor interfaces. It opens a
+    /// selected region only when the contraction needs its interior, reusing
+    /// unchanged leaves and known interfaces. With expand=True, necessary local
+    /// distribution is allowed; an unrelated scalar sum is not routinely expanded.
+    /// Internal dummy contractions can be processed even inside a scalar-interface
+    /// leaf. This is distinct from expanding the whole expression with expand().
+    ///
+    /// Settings do not undo intrinsic normalization performed during construction.
+    /// A metric with identical compatible ports can already be its dimension,
+    /// typed vector multiplication can already form a scalar product, and symmetric
+    /// dot arguments are already ordered. representations=[] and disabled flags
+    /// preserve these existing normalizations. Assign explicit compatible indices
+    /// before requesting a particular Einstein contraction; unresolved axes are
+    /// distinct port identities, not dummy indices to pair by guesswork.
+    ///
+    /// Scalar products can remain in compact metric notation g(p(R), q(R)).
+    /// to_dots() converts that surviving notation to dot(p(R), q(R)) without
+    /// searching for repeated indices. undo_dots(), undo_chain() and undo_trace()
+    /// unfold existing notation with fresh compatible dummy indices, preserving
+    /// matrix order. They do not recover expressions already changed by identities.
+    ///
+    /// Complete means no eligible work remains under the requested settings;
+    /// disabled contractions and unevaluated traces may remain. Deferred retains
+    /// exact work the current implementation could not finish. Capped means an
+    /// explicit work limit stopped the operation. Completed reruns with the same
+    /// settings are stable. Unfinished results can be passed back to contract(),
+    /// possibly with different settings; unsupported cases need not make progress.
+    /// Inspect this operation's reduction_status before other transformations.
+    /// contraction_complete is a separate structural certificate, not a substitute
+    /// for completion under a restricted representation filter or expand=False.
+    ///
+    /// See Also
+    /// --------
+    /// simplify_algebra : Gamma, color and epsilon identities plus their contractions.
+    /// contract_ports : Explicit binary contraction of selected logical ports.
+    /// to_dots : Scalar-product notation conversion without index contraction.
+    /// undo_trace : Turn trace notation into a closed indexed chain.
+    /// expand : Explicit arithmetic distribution.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(3)
-    /// >>> p = TensorName.vector("p")(space)
-    /// >>> expression = TensorExpression.g(space)("i", "j") * p("j")
-    /// >>> result = expression.contract()
-    /// >>> result.rank
-    /// 1
-    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=None))]
+    /// A metric relabels a vector. A Lorentz-only filter also permits a metric to
+    /// enter a gamma matrix without touching its two spinor ports.
+    ///
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> lorentz = sp.Representation.mink(4)
+    /// >>> metric = sp.TensorExpression.g(lorentz)
+    /// >>> p = sp.TensorName.vector("contract_docs::p")(lorentz)
+    /// >>> source = metric("mu", "nu") * p("nu")
+    /// >>> assert source.contract() == p("mu")
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4)
+    /// >>> mixed = gamma("a", "b", "nu") * metric("mu", "nu")
+    /// >>> assert mixed.contract(representations=[lorentz]) == gamma("a", "b", "mu")
+    ///
+    /// Trace collection and trace evaluation are separate operations. The collected
+    /// trace represents the same tensor as 4*g(mu,nu), but contract() leaves it
+    /// unevaluated. Unfolding and contracting it recovers the collected notation.
+    ///
+    /// >>> word = gamma("a", "b", "mu") * gamma("b", "a", "nu")
+    /// >>> collected = word.contract()
+    /// >>> assert collected.simplify_algebra(color=False) == 4 * metric("mu", "nu")
+    /// >>> assert collected.undo_trace().undo_chain().contract() == collected
+    /// >>> uncollected = word.contract(collect_traces=False)
+    /// >>> assert uncollected.contract() == collected
+    ///
+    /// A closed color delta gives N_c without any color-algebra identity. An empty
+    /// filter retains this product, and an unrelated scalar power remains factored.
+    ///
+    /// >>> Nc = S("contract_docs::Nc")
+    /// >>> fundamental = sp.Representation.cof(Nc)
+    /// >>> delta = sp.TensorExpression.g(fundamental, fundamental.dual())
+    /// >>> cycle = delta("i", "j") * delta("j", "i")
+    /// >>> assert cycle.contract().to_expression() == Nc
+    /// >>> assert cycle.contract(representations=[]) == cycle
+    /// >>> x, y = S("contract_docs::x", "contract_docs::y")
+    /// >>> assert ((x + y)**8 * cycle).contract().to_expression() == (x + y)**8 * Nc
+    ///
+    /// Minimal contraction still relabels ports through a sum. It leaves products
+    /// of independent tensor sums factorized instead of enumerating their pairings.
+    ///
+    /// >>> q = sp.TensorName.vector("contract_docs::q")(lorentz)
+    /// >>> A = sp.TensorName("contract_docs::A")(lorentz, lorentz)
+    /// >>> relabel = metric("mu", "nu") * (p("nu") + q("nu"))
+    /// >>> assert relabel != p("mu") + q("mu")
+    /// >>> assert relabel.contract(expand=False) == p("mu") + q("mu")
+    /// >>> product = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+    /// >>> minimal = product.contract(expand=False)
+    /// >>> assert minimal == product
+    /// >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+    /// >>> full = product.contract()
+    /// >>> assert minimal != full
+    /// >>> assert minimal.contract() == full
+    ///
+    /// An explicit zero limit retains eligible work exactly. Continuing without
+    /// that limit completes it, while the original input remains available.
+    ///
+    /// >>> pending = cycle.contract(max_steps_per_domain=0)
+    /// >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+    /// >>> assert pending == cycle
+    /// >>> assert pending.contract().to_expression() == Nc
+    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, expand=true, order=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
@@ -2901,6 +3187,7 @@ impl TensorExpression {
         rank_one: bool,
         collect_chains: bool,
         collect_traces: bool,
+        expand: bool,
         order: Option<Vec<usize>>,
         max_steps_per_domain: Option<usize>,
     ) -> PyResult<Py<Self>> {
@@ -2911,6 +3198,7 @@ impl TensorExpression {
             rank_one,
             collect_chains,
             collect_traces,
+            expand,
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
         };

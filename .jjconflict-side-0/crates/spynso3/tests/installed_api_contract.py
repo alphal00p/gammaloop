@@ -185,6 +185,7 @@ class FactorizedContractionTests(unittest.TestCase):
             {"contract": "invalid"},
             {"contract": "selected"},
             {"contract": "fully", "representations": []},
+            {"contract": "minimal", "representations": []},
             {"contract": "none", "representations": [color]},
         ):
             with self.assertRaises(ValueError):
@@ -233,6 +234,50 @@ class FactorizedContractionTests(unittest.TestCase):
             dots,
         )
 
+    def test_minimal_contraction_keeps_sum_products_and_identity_prerequisites(self):
+        lorentz = sp.Representation.mink(4)
+        p, q = (
+            sp.TensorName.vector(f"minimal_modes::{name}")(lorentz)
+            for name in ("p", "q")
+        )
+        metric = sp.TensorExpression.g(lorentz)
+        matrix = sp.TensorName("minimal_modes::A")(lorentz, lorentz)
+        source = (metric("mu", "nu") + matrix("mu", "nu")) * (p("mu") + q("mu"))
+        original = source.to_expression()
+        for minimal in (
+            source.contract(expand=False),
+            source.simplify_algebra(gamma=False, color=False, contract="minimal"),
+        ):
+            self.assertEqual(minimal.to_expression(), original)
+            self.assertEqual(minimal.reduction_status, sp.ReductionStatus.Complete)
+            self.assertFalse(minimal.contraction_complete)
+            self.assertEqual(minimal.contract(), source.contract())
+        self.assertEqual(source.contract(), source.contract(expand=True))
+        self.assertNotEqual(source.contract().to_expression(), original)
+        self.assertEqual(source.to_expression(), original)
+        monomial = metric("mu", "nu") * p("mu")
+        self.assertEqual(monomial.contract(expand=False), p("nu"))
+
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        word = gamma("a", "b", "rho") * gamma("b", "a", "rho")
+        reduced = word.simplify_algebra(contract="minimal")
+        self.assertEqual(reduced.to_expression(), E("16"))
+        self.assertEqual(reduced.components(), word.components())
+        self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
+        self.assertEqual(
+            (word * source)
+            .simplify_algebra(color=False, contract="minimal")
+            .to_expression(),
+            (16 * source).to_expression(),
+        )
+
+        fundamental = sp.Representation.cof(3)
+        delta = sp.TensorExpression.g(fundamental, fundamental.dual())
+        cycle = delta("i", "j") * delta("j", "i")
+        dimension = cycle.simplify_algebra(gamma=False, color=False, contract="minimal")
+        self.assertEqual(dimension.to_expression(), E("3"))
+        self.assertEqual(dimension.reduction_status, sp.ReductionStatus.Complete)
+
     def test_full_contraction_preserves_disabled_color_identities(self):
         generator = sp.TensorExpression.color_t(8, 3)
         source = generator("a", "i", "j") * generator("a", "k", "l")
@@ -264,6 +309,9 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertIs(defaults["gamma"].default, True)
         self.assertIs(defaults["color"].default, True)
         self.assertIs(defaults["epsilon"].default, False)
+        self.assertIs(
+            inspect.signature(tensor.contract).parameters["expand"].default, True
+        )
         for operation in (tensor.contract, tensor.simplify_algebra):
             signature = inspect.signature(operation)
             self.assertIsNone(signature.parameters["max_steps_per_domain"].default)

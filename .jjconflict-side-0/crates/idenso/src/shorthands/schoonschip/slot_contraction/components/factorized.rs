@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::tensor::{SymbolicNet, simplification::observation::DomainObservations};
+use ahash::AHashSet;
 use linnet::{
     half_edge::{
         NodeIndex,
@@ -22,7 +23,9 @@ use spenso::{
         store::{TensorScalarStore, TensorScalarStoreMapping},
     },
     structure::{
-        OrderedStructure, TensorStructure, abstract_index::AbstractIndex, partial::PartialIndex,
+        OrderedStructure, TensorStructure,
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructureExt},
         slot::IsAbstractSlot,
     },
 };
@@ -76,7 +79,7 @@ struct ContractionScope<'src> {
     root: NodeIndex,
     ports: AHashMap<NodeIndex, (Vec<Atom>, PartialStructure)>,
     opened: AHashMap<NodeIndex, std::cell::OnceCell<Option<Box<Self>>>>,
-    powers: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
+    reductions: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
     work: AHashMap<NodeIndex, std::cell::OnceCell<bool>>,
     interfaces: Option<LeafInterfaceCache>,
 }
@@ -152,7 +155,7 @@ impl<'src> ContractionScope<'src> {
                 .iter()
                 .map(|&node| (node, Default::default()))
                 .collect(),
-            powers: nodes
+            reductions: nodes
                 .iter()
                 .map(|&node| (node, Default::default()))
                 .collect(),
@@ -246,6 +249,171 @@ impl<'src> ContractionScope<'src> {
 }
 
 impl SlotContraction {
+    /// Budget admission uses the same shallow scopes and boundary edges as the
+    /// contraction. It does not normalize a tensor or invoke user callbacks.
+    pub(crate) fn minimal_work_permitted(
+        &self,
+        source: AtomView<'_>,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> Option<bool> {
+        let scope = self.scope(source)?;
+        self.minimal_scope_work(&scope, scope.root, settings)
+    }
+
+    fn minimal_scope_work(
+        &self,
+        scope: &ContractionScope<'_>,
+        root: NodeIndex,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> Option<bool> {
+        match scope.network.graph.graph[root] {
+            NetworkNode::Op(NetworkOp::Sum) => {
+                for child in scope.tree.iter_children(root, &scope.network.graph.graph) {
+                    if self.minimal_scope_work(scope, child, settings)? {
+                        return Some(true);
+                    }
+                }
+                return Some(false);
+            }
+            NetworkNode::Op(NetworkOp::Power(_)) => {
+                let child = scope
+                    .tree
+                    .iter_children(root, &scope.network.graph.graph)
+                    .next()?;
+                if !scope.ports[&child].0.is_empty()
+                    && !self.tensor_alternatives(scope.literal(child)?)
+                {
+                    // An atomic tensor power can connect copies directly.
+                    let sources = self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(scope.literal(child)?))
+                        .map(|region| region.contraction_sources(settings))?;
+                    return Some(
+                        (sources || (settings.collect_traces && scope.ports[&child].0.len() == 2))
+                            && scope.ports[&child]
+                                .1
+                                .logical_slots()
+                                .iter()
+                                .any(|slot| self.permits(slot.rep().rep)),
+                    );
+                }
+                return self.minimal_scope_work(scope, child, settings);
+            }
+            _ => {}
+        }
+        let nodes = scope.factors(root);
+        let external: SuBitGraph = scope.network.graph.graph.external_filter();
+        let components = scope.network.graph.slot_components(&scope.tree, &nodes);
+        for &node in &nodes {
+            let literal = scope.literal(node)?;
+            let component = components
+                .iter()
+                .find(|component| component.contains(&node))?;
+            let alternatives = component
+                .iter()
+                .copied()
+                .filter(|&member| {
+                    !scope.ports[&member].0.is_empty()
+                        && scope
+                            .literal(member)
+                            .is_some_and(|source| self.tensor_alternatives(source))
+                })
+                .collect::<Vec<_>>();
+            let open_component = component.iter().any(|&member| {
+                scope.network.graph.graph.iter_crown(member).any(|edge| {
+                    matches!(scope.network.graph.graph[[&edge]], NetworkEdge::Slot(_))
+                        && external.includes(&edge)
+                })
+            });
+            let matrix = scope.ports[&node].0.len() == 2
+                && (settings.collect_traces || (settings.collect_chains && open_component));
+            let connected = scope.network.graph.graph.iter_crown(node).any(|edge| {
+                matches!(scope.network.graph.graph[[&edge]], NetworkEdge::Slot(slot)
+                    if self.permits(slot.rep().rep))
+                    && !external.includes(&edge)
+                    && component.contains(
+                        &scope
+                            .network
+                            .graph
+                            .graph
+                            .node_id(scope.network.graph.graph.inv(edge)),
+                    )
+            });
+            if alternatives.len() == 1
+                && alternatives[0] == node
+                && connected
+                && (matrix
+                    || self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(literal))?
+                        .contraction_sources(settings))
+            {
+                // One selected existing sum may supply a metric/vector to an
+                // atomic partner. It never combines independent alternatives.
+                return Some(true);
+            }
+            if let AtomView::Fun(function) = literal {
+                let head = function.get_symbol();
+                let source = (settings.metrics && head == self.metric)
+                    || (settings.rank_one && head.has_tag(&self.tags.rank1));
+                if (source || matrix) && connected {
+                    return Some(true);
+                }
+                if !source
+                    && scope.ports[&node].0.is_empty()
+                    && settings.collect_traces
+                    && self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(literal))?
+                        .has_indices()
+                {
+                    // An internally closed matrix leaf has no graph boundary;
+                    // its notation owner establishes trace eligibility.
+                    return None;
+                }
+                if head == self.tags.chain || head == self.tags.trace || head == self.tags.bracket {
+                    // These notation owners carry ports inside their words.
+                    // Keep their existing admission and checked rewrite rules.
+                    return None;
+                }
+            } else if scope.contains_work(node, self) {
+                if !matches!(scope.network.graph.graph[node], NetworkNode::Leaf(_)) {
+                    if self.minimal_scope_work(scope, node, settings)? {
+                        return Some(true);
+                    }
+                } else {
+                    let opened = scope.open(node)?;
+                    if self.minimal_scope_work(opened, opened.root, settings)? {
+                        return Some(true);
+                    }
+                }
+            }
+        }
+        Some(false)
+    }
+
+    fn tensor_alternatives(&self, source: AtomView<'_>) -> bool {
+        if self
+            .observations
+            .as_ref()
+            .and_then(|observed| observed.region(source))
+            .is_some_and(|region| !region.has_indices())
+        {
+            return false;
+        }
+        match source {
+            AtomView::Add(_) => true,
+            AtomView::Mul(product) => product
+                .iter()
+                .any(|factor| self.tensor_alternatives(factor)),
+            AtomView::Pow(power) => self.tensor_alternatives(power.get_base_exp().0),
+            _ => false,
+        }
+    }
+
     fn scope<'a>(&'a self, source: AtomView<'a>) -> Option<ContractionScope<'a>> {
         if let Some((planned, graph)) = &self.graph
             && planned.as_view() == source
@@ -518,10 +686,13 @@ impl SlotContraction {
         };
         let mut children = scope.tree.iter_children(node, &scope.network.graph.graph);
         let child = children.next()?;
-        if children.next().is_some() || !scope.ports[&child].0.is_empty() {
+        if children.next().is_some() {
             return None;
         }
         let source = scope.literal(child)?;
+        if !scope.ports[&child].0.is_empty() && (self.expand || !self.tensor_alternatives(source)) {
+            return None;
+        }
         use spenso::network::parsing::AtomStructureExt;
         let internal = self
             .observations
@@ -541,7 +712,7 @@ impl SlotContraction {
         rank_one: bool,
     ) -> Option<&'a FactorizedContraction> {
         let (child, power, internal) = self.power_scope(scope, node)?;
-        scope.powers[&node]
+        scope.reductions[&node]
             .get_or_init(|| {
                 if !internal {
                     // A transparent bracket can remain after local dot pairing
@@ -565,8 +736,9 @@ impl SlotContraction {
                         }),
                     });
                 }
-                // Contract a closed base once in its own scope before applying the
-                // exponent. Copies must never share their internal dummy pairs.
+                // Contract the base in its own scope before applying the
+                // exponent. Closed bases keep independent dummy copies; minimal
+                // open sums retain their alternatives and external connections.
                 let mut result = self.contract_graph(scope, child, None, rank_one)?;
                 result.root = result.root.pow(power);
                 Some(result)
@@ -678,7 +850,13 @@ impl SlotContraction {
                             observed.needs_dot_normalization(),
                         );
                     }
-                    return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
+                    return Some(if scope.ports[&node].0.is_empty() {
+                        TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
+                    } else {
+                        let position = sum.register_factor(scope, node, positions)?;
+                        sum.opaque_factors[position].0 = result.root.as_view();
+                        TermLeaf::Value(InputLeaf::Subtree(position))
+                    });
                 }
                 if !matches!(value, NetworkNode::Leaf(_)) {
                     return None;
@@ -692,6 +870,28 @@ impl SlotContraction {
                 ) || matches!(literal, AtomView::Fun(function) if function.get_symbol() == self.tags.bracket) {
                     if scope.contains_work(node, self) {
                         let opened = scope.open(node)?;
+                        if !self.expand && sum.exposed_sum != Some((scope as *const _ as usize, node)) && self.tensor_alternatives(literal) {
+                            // Reduce this existing scope independently; its
+                            // alternatives remain inside one opaque factor of
+                            // the surrounding product. Boundary bindings are
+                            // applied by the same positional emitter below.
+                            let result = scope.reductions[&node]
+                                .get_or_init(|| self.contract_graph(opened, opened.root, None, sum.rank_one))
+                                .as_ref()?;
+                            if result.root.as_view() != literal || result.status != ReductionStatus::Complete {
+                                scoped.insert((scope as *const _ as usize, node), result);
+                            }
+                            if let Some(observed) = &result.observations {
+                                sum.scalar_forms.insert(result.root.as_view(), observed.needs_dot_normalization());
+                            }
+                            return Some(if scope.ports[&node].0.is_empty() {
+                                TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
+                            } else {
+                                let position = sum.register_factor(scope, node, positions)?;
+                                sum.opaque_factors[position].0 = result.root.as_view();
+                                TermLeaf::Value(InputLeaf::Subtree(position))
+                            });
+                        }
                         let (node, size) =
                             self.compile_scope(opened, opened.root, tape, sum, positions, scoped)?;
                         Some(TermLeaf::Reference(node, size))
@@ -732,14 +932,70 @@ impl SlotContraction {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
         let scalar_boundary = scope.ports[&root].0.is_empty();
+        if !self.expand
+            && matches!(
+                scope.network.graph.graph[root],
+                NetworkNode::Op(NetworkOp::Sum)
+            )
+        {
+            // Existing additive branches already own their dummy scopes. Visit
+            // them independently instead of exposing them to a product tape.
+            let mut terms = Vec::new();
+            let mut status = ReductionStatus::Complete;
+            let mut scalar_form = Some(false);
+            for node in scope.tree.iter_children(root, &scope.network.graph.graph) {
+                let result = self.contract_graph(scope, node, None, rank_one)?;
+                status = status.max(result.status);
+                scalar_form = scalar_form
+                    .zip(result.observations.as_ref())
+                    .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
+                terms.push(result.root);
+            }
+            return Some(FactorizedContraction {
+                root: Atom::add_many(terms),
+                status,
+                observations: scalar_form
+                    .filter(|_| scalar_boundary)
+                    .map(DomainObservations::closed_scalar),
+            });
+        }
         let nodes = scope.factors(root);
         let selected = nodes
             .iter()
             .enumerate()
             .filter_map(|(i, &node)| scope.contains_work(node, self).then_some(i))
             .collect();
-        let selected = self.factor_order(scope, &nodes, selected, order)?;
+        let mut selected = self.factor_order(scope, &nodes, selected, order)?;
+        if !self.expand && order.is_none() {
+            // Apply outer atomic sources before visiting opaque arithmetic
+            // scopes. A scalar or tensor sum is never a list of alternatives
+            // in the surrounding contraction state.
+            selected.sort_by_key(|&position| {
+                matches!(
+                    scope.literal(nodes[position]),
+                    Some(AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                )
+            });
+        }
         let components = scope.network.graph.slot_components(&scope.tree, &nodes);
+        let mut exposed_sums = AHashSet::new();
+        if !self.expand {
+            for component in &components {
+                let alternatives = component
+                    .iter()
+                    .copied()
+                    .filter(|&node| {
+                        !scope.ports[&node].0.is_empty()
+                            && scope
+                                .literal(node)
+                                .is_some_and(|source| self.tensor_alternatives(source))
+                    })
+                    .collect::<Vec<_>>();
+                if let [node] = alternatives.as_slice() {
+                    exposed_sums.insert(*node);
+                }
+            }
+        }
         let node_positions = nodes
             .iter()
             .copied()
@@ -766,6 +1022,11 @@ impl SlotContraction {
         let mut scoped = AHashMap::new();
         let mut compile = |sum: &mut ComponentSum<'a, '_>, position: usize| {
             let mut tape = std::mem::take(&mut sum.input);
+            sum.exposed_sum = if exposed_sums.contains(&nodes[position]) {
+                Some((scope as *const _ as usize, nodes[position]))
+            } else {
+                None
+            };
             let result = self.compile_scope(
                 scope,
                 nodes[position],
@@ -774,6 +1035,7 @@ impl SlotContraction {
                 &mut positions,
                 &mut scoped,
             );
+            sum.exposed_sum = None;
             sum.input = tape;
             result.map(|(node, _)| node)
         };

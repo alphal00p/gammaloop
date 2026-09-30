@@ -158,6 +158,7 @@ assert source.contract(representations=[]) == source
 assert source.simplify_algebra(gamma=False, color=False, contract='none') == source
 assert source.contract(representations=[lorentz]).to_expression() == source.contract(representations=[lorentz.name]).to_expression()
 collected = source.contract()
+assert source.contract(expand=False) == collected
 assert 'trace' in collected.to_expression().format_plain()
 unfolded = collected.undo_trace()
 assert 'trace' not in unfolded.to_expression().format_plain()
@@ -169,13 +170,14 @@ reduced = source.simplify_algebra(gamma=True)
 assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression()))
 assert reduced.expand().components() == collected.components()
 assert source.simplify_algebra(gamma=True, max_steps_per_domain=None) == reduced
+assert source.simplify_algebra(gamma=True, contract='minimal') == reduced
 assert source.contract(max_steps_per_domain=None) == collected
 capped = source.simplify_algebra(gamma=True, max_steps_per_domain=0)
 assert capped.reduction_status == sp.ReductionStatus.Capped
 assert capped == source
 generator = sp.TensorExpression.color_t(8, 3)
 word = generator('a', 'i', 'j') * generator('a', 'k', 'l')
-for mode in ('fully', 'dots', 'selected'):
+for mode in ('fully', 'minimal', 'dots', 'selected'):
     options = dict(color=True, color_expand_fierz=False, contract=mode)
     if mode == 'selected':
         options['representations'] = [sp.Representation.cof(3)]
@@ -289,7 +291,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
                     py.get_type::<TensorExpression>()
                         .getattr("contract")
                         .unwrap(),
-                    "($self, *, representations=None, metrics=True, rank_one=True, collect_chains=True, collect_traces=True, order=None, max_steps_per_domain=None)",
+                    "($self, *, representations=None, metrics=True, rank_one=True, collect_chains=True, collect_traces=True, expand=True, order=None, max_steps_per_domain=None)",
                 ),
                 (
                     py.get_type::<TensorExpression>()

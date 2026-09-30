@@ -38,6 +38,10 @@ pub struct ContractSettings<'a> {
     pub collect_chains: bool,
     /// Close compatible matrix chains into trace notation without evaluating it.
     pub collect_traces: bool,
+    /// Permit local distribution required to contract independent sum alternatives.
+    /// False retains such products and powers, while allowing port substitutions
+    /// through existing sums and contractions within their branches.
+    pub expand: bool,
     /// Optional limit on successful planning rounds per domain. `None` is unlimited.
     pub max_passes: Option<usize>,
 }
@@ -51,6 +55,7 @@ impl Default for ContractSettings<'_> {
             rank_one: true,
             collect_chains: true,
             collect_traces: true,
+            expand: true,
             max_passes: None,
         }
     }
@@ -66,7 +71,7 @@ impl<'a> ContractSettings<'a> {
     }
 
     pub(crate) fn unrestricted(self) -> bool {
-        self.representations.is_none() && self.metrics && self.rank_one
+        self.representations.is_none() && self.metrics && self.rank_one && self.expand
     }
 
     /// Visit normalized top-level factors in this explicit permutation.
@@ -129,7 +134,29 @@ impl SymbolicTensor<PartialStructure> {
             {
                 return false;
             }
-            return candidates.repeated_indices || candidates.brackets;
+            if !(candidates.repeated_indices || candidates.brackets) {
+                return false;
+            }
+            if !settings.expand && settings.max_passes.is_some() {
+                // A deliberate budget counts permitted transformations, not
+                // products whose remaining contractions require distribution.
+                // Reuse admission's graph; probing must not perform rewrites.
+                let contractor =
+                    SlotContraction::configured(settings.metrics, settings.representations)
+                        .observed(observed);
+                let contractor = match self.shallow_graph() {
+                    Ok(graph) => contractor.planned(
+                        self.expression.clone(),
+                        graph,
+                        self.proofs.leaf_interfaces.get().cloned(),
+                    ),
+                    Err(_) => contractor,
+                };
+                return contractor
+                    .minimal_work_permitted(self.expression.as_view(), settings)
+                    .unwrap_or(true);
+            }
+            return true;
         }
         true
     }
@@ -162,8 +189,11 @@ impl SymbolicTensor<PartialStructure> {
             && (!observed.dots || DotNormalizer::with_settings(self.expression.as_view(), settings) == self.expression)
     }
 
-    /// Contract the metric/vector graph, retaining scalar factorization.
-    /// An explicit order permutes top-level factors after dot normalization.
+    /// Contract compatible structural connections without evaluating identities
+    /// or traces. [`ContractSettings`] controls representations and notation.
+    /// Setting `expand = false` retains independent sum alternatives; completion
+    /// is relative to that policy. Both policies reuse the outside-in planner and
+    /// shallow graph, opening only selected tensor scopes.
     pub fn contract(&self, settings: ContractSettings<'_>) -> Result<Self, TensorInferenceError> {
         self.plan_reduction(super::simplification::ReductionRequest::Contract(settings))
     }
@@ -297,6 +327,7 @@ impl SymbolicTensor<PartialStructure> {
             observations: None,
         };
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
+            .expanding(settings.expand)
             .observed(result.root.reduction_observations());
         let contractor = match result.root.shallow_graph() {
             Ok(graph) => contractor.planned(
@@ -363,6 +394,7 @@ impl SymbolicTensor<PartialStructure> {
         if settings.rank_one && observed.dots {
             let expression =
                 SlotContraction::configured(settings.metrics, settings.representations)
+                    .expanding(settings.expand)
                     .contract_inner_products(result.root.expression.as_view());
             result.root = result.root.with_identity_result(expression, None)?;
         }
@@ -383,6 +415,7 @@ impl SymbolicTensor<PartialStructure> {
             }
             let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
+                    .expanding(settings.expand)
                     .observed(result.root.reduction_observations());
             let contractor = match result.root.shallow_graph() {
                 Ok(graph) => contractor.planned(
@@ -475,6 +508,7 @@ impl SymbolicTensor<PartialStructure> {
             });
         }
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
+            .expanding(settings.expand)
             .observed(self.reduction_observations());
         let contractor = match self.shallow_graph() {
             Ok(graph) => contractor.planned(
@@ -551,6 +585,8 @@ impl SymbolicTensor<PartialStructure> {
 
 #[cfg(test)]
 mod factorized_tests;
+#[cfg(test)]
+mod minimal_tests;
 #[cfg(test)]
 mod network_tests;
 

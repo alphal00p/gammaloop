@@ -1061,21 +1061,17 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
         "spynso3" => Ok(&[
             "BroadcastFunction",
             "CanonicalizationError",
-            "ColorSimplifySettings",
             "CompiledTensorEvaluator",
             "CookingError",
             "DiracAdjointError",
             "DisplaySettings",
             "ExecutionMode",
             "ExecutionStatus",
-            "GammaChainOrdering",
-            "GammaSimplifySettings",
+            "FactorProjector",
             "NetworkToolingError",
             "PortPattern",
             "Representation",
             "RepresentationName",
-            "AlgebraSettings",
-            "ContractSettings",
             "ReductionStatus",
             "Slot",
             "SymbolicParallelism",
@@ -1480,13 +1476,8 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        // AlgebraSettings replaces SimplifySettings; independent structural
-        // settings and completion status add two supported exports.
-        assert_eq!(required.len(), 45);
-        assert!(!required.contains(&"SimplifySettings"));
         for entry in [
-            "AlgebraSettings",
-            "ContractSettings",
+            "FactorProjector",
             "ReductionStatus",
             "CompiledTensorEvaluator",
             "TensorExpression",
@@ -1507,6 +1498,27 @@ mod tests {
         let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
             .expect("checked-in spynso3 Python stub");
         let declarations = python_declarations(&source).unwrap();
+        for entry in required {
+            let declaration = declarations
+                .iter()
+                .find(|declaration| declaration.name == *entry)
+                .unwrap_or_else(|| panic!("missing supported Python declaration {entry}"));
+            assert!(
+                !declaration.docs.trim().is_empty(),
+                "supported Python declaration {entry} has no docs"
+            );
+        }
+        for retired in [
+            "SimplifySettings",
+            "AlgebraSettings",
+            "ContractSettings",
+            "ColorSimplifySettings",
+            "GammaSimplifySettings",
+            "GammaChainOrdering",
+        ] {
+            assert!(!required.contains(&retired));
+            assert!(!declarations.iter().any(|item| item.name == retired));
+        }
         let promoted = declarations
             .iter()
             .filter(|declaration| {
@@ -1526,43 +1538,130 @@ mod tests {
                 .iter()
                 .all(|declaration| !declaration.docs.trim().is_empty())
         );
-        let members = promoted
-            .iter()
-            .flat_map(|declaration| &declaration.members)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len(), 106);
-        let overload_groups = members
-            .iter()
-            .filter(|member| {
-                member
+        for declaration in &promoted {
+            for member in declaration.members.iter().filter(|member| {
+                !matches!(
+                    member.name.as_str(),
+                    "_repr_pretty_" | "_repr_html_" | "_repr_latex_"
+                )
+            }) {
+                let overloads = member
                     .members
                     .iter()
-                    .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            })
-            .count();
-        let overloads = members
+                    .filter(|overload| {
+                        overload.kind == alphal00p_docs_schema::DocMemberKind::Overload
+                    })
+                    .collect::<Vec<_>>();
+                let documented = if overloads.is_empty() {
+                    vec![member]
+                } else {
+                    overloads
+                };
+                for overload in documented {
+                    assert!(
+                        overload
+                            .docs
+                            .as_ref()
+                            .is_some_and(|docs| !docs.body.trim().is_empty()),
+                        "undocumented public member {}.{}",
+                        declaration.name,
+                        member.name,
+                    );
+                }
+            }
+        }
+        let tensor = declarations
             .iter()
-            .flat_map(|member| &member.members)
-            .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 119);
-        assert_eq!(
-            members
+            .find(|item| item.name == "TensorExpression")
+            .unwrap();
+        for method in [
+            "contract",
+            "contract_ports",
+            "simplify_algebra",
+            "to_expression",
+            "to_dots",
+            "undo_dots",
+            "undo_chain",
+            "undo_trace",
+            "reduction_status",
+            "contraction_complete",
+        ] {
+            assert!(
+                tensor.members.iter().any(|member| member.name == method),
+                "missing typed tensor method {method}"
+            );
+        }
+        for method in [
+            "simplify",
+            "reduce_algebra",
+            "simplify_gamma",
+            "simplify_color",
+            "simplify_epsilon",
+            "undo_all",
+        ] {
+            assert!(
+                !tensor.members.iter().any(|member| member.name == method),
+                "retired tensor method {method}"
+            );
+        }
+        for (method, defaults) in [
+            (
+                "contract",
+                &[
+                    ("expand", "True"),
+                    ("representations", "None"),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+            (
+                "simplify_algebra",
+                &[
+                    ("gamma", "True"),
+                    ("color", "True"),
+                    ("epsilon", "False"),
+                    ("contract", "\"fully\""),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+        ] {
+            let member = tensor
+                .members
                 .iter()
-                .filter(|member| {
-                    !member
-                        .members
-                        .iter()
-                        .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-                        && member.docs.is_some()
-                })
-                .count()
-                + overloads
+                .find(|member| member.name == method)
+                .unwrap();
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:")
+            );
+            assert!(
+                !member
+                    .members
                     .iter()
-                    .filter(|member| member.docs.is_some())
-                    .count(),
-            114
-        );
+                    .any(|parameter| parameter.name == "settings")
+            );
+            for &(name, expected) in defaults {
+                let parameter = member
+                    .members
+                    .iter()
+                    .find(|parameter| parameter.name == name)
+                    .unwrap();
+                assert_eq!(
+                    parameter.default.as_deref(),
+                    Some(expected),
+                    "{method}.{name}"
+                );
+                assert!(
+                    parameter
+                        .docs
+                        .as_ref()
+                        .is_some_and(|docs| !docs.body.trim().is_empty()),
+                    "undocumented parameter {method}.{name}"
+                );
+            }
+        }
     }
 
     #[test]

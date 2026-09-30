@@ -50,6 +50,7 @@ pub(crate) fn algebra_settings(
     let representations = contraction_representations(representations)?;
     let contract = match (contract, representations) {
         ("fully", None) => AlgebraContraction::Fully,
+        ("minimal", None) => AlgebraContraction::Minimal,
         ("dots", None) => AlgebraContraction::Dots,
         ("none", None) => AlgebraContraction::None,
         ("selected", Some(representations)) => AlgebraContraction::Selected(representations),
@@ -58,14 +59,14 @@ pub(crate) fn algebra_settings(
                 "contract='selected' requires representations (an empty list permits no additional contractions)",
             ));
         }
-        ("fully" | "dots" | "none", Some(_)) => {
+        ("fully" | "minimal" | "dots" | "none", Some(_)) => {
             return Err(PyValueError::new_err(
                 "representations requires contract='selected'",
             ));
         }
         _ => {
             return Err(PyValueError::new_err(
-                "contract must be 'fully', 'dots', 'selected', or 'none'",
+                "contract must be 'fully', 'minimal', 'dots', 'selected', or 'none'",
             ));
         }
     };

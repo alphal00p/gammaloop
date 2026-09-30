@@ -16,12 +16,14 @@ The Rust reduction operations are `contract(ContractSettings)` and
 returning the same typed carrier with an Atom payload. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
-the existing optional contraction order, and an opt-in per-domain change budget.
+permission for local arithmetic distribution, the existing optional contraction
+order, and an opt-in per-domain change budget.
 `AlgebraSettings` independently carries optional `GammaSimplifySettings` and
 `ColorSimplifySettings`, the epsilon permission, `AlgebraContraction`, and its
 opt-in per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
-normalizes scalar-product notation, `Selected` limits additional connections by
-representation, and `None` retains identity prerequisites only. These lower to
+normalizes scalar-product notation, `Minimal` excludes distribution of independent
+sum alternatives, `Selected` limits additional connections by representation,
+and `None` retains identity prerequisites only. These lower to
 work in the same queue; they do not launch another whole-expression pipeline.
 Representation filters select the `LibraryRep` base family, including duals;
 for example, a Python `Representation.mink(4)` filter does not restrict permission
@@ -36,6 +38,16 @@ planning or contraction logic. Family-specific options require the corresponding
 family to be enabled, and omitted options retain native defaults. The Python budget
 is named `max_steps_per_domain` and defaults to `None` (unlimited); reusable configurations are ordinary dictionaries
 passed with `**options`. Python settings classes are removed.
+
+Python's `expr.contract(expand=False)` sets the same distribution permission as
+Rust's `ContractSettings.expand=false`. Minimal contraction still substitutes boundary
+ports through existing sums and reduces their branches. A connection that needs
+a cross-product of independent sum alternatives remains exactly factored and is
+outside that request's capabilities, so it need not cause `Deferred`. Enabled
+identities retain their necessary prerequisites even under
+`simplify_algebra(contract="minimal")`; this option does not forbid identity-generated
+sums. The default permits necessary local distribution, and global arithmetic
+expansion remains a separate request.
 
 `AlgebraSettings` does not contain contraction settings. Algebra identities authorize their
 required structural dependencies, not unrelated identity families.

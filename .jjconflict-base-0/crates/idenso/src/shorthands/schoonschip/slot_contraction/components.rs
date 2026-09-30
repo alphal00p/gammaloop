@@ -135,6 +135,9 @@ struct ComponentSum<'a, 'b> {
     coefficients: Vec<Rational>,
     monomials: Vec<Vec<(usize, u32)>>,
     input: TermTape<InputLeaf<'a>>,
+    // Minimal contraction can expose one selected existing sum per component;
+    // its descendants retain their own independent arithmetic scopes.
+    exposed_sum: Option<(usize, linnet::half_edge::NodeIndex)>,
     scalar_spectators: AHashMap<AtomView<'a>, bool>,
     scalar_interfaces: AHashMap<AtomView<'a>, bool>,
     metadata_certificates: AHashMap<AtomView<'a>, bool>,
@@ -401,6 +404,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             coefficients: Vec::new(),
             monomials: Vec::new(),
             input: TermTape::default(),
+            exposed_sum: None,
             scalar_spectators: AHashMap::new(),
             scalar_interfaces: AHashMap::new(),
             metadata_certificates: AHashMap::new(),

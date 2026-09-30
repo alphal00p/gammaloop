@@ -101,6 +101,14 @@ impl Default for RegionObservation {
 }
 
 impl RegionObservation {
+    pub(crate) fn contraction_sources(
+        &self,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> bool {
+        (settings.metrics && self.metric_sources.iter().any(|rep| settings.permits(*rep)))
+            || (settings.rank_one && self.vector_sources.iter().any(|rep| settings.permits(*rep)))
+    }
+
     fn head(&mut self, head: Symbol) {
         for (count, candidate) in self.counts.iter_mut().zip(DOMAIN_HEADS.iter()) {
             *count += usize::from(head == *candidate);
@@ -531,18 +539,10 @@ impl DomainObservations {
         }
         self.candidates.complete
             && self.candidates.traversal_complete
-            && self.regions.values().all(|region| {
-                !(settings.metrics
-                    && region
-                        .metric_sources
-                        .iter()
-                        .any(|rep| settings.permits(*rep)))
-                    && !(settings.rank_one
-                        && region
-                            .vector_sources
-                            .iter()
-                            .any(|rep| settings.permits(*rep)))
-            })
+            && self
+                .regions
+                .values()
+                .all(|region| !region.contraction_sources(settings))
     }
 
     pub(crate) fn identity_candidates(&self) -> u8 {

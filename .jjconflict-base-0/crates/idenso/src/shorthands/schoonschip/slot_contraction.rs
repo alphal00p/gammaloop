@@ -67,6 +67,7 @@ type ContractionCandidate = (usize, usize, Atom);
 pub(crate) struct SlotContraction {
     metric: Symbol,
     metrics: bool,
+    expand: bool,
     representations: Option<Vec<LibraryRep>>,
     observations:
         Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
@@ -87,6 +88,7 @@ impl SlotContraction {
         Self {
             metric: ETS.metric,
             metrics: true,
+            expand: true,
             representations: None,
             observations: None,
             graph: None,
@@ -112,6 +114,11 @@ impl SlotContraction {
         >,
     ) -> Self {
         self.observations = Some(std::sync::Arc::clone(observations));
+        self
+    }
+
+    pub(crate) fn expanding(mut self, expand: bool) -> Self {
+        self.expand = expand;
         self
     }
 
