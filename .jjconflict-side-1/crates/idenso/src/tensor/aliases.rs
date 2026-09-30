@@ -24,6 +24,7 @@ use symbolica::{
 use super::{
     SymbolicTensor, TensorProofs,
     inference::{InterfaceInference, LeafInference, TensorInferenceError},
+    simplification::observation::DomainObservations,
 };
 
 mod components;
@@ -77,24 +78,31 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             InterfaceInference::replacement_interface(self.expression.as_view())?
         };
-        let slots = interface
-            .logical_slots()
-            .into_iter()
-            .map(super::composition::port_atom);
-        let head = if self.is_scalar() {
+        let slots = interface.logical_slots();
+        let scalar = self.is_scalar();
+        let closed_scalar = scalar && slots.is_empty();
+        let head = if scalar {
             symbolica::symbol!("idenso::scalar_alias"; Scalar)
         } else {
             *TENSOR_ALIAS_SYMBOL
         };
         let expression = FunctionBuilder::new(head)
             .add_arg(Atom::num(owner))
-            .add_args(slots)
+            .add_args(slots.into_iter().map(super::composition::port_atom))
             .finish();
-        Ok(if certified {
+        let handle = if certified {
             Self::from_validated_parts(expression, self.structure.clone())
         } else {
             Self::from_normalized_parts(expression, self.structure.clone())
-        })
+        };
+        if closed_scalar {
+            let _ = handle.proofs.intrinsic.set(true);
+            let _ = handle
+                .proofs
+                .observations
+                .set(Arc::new(DomainObservations::closed_scalar(false)));
+        }
+        Ok(handle)
     }
 
     /// Attach checked literal definitions without resolving or expanding them.
@@ -342,11 +350,11 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             .observations
             .get()
             .unwrap()
-            .literals
+            .literals(self.expression.as_atom_view())
             .iter()
             .collect::<Vec<_>>();
         while let Some(literal) = pending.pop() {
-            if let Some((handle, _)) = definitions.get_key_value(literal)
+            if let Some((handle, body)) = definitions.get_key_value(literal)
                 && reachable.insert(handle)
             {
                 pending.extend(
@@ -355,7 +363,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                         .observations
                         .get()
                         .unwrap()
-                        .literals
+                        .literals(body.as_view())
                         .iter(),
                 );
             }
@@ -378,9 +386,11 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                 "alias registry and interfaces disagree",
             ));
         }
-        let dependencies = |observed: &super::simplification::observation::DomainObservations| -> Result<HashSet<&Atom>> {
+        let dependencies = |observed: &DomainObservations,
+                            expression: AtomView<'_>|
+         -> Result<HashSet<&Atom>> {
             let mut found = HashSet::new();
-            for literal in &observed.literals {
+            for literal in observed.literals(expression) {
                 if let Some((handle, _)) = definitions.get_key_value(literal) {
                     found.insert(handle);
                 } else if matches!(literal.as_view(), AtomView::Fun(function)
@@ -394,7 +404,10 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             }
             Ok(found)
         };
-        dependencies(self.proofs.observations.get().unwrap())?;
+        dependencies(
+            self.proofs.observations.get().unwrap(),
+            self.expression.as_atom_view(),
+        )?;
         let mut keys = definitions.keys().collect::<Vec<_>>();
         keys.sort_unstable_by(|a, b| AtomView::cmp(&a.as_view(), &b.as_view()));
         let mut remaining = HashMap::new();
@@ -406,6 +419,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                     .observations
                     .get()
                     .unwrap(),
+                definitions[key].as_view(),
             )?;
             remaining.insert(key, dependencies.len());
             for dependency in dependencies {

@@ -7,7 +7,10 @@ use std::{collections::HashMap, sync::Arc};
 use symbolica::atom::AtomCore;
 use symbolica::atom::{AliasedAtom, Atom, AtomView};
 
-use super::{SymbolicTensor, aliases::AliasInterfaces, inference::TensorInferenceError};
+use super::{
+    SymbolicTensor, aliases::AliasInterfaces, inference::TensorInferenceError,
+    simplification::observation::DomainObservations,
+};
 use crate::shorthands::schoonschip::{
     DotNormalizer, ReductionStatus, SchoonschipSettings, SchoonschipWithSettings,
     SimplificationCandidates, SlotContraction,
@@ -91,6 +94,9 @@ impl SymbolicTensor<PartialStructure> {
         {
             return true;
         }
+        if observed.is_closed_scalar() {
+            return false;
+        }
         if settings
             .representations
             .is_some_and(<[LibraryRep]>::is_empty)
@@ -114,10 +120,13 @@ impl SymbolicTensor<PartialStructure> {
                 && !(settings.metrics && (candidates.symbols[17] || candidates.symbols[5]))
                 && !(settings.rank_one && candidates.dots)
                 && !candidates.brackets
-                && !observed.literals.iter().any(|literal| {
-                    matches!(literal.as_view(), AtomView::Fun(function)
+                && !observed
+                    .literals(self.expression.as_view())
+                    .iter()
+                    .any(|literal| {
+                        matches!(literal.as_view(), AtomView::Fun(function)
                         if function.get_symbol() == *super::aliases::TENSOR_ALIAS_SYMBOL)
-                })
+                    })
             {
                 return false;
             }
@@ -203,7 +212,7 @@ impl SymbolicTensor<PartialStructure> {
             && root.reduction_observations().candidates.repeated_indices
             && root
                 .reduction_observations()
-                .literals
+                .literals(root.expression.as_view())
                 .iter()
                 .any(|literal| {
                     definitions
@@ -431,7 +440,7 @@ impl SymbolicTensor<PartialStructure> {
             }
             _ => self.expression.clone(),
         };
-        result.root = self.with_identity_result(expression)?;
+        result.root = self.with_identity_result(expression, None)?;
         Ok(result)
     }
 
@@ -477,9 +486,12 @@ impl SymbolicTensor<PartialStructure> {
             let observed = body.reduction_observations();
             let candidate = observed.candidates.dots
                 || observed.candidates.symbols[17]
-                || observed.literals.iter().any(|dependency| {
-                    supports_structural(dependency, definitions, cache, depth + 1)
-                });
+                || observed
+                    .literals(body.expression.as_view())
+                    .iter()
+                    .any(|dependency| {
+                        supports_structural(dependency, definitions, cache, depth + 1)
+                    });
             cache.insert(literal.clone(), candidate);
             candidate
         }
@@ -491,7 +503,7 @@ impl SymbolicTensor<PartialStructure> {
         let candidates = result
             .root
             .reduction_observations()
-            .literals
+            .literals(result.root.expression.as_view())
             .iter()
             .filter(|literal| supports_structural(literal, &definitions_by_handle, &mut cache, 0))
             .cloned()
@@ -540,7 +552,7 @@ impl SymbolicTensor<PartialStructure> {
             result.status = result.status.max(root.proofs.frontier);
             emitted.extend(additional);
             spectators.push(root.expression);
-            result.root = self.with_identity_result(Atom::mul_many(spectators))?;
+            result.root = self.with_identity_result(Atom::mul_many(spectators), None)?;
             return Ok(result);
         }
         let contracted = domain.contract_parts(ContractSettings {
@@ -555,7 +567,7 @@ impl SymbolicTensor<PartialStructure> {
             .extend(contracted.literal_relabellings);
         result.status = result.status.max(contracted.status);
         spectators.push(contracted.root.expression);
-        result.root = self.with_identity_result(Atom::mul_many(spectators))?;
+        result.root = self.with_identity_result(Atom::mul_many(spectators), None)?;
         Ok(result)
     }
 
@@ -579,6 +591,15 @@ impl SymbolicTensor<PartialStructure> {
             crate::reference_cases::timing::Phase::Contraction,
         );
         let mut result = self.contract_kernel(settings, observed)?;
+        if result
+            .root
+            .proofs
+            .observations
+            .get()
+            .is_some_and(|observed| observed.is_closed_scalar())
+        {
+            return Ok(result);
+        }
         if settings.rank_one && observed.dots {
             let expression =
                 SlotContraction::configured(settings.metrics, settings.representations)
@@ -586,7 +607,7 @@ impl SymbolicTensor<PartialStructure> {
                         result.root.expression.as_view(),
                         &mut result.literal_relabellings,
                     );
-            result.root = result.root.with_identity_result(expression)?;
+            result.root = result.root.with_identity_result(expression, None)?;
         }
         if settings.collect_chains || settings.collect_traces {
             result.root.observe_replacement(self);
@@ -622,7 +643,7 @@ impl SymbolicTensor<PartialStructure> {
                     settings.collect_traces,
                 )
                 .unwrap_or_else(|| result.root.expression.clone());
-            result.root = result.root.with_identity_result(expression)?;
+            result.root = result.root.with_identity_result(expression, None)?;
         }
         Ok(result)
     }
@@ -670,10 +691,13 @@ impl SymbolicTensor<PartialStructure> {
                 ));
             }
         }
-        if (settings
-            .representations
-            .is_some_and(<[LibraryRep]>::is_empty)
-            || (!settings.metrics && !settings.rank_one))
+        let observations = self.reduction_observations();
+        let closed_scalar = observations.is_closed_scalar();
+        if closed_scalar
+            || (settings
+                .representations
+                .is_some_and(<[LibraryRep]>::is_empty)
+                || (!settings.metrics && !settings.rank_one))
             || (order.is_none()
                 && source == self.expression
                 && self.contraction_is_noop_observed(settings, observed))
@@ -682,7 +706,14 @@ impl SymbolicTensor<PartialStructure> {
             // exclude callbacks, opaque payloads and AUTO. The alias owner
             // still visits every original reachable definition.
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(source)?,
+                root: self.with_identity_result(
+                    source,
+                    closed_scalar.then(|| {
+                        // Structural normalization can retain compact metrics;
+                        // only the notation owner can discharge their dot work.
+                        DomainObservations::closed_scalar(observations.needs_dot_normalization())
+                    }),
+                )?,
                 aliases: Vec::new(),
                 status: ReductionStatus::Complete,
                 literal_relabellings: Vec::new(),
@@ -702,7 +733,7 @@ impl SymbolicTensor<PartialStructure> {
             contractor.contract_factorized(source.as_view(), order, settings.rank_one)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root)?,
+                root: self.with_identity_result(contracted.root, None)?,
                 aliases: contracted.aliases,
                 status: contracted.status,
                 literal_relabellings: contracted.literal_relabellings,
@@ -743,13 +774,13 @@ impl SymbolicTensor<PartialStructure> {
         {
             literal_relabellings.extend(contracted.literal_relabellings);
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root)?,
+                root: self.with_identity_result(contracted.root, None)?,
                 aliases: contracted.aliases,
                 status: contracted.status,
                 literal_relabellings,
             });
         }
-        let root = self.with_identity_result(rewritten)?;
+        let root = self.with_identity_result(rewritten, None)?;
         root.observe_replacement(self);
         // The ordered fallback supports spaces declined by the coefficient
         // collector. Repeated gamma ports or compact slash vectors are not

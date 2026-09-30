@@ -35,6 +35,7 @@ use super::{
     SymbolicNet, SymbolicTensor,
     aliases::{AliasInterfaces, Definition},
     inference::{InterfaceInference, LeafInference, TensorInferenceError},
+    simplification::observation::DomainObservations,
 };
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
@@ -175,7 +176,7 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
         let intrinsic = body.normalization_is_intrinsic()
             && body
                 .reduction_observations()
-                .literals
+                .literals(body.expression.as_view())
                 .iter()
                 .filter_map(|literal| self.origins.get(literal))
                 .all(|&dependency| self.definition_is_intrinsic(dependency, depth + 1));
@@ -872,10 +873,19 @@ impl SymbolicTensor<PartialStructure> {
         let expose = nodes.iter().filter(|node| owned[node]).count() > 1;
         for node in nodes {
             if !owned[&node] {
-                spectators.push(Self::from_normalized_parts(
+                let spectator = Self::from_normalized_parts(
                     input.emit(&network, &tree, node)?,
                     interfaces[&node].clone(),
-                ));
+                );
+                if spectator.is_scalar()
+                    && let Some(facts) = input
+                        .observations
+                        .certify_scalar_region(spectator.expression.as_view())
+                {
+                    let _ = spectator.proofs.intrinsic.set(true);
+                    let _ = spectator.proofs.observations.set(Arc::new(facts));
+                }
+                spectators.push(spectator);
                 continue;
             }
             let compiled = if expose
@@ -1089,8 +1099,10 @@ impl SymbolicTensor<PartialStructure> {
                         mapped = handle;
                     }
                     let coefficient = Self::collection_product(&coefficient_factors)?;
+                    let facts = Self::collection_observations(std::slice::from_ref(&coefficient));
                     let coefficient = coefficient.with_identity_result(
                         Atom::num(number.clone()) * &coefficient.expression,
+                        facts,
                     )?;
                     let key = (mapped.expression.clone(), mapped.structure.logical_slots());
                     if let Some(&position) = keys.get(&key) {
@@ -1116,9 +1128,10 @@ impl SymbolicTensor<PartialStructure> {
                             "collected coefficients have different interfaces",
                         ));
                     }
-                    let body = first.with_identity_result(Atom::add_many(
-                        coefficients.iter().map(|value| &value.expression),
-                    ))?;
+                    let body = first.with_identity_result(
+                        Atom::add_many(coefficients.iter().map(|value| &value.expression)),
+                        Self::collection_observations(&coefficients),
+                    )?;
                     if coefficients.len() == 1
                         || !matches!(body.expression.as_atom_view(), AtomView::Add(_))
                     {
@@ -1144,13 +1157,13 @@ impl SymbolicTensor<PartialStructure> {
         }
         let terms = states
             .into_iter()
-            .map(|(selected, coefficient)| {
-                Self::collection_product(&[selected, coefficient]).map(|value| value.expression)
-            })
+            .map(|(selected, coefficient)| Self::collection_product(&[selected, coefficient]))
             .collect::<Result<Vec<_>>>()?;
-        let mut output = vec![Atom::add_many(terms)];
+        let mut facts = Self::collection_observations(&terms);
+        let mut output = vec![Atom::add_many(terms.iter().map(|value| &value.expression))];
         if !remaining.is_empty() {
             frontier = super::simplification::ReductionStatus::Capped;
+            facts = None;
         }
         for node in remaining {
             let expression = network
@@ -1183,11 +1196,37 @@ impl SymbolicTensor<PartialStructure> {
             output.push(handle.expression.clone());
             register((handle, body), &mut available, &mut additional)?;
         }
+        facts =
+            facts
+                .zip(Self::collection_observations(&spectators))
+                .map(|(selected, spectators)| {
+                    DomainObservations::closed_scalar(
+                        selected.needs_dot_normalization() || spectators.needs_dot_normalization(),
+                    )
+                });
         output.extend(spectators.into_iter().map(|value| value.expression));
         let expression = Atom::mul_many(output);
-        let mut root = self.with_identity_result(expression)?;
+        let mut root = self.with_identity_result(expression, facts)?;
         root.proofs.frontier = frontier;
         Ok((root, additional))
+    }
+
+    // Addition and multiplication of certified scalar syntax cannot create an
+    // identity head or an index connection. Dependencies stay in their own
+    // domains; exact surviving literals are queried lazily after normalization.
+    fn collection_observations(values: &[Self]) -> Option<DomainObservations> {
+        let mut needs_dots = false;
+        for value in values {
+            if !value.is_scalar() {
+                return None;
+            }
+            let observed = value.reduction_observations();
+            if !observed.can_certify_scalar() {
+                return None;
+            }
+            needs_dots |= observed.needs_dot_normalization();
+        }
+        Some(DomainObservations::closed_scalar(needs_dots))
     }
 
     fn collection_product(values: &[Self]) -> Result<Self> {
@@ -1220,6 +1259,9 @@ impl SymbolicTensor<PartialStructure> {
         let value = Self::from_validated_parts(expression, interface);
         if intrinsic {
             let _ = value.proofs.intrinsic.set(true);
+            if let Some(observed) = Self::collection_observations(values) {
+                let _ = value.proofs.observations.set(Arc::new(observed));
+            }
         }
         Ok(value)
     }

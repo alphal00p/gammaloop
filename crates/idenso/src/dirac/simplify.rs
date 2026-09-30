@@ -34,7 +34,10 @@ use crate::{
         chain::Chain,
         schoonschip::{SchoonschipSettings, SchoonschipWithSettings},
     },
-    tensor::{SymbolicTensor, aliases::Definition, inference::TensorInferenceError},
+    tensor::{
+        SymbolicTensor, aliases::Definition, inference::TensorInferenceError,
+        simplification::observation::DomainObservations,
+    },
 };
 
 use super::{AGS, id_atom};
@@ -505,6 +508,7 @@ impl SymbolicTensor<PartialStructure> {
                 // Finish joining the selected spinor factors before Clifford
                 // reduction can turn an open prefix into a sum of chains. Such
                 // a sum can hide the cycle closed by a later selected factor.
+                let mut observations = None;
                 let expression = if settings.output == GammaOutput::Chains || !complete {
                     expression
                 } else if contextual_callback {
@@ -548,15 +552,32 @@ impl SymbolicTensor<PartialStructure> {
                             }
                         })
                         .flatten();
-                    terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
+                    match terminal {
+                        Some((expression, facts)) => {
+                            if selected.normalization_is_intrinsic()
+                                && !scalar_callback
+                                && !component_callback
+                            {
+                                observations = facts;
+                            }
+                            expression
+                        }
+                        None => settings.rewrite_expression(expression, output),
+                    }
                 };
                 let mut definitions = definitions.into_inner().into_definitions()?;
                 for (_, body) in &mut definitions {
                     // These bodies were emitted by this identity, so finishing their
                     // new metric connections is a prerequisite of the same work.
                     body.proofs.prerequisites = settings.output == GammaOutput::Reduced;
+                    if let Some(facts) = &observations {
+                        let _ = body
+                            .proofs
+                            .observations
+                            .set(std::sync::Arc::new(facts.clone()));
+                    }
                 }
-                let rewritten = selected.with_identity_result(expression)?;
+                let rewritten = selected.with_identity_result(expression, observations)?;
                 if settings.output != GammaOutput::Reduced || rewritten == selected {
                     return Ok((rewritten, definitions));
                 }
@@ -816,7 +837,7 @@ impl<'settings> DiracSimplifier<'settings> {
     pub(crate) fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
         self,
         expr: AtomView<'_>,
-    ) -> Option<Atom> {
+    ) -> Option<(Atom, Option<DomainObservations>)> {
         let TerminalTrace {
             representation: rep,
             indices,
@@ -825,8 +846,39 @@ impl<'settings> DiracSimplifier<'settings> {
             four_dimensional,
         } = self.parse_terminal_trace::<SCALAR_CONTEXT>(expr)?;
         let output = self.output;
+        // The recurrence removes every summed explicit pair before emitting
+        // pairings. With no free slots, ordinary pairings contain only compact
+        // metrics and scalar arithmetic. Certify this from the parsed word;
+        // generated polynomial trees need no new candidate traversal.
+        let closed_scalar = !axial
+            && indices.iter().filter(|&&index| is_minkowski_slot(index)).count() == 2 * repeated
+            && matches!(rep, AtomView::Fun(spin) if spin.iter().all(Self::exact_scalar_leaf))
+            && indices.iter().all(|&index| {
+                // Wildcards keep written diagonal metrics inert during
+                // construction, so a paired slot need not have disappeared.
+                if index.get_all_symbols(true).iter().any(|symbol| symbol.get_wildcard_level() > 0) {
+                    return false;
+                }
+                let mut slots = SlotMatcher::default();
+                if let SlotMatch::Explicit(slot) = slots.classify(index) {
+                    Self::exact_scalar_leaf(slot.dimension())
+                } else {
+                    matches!(index, AtomView::Fun(vector)
+                        if vector.get_symbol().get_normalization_function().is_none()
+                            && vector.get_symbol().get_evaluation_info().is_none()
+                            && vector.iter().take(vector.get_nargs() - 1).all(Self::exact_scalar_leaf)
+                            && slots.vector_argument(vector)
+                                .and_then(|argument| slots.compact_representation(argument))
+                                .is_some_and(|rep| Self::exact_scalar_leaf(rep.dimension())))
+                }
+            });
+        let observations = closed_scalar.then(|| {
+            DomainObservations::closed_scalar(
+                indices.iter().any(|&index| !is_minkowski_slot(index)),
+            )
+        });
         if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
-            return Some(Atom::Zero);
+            return Some((Atom::Zero, observations));
         }
         let compact = !axial && indices.iter().all(|&index| !is_minkowski_slot(index));
         let result = if !compact && repeated == 0 && (axial || four_dimensional) {
@@ -843,7 +895,7 @@ impl<'settings> DiracSimplifier<'settings> {
                 output,
             )
         };
-        Some(result)
+        Some((result, observations))
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -2656,6 +2708,7 @@ mod tests {
             ))
         .pow(8);
         for (name, [dim, unit, label, parameter], repeated) in [
+            ("ordinary", [&dimension, &four, &index, &metadata], true),
             ("index", [&dimension, &four, &wildcard, &metadata], true),
             ("dimension", [&wildcard, &four, &index, &metadata], true),
             ("spin", [&dimension, &wildcard, &index, &metadata], true),
@@ -2681,12 +2734,21 @@ mod tests {
             let q = spenso::q!(&compact);
             let input = trace!(symbolica::function!(*BISPINOR_SYMBOL, unit);
                 [&a, &p, &b, &q].map(|argument| gamma!(argument)));
-            let admitted = DiracSimplifier::new(&GammaSimplifySettings::default())
+            let (admitted, observations) = DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<true>(input.as_view())
                 .unwrap_or_else(|| panic!("{name}: expected scalar-context admission"));
+            if matches!(name, "index" | "dimension") {
+                assert!(
+                    observations.is_none(),
+                    "{name}: an inert diagonal is not closed"
+                );
+            } else if name == "ordinary" {
+                assert!(observations.is_some(), "paired concrete slots are closed");
+            }
             let settings = GammaSimplifySettings::default();
             let standalone = DiracSimplifier::new(&settings)
                 .evaluate_terminal_trace::<false>(input.as_view())
+                .map(|(expression, _)| expression)
                 .unwrap();
             assert_eq!(admitted, standalone, "{name}: terminal result");
             let raw = &spectator * &standalone;
@@ -2701,6 +2763,7 @@ mod tests {
             let contextual = &spectator
                 * DiracSimplifier::new(&settings)
                     .evaluate_terminal_trace::<true>(trace)
+                    .map(|(expression, _)| expression)
                     .unwrap();
             assert_eq!(contextual, raw, "{name}: contextual result");
             assert_eq!(
@@ -2858,11 +2921,13 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<true>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none()
             );
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_some()
             );
         }
@@ -3150,6 +3215,7 @@ mod tests {
                 let input = trace!(&spin; factors);
                 let shortcut = DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .expect("a distinct-index short axial trace is terminal");
                 // A factorized scalar spectator forces the full existing
                 // pipeline, without expanding or changing the trace word.
@@ -3157,6 +3223,7 @@ mod tests {
                 assert!(
                     DiracSimplifier::new(&GammaSimplifySettings::default())
                         .evaluate_terminal_trace::<false>(fallback.as_view())
+                        .map(|(expression, _)| expression)
                         .is_none()
                 );
                 let complete = crate::tensor::SymbolicTensor::infer(fallback)
@@ -3263,6 +3330,7 @@ mod tests {
                     let settings = GammaSimplifySettings::default();
                     let admitted = DiracSimplifier::new(&settings)
                         .evaluate_terminal_trace::<true>(trace.as_view())
+                        .map(|(expression, _)| expression)
                         .expect("a free axial word with symbolic slots is terminal");
                     // A function spectator forces the established full pass.
                     // Exact coefficients can then be applied without regrouping
@@ -3369,6 +3437,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<true>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none(),
                 "{input}"
             );
@@ -3478,6 +3547,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none(),
                 "{input}"
             );
@@ -3518,7 +3588,8 @@ mod tests {
             assert!((&result - expected).expand().is_zero());
             assert_eq!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
-                    .evaluate_terminal_trace::<false>(input.as_view()),
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression),
                 Some(result.clone())
             );
             assert_eq!(
@@ -3580,6 +3651,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none()
             );
             assert_eq!(
@@ -3838,6 +3910,7 @@ mod tests {
                     assert!(
                         DiracSimplifier::new(&GammaSimplifySettings::default())
                             .evaluate_terminal_trace::<false>(input.as_view())
+                            .map(|(expression, _)| expression)
                             .is_some()
                     );
                     let next = Atom::num(2) * &pq * &expected - &pp * &qq * &previous;
@@ -3910,6 +3983,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none()
             );
         }
@@ -3921,12 +3995,14 @@ mod tests {
         assert!(
             DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<false>(mixed.as_view())
+                .map(|(expression, _)| expression)
                 .is_none()
         );
         let spectator = symbolica::parse_lit!((x + y) ^ 8);
         assert!(
             DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<false>((&spectator * &input).as_view())
+                .map(|(expression, _)| expression)
                 .is_none()
         );
         assert_eq!(
@@ -4060,6 +4136,7 @@ mod tests {
                         let expected = coefficient.as_view() * unit * g!(&slots[1], &slots[2]);
                         let result = DiracSimplifier::new(&GammaSimplifySettings::default())
                             .evaluate_terminal_trace::<false>(input.as_view())
+                            .map(|(expression, _)| expression)
                             .expect("the summed pair reduces without emitting tensor metrics");
                         assert_eq!(result, expected, "dimension {dimension}, rotation {start}");
                         assert_eq!(
@@ -4104,6 +4181,7 @@ mod tests {
                 let input = trace!(&spin; word.into_iter().map(|index| gamma!(index)));
                 let result = DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .unwrap();
                 result.visitor(&mut |node| {
                     assert!(node != a.as_view() && node != b.as_view());
@@ -4119,6 +4197,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(fixed_component.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none(),
                 "fixed components do not define Einstein sums"
             );
@@ -4127,6 +4206,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(ambiguous.as_view())
+                    .map(|(expression, _)| expression)
                     .is_none()
             );
             let input = trace!(&spin; [&a, &p[0], &p[1], &p[2], &a, &p[3], &p[4], &p[5]]
@@ -4134,6 +4214,7 @@ mod tests {
             assert!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .is_some()
             );
         }
@@ -4197,6 +4278,7 @@ mod tests {
         assert!(
             DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<false>(decorated.as_view())
+                .map(|(expression, _)| expression)
                 .is_none()
         );
         let complete = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())

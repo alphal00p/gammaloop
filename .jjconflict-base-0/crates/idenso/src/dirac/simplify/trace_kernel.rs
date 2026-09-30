@@ -1355,6 +1355,7 @@ pub(super) mod tests {
                 let input = trace!(&spin; word.iter().map(|&i| gamma!(&arguments[i])));
                 let reduced = DiracSimplifier::new(&crate::dirac::GammaSimplifySettings::default())
                     .evaluate_terminal_trace::<false>(input.as_view())
+                    .map(|(expression, _)| expression)
                     .expect("scalar word contractions must finish within the terminal evaluator");
                 reduced.visitor(&mut |node| {
                     assert!(

@@ -39,6 +39,208 @@ fn free_trace_definitions_discharge_cleanup_without_entering_contraction() {
 }
 
 #[test]
+fn closed_trace_results_reuse_observations_through_dot_conversion() {
+    use observation::{INITIAL_DOMAINS, REPLACEMENT_SCANS};
+    use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("closed_trace_observation_vector");
+    let spectator = symbolica::parse_lit!((closed_trace_x + closed_trace_y) ^ 8);
+    let settings = AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::default()),
+        ..Default::default()
+    };
+    for representation in [&reps.mink4, &reps.mink_d] {
+        let vectors = (0..4)
+            .map(|index| {
+                FunctionBuilder::new(vector)
+                    .add_arg(Atom::num(index))
+                    .add_arg(representation.to_symbolic([]))
+                    .finish()
+            })
+            .collect::<Vec<_>>();
+        for length in [2, 4] {
+            let source = SymbolicTensor::infer(
+                &spectator
+                    * trace!(reps.bis4.to_symbolic([]);
+                        vectors[..length].iter().map(|vector| gamma!(vector))),
+            )
+            .unwrap();
+            source.reduction_observations();
+            INITIAL_DOMAINS.with(|domains| domains.borrow_mut().clear());
+            REPLACEMENT_SCANS.with(|count| count.set(0));
+
+            let reduced = source.simplify_algebra(&settings).unwrap();
+            assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+            assert_eq!(reduced.aliases().unwrap().is_empty(), length == 2);
+            assert!(Arc::ptr_eq(
+                &reduced,
+                &reduced.simplify_algebra(&settings).unwrap()
+            ));
+            let dotted = reduced.to_dots().unwrap();
+            assert!(Arc::ptr_eq(&dotted, &dotted.to_dots().unwrap()));
+            assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+            INITIAL_DOMAINS.with(|domains| {
+                assert!(
+                    domains.borrow().iter().all(|domain| {
+                        !domain.contains_symbol(ETS.metric)
+                            && !domain.contains_symbol(SPENSO_TAG.dot)
+                    }),
+                    "generated pairing results must retain their producer observations: {:?}",
+                    *domains.borrow()
+                );
+            });
+
+            // These two Clifford identities are independent of the production
+            // recurrence. Only the test oracle distributes the small pairing sum.
+            for (result, head) in [(reduced, ETS.metric), (dotted, SPENSO_TAG.dot)] {
+                let pair = |left: usize, right: usize| {
+                    FunctionBuilder::new(head)
+                        .add_arg(&vectors[left])
+                        .add_arg(&vectors[right])
+                        .finish()
+                };
+                let pairing = if length == 2 {
+                    pair(0, 1)
+                } else {
+                    pair(0, 1) * pair(2, 3) - pair(0, 2) * pair(1, 3) + pair(0, 3) * pair(1, 2)
+                };
+                let expected = Atom::num(4) * &spectator * pairing;
+                let resolved = result.resolved().unwrap();
+                assert_eq!(resolved.structure, source.structure);
+                assert!((&resolved.expression - expected).expand().is_zero());
+                assert!(
+                    matches!(resolved.expression.as_view(), AtomView::Mul(product)
+                    if product.iter().any(|factor| factor == spectator.as_view()))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn closed_trace_observations_preserve_a_surviving_epsilon_identity() {
+    let reps = crate::test_support::test_initialize();
+    let compact = reps.mink4.to_symbolic([]);
+    let epsilon = crate::epsilon!(mink!(2, 99501), mink!(2, 99502));
+    let spectator = symbolica::parse_lit!((closed_epsilon_x + closed_epsilon_y) ^ 8);
+    let source = SymbolicTensor::infer(
+        &spectator
+            * epsilon.pow(2)
+            * trace!(
+                reps.bis4.to_symbolic([]),
+                gamma!(p!(&compact)),
+                gamma!(q!(&compact))
+            ),
+    )
+    .unwrap();
+    let gamma_only = AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::default()),
+        ..Default::default()
+    };
+    let reduced = source.simplify_algebra(&gamma_only).unwrap();
+    assert!(
+        reduced
+            .resolved()
+            .unwrap()
+            .expression
+            .contains_symbol(*crate::epsilon::EPSILON_SYMBOL)
+    );
+    let settings = AlgebraSettings {
+        epsilon: true,
+        ..gamma_only
+    };
+    let completed = reduced.simplify_algebra(&settings).unwrap();
+    assert_eq!(completed.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(
+        completed.resolved().unwrap().expression,
+        Atom::num(8) * spectator * g!(p!(&compact), q!(&compact))
+    );
+    assert!(Arc::ptr_eq(
+        &completed,
+        &completed.simplify_algebra(&settings).unwrap()
+    ));
+}
+
+#[test]
+fn closed_trace_observations_keep_generated_leaves_available_to_collection() {
+    use spenso::{
+        network::{library::symbolic::ETS, tags::SPENSO_TAG},
+        shadowing::TensorCollectFilter,
+    };
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("closed_trace_collection_vector");
+    let vectors = (0..4)
+        .map(|index| {
+            FunctionBuilder::new(vector)
+                .add_arg(Atom::num(index))
+                .add_arg(reps.mink4.to_symbolic([]))
+                .finish()
+        })
+        .collect::<Vec<_>>();
+    for head in [ETS.metric, SPENSO_TAG.dot] {
+        let source = SymbolicTensor::infer(
+            trace!(reps.bis4.to_symbolic([]); vectors.iter().map(|vector| gamma!(vector))),
+        )
+        .unwrap();
+        let reduced = source
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        let reduced = if head == SPENSO_TAG.dot {
+            reduced.to_dots().unwrap()
+        } else {
+            reduced
+        };
+        let target = FunctionBuilder::new(head)
+            .add_arg(&vectors[0])
+            .add_arg(&vectors[1])
+            .finish();
+        let definitions = reduced.aliases().unwrap();
+        let body = definitions
+            .iter()
+            .map(|(_, body)| body)
+            .find(|body| body.expression.contains_symbol(head))
+            .expect("the four-vector pairing sum has a generated definition");
+        let mut selected_target = false;
+        let mut mapped_target = false;
+        body.collect_with_map(
+            None,
+            &definitions,
+            |value| {
+                let selected = value == target.as_view();
+                selected_target |= selected;
+                selected
+            },
+            |value, _, _| {
+                mapped_target |= value.expression == target;
+                Ok((value, Vec::new()))
+            },
+        )
+        .unwrap();
+        assert!(selected_target, "the selector must see generated leaves");
+        assert!(
+            mapped_target,
+            "the collector must process the selected leaf"
+        );
+
+        if head == ETS.metric {
+            let rows = body
+                .coefficient_list(TensorCollectFilter::<0>::Metrics)
+                .unwrap();
+            assert_eq!(rows.len(), 3);
+            assert!(rows.iter().all(|(selected, coefficient)| {
+                selected.expression.contains_symbol(ETS.metric)
+                    && !coefficient.expression.contains_symbol(ETS.metric)
+            }));
+        }
+    }
+}
+
+#[test]
 fn unchanged_shared_definition_is_observed_once_and_completed_reruns_reuse_it() {
     use observation::{INITIAL_DOMAINS, INITIAL_SCANS};
     crate::test_support::test_initialize();
@@ -230,7 +432,7 @@ fn dummy_reservation_reuses_observed_domains_including_opaque_metadata() {
     DUMMY_RESERVATION_WALKS.with(|count| count.set(0));
     let _ = SymbolicTensor::reserved_dummies([&source, &source]);
     assert_eq!(DUMMY_RESERVATION_WALKS.with(|count| count.get()), 0);
-    let replaced = source.with_identity_result(metadata).unwrap();
+    let replaced = source.with_identity_result(metadata, None).unwrap();
     assert_eq!(
         replaced.reduction_observations().reserved_indices,
         HashSet::from([AbstractIndex::Normal(99202)])
@@ -282,7 +484,9 @@ fn trusted_replacements_reuse_unchanged_opaque_boundary_interfaces() {
 
     // This is the metric substitution's exact result. Its spectator keeps its
     // admitted scalar interface even though its interior still has dummy pairs.
-    let rewritten = source.with_identity_result(p!(&mu) * &spectator).unwrap();
+    let rewritten = source
+        .with_identity_result(p!(&mu) * &spectator, None)
+        .unwrap();
     assert_ne!(rewritten.expression, source.expression);
     assert!(Arc::ptr_eq(
         interfaces,

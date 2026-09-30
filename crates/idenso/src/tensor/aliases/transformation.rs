@@ -433,7 +433,7 @@ mod tests {
         let mapped = value
             .map_domains(|domain, _| {
                 let expression = &domain.expression * Atom::num(2);
-                Ok((domain.with_identity_result(expression)?, Vec::new()))
+                Ok((domain.with_identity_result(expression, None)?, Vec::new()))
             })
             .unwrap();
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
@@ -501,7 +501,7 @@ mod tests {
         let mapped = value
             .map_domains(|domain, _| {
                 if domain.expression == body.expression {
-                    Ok((domain.with_identity_result(Atom::Zero)?, Vec::new()))
+                    Ok((domain.with_identity_result(Atom::Zero, None)?, Vec::new()))
                 } else {
                     Ok((domain, Vec::new()))
                 }
@@ -549,7 +549,7 @@ mod tests {
                 .map_domains(|domain, _| {
                     if domain.expression == body.expression {
                         let expression = domain.expression.schoonschip();
-                        Ok((domain.with_identity_result(expression)?, Vec::new()))
+                        Ok((domain.with_identity_result(expression, None)?, Vec::new()))
                     } else {
                         Ok((domain, Vec::new()))
                     }

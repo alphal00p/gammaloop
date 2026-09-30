@@ -172,6 +172,12 @@ but its observation/dot/trace shares agree within 0.2 percentage points with
 the deeper capture. Inlined source-level attribution is unavailable in these
 release binaries.
 
+A later health audit found kernel throttle notifications in these 499 Hz
+captures, despite zero lost samples. Their requested cadence was not fully
+achieved. See #link("trusted-observations.typ")[the producer-observation followup]
+for a lower-rate sensitivity check, the implemented change and matched new
+measurements; the phase numbers remain estimates.
+
 Use #link("profile.py")[`profile.py`] with `--mode`, `--iterations`,
 `--hep-examples`, `--compare`, and `--save`. Select the isolated no-alias package
 with `--python-root`. Omit `--control` and `--ack` for ordinary wall timings.

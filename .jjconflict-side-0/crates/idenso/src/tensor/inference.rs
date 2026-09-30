@@ -31,6 +31,7 @@ use thiserror::Error;
 use super::{
     SymbolicTensor,
     composition::{self, ExplicitIndexOccurrences, TensorCompositionError},
+    simplification::observation::DomainObservations,
 };
 use crate::{
     color::CS,
@@ -113,17 +114,32 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Publish an identity implemented by our algebra, preserving its proven
     /// logical interface. User callbacks remain a checked result boundary.
-    pub(crate) fn with_identity_result(&self, expression: Atom) -> InferenceResult<Self> {
+    pub(crate) fn with_identity_result(
+        &self,
+        expression: Atom,
+        observations: Option<DomainObservations>,
+    ) -> InferenceResult<Self> {
         self.ensure_validated()?;
         if expression == self.expression {
             return Ok(self.clone());
         }
-        let mut result = if expression.is_zero() || self.normalization_is_intrinsic() {
+        let intrinsic = self.normalization_is_intrinsic();
+        let mut result = if expression.is_zero() || intrinsic {
             Self::from_validated_parts(expression, self.structure.clone())
         } else {
             self.with_rewritten_expression(expression)?
         };
         result.proofs.literal_origin = self.proofs.literal_origin.clone();
+        if intrinsic && let Some(observations) = observations {
+            let _ = result
+                .proofs
+                .intrinsic
+                .set(observations.candidates.intrinsic);
+            let _ = result
+                .proofs
+                .observations
+                .set(std::sync::Arc::new(observations));
+        }
         if self.proofs.observations.get().is_some() {
             result.observe_replacement(self);
         }
@@ -2714,14 +2730,14 @@ pub(crate) mod tests {
         let callback = symbolica::symbol!("trusted_identity_new_callback"; Scalar;
             norm = |_value, _out| {});
         let result = source
-            .with_identity_result(FunctionBuilder::new(callback).add_arg(7).finish())
+            .with_identity_result(FunctionBuilder::new(callback).add_arg(7).finish(), None)
             .unwrap();
         assert_eq!(result.proofs.validated.get(), Some(&true));
         assert!(!result.normalization_is_intrinsic());
         let tensor = FunctionBuilder::new(spenso::tensor_symbol!("trusted_identity_added_port"))
             .add_arg(spenso::mink!(4, 98491))
             .finish();
-        assert!(result.with_identity_result(tensor).is_err());
+        assert!(result.with_identity_result(tensor, None).is_err());
     }
 
     #[test]
@@ -4835,6 +4851,7 @@ pub(crate) mod tests {
         let settings = crate::dirac::GammaSimplifySettings::default();
         let rewritten = crate::dirac::DiracSimplifier::new(&settings)
             .evaluate_terminal_trace::<false>(value.expression.as_view())
+            .map(|(expression, _)| expression)
             .unwrap();
         assert_eq!(rewritten, Atom::num(4) * scalar);
         assert!(

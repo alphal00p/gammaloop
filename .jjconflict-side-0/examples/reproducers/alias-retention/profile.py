@@ -19,6 +19,7 @@ p.add_argument("--compare", type=Path, required=True)
 p.add_argument("--python-root", type=Path)
 p.add_argument("--control", type=Path)
 p.add_argument("--ack", type=Path)
+p.add_argument("--materialize", action="store_true")
 args = p.parse_args()
 if args.python_root:
     sys.path.insert(0, str(args.python_root))
@@ -88,5 +89,22 @@ record = {
     "profiled": control is not None,
     "settings": ns["settings"],
 }
+if args.materialize:
+    materialization = []
+    reruns = []
+    for result in results:
+        start = time.perf_counter()
+        materialized = result.expand().to_expression()
+        materialization.append(time.perf_counter() - start)
+        assert materialized == ns["scalar"]
+        start = time.perf_counter()
+        repeated = result.simplify_algebra(**ns["settings"])
+        reruns.append(time.perf_counter() - start)
+        assert repeated.reduction_status == ns["sp"].ReductionStatus.Complete
+    record["materialization_seconds"] = materialization
+    record["completed_rerun_seconds"] = reruns
+    record["mean_reduction_plus_materialization"] = statistics.mean(
+        times
+    ) + statistics.mean(materialization)
 args.save.write_text(json.dumps(record, indent=2) + "\n")
 print("PROFILE_RESULT", json.dumps(record), flush=True)

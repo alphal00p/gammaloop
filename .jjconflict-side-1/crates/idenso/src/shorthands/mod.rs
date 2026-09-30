@@ -25,26 +25,36 @@ pub mod schoonschip;
 impl SymbolicTensor<PartialStructure> {
     /// Normalize index-free scalar-product notation without contracting indexed factors.
     pub fn to_dots(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(schoonschip::DotNormalizer::notation(
-            self.expression().as_view(),
-        ))
+        let observed = self.proofs.observations.get();
+        if observed
+            .is_some_and(|facts| facts.is_closed_scalar() && !facts.needs_dot_normalization())
+        {
+            return Ok(self.clone());
+        }
+        let facts = observed.filter(|facts| facts.is_closed_scalar()).map(|_| {
+            crate::tensor::simplification::observation::DomainObservations::closed_scalar(false)
+        });
+        self.with_identity_result(
+            schoonschip::DotNormalizer::notation(self.expression().as_view()),
+            facts,
+        )
     }
 
     /// Open dots into symbolic indexed contractions, retaining other shorthands.
     /// This does not expand a numerator or evaluate finite tensor components.
     pub fn undo_dots(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_dots::<AbstractIndex>()?;
-        self.with_identity_result(expression)
+        self.with_identity_result(expression, None)
     }
 
     /// Expose chain factors with fresh compatible dummy indices and unchanged endpoints.
     pub fn undo_chain(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_chain::<AbstractIndex>()?)
+        self.with_identity_result(self.expression().undo_chain::<AbstractIndex>()?, None)
     }
 
     /// Replace trace notation with a closed chain, without evaluating it.
     pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?)
+        self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?, None)
     }
 }
 

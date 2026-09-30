@@ -172,7 +172,7 @@ impl DomainPlan {
     ) -> Self {
         let observed = Arc::clone(value.reduction_observations());
         let dependencies = observed
-            .literals
+            .literals(value.expression.as_view())
             .iter()
             .filter(|literal| registry.contains_key(*literal))
             .cloned()
@@ -197,7 +197,7 @@ impl DomainPlan {
     fn local_candidates(&self) -> u8 {
         self.observed.identity_candidates()
             | STRUCTURE
-            | if self.observed.candidates.dots || self.observed.candidates.symbols[17] {
+            | if self.observed.needs_dot_normalization() {
                 DOTS
             } else {
                 0
@@ -501,12 +501,12 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                                 GAMMA => before.simplify_gamma_parts(definitions, settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default())?,
                                 COLOR => before.simplify_color_parts(definitions, settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
                                 EPSILON if before.reduction_observations().epsilon_degree < 2
-                                    && !before.reduction_observations().literals.iter().any(|literal| registry.get(literal).is_some_and(|(_, body)| !body.is_scalar())) => (before.clone(), Vec::new()),
+                                    && !before.reduction_observations().literals(before.expression.as_view()).iter().any(|literal| registry.get(literal).is_some_and(|(_, body)| !body.is_scalar())) => (before.clone(), Vec::new()),
                                 EPSILON => before.collect_with_map(None, definitions,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                                     |selected, registry, complete| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
                                         let expression = EpsilonSimplifierPass::step(selected.expression.as_view());
-                                        let rewritten = selected.with_identity_result(expression)?;
+                                        let rewritten = selected.with_identity_result(expression, None)?;
                                         if rewritten == selected { return Ok((rewritten, Vec::new())); }
                                         let registry = registry.iter().cloned().map(|pair| (pair.0.expression.clone(), pair)).collect();
                                         let (mut value, definitions, status) = rewritten.contract_domain(prerequisite_settings, &registry)?;
@@ -546,7 +546,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                 }
                 plan.dependencies = plan
                     .observed
-                    .literals
+                    .literals(value.expression.as_view())
                     .iter()
                     .filter(|literal| registry.contains_key(*literal))
                     .cloned()
@@ -636,7 +636,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             }
             {
                 let plan = domains.get_mut(&key).unwrap();
-                for literal in &plan.observed.literals {
+                for literal in plan.observed.literals(plan.value.expression.as_view()) {
                     if registry.contains_key(literal) && plan.dependencies.insert(literal.clone()) {
                         dependents
                             .entry(literal.clone())

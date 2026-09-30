@@ -149,6 +149,7 @@ fn contracted_sixteen_mixed_components_keep_normalizer_semantics() {
     let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
     let result = DiracSimplifier::new(&settings)
         .evaluate_terminal_trace::<false>(input.as_view())
+        .map(|(expression, _)| expression)
         .unwrap();
     assert_eq!(result.expand(), expected.expand());
     // The callback deliberately mixes a scalar with surviving b,c ports.
@@ -197,6 +198,7 @@ fn contracted_sixteen_unsupported_coefficients_keep_atom_fallback() {
             output: trace_kernel::TraceOutput::Expanded,
         }
         .evaluate_terminal_trace::<false>(input.as_view())
+        .map(|(expression, _)| expression)
         .expect("the local trace owner accepts these coefficient domains");
         assert_eq!(result.expand(), expected.expand());
         assert_eq!(
