@@ -630,6 +630,30 @@ share a label throughout an expression, and existing numeric or manually named l
 reserved to prevent collisions. Scoped copies keep the same base letters with primes;
 internal dummy identifiers never become alphabet labels.
 
+Color invariants use compact notation by default: $C_F$, $C_A$, $T_R$, and $N_c$.
+Select `DisplaySettings(invariant_style="explicit")` to display the degree and
+representation as $C_2(F)$, $C_2(A)$, and $I_2(F)$. Higher invariants always use
+$C_k(R)$, $I_k(R)$, and $G_k(R,S)$, with $F$ and $A$ denoting the fundamental and
+adjoint representations. These scalar arguments retain parentheses and commas
+independently of the tensor-index layout settings.
+
+`show_dimensions=True` adds representation dimensions and disables compact
+quadratic aliases, for example $C_2(F_3)$ and $C_2(A_8)$. Use it to distinguish
+multiple color spaces. Older scalar constants carry no dimension metadata.
+These settings affect presentation only: exact expressions and representation
+identities are preserved across plain text, LaTeX, Typst source, HTML and SVG.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import DisplaySettings, Representation, TensorExpression
+
+invariant = TensorExpression(Representation.cof(3).casimir())
+explicit = DisplaySettings(invariant_style="explicit")
+source = invariant.to_typst(settings=explicit)  # C_2(F)
+latex = invariant.to_latex(settings=explicit)
+preview = invariant.formatted(settings=explicit)
+```
+
 Choose `DisplaySettings(index_style="graph")` to retain graph identifiers, for example
 $mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.
 The second index is implicit when it equals one; other values remain visible, as in

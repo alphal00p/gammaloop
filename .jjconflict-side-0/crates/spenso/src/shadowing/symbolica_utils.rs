@@ -40,6 +40,8 @@ pub struct SpensoPrintSettings {
     pub symbol_scripts: bool,
     /// Display concrete coordinates as array indices instead of a superscript.
     pub array_components: bool,
+    /// Show the invariant degree and representation instead of quadratic aliases.
+    pub explicit_invariants: bool,
 }
 
 /// Output syntax selected by Symbolica's print mode.
@@ -99,6 +101,7 @@ impl SpensoPrintSettings {
             symbol_scripts: (x & 0b01000) != 0,
             index_subscripts: (x & 0b10000) != 0,
             array_components: (x & 0b100000) != 0,
+            explicit_invariants: (x & 0b1000000) != 0,
         }
     }
 
@@ -109,6 +112,7 @@ impl SpensoPrintSettings {
             | ((self.symbol_scripts as usize) << 3)
             | ((self.index_subscripts as usize) << 4)
             | ((self.array_components as usize) << 5)
+            | ((self.explicit_invariants as usize) << 6)
     }
 
     /// Resolve Spenso presentation and backend syntax from Symbolica options.
@@ -144,6 +148,7 @@ impl SpensoPrintSettings {
             symbol_scripts: true,
             index_subscripts: true,
             array_components: false,
+            explicit_invariants: false,
         }
     }
 
@@ -161,6 +166,7 @@ impl SpensoPrintSettings {
             symbol_scripts: false,
             index_subscripts: false,
             array_components: false,
+            explicit_invariants: false,
         }
     }
 

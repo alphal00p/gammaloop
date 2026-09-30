@@ -2948,11 +2948,14 @@ impl TensorExpression {
     /// ----------
     /// max_line_length : int, optional
     ///     Requested line-length bound for the printer. None leaves it unbounded.
+    /// settings : DisplaySettings, optional
+    ///     Index labels, dimensions and invariant notation. Defaults to
+    ///     DisplaySettings(). Only ports layout and default spacing are supported.
     ///
     /// Returns
     /// -------
     /// str
-    ///     LaTeX tensor notation with dimensions omitted.
+    ///     LaTeX tensor notation, including the enclosing math delimiters.
     ///
     /// Examples
     /// --------
@@ -2960,9 +2963,19 @@ impl TensorExpression {
     /// >>> space = Representation.euc(2)
     /// >>> A = TensorName("M")(space, space)
     /// >>> source = A.to_latex()
-    #[pyo3(signature = (max_line_length = None))]
-    fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
-        display::structured_to_latex(Self::structured(&self_), false, max_line_length)
+    #[pyo3(signature = (max_line_length = None, *, settings = None))]
+    fn to_latex(
+        self_: PyRef<'_, Self>,
+        max_line_length: Option<usize>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(None, settings.as_deref());
+        display::reject_renderer_only_settings(&settings, "to_latex")?;
+        Ok(display::structured_to_latex(
+            Self::structured(&self_),
+            &settings,
+            max_line_length,
+        ))
     }
 
     /// Produce static Typst math source.
@@ -3185,8 +3198,8 @@ impl TensorExpression {
         display::structured_to_html(py, Self::structured(&self_), &settings, None).ok()
     }
 
-    fn _repr_latex_(self_: PyRef<'_, Self>) -> String {
-        Self::to_latex(self_, None)
+    fn _repr_latex_(self_: PyRef<'_, Self>) -> PyResult<String> {
+        Self::to_latex(self_, None, None)
     }
 }
 

@@ -3,7 +3,10 @@ use std::sync::LazyLock;
 
 use spenso::{
     network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
-    shadowing::{IntoAtom, symbolica_utils::SpensoPrintSettings},
+    shadowing::{
+        IntoAtom,
+        symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
+    },
     structure::{
         Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -241,122 +244,166 @@ enum ColorInvariantPrintKind {
     Index,
 }
 
-fn print_color_invariant(
-    atom: AtomView<'_>,
-    opt: &PrintOptions,
-    kind: ColorInvariantPrintKind,
-) -> Option<String> {
-    match SpensoPrintSettings::resolve(opt) {
-        Some(resolved) => {
-            let SpensoPrintSettings {
-                parens,
-                symbol_scripts,
-                commas,
-                ..
-            } = resolved.presentation;
-
-            let AtomView::Fun(f) = atom else {
-                return None;
+impl ColorInvariantPrintKind {
+    fn print(self, atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        let resolved = SpensoPrintSettings::resolve(opt)?;
+        let settings = resolved.presentation;
+        let AtomView::Fun(f) = atom else { return None };
+        let args = f.iter().collect::<Vec<_>>();
+        let arity = if matches!(self, Self::Gram) { 3 } else { 2 };
+        if args.len() != arity {
+            return None;
+        }
+        if !settings.explicit_invariants && !settings.with_dim && small_integer(args[0]) == Some(2)
+        {
+            let alias = match self {
+                Self::Casimir if is_color_rep(args[1], "spenso::cof") => Some(("C_F", "CF")),
+                Self::Casimir if is_color_rep(args[1], "spenso::coad") => Some(("C_A", "CA")),
+                Self::Index if is_color_rep(args[1], "spenso::cof") => Some(("T_R", "TR")),
+                _ => None,
             };
-            let args = f.iter().collect::<Vec<_>>();
-            let expected_nargs = match kind {
-                ColorInvariantPrintKind::Gram => 3,
-                ColorInvariantPrintKind::Casimir | ColorInvariantPrintKind::Index => 2,
-            };
-            if args.len() != expected_nargs {
-                return None;
+            if let Some((script, plain)) = alias {
+                let label = if settings.symbol_scripts {
+                    script.to_owned()
+                } else {
+                    Self::function_head(plain, opt)
+                };
+                return Some(Self::colorize(&label, opt));
             }
-
-            if let Some(special) = invariant_print_special(&kind, &args, symbol_scripts) {
-                return Some(colorize_invariant_head(special, opt));
+        }
+        let (symbol, function) = match self {
+            Self::Gram => ("G", "gram"),
+            Self::Casimir => ("C", "cas"),
+            Self::Index => ("I", "idx"),
+        };
+        let mut degree = String::new();
+        args[0].format(&mut degree, opt, PrintState::new()).unwrap();
+        let head = if settings.symbol_scripts {
+            let (open, close) = resolved.script_delimiters();
+            // Group symbolic or multi-digit degrees so following powers apply to
+            // the complete invariant, never to part of its degree label.
+            if degree.chars().count() == 1 {
+                format!("{symbol}_{degree}")
+            } else {
+                format!("{symbol}_{open}{degree}{close}")
             }
+        } else {
+            Self::function_head(function, opt)
+        };
+        let mut arguments = args[1..]
+            .iter()
+            .map(|arg| Self::representation(*arg, opt))
+            .collect::<Vec<_>>();
+        if !settings.symbol_scripts {
+            arguments.insert(0, degree);
+        }
+        // These are scalar function arguments, not index lists: always delimit
+        // them, independently of the tensor parentheses/comma preferences.
+        Some(format!(
+            "{}({})",
+            Self::colorize(&head, opt),
+            arguments.join(",")
+        ))
+    }
 
-            let head = if symbol_scripts {
-                let mut rank = String::new();
-                args[0].format(&mut rank, opt, PrintState::new()).unwrap();
-                match kind {
-                    ColorInvariantPrintKind::Gram => format!("G_{rank}"),
-                    ColorInvariantPrintKind::Casimir => format!("C_{rank}"),
-                    ColorInvariantPrintKind::Index => format!("I_{rank}"),
+    fn representation(mut arg: AtomView<'_>, opt: &PrintOptions) -> String {
+        let resolved = SpensoPrintSettings::resolve(opt).unwrap();
+        let original = arg;
+        let mut dual = false;
+        if let AtomView::Fun(f) = arg
+            && f.get_symbol() == AIND_SYMBOLS.dind
+            && f.get_nargs() == 1
+        {
+            dual = true;
+            arg = f.iter().next().unwrap();
+        }
+        let mut out = String::new();
+        if let AtomView::Fun(rep) = arg
+            && rep.get_symbol().has_tag(&T.representation)
+            && rep.get_nargs() == 1
+        {
+            out = match rep.get_symbol().get_name() {
+                "spenso::cof" => "F".to_owned(),
+                "spenso::coad" => "A".to_owned(),
+                _ => {
+                    Atom::var(rep.get_symbol())
+                        .format(&mut out, opt, PrintState::new())
+                        .unwrap();
+                    out
                 }
-            } else {
-                match kind {
-                    ColorInvariantPrintKind::Gram => "gram".to_string(),
-                    ColorInvariantPrintKind::Casimir => "cas".to_string(),
-                    ColorInvariantPrintKind::Index => "idx".to_string(),
-                }
             };
-
-            let mut out = colorize_invariant_head(&head, opt);
-            let printed_args = if symbol_scripts {
-                &args[1..]
-            } else {
-                &args[..]
-            };
-            print_invariant_args(&mut out, printed_args, opt, parens, commas);
-            Some(out)
-        }
-        _ => None,
-    }
-}
-
-fn invariant_print_special(
-    kind: &ColorInvariantPrintKind,
-    args: &[AtomView<'_>],
-    symbol_scripts: bool,
-) -> Option<&'static str> {
-    if small_integer(args[0])? != 2 {
-        return None;
-    }
-
-    match kind {
-        ColorInvariantPrintKind::Casimir if is_color_rep(args[1], "cof") => {
-            Some(if symbol_scripts { "C_F" } else { "CF" })
-        }
-        ColorInvariantPrintKind::Casimir if is_color_rep(args[1], "coad") => {
-            Some(if symbol_scripts { "C_A" } else { "CA" })
-        }
-        ColorInvariantPrintKind::Index if is_color_rep(args[1], "cof") => {
-            Some(if symbol_scripts { "T_R" } else { "TR" })
-        }
-        _ => None,
-    }
-}
-
-fn print_invariant_args(
-    out: &mut String,
-    args: &[AtomView<'_>],
-    opt: &PrintOptions,
-    parens: bool,
-    commas: bool,
-) {
-    if parens {
-        out.push('(');
-    } else if !args.is_empty() {
-        out.push(' ');
-    }
-
-    for (position, arg) in args.iter().enumerate() {
-        if position > 0 {
-            if commas {
-                out.push(',');
-            } else {
-                out.push(' ');
+            if dual {
+                out = match resolved.backend {
+                    SpensoPrintBackend::Typst => format!("accent({out},macron)"),
+                    SpensoPrintBackend::Latex => format!("\\overline{{{out}}}"),
+                    SpensoPrintBackend::Plain => format!("bar({out})"),
+                };
             }
+            if resolved.presentation.with_dim {
+                let mut dimension = String::new();
+                rep.iter()
+                    .next()
+                    .unwrap()
+                    .format(&mut dimension, opt, PrintState::new())
+                    .unwrap();
+                if resolved.presentation.symbol_scripts {
+                    let (open, close) = resolved.script_delimiters();
+                    out.push_str(&format!("_{open}{dimension}{close}"));
+                } else {
+                    out.push_str(&format!("[{dimension}]"));
+                }
+            }
+        } else {
+            original.format(&mut out, opt, PrintState::new()).unwrap();
         }
-        arg.format(out, opt, PrintState::new()).unwrap();
+        out
     }
 
-    if parens {
-        out.push(')');
+    fn colorize(head: &str, opt: &PrintOptions) -> String {
+        if opt.color_builtin_symbols {
+            nu_ansi_term::Color::Magenta.paint(head).to_string()
+        } else {
+            head.to_owned()
+        }
     }
-}
 
-fn colorize_invariant_head(head: &str, opt: &PrintOptions) -> String {
-    if opt.color_builtin_symbols {
-        nu_ansi_term::Color::Magenta.paint(head).to_string()
-    } else {
-        head.to_string()
+    fn function_head(name: &str, opt: &PrintOptions) -> String {
+        match SpensoPrintSettings::resolve(opt).unwrap().backend {
+            SpensoPrintBackend::Typst => format!("op({name:?})"),
+            SpensoPrintBackend::Latex => format!("\\operatorname{{{name}}}"),
+            SpensoPrintBackend::Plain => name.to_owned(),
+        }
+    }
+
+    fn constant(atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        let settings = SpensoPrintSettings::resolve(opt)?.presentation;
+        let AtomView::Var(variable) = atom else {
+            return None;
+        };
+        let symbol = variable.get_symbol();
+        let (head, label) = match symbol.get_name() {
+            "spenso::CA" => ("C", "A"),
+            "spenso::CF" => ("C", "F"),
+            "spenso::TR" => ("T", "R"),
+            "spenso::Nc" => ("N", "c"),
+            _ => return None,
+        };
+        let out = if settings.explicit_invariants && head != "N" {
+            let rep = if head == "T" { "F" } else { label };
+            if settings.symbol_scripts {
+                format!("{}_2({rep})", if head == "T" { "I" } else { head })
+            } else {
+                format!(
+                    "{}(2,{rep})",
+                    Self::function_head(if head == "T" { "idx" } else { "cas" }, opt)
+                )
+            }
+        } else if settings.symbol_scripts {
+            format!("{head}_{label}")
+        } else {
+            Self::function_head(symbol.get_stripped_name(), opt)
+        };
+        Some(Self::colorize(&out, opt))
     }
 }
 
@@ -373,7 +420,7 @@ fn small_integer(expr: AtomView<'_>) -> Option<i64> {
 fn is_color_rep(expr: AtomView<'_>, name: &str) -> bool {
     matches!(
         expr,
-        AtomView::Fun(rep) if rep.get_symbol().get_stripped_name() == name && rep.get_nargs() == 1
+        AtomView::Fun(rep) if rep.get_symbol().get_name() == name && rep.get_nargs() == 1
     )
 }
 
@@ -516,17 +563,17 @@ pub static CS, CS_INNER: ColorSymbols = || {
                 _=>None}
 
         }),
-        ca: symbol!("spenso::CA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
-        cf: symbol!("spenso::CF";Real; eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
+        ca: symbol!("spenso::CA";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        cf: symbol!("spenso::CF";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt), eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
         gram: symbol!("spenso::gram"; Real, Scalar; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Gram)
+            ColorInvariantPrintKind::Gram.print(a, opt)
         }),
         cas: symbol!("spenso::cas"; Real, Scalar; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Casimir)
+            ColorInvariantPrintKind::Casimir.print(a, opt)
         }),
         idx: symbol!("spenso::idx"; Real, Scalar; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Index)
+            ColorInvariantPrintKind::Index.print(a, opt)
         }),
         trace_dummy: symbol!("x"),
         fundamental_rep: representation_symbol(
@@ -535,8 +582,8 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
-        nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        tr: symbol!("spenso::TR";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
+        nc: symbol!("spenso::Nc";Real; print = |a, opt, _| ColorInvariantPrintKind::constant(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
 };
 }

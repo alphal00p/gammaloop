@@ -121,7 +121,9 @@ mod tests {
         );
         assert_eq!(atom.get_all_symbols(true).len(), 2);
         assert_eq!(typst_heads(&atom).len(), 2);
-        assert!(atom_to_latex(&atom, false, Some(1)).starts_with(r"$$\begin{gathered}"));
+        assert!(
+            atom_to_latex(&atom, &Default::default(), Some(1)).starts_with(r"$$\begin{gathered}")
+        );
         DisplaySettings::register_latex_name(first, r"\beta");
         assert!(format_atom_with_mode(&atom, TensorDisplayMode::Latex, false).contains(r"\beta"));
         for symbol in [first, second] {

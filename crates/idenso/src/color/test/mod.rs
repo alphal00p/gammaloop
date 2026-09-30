@@ -319,6 +319,66 @@ fn color_invariant_print_special_cases_are_compact() {
 }
 
 #[test]
+fn color_invariant_printing_preserves_degree_representations_and_dimensions() {
+    test_initialize();
+    let f = ColorFundamental {}.to_symbolic([Atom::num(3)]);
+    let a = ColorAdjoint {}.to_symbolic([Atom::num(8)]);
+    let options = |explicit, dimensions| {
+        let settings = SpensoPrintSettings {
+            explicit_invariants: explicit,
+            with_dim: dimensions,
+            ..SpensoPrintSettings::typst()
+        };
+        PrintOptions {
+            custom_print_mode: settings.into(),
+            ..PrintOptions::typst()
+        }
+    };
+    for (atom, compact, explicit, dimensions) in [
+        (color_cas!(2, f.clone()), "C_F", "C_2(F)", "C_2(F_(3))"),
+        (color_cas!(2, a.clone()), "C_A", "C_2(A)", "C_2(A_(8))"),
+        (color_idx!(2, f.clone()), "T_R", "I_2(F)", "I_2(F_(3))"),
+        (
+            color_cas!(12, f.clone()),
+            "C_(12)(F)",
+            "C_(12)(F)",
+            "C_(12)(F_(3))",
+        ),
+        (
+            color_gram!(4, f, a),
+            "G_4(F,A)",
+            "G_4(F,A)",
+            "G_4(F_(3),A_(8))",
+        ),
+    ] {
+        let original = atom.to_bare_ordered_string();
+        for (opts, expected) in [
+            (options(false, false), compact),
+            (options(true, false), explicit),
+            (options(false, true), dimensions),
+        ] {
+            assert_eq!(atom.printer(opts).to_string(), expected);
+            assert_eq!(atom.to_bare_ordered_string(), original);
+        }
+    }
+    for (symbol, compact, explicit) in [
+        (CS.cf, "C_F", "C_2(F)"),
+        (CS.ca, "C_A", "C_2(A)"),
+        (CS.tr, "T_R", "I_2(F)"),
+        (CS.nc, "N_c", "N_c"),
+    ] {
+        assert_eq!(
+            Atom::var(symbol).printer(options(false, false)).to_string(),
+            compact
+        );
+        assert_eq!(
+            Atom::var(symbol).printer(options(true, false)).to_string(),
+            explicit
+        );
+    }
+}
+
+#[test]
 fn cof_dimension_invariant_rules_substitute_supported_fundamental_cases() {
     test_initialize();
     let n = Atom::var(CS.nc);
@@ -2063,6 +2123,7 @@ fn compact_printing() {
                 index_subscripts: false,
                 symbol_scripts: false,
                 array_components: false,
+                explicit_invariants: false,
             }
             .nice_symbolica()
         )

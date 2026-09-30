@@ -1431,7 +1431,7 @@ impl SpensoNet {
     }
 
     fn _repr_latex_(&self) -> String {
-        display::structured_to_latex(&self.structure, false, None)
+        display::structured_to_latex(&self.structure, &Default::default(), None)
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {

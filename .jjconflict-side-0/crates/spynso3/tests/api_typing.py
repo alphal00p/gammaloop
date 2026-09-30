@@ -20,6 +20,9 @@ def check_types(
 ) -> None:
     settings = sp.DisplaySettings(tensor_view="matrix")
     assert_type(settings.tensor_view, Literal["interactive", "matrix"])
+    explicit = sp.DisplaySettings(invariant_style="explicit")
+    assert_type(explicit.invariant_style, Literal["compact", "explicit"])
+    assert_type(expression.to_latex(settings=explicit), str)
     assert_type(tensor.to_html(settings=settings), str)
     assert_type(representation("mu"), sp.Slot)
     assert_type(representation(1), sp.Slot)

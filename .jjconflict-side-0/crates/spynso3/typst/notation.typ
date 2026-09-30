@@ -16,6 +16,7 @@
 #let _settings(value) = _merge((
   tensor-layout: "ports",
   component-style: "superscript",
+  invariant-style: "compact",
   print-heads: (:),
   print-calls: (),
   with-dim: false,
@@ -733,6 +734,61 @@
   }
 }
 
+// Invariant arguments describe representations, not tensor index positions.
+// Keep their degree and separators independent of tensor layout preferences.
+#let _color-representation(node, ctx, settings) = {
+  let rep = _representation-value(node, ctx)
+  if rep == none { return _visual(ctx, node) }
+  let label = if rep.identity == "spenso::cof" { $F$ }
+    else if rep.identity == "spenso::coad" { $A$ }
+    else { _head(ctx, rep.node) }
+  if rep.dual { label = math.accent(label, sym.macron) }
+  if settings.with-dim {
+    let dim = _visual(ctx, rep.dimension)
+    label = if settings.symbol-scripts { math.attach(label, b: dim) }
+      else { label + math.lr([\[] + dim + [\]]) }
+  }
+  label
+}
+
+#let _color-constant(name, settings) = {
+  if settings.invariant-style == "explicit" and name != "Nc" {
+    let head = if name == "TR" { $I$ } else { $C$ }
+    let rep = if name == "CA" { $A$ } else { $F$ }
+    if settings.symbol-scripts { math.attach(head, b: $2$) + _parentheses(rep) }
+    else { math.op(if name == "TR" { "idx" } else { "cas" }) + _parentheses($2,#rep$) }
+  } else if settings.symbol-scripts {
+    (CA: $C_A$, CF: $C_F$, TR: $T_R$, Nc: $N_c$).at(name)
+  } else { math.op(name) }
+}
+
+#let _color-invariant(ctx, settings, kind) = {
+  let args = ctx.arguments
+  if args.len() != (if kind == "gram" { 3 } else { 2 }) { return (ctx.default)() }
+  let degree = args.first()
+  let rep = _representation-value(args.at(1), ctx)
+  if (
+    settings.invariant-style == "compact" and not settings.with-dim
+      and _kind(degree) == "number" and degree.at("source", default: none) == "2"
+      and rep != none and not rep.dual
+  ) {
+    let name = if kind == "cas" and rep.identity == "spenso::cof" { "CF" }
+      else if kind == "cas" and rep.identity == "spenso::coad" { "CA" }
+      else if kind == "idx" and rep.identity == "spenso::cof" { "TR" }
+      else { none }
+    if name != none { return _color-constant(name, settings) }
+  }
+  let head = if kind == "cas" { $C$ } else if kind == "idx" { $I$ } else { $G$ }
+  let arguments = args.slice(1).map(arg => _color-representation(arg, ctx, settings))
+  if settings.symbol-scripts {
+    head = math.attach(head, b: _visual(ctx, degree))
+  } else {
+    head = math.op(kind)
+    arguments.insert(0, _visual(ctx, degree))
+  }
+  head + _parentheses(arguments.join($,$))
+}
+
 #let _default-heads = (
   "spenso::gamma": $gamma$,
   "spenso::gamma0": $gamma_0$,
@@ -752,6 +808,7 @@
   settings: (:),
   tensor-layout: none,
   component-style: none,
+  invariant-style: none,
   with-dim: none,
   parens: none,
   commas: none,
@@ -767,6 +824,7 @@
   for (key, value) in (
     tensor-layout: tensor-layout,
     component-style: component-style,
+    invariant-style: invariant-style,
     with-dim: with-dim,
     parens: parens,
     commas: commas,
@@ -781,6 +839,9 @@
   }
   if settings.component-style not in ("superscript", "array") {
     panic("component-style must be \"superscript\" or \"array\"")
+  }
+  if settings.invariant-style not in ("compact", "explicit") {
+    panic("invariant-style must be compact or explicit")
   }
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
@@ -803,7 +864,12 @@
     (ctx.default)()
   }
   let defaults = core.notation(
-    heads: _merge(_default-heads, settings.print-heads),
+    heads: _merge(_merge(_default-heads, (
+      "spenso::CA": ctx => _color-constant("CA", settings),
+      "spenso::CF": ctx => _color-constant("CF", settings),
+      "spenso::TR": ctx => _color-constant("TR", settings),
+      "spenso::Nc": ctx => _color-constant("Nc", settings),
+    )), settings.print-heads),
     calls: (
       "spenso::bracket": ctx => {
         if ctx.arguments.len() == 0 { return (ctx.default)() }
@@ -813,6 +879,9 @@
         }).join(h(settings.factor-gap))
         if ctx.power-base { _parentheses(body) } else { body }
       },
+      "spenso::cas": ctx => _color-invariant(ctx, settings, "cas"),
+      "spenso::idx": ctx => _color-invariant(ctx, settings, "idx"),
+      "spenso::gram": ctx => _color-invariant(ctx, settings, "gram"),
       "spenso::gamma": ctx => _render-gamma(ctx, settings),
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),

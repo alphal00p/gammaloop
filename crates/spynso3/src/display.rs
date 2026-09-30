@@ -145,12 +145,29 @@ pub struct DisplaySettings {
     /// >>> value = DisplaySettings().tensor_view
     #[pyo3(get)]
     tensor_view: String,
+    /// Choose compact or degree-explicit scalar invariant notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     "compact" uses C_F, C_A and T_R for the quadratic color invariants;
+    ///     "explicit" uses C_2(F), C_2(A) and I_2(F). Higher degrees use
+    ///     C_k(R), I_k(R) and G_k(R, S) in either style.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings(invariant_style="explicit").invariant_style
+    /// 'explicit'
+    #[pyo3(get)]
+    invariant_style: String,
     /// Include representation dimensions in index notation.
     ///
     /// Returns
     /// -------
     /// bool
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     ///
     /// Examples
     /// --------
@@ -234,6 +251,7 @@ impl Default for DisplaySettings {
             index_style: "alphabet".to_owned(),
             component_style: "superscript".to_owned(),
             tensor_view: "interactive".to_owned(),
+            invariant_style: "compact".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -272,7 +290,8 @@ impl DisplaySettings {
     ///     Rich layout: "ports" places indices by tensor axes; "schoonschip"
     ///     uses compact contracted-vector notation; "call" uses function-call notation.
     /// show_dimensions : bool, default False
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     /// parentheses : bool, default True
     ///     Include the optional grouping parentheses used by tensor notation.
     /// commas : bool or None, default None
@@ -294,6 +313,13 @@ impl DisplaySettings {
     /// tensor_view : str, default "interactive"
     ///     Concrete-tensor HTML: "interactive" provides a component explorer with
     ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+    ///
+    /// invariant_style : {"compact", "explicit"}, default "compact"
+    ///     Compact quadratic color notation uses C_F, C_A and T_R. Explicit
+    ///     notation uses C_2(F), C_2(A) and I_2(F). Both use C_k(R), I_k(R)
+    ///     and G_k(R, S) for higher invariants. show_dimensions adds the
+    ///     dimension to each representation label and disables quadratic aliases.
+    ///     Older scalar symbols have no representation dimension to display.
     ///
     /// Returns
     /// -------
@@ -321,6 +347,7 @@ impl DisplaySettings {
         index_style = "alphabet",
         component_style = "superscript",
         tensor_view = "interactive",
+        invariant_style = "compact",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
@@ -334,6 +361,7 @@ impl DisplaySettings {
         index_style: &str,
         component_style: &str,
         tensor_view: &str,
+        invariant_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
@@ -356,12 +384,18 @@ impl DisplaySettings {
                 "tensor_view must be 'interactive' or 'matrix'",
             ));
         }
+        if !matches!(invariant_style, "compact" | "explicit") {
+            return Err(PyValueError::new_err(
+                "invariant_style must be 'compact' or 'explicit'",
+            ));
+        }
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
             component_style: component_style.to_owned(),
             tensor_view: tensor_view.to_owned(),
+            invariant_style: invariant_style.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -462,6 +496,7 @@ impl DisplaySettings {
                 ("index_style", "index_style"),
                 ("component_style", "component_style"),
                 ("tensor_view", "tensor_view"),
+                ("invariant_style", "invariant_style"),
             ],
         )
     }
@@ -503,7 +538,10 @@ fn has_renderer_only_settings(settings: &DisplaySettings) -> bool {
         || settings.factor_gap != defaults.factor_gap
 }
 
-fn reject_renderer_only_settings(settings: &DisplaySettings, method: &str) -> PyResult<()> {
+pub(crate) fn reject_renderer_only_settings(
+    settings: &DisplaySettings,
+    method: &str,
+) -> PyResult<()> {
     if has_renderer_only_settings(settings) {
         return Err(PyValueError::new_err(format!(
             "{method} emits ports-style source; Schoonschip, call, and custom spacing layouts require to_html or to_svg"
@@ -575,6 +613,7 @@ fn display_options_with_settings(
     presentation.commas = settings.commas.unwrap_or(settings.tensor_layout == "call");
     presentation.symbol_scripts = settings.symbol_scripts;
     presentation.array_components = settings.component_style == "array";
+    presentation.explicit_invariants = settings.invariant_style == "explicit";
 
     let mut options = match mode {
         TensorDisplayMode::Plain => presentation.nice_symbolica(),
@@ -1046,12 +1085,12 @@ pub(crate) fn format_structured(
 
 pub(crate) fn atom_to_latex(
     atom: &Atom,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    let mut options = display_options(TensorDisplayMode::Latex, show_dimensions);
+    let mut options = display_options_with_settings(TensorDisplayMode::Latex, settings);
     options.max_line_length = max_line_length;
-    let body = format_atom_with_options(atom, &options, "alphabet");
+    let body = format_atom_with_options(atom, &options, &settings.index_style);
     if body.contains("\\\\\n") {
         format!("$$\\begin{{gathered}}\n{body}\n\\end{{gathered}}$$")
     } else {
@@ -1061,10 +1100,10 @@ pub(crate) fn atom_to_latex(
 
 pub(crate) fn structured_to_latex(
     value: &SymbolicTensor<PartialStructure>,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    atom_to_latex(&value.presentation_atom(), show_dimensions, max_line_length)
+    atom_to_latex(&value.presentation_atom(), settings, max_line_length)
 }
 
 // Typst supplies semantic HTML when the optional renderer is installed;
@@ -1108,6 +1147,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
             "(\n",
             "  tensor-layout: {:?},\n",
             "  component-style: {:?},\n",
+            "  invariant-style: {:?},\n",
             "  with-dim: {},\n",
             "  parens: {},\n",
             "  commas: {},\n",
@@ -1119,6 +1159,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
         ),
         settings.tensor_layout,
         settings.component_style,
+        settings.invariant_style,
         settings.show_dimensions,
         settings.parentheses,
         commas,
@@ -2685,6 +2726,7 @@ mod tests {
                 style,
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.index_style, style);
@@ -2711,6 +2753,7 @@ mod tests {
                 "invalid",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -2731,6 +2774,7 @@ mod tests {
                 "alphabet",
                 style,
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.component_style, style);
@@ -2761,6 +2805,7 @@ mod tests {
                 "alphabet",
                 "invalid",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -3366,6 +3411,7 @@ mod tests {
                 "alphabet",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             let source = typst_settings_source(&settings, &Atom::Zero);

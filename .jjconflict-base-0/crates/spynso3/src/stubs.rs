@@ -60,6 +60,7 @@ pub(crate) fn refine(module: &mut Module) {
         "tensor_layout" => Some("typing.Literal['ports', 'schoonschip', 'call']"),
         "index_style" => Some("typing.Literal['alphabet', 'graph', 'raw']"),
         "component_style" => Some("typing.Literal['superscript', 'array']"),
+        "invariant_style" => Some("typing.Literal['compact', 'explicit']"),
         "tensor_view" => Some("typing.Literal['interactive', 'matrix']"),
         _ => None,
     };
