@@ -111,21 +111,22 @@ def check_types(
     assert_type(expression.to_expression().collect_num(), Expression)
     assert_type(expression.to_expression().collect_factors(), Expression)
     assert_type(
-        expression.reduce_algebra(
-            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
-        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False)),
+        expression.reduce_algebra(gamma=True, epsilon=True).contract(
+            collect_chains=False, collect_traces=False
+        ),
         sp.AliasedTensorExpression,
     )
     assert_type(
-        expression.reduce_algebra(
-            sp.AlgebraSettings(color=sp.ColorSimplifySettings())
-        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False)),
+        expression.reduce_algebra(color=True).contract(
+            collect_chains=False, collect_traces=False
+        ),
         sp.AliasedTensorExpression,
     )
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
     assert_type(
-        expression.reduce_algebra(sp.AlgebraSettings.hep()), sp.AliasedTensorExpression
+        expression.reduce_algebra(gamma=True, color=True, epsilon=True),
+        sp.AliasedTensorExpression,
     )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
     assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)
@@ -193,13 +194,20 @@ def check_types(
     assert_type(compiled.output_shape, tuple[int, ...])
     policy: sp.ExecutionMode = sp.ExecutionMode.All
     assert_type(int(policy), int)
-    settings = sp.GammaSimplifySettings(
-        chain_ordering=sp.GammaChainOrdering.Canonical, gamma0=True, conjugate=True
+    assert_type(
+        expression.reduce_algebra(
+            gamma=True, gamma_ordering="canonical", gamma0=True, gamma_conjugate=True
+        ),
+        sp.AliasedTensorExpression,
     )
-    assert_type(settings.output, Literal["reduced", "chains"])
-    assert_type(settings.gamma0, bool)
-    assert_type(settings.conjugate, bool)
-    assert_type(settings.chain_ordering, sp.GammaChainOrdering)
+    assert_type(
+        expression.contract(
+            representations=[representation],
+            collect_traces=False,
+            max_steps_per_domain=8,
+        ),
+        sp.AliasedTensorExpression,
+    )
     name = sp.TensorName("typing::Jbar", print={"typst": "macron(J)"})
     assert_type(name(representation), sp.TensorExpression)
     function = sp.BroadcastFunction("typing::f")

@@ -5,12 +5,6 @@ The shared model, graph UV expansion, Spenso traces, tensor projection and
 RustRed IBP calculate all two-, three- and four-point ultraviolet poles.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import copy
 import json
 
@@ -278,12 +272,8 @@ for variant, lorentz, local_coupling in [
                 for label, projector in probes:
                     trace = (
                         TensorExpression((numerator * projector).expand())
-                        .reduce_algebra(
-                            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                        )
-                        .contract(
-                            ContractSettings(collect_chains=False, collect_traces=False)
-                        )
+                        .reduce_algebra(gamma=True, epsilon=True)
+                        .contract(collect_chains=False, collect_traces=False)
                         .expand()
                         .to_dots()
                         .to_expression()

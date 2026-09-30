@@ -7,12 +7,6 @@ Keep the native ordered external-state weight, then state the conversion to
 an amputated Dirac kernel explicitly. No UV expansion or mass rearrangement.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import json
 from math import log, pi
 from pathlib import Path
@@ -100,8 +94,8 @@ tree_probe = gamma(
 ) / (4 * D)
 tree_coupling = (
     TensorExpression((tree_num * tree_probe).expand())
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .expand()
     .to_expression()
 )
@@ -158,8 +152,8 @@ terms_by_structure, targets, traced_coefficients = [], set(), []
 for projector, independent in zip(probes, independent_numerators, strict=True):
     trace = (
         TensorExpression((numerator * projector).expand())
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()
         .to_expression()

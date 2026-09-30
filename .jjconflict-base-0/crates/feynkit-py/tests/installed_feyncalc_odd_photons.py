@@ -13,12 +13,6 @@ All native graph factors are retained; the tadpole's zero alone does not test
 its individual symmetry-factor normalization.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from pathlib import Path
 from time import monotonic
 
@@ -83,12 +77,10 @@ for count in (1, 3, 5):
         # routings inside a ten-gamma trace would needlessly multiply its terms.
         tensor = (
             TensorExpression(numerator.expand())
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )

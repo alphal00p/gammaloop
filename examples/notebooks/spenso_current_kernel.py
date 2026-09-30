@@ -1,14 +1,3 @@
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-# Run with a combined Symbolica host exposing symbolica.community.tensor:
-#   python -m marimo edit examples/notebooks/spenso_current_kernel.py
-# Additional packages: marimo==0.24.0, typst==0.15.0.
-# The host build lives in examples/notebooks/symbolica-host; a stock Symbolica
-# wheel need not expose this checkout's typed Spenso API.
-
 import marimo
 
 __generated_with = "0.24.0"
@@ -126,7 +115,7 @@ def _():
     which explains their order in the code.
 
     \begin{lstlisting}[language=Python,caption={A vector current constructed with \spenso{} and simplified with \idenso{}.},label={lst:spenso-current}]
-    from symbolica.community.tensor import AlgebraSettings, ContractSettings, GammaSimplifySettings, TensorExpression
+    from symbolica.community.tensor import TensorExpression
     from symbolica.community.tensor import (
         LibraryTensor, Representation, TensorLibrary, TensorName, TensorNetwork,
     )
@@ -139,7 +128,7 @@ def _():
     gamma = lib[TensorName.dirac_gamma()]
     expr = (Jbar(s1).to_expression() *
             gamma("s2", "s1", "mu") * J(s2).to_expression())
-    expr = TensorExpression(expr).reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)).contract(ContractSettings(collect_chains=False, collect_traces=False)).to_expression()
+    expr = TensorExpression(expr).reduce_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression()
     net = TensorNetwork(expr, lib)
     net.execute(library=lib)
     K = net.result_tensor(lib)
@@ -514,10 +503,8 @@ def _(AUTO, Representation, TensorExpression, mo, trace):
         _gamma(AUTO, AUTO, lorentz("nu")),
     )
     reduced_trace = (
-        gamma_trace.reduce_algebra(
-            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        gamma_trace.reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert (

@@ -45,7 +45,7 @@ operations cover:
   materializes an expanded result;
 - index preparation: typed `wrap_indices`, `list_dangling`, and the explicit
   `intern="indices"` or `intern="flattened"` construction/indexing policy;
-- reduction: `contract(ContractSettings(...))` and `reduce_algebra(AlgebraSettings(...))`;
+- reduction: `contract(...)` and `reduce_algebra(...)`;
 - notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`;
 - canonical labels: `canonize`;
 - conjugation: `dirac_adjoint`.
@@ -68,20 +68,22 @@ assert reduced == momentum(nu)
 ```
 
 `contract()` returns an `AliasedTensorExpression` and reports whether contraction is complete.
-Use `contract(ContractSettings(rank_one=False, collect_chains=False, collect_traces=False))` for metrics only. `contract_ports(rhs, left=..., right=...)`
+Use `contract(rank_one=False, collect_chains=False, collect_traces=False)` for metrics only. `contract_ports(rhs, left=..., right=...)`
 is the separate binary operation on selected logical ports. `to_dots()` changes notation;
 request `contract()` first when repeated explicit indices need contraction.
 Resolve aliases with `to_expression()`, or explicitly distribute the result with `expand()`.
 
-`reduce_algebra(AlgebraSettings(...))` selects gamma, color, and epsilon identities
-independently. Its default enables no identity family; `AlgebraSettings.hep()` enables
-all three. The existing `GammaSimplifySettings` and `ColorSimplifySettings` specify
-family conventions and requested output. Enabled identities authorize their necessary
+`reduce_algebra(...)` selects gamma, color, and epsilon identities
+independently. Its default enables no identity family; `reduce_algebra(gamma=True, color=True, epsilon=True)` enables
+all three. Flat keyword arguments such as `gamma_ordering="canonical"`,
+`gamma_evaluate_traces=False`, and `color_expand_fierz=False` specify family
+conventions and requested output. Supplying a family option requires explicitly
+enabling that family. Dimensions belong to representations. Enabled identities authorize their necessary
 structural contractions; emitting an epsilon does not itself enable epsilon identities.
 Both reduction operations use the same Rust planner and contraction implementation.
 
-`ContractSettings` independently controls `metrics`, `rank_one`, `representations`,
-`collect_chains`, `collect_traces`, and the work budget `max_passes`. Representation filters select connections,
+`contract()` independently controls `metrics`, `rank_one`, `representations`,
+`collect_chains`, `collect_traces`, and the work budget `max_steps_per_domain`. Representation filters select connections,
 including a Lorentz connection on a gamma matrix whose spinor ports survive. `None`
 permits every representation; `[]` permits none. Trace collection preserves an unevaluated
 trace. Disabling it retains indexed factors or closed chains without creating trace notation.
@@ -110,7 +112,7 @@ retains the exact unfinished tensor and its aliases; rerunning may make further 
 A zero `max_passes` budget preserves eligible work and reports `Capped`.
 Completed reruns are stable. Global arithmetic distribution remains an explicit `expand()` request.
 Color dimension invariants are selected with
-`ColorSimplifySettings(substitute_cof_dimension_invariants=True)`.
+`reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)`.
 
 The construction and indexing surface is intentionally retained: `flat`, `sigma`, and `f`
 construct tensors; `rank` and `shape` inspect their interface; `index`, `reindex`, and

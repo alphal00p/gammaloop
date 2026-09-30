@@ -31,8 +31,7 @@ class Amplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import feynkit as hep
-    >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
+    >>> from symbolica.community import hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -41,8 +40,8 @@ class Amplitude:
     >>> operator = amplitude.expression()
     >>> adjoint = amplitude.conjugate().expression()
     >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
-    >>> scalar = squared.expression().reduce_algebra(AlgebraSettings.hep())
-    >>> scalar = scalar.contract(ContractSettings(collect_chains=False, collect_traces=False))
+    >>> scalar = squared.expression()
+    >>> scalar = scalar.contract(collect_chains=False, collect_traces=False)
     """
     @property
     def diagrams(self) -> builtins.list[FeynmanDiagram]:
@@ -137,7 +136,7 @@ class Amplitude:
         --------
         Using the setup in the ``Amplitude`` class example:
 
-        >>> operator = amplitude.expression().factor()
+        >>> operator = amplitude.expression()
         """
     def conjugate(self) -> Amplitude:
         r"""
@@ -208,7 +207,7 @@ class AmplitudeLeg:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import feynkit as hep
+    >>> from symbolica.community import hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -5846,7 +5845,7 @@ class LoopMomentumBasis:
         Using the setup in the ``LoopMomentumBasis`` class example:
 
         >>> rules = diagram.loop_momentum_basis.momentum_replacements()
-        >>> routed = diagram.numerator_expression().replace_multiple(rules)
+        >>> routed = diagram.numerator_expression().to_expression().replace_multiple(rules)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -8848,8 +8847,7 @@ class SquaredAmplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import feynkit as hep
-    >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
+    >>> from symbolica.community import hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -8922,8 +8920,8 @@ class SquaredAmplitude:
         --------
         Using the setup in the ``SquaredAmplitude`` class example:
 
-        >>> tensor = squared.expression().reduce_algebra(AlgebraSettings.hep())
-        >>> tensor = tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        >>> tensor = squared.expression()
+        >>> tensor = tensor.contract(collect_chains=False, collect_traces=False)
         """
     def sum_spins(self, legs: typing.Optional[typing.Sequence[builtins.int]] = None, *, average_initial: builtins.bool = False, references: typing.Optional[typing.Mapping[builtins.int, Expression]] = None, spin_vectors: typing.Optional[typing.Mapping[builtins.int, Expression]] = None) -> SquaredAmplitude:
         r"""
@@ -9342,12 +9340,12 @@ class TensorReducer:
 
     >>> from symbolica import S, E
     >>> from symbolica.community import hep
-    >>> from symbolica.community.tensor import TensorName
+    >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
     >>> D, mu, nu = S("D", "mu", "nu")
-    >>> k, p = (TensorName.vector(name).to_expression() for name in ("k", "p"))
-    >>> mink = S("spenso::mink")
-    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-    >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
+    >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+    >>> lorentz = Representation.mink(D)
+    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+    >>> numerator = k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
     >>> projected = reducer.reduce(numerator)
 
     Parameters
@@ -9408,7 +9406,7 @@ class TensorReducer:
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
         >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
-        >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
+        >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
 
         Parameters
         ----------
@@ -9437,15 +9435,15 @@ class TensorReducer:
         Select one exact compact Spenso vector.
 
         A compact vector has a representation but no explicit index, for
-        example ``K(1, spenso::mink(D))``. This distinguishes different loop
+        example ``K(1, PortPattern.exact(lorentz))``. This distinguishes different loop
         momenta that share one tensor head.
 
         Examples
         --------
         Using the setup in the ``TensorReducer`` class example:
 
-        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-        >>> projected = reducer.reduce(k(mink(D, mu)) * k(mink(D, nu)))
+        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+        >>> projected = reducer.reduce(k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu)))
 
         Parameters
         ----------
@@ -9465,14 +9463,14 @@ class TensorReducer:
         --------
         Using the setup in the ``TensorReducer`` class example:
 
-        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-        >>> reducer = reducer.with_external_vector(p(mink(D)))
-        >>> reduced = reducer.reduce(k(mink(D, mu)))
+        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+        >>> reducer = reducer.with_external_vector(p(PortPattern.exact(lorentz)))
+        >>> reduced = reducer.reduce(k(PortPattern.exact(lorentz, mu)))
 
         Parameters
         ----------
         vector : Expression
-            Compact Spenso vector, for example ``p(spenso::mink(D))``.
+            Compact Spenso vector, for example ``p(PortPattern.exact(lorentz))``.
         """
     def with_pairing_limit(self, limit: builtins.int) -> TensorReducer:
         r"""
@@ -9545,14 +9543,14 @@ class TensorReducer:
         >>> from symbolica import S
         >>> from symbolica.community import hep
         >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
-        >>> from symbolica.community.tensor import TensorName
-        >>> k, p = (TensorName.vector("hep_docs::" + name).to_expression() for name in ("k", "p"))
-        >>> mink, dot = S("spenso::mink", "spenso::dot")
-        >>> k_compact = k(mink(D))
-        >>> p_compact = p(mink(D))
+        >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
+        >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+        >>> lorentz, dot = Representation.mink(D), TensorPattern.dot
+        >>> k_compact = k(PortPattern.exact(lorentz))
+        >>> p_compact = p(PortPattern.exact(lorentz))
         >>> numerator = (
-        ...     k(mink(D, mu)) * k(mink(D, nu))
-        ...     * p(mink(D, mu)) * p(mink(D, nu))
+        ...     k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
+        ...     * p(PortPattern.exact(lorentz, mu)) * p(PortPattern.exact(lorentz, nu))
         ... )
         >>> reducer = hep.TensorReducer(D).with_integrated_vector(k_compact)
         >>> reduced = reducer.reduce(numerator)
@@ -10460,4 +10458,3 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
-

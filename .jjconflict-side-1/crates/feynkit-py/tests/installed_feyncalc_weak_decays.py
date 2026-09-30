@@ -4,20 +4,11 @@ References: FeynCalc EW/Tree/W-ElAnel, W-QiQjbar and Qt-QbW.
 The top reference sums initial colors; the physical width averages them.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    ColorSimplifySettings,
-)
-
 import math
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -87,12 +78,9 @@ for label, pdgs, masses, ckm_name in [
     adjoint = (
         operator.dirac_adjoint()
         .reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-                epsilon=True,
-            )
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
@@ -205,14 +193,8 @@ for label, pdgs, masses, ckm_name in [
                 operator.to_expression() * adjoint * spin_projector * color_projector,
                 intern="flattened",
             )
-            .reduce_algebra(
-                AlgebraSettings(
-                    gamma=GammaSimplifySettings(),
-                    epsilon=True,
-                    color=ColorSimplifySettings(),
-                )
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True, color=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )

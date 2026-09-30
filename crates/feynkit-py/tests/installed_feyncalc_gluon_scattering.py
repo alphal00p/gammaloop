@@ -5,15 +5,10 @@ Spin/color completeness, diagram generation and tensor algebra use shared owners
 The gallery uses fixed 1/2 incoming spin factors; dimensional averages use 1/(D-2).
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    ColorSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -84,7 +79,7 @@ assert set(denominators) == {E("1"), s, t, u}
 amplitude = sum(terms, E("0"))
 operator = kin.apply(
     TensorExpression(amplitude)
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
 )
@@ -105,20 +100,16 @@ generic = (amplitude * adjoint * colors * gluon.color**2 / dA**2).replace(
 print("color contraction", flush=True)
 colored = (
     TensorExpression(generic, intern="flattened")
-    .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(color=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
     .replace(dA, N**2 - 1)
 )
 colored = (
     TensorExpression(colored)
-    .reduce_algebra(
-        AlgebraSettings(
-            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
 )
@@ -132,7 +123,7 @@ for i, j in enumerate((1, 0, 3, 2)):
     print("polarization", i, "start", flush=True)
     tensor = TensorExpression(result * projector)
     tensor = (
-        tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        tensor.contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
     )

@@ -4,12 +4,6 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 Polarized production remains a separate benchmark.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from pathlib import Path
 
 from symbolica import E, Expression, S
@@ -61,8 +55,8 @@ numerator = model.expand_couplings(
 )
 contracted = (
     TensorExpression(numerator)
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
     .to_expression()

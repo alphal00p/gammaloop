@@ -1664,9 +1664,31 @@ impl TensorExpression {
     ///
     /// Parameters
     /// ----------
-    /// settings : AlgebraSettings, optional
-    ///     Identity families and transformation budget. The default enables no optional
-    ///     families. AlgebraSettings.hep() enables Dirac, color, and Levi-Civita identities.
+    /// gamma, color, epsilon : bool, default False
+    ///     Enable only the selected identity families and their prerequisite contractions.
+    /// gamma_output : {"reduced", "chains"}, optional
+    ///     Apply Clifford identities (default), or only collect Dirac chains.
+    /// gamma_ordering : {"repeated_pairs", "canonical"}, optional
+    ///     Open-chain ordering; defaults to repeated-pair reduction.
+    /// gamma_evaluate_traces : bool, optional
+    ///     Evaluate closed Dirac traces; defaults to True for reduced output.
+    /// gamma0 : bool, optional
+    ///     Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+    /// gamma_conjugate : bool, optional
+    ///     Rewrite complex-conjugated Dirac matrices; defaults to False.
+    /// gamma_expand_three_gamma_epsilon : bool, optional
+    ///     Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
+    ///     to False. This does not enable epsilon identities.
+    /// color_evaluate_traces : bool, optional
+    ///     Evaluate supported closed color traces; defaults to True.
+    /// color_expand_fierz : bool, optional
+    ///     Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+    /// color_substitute_cof_dimension_invariants : bool, optional
+    ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
+    /// max_steps_per_domain : int, default 16
+    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Capped results retain exact unfinished work. Family-specific options require
+    ///     the corresponding family to be enabled. None selects its native default.
     ///
     /// Returns
     /// -------
@@ -1683,21 +1705,50 @@ impl TensorExpression {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings, TensorExpression
+    /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> gamma = TensorExpression.dirac_gamma(4)
     /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> result = expression.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))
+    /// >>> result = expression.reduce_algebra(gamma=True)
     /// >>> result.to_expression().rank
     /// 2
-    #[pyo3(signature=(settings=None))]
+    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    #[allow(clippy::too_many_arguments)]
     fn reduce_algebra(
         &self,
-        settings: Option<&crate::simplification::PyAlgebraSettings>,
+        gamma: bool,
+        color: bool,
+        epsilon: bool,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['reduced', 'chains']]", imports=("typing")))]
+        gamma_output: Option<&str>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['repeated_pairs', 'canonical']]", imports=("typing")))]
+        gamma_ordering: Option<&str>,
+        gamma_evaluate_traces: Option<bool>,
+        gamma0: Option<bool>,
+        gamma_conjugate: Option<bool>,
+        gamma_expand_three_gamma_epsilon: Option<bool>,
+        color_evaluate_traces: Option<bool>,
+        color_expand_fierz: Option<bool>,
+        color_substitute_cof_dimension_invariants: Option<bool>,
+        max_steps_per_domain: usize,
     ) -> PyResult<AliasedTensorExpression> {
-        let settings = settings.copied().unwrap_or_default();
+        let settings = crate::simplification::algebra_settings(
+            gamma,
+            color,
+            epsilon,
+            gamma_output,
+            gamma_ordering,
+            gamma_evaluate_traces,
+            gamma0,
+            gamma_conjugate,
+            gamma_expand_three_gamma_epsilon,
+            color_evaluate_traces,
+            color_expand_fierz,
+            color_substitute_cof_dimension_invariants,
+            max_steps_per_domain,
+        )?;
         let value = self
             .value
-            .reduce_algebra(settings.rust())
+            .reduce_algebra(&settings)
             .map_err(Self::inference_error)?;
         Ok(AliasedTensorExpression::from_parts(
             value,
@@ -2755,9 +2806,23 @@ impl TensorExpression {
     ///
     /// Parameters
     /// ----------
-    /// settings : ContractSettings, optional
-    ///     Select representations, metrics, rank-one contractions, chain/trace collection,
-    ///     factor order, and transformation budget. Defaults to ContractSettings().
+    /// representations : sequence of Representation or RepresentationName, optional
+    ///     Filter connecting axes by representation name: None permits all, [] none.
+    ///     Compatible dimensions and orientations are still required. Intrinsic
+    ///     constructor normalization, including symmetric dots, is unaffected.
+    /// metrics : bool, default True
+    ///     Contract compatible metric tensors.
+    /// rank_one : bool, default True
+    ///     Contract compatible rank-one tensors into scalar products.
+    /// collect_chains : bool, default True
+    ///     Collect compatible matrix products into ordered chains.
+    /// collect_traces : bool, default True
+    ///     Collect closed chains without evaluating traces. False preserves indexed closure.
+    /// order : sequence of int, optional
+    ///     Requested factor contraction order; None uses the planner's default.
+    /// max_steps_per_domain : int, default 16
+    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Inspect reduction_status for exact unfinished work.
     ///
     /// Returns
     /// -------
@@ -2780,15 +2845,32 @@ impl TensorExpression {
     /// >>> result = expression.contract()
     /// >>> result.to_expression().rank
     /// 1
-    #[pyo3(signature=(settings=None))]
+    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=16))]
+    #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
-        settings: Option<&crate::simplification::PyContractSettings>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
+        representations: Option<Vec<Bound<'_, PyAny>>>,
+        metrics: bool,
+        rank_one: bool,
+        collect_chains: bool,
+        collect_traces: bool,
+        order: Option<Vec<usize>>,
+        max_steps_per_domain: usize,
     ) -> PyResult<AliasedTensorExpression> {
-        let settings = settings.cloned().unwrap_or_default();
+        let representations = crate::simplification::contraction_representations(representations)?;
+        let settings = idenso::tensor::ContractSettings {
+            representations: representations.as_deref(),
+            metrics,
+            rank_one,
+            collect_chains,
+            collect_traces,
+            order: order.as_deref(),
+            max_passes: max_steps_per_domain,
+        };
         let value = self
             .value
-            .contract(settings.rust())
+            .contract(settings)
             .map_err(Self::inference_error)?;
         Ok(AliasedTensorExpression::from_parts(
             Arc::new(value),
@@ -4465,11 +4547,11 @@ mod tests {
                         * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
                     let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?.resolved().map_err(TensorExpression::inference_error)?)?;
-                    let settings = crate::simplification::PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
-                        output: idenso::dirac::GammaOutput::Chains,
-                        ..Default::default()
-                    });
-                    let collected = compact.borrow(py).reduce_algebra(Some(&crate::simplification::PyAlgebraSettings::new(Some(settings), None, false, 16)))?;
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("gamma", true)?;
+                    kwargs.set_item("gamma_output", "chains")?;
+                    let collected = compact.bind(py).call_method("reduce_algebra", (), Some(&kwargs))?;
+                    let collected = collected.extract::<PyRef<'_, AliasedTensorExpression>>()?;
                     let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
                     let collected = collected.borrow(py);
                     let expected = infer_interface(&original)?;
@@ -5612,24 +5694,21 @@ mod tests {
                 idenso::dirac::GammaOutput::Reduced,
                 idenso::dirac::GammaOutput::Chains,
             ] {
-                let settings = crate::simplification::PyGammaSimplifySettings::from_rust(
-                    idenso::dirac::GammaSimplifySettings {
-                        output,
-                        ..Default::default()
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("gamma", true)?;
+                kwargs.set_item(
+                    "gamma_output",
+                    if output == idenso::dirac::GammaOutput::Reduced {
+                        "reduced"
+                    } else {
+                        "chains"
                     },
-                );
-                let result = gamma_expression.bind(py).call_method1(
-                    "reduce_algebra",
-                    (Py::new(
-                        py,
-                        crate::simplification::PyAlgebraSettings::new(
-                            Some(settings),
-                            None,
-                            output == idenso::dirac::GammaOutput::Reduced,
-                            16,
-                        ),
-                    )?,),
                 )?;
+                kwargs.set_item("epsilon", output == idenso::dirac::GammaOutput::Reduced)?;
+                let result =
+                    gamma_expression
+                        .bind(py)
+                        .call_method("reduce_algebra", (), Some(&kwargs))?;
                 let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
@@ -5678,10 +5757,7 @@ mod tests {
             kwargs.set_item("rank_one", false)?;
             kwargs.set_item("collect_chains", false)?;
             kwargs.set_item("collect_traces", false)?;
-            let policy = py
-                .get_type::<crate::simplification::PyContractSettings>()
-                .call((), Some(&kwargs))?;
-            let metric_only = tensor.bind(py).call_method1("contract", (&policy,))?;
+            let metric_only = tensor.bind(py).call_method("contract", (), Some(&kwargs))?;
             let value = metric_only.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             assert_eq!(
                 value
@@ -5692,7 +5768,7 @@ mod tests {
                 &(spenso::p!(&nu) * spenso::q!(&nu))
             );
             assert!(!value.value.contraction_complete());
-            let again = metric_only.call_method1("contract", (&policy,))?;
+            let again = metric_only.call_method("contract", (), Some(&kwargs))?;
             let again = again.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             assert_eq!(again.value.root(), value.value.root());
             let full = metric_only.call_method0("contract")?;
@@ -5798,12 +5874,10 @@ mod tests {
             let contraction = PyDict::new(py);
             contraction.set_item("collect_chains", false)?;
             contraction.set_item("collect_traces", false)?;
-            let contraction = py
-                .get_type::<crate::simplification::PyContractSettings>()
-                .call((), Some(&contraction))?;
-            let contraction =
-                contraction.extract::<PyRef<'_, crate::simplification::PyContractSettings>>()?;
-            let simplified = TensorExpression::contract(&cooked.borrow(py), Some(&contraction))?;
+            let simplified = cooked
+                .bind(py)
+                .call_method("contract", (), Some(&contraction))?;
+            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             assert_eq!(
                 simplified
                     .value
@@ -5836,8 +5910,8 @@ mod tests {
             let original =
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
-            let settings = crate::simplification::PyAlgebraSettings::new(None, None, false, 16);
-            let simplified = original.borrow(py).reduce_algebra(Some(&settings))?;
+            let simplified = original.bind(py).call_method0("reduce_algebra")?;
+            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             let simplified = simplified
                 .value
                 .expanded()
@@ -5961,8 +6035,8 @@ mod tests {
                         interface.logical_slots()
                     );
                 }
-                let settings = crate::simplification::PyAlgebraSettings::new(None, None, false, 16);
-                let simplified = original.borrow(py).reduce_algebra(Some(&settings))?;
+                let simplified = original.bind(py).call_method0("reduce_algebra")?;
+                let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
                 let simplified = simplified
                     .value
                     .expanded()
@@ -6614,22 +6688,11 @@ mod tests {
             let tensor = tensor.extract::<Py<TensorExpression>>()?;
             assert!(tensor.borrow(py).interface().canonical().is_scalar());
             assert_eq!(*tensor.borrow(py).atom(), atom);
+            let kwargs = pyo3::types::PyDict::new(py);
+            kwargs.set_item("color", true)?;
             let simplified = tensor
                 .bind(py)
-                .call_method1(
-                    "reduce_algebra",
-                    (Py::new(
-                        py,
-                        crate::simplification::PyAlgebraSettings::new(
-                            None,
-                            Some(crate::simplification::PyColorSimplifySettings::from_rust(
-                                Default::default(),
-                            )),
-                            false,
-                            16,
-                        ),
-                    )?,),
-                )?
+                .call_method("reduce_algebra", (), Some(&kwargs))?
                 .call_method0("to_expression")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert!(simplified.interface().canonical().is_scalar());

@@ -6,12 +6,6 @@ taking t->0, where the two form-factor projectors become degenerate. Timelike
 continuation retains the physical t+i0 prescription above pair threshold.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import numpy as np
 from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import feynkit as hep
@@ -103,10 +97,8 @@ for operator in basis + [vertex]:
     for probe in probes:
         trace = (
             TensorExpression((operator * incoming * probe * outgoing).expand())
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
             .to_expression()

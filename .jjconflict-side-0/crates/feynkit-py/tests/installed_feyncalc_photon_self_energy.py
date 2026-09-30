@@ -6,12 +6,6 @@ https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization
 The full renormalization example, including its other diagrams, remains pending.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from math import pi, sqrt
 from pathlib import Path
 
@@ -47,8 +41,8 @@ for edge in diagram.external_edges:
 numerator = numerator.replace(mink(4, index), mink(D, index))
 trace = (
     TensorExpression(numerator.expand())
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .expand()
     .to_dots()
 )

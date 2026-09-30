@@ -14,7 +14,6 @@ from time import process_time_ns
 
 from symbolica import E, Replacement, S
 from symbolica.community.tensor import (
-    ContractSettings,
     Representation,
     TensorExpression,
     TensorName,
@@ -179,7 +178,7 @@ class GluonLadder:
         result = self.source if source is None else source
         for vertex in self.order:
             result = result.replace(self.rules[vertex - 1]).contract(
-                ContractSettings(collect_chains=False, collect_traces=False)
+                collect_chains=False, collect_traces=False
             )
         # Materialize once, then name scalar products for the exact FORM comparison.
         return result.expand().to_expression().replace_multiple(self.replacements)
@@ -206,9 +205,7 @@ class GluonLadder:
             start = process_time_ns()
             result = result.replace(self.rules[vertex - 1])
             replaced = process_time_ns()
-            result = result.contract(
-                ContractSettings(collect_chains=False, collect_traces=False)
-            )
+            result = result.contract(collect_chains=False, collect_traces=False)
             contracted = process_time_ns()
             rows.append(
                 {

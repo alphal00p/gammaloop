@@ -5,17 +5,11 @@ Summing its two orientations must recover ordinary completeness; no extra
 initial-state spin average belongs to a selected state.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import feynkit as fk
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    TensorExpression,
-    TensorName,
-)
+from symbolica.community.tensor import TensorExpression, TensorName
 
 # The fixture declares a nonzero tau mass; its muon mass parameter is zero.
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -43,17 +37,15 @@ for pdg, sign, ket_name, bra_name in (
     ordinary = particle.spin_sum(p, i, j)
     opposite = density.replace(spin(slot), -spin(slot))
     assert TensorExpression((density + opposite - ordinary).expand()).reduce_algebra(
-        AlgebraSettings(gamma=GammaSimplifySettings.canonical(), epsilon=True)
+        gamma=True, gamma_ordering="canonical", epsilon=True
     ).contract(
-        ContractSettings(collect_chains=False, collect_traces=False)
+        collect_chains=False, collect_traces=False
     ).expand().to_expression() == E("0")
     assert particle.spin_sum(p, i, j, spin_vector=None) == ordinary
     traced = (
         TensorExpression(density.replace(j, i))
-        .reduce_algebra(
-            AlgebraSettings(gamma=GammaSimplifySettings.canonical(), epsilon=True)
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
@@ -73,10 +65,8 @@ for pdg, sign, ket_name, bra_name in (
     ):
         reduced = (
             TensorExpression(identity.expand())
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings.canonical(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, gamma_ordering="canonical", epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
             .to_expression()
@@ -91,9 +81,9 @@ for pdg, sign, ket_name, bra_name in (
     # reuse the same explicit spinor indices into a tensor network.
     output = particle.sum_spins(pair, p, edge=7, spin_vector=spin)
     assert TensorExpression((output - density).expand()).reduce_algebra(
-        AlgebraSettings(gamma=GammaSimplifySettings.canonical(), epsilon=True)
+        gamma=True, gamma_ordering="canonical", epsilon=True
     ).contract(
-        ContractSettings(collect_chains=False, collect_traces=False)
+        collect_chains=False, collect_traces=False
     ).expand().to_expression() == E("0")
     assert particle.sum_spins(output, p, edge=7, spin_vector=spin) == output
     assert particle.sum_spins(spectator, p, edge=7, spin_vector=spin) == spectator

@@ -5,14 +5,12 @@ model is a toy color interaction, not the Standard Model Higgs interaction.
 Reference normalization: https://feyncalc.github.io/FeynCalcBook/SUND.html
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import json
 from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import feynkit as fk
-from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 source = json.loads(
     (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text()
@@ -41,12 +39,8 @@ assert color.dirac_adjoint().to_expression() == color.to_expression()
 # The Symbolica product contracts all three matching explicit adjoint indices.
 norm = (
     TensorExpression(color.to_expression() * color.dirac_adjoint().to_expression())
-    .reduce_algebra(
-        AlgebraSettings(
-            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )
 assert norm.is_scalar
@@ -54,6 +48,6 @@ assert norm.to_expression() == E("40/3")
 # Initial-state color averaging is independently supplied by the particle API.
 particle = model.particle_by_pdg(25)
 assert TensorExpression(particle.color_sum(S("x"), S("x"), average=True)).contract(
-    ContractSettings(collect_chains=False, collect_traces=False)
+    collect_chains=False, collect_traces=False
 ).to_expression().to_expression() == E("1")
 print("Generated UFO d tensor: real adjoint interface and SU(3) norm 40/3 passed")

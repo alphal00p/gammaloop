@@ -15,12 +15,6 @@ MS/MSbar matching uses the same generated CT amplitudes and OneLOop measure.
 https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import json
 from pathlib import Path
 
@@ -173,10 +167,8 @@ for kind, incoming, outgoing, loops in [
     for label, projector in probes:
         trace = (
             TensorExpression((numerator * projector).expand())
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
             .to_expression()
@@ -430,10 +422,8 @@ for kind, incoming, outgoing, count, qed_order in [
         for label, projector in probes:
             trace = (
                 TensorExpression((numerator * projector).expand())
-                .reduce_algebra(
-                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(gamma=True, epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .expand()
                 .to_dots()
                 .to_expression()
@@ -682,10 +672,8 @@ for kind, incoming, outgoing in [
         routed = diagram.momentum_basis().route_expression(numerator)
         traced = (
             TensorExpression((routed * projector).expand())
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_dots()
             .to_expression()
@@ -756,10 +744,8 @@ for kind, incoming, outgoing in [
                 expression
                 if scheme == "direct_irr"
                 else TensorExpression((expression * projector).expand())
-                .reduce_algebra(
-                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(gamma=True, epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .expand()
                 .to_dots()
                 .to_expression()

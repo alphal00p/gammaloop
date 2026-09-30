@@ -4,16 +4,11 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa
 The sewn-forward-graph conversion is a separate regression requirement.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import feynkit as fk
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -87,12 +82,9 @@ for pdg in (11, -11):
     adjoint = (
         operator.dirac_adjoint()
         .reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-                epsilon=True,
-            )
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
@@ -124,13 +116,10 @@ for pdg in (11, -11):
             )
         squared = (
             TensorExpression(
-                operator.to_expression() * adjoint * density,
-                intern="flattened",
+                operator.to_expression() * adjoint * density, intern="flattened"
             )
-            .reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
             .to_expression()

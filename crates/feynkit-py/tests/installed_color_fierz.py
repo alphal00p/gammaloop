@@ -3,15 +3,8 @@
 Reference: https://feyncalc.github.io/FeynCalcBook/SUNSimplify.html
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from symbolica import E
-from symbolica.community.tensor import (
-    AUTO,
-    ColorSimplifySettings,
-    Representation,
-    TensorExpression,
-)
+from symbolica.community.tensor import AUTO, Representation, TensorExpression
 from symbolica.community.tensor import (
     trace as tensor_trace,
 )
@@ -32,44 +25,36 @@ for colors in (2, 3, 5):
         - identity.to_expression() * adjoint.g("b", "c").to_expression() / (4 * colors)
     )
     reduced = (
-        mixed.reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        mixed.reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert reduced.to_expression().expand() == (
-        expected.reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        expected.reduce_algebra(color=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .expand()
     )
     assert (
-        reduced.reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        reduced.reduce_algebra(color=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         == reduced.to_expression()
     )
-    disabled = ColorSimplifySettings(
-        evaluate_traces=False, expand_cross_chain_fierz=False
-    )
+    disabled = dict(color=True, color_evaluate_traces=False, color_expand_fierz=False)
     preserved = (
-        mixed.reduce_algebra(AlgebraSettings(color=disabled))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        mixed.reduce_algebra(**disabled)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert preserved.to_expression() != reduced.to_expression()
     assert (
         preserved.reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
+            color=True, color_substitute_cof_dimension_invariants=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         == reduced.to_expression()
@@ -80,13 +65,11 @@ for colors in (2, 3, 5):
     closed = TensorExpression(trace.to_expression() * other_trace.to_expression())
     trace_norm = (
         closed.reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
+            color=True, color_substitute_cof_dimension_invariants=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     assert trace_norm.is_scalar

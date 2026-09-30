@@ -1,11 +1,5 @@
 """M0 diagnostics ported from the plan's Python probes, outside primary clocks."""
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from collections import defaultdict
 from math import prod
 from time import process_time_ns
@@ -50,7 +44,7 @@ def validation_cost(case):
     result = case.source
     for step, vertex in enumerate(case.order, 1):
         result = result.replace(case.rules[vertex - 1]).contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
+            collect_chains=False, collect_traces=False
         )
         stages[step] = result
     stages[8] = result.expand()
@@ -63,7 +57,7 @@ def validation_cost(case):
             (
                 "contract",
                 lambda source=source: source.contract(
-                    ContractSettings(collect_chains=False, collect_traces=False)
+                    collect_chains=False, collect_traces=False
                 ),
             ),
             ("expand", lambda source=source: source.expand()),
@@ -87,7 +81,7 @@ def partial_parse(case, limit=200):
     result, stages = case.source, {}
     for step, vertex in enumerate(case.order, 1):
         result = result.replace(case.rules[vertex - 1]).contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
+            collect_chains=False, collect_traces=False
         )
         if step in (5, 7, 8):
             stages[step] = result.expand() if step == 8 else result
@@ -119,9 +113,7 @@ def partial_parse(case, limit=200):
             whole = TensorExpression(sum((atom(t) for t in selected), E("0")))
             singles, individual = observe(
                 lambda selected=selected: [
-                    t.contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
+                    t.contract(collect_chains=False, collect_traces=False)
                     for t in selected
                 ]
             )
@@ -180,12 +172,12 @@ def keep_rest():
             lambda source=source: (
                 source.replace(rule)
                 .expand()
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
             )
         )
         output, row = observe(
             lambda source=source: source.replace(rule).contract(
-                ContractSettings(collect_chains=False, collect_traces=False)
+                collect_chains=False, collect_traces=False
             )
         )
         row.update(
@@ -207,11 +199,7 @@ def keep_rest():
                 preserves_outer_scalar_factor=bool(atom(output).contains(1 + x))
                 if name in ("factored_scalar", "nested_sum")
                 else None,
-                rerun=atom(
-                    output.contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
-                )
+                rerun=atom(output.contract(collect_chains=False, collect_traces=False))
                 == atom(output),
             )
         rows.append(row)
@@ -228,13 +216,11 @@ def keep_rest():
                 gamma_value = gamma_value + gam(*indices, rep(S("r3rest::nu")))
             source = metric(rep(S("r3rest::mu")), rep(S("r3rest::nu"))) * gamma_value
             for method in ("contract", "reduce_algebra"):
-                settings = AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                settings = dict(gamma=True, epsilon=True)
                 operation = lambda value: (
-                    value.reduce_algebra(settings)
+                    value.reduce_algebra(**settings)
                     if method == "reduce_algebra"
-                    else value.contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
+                    else value.contract(collect_chains=False, collect_traces=False)
                 )
                 output, row = observe(lambda: operation(source))
                 row.update(
@@ -249,10 +235,8 @@ def keep_rest():
                 if output is not None:
                     row["output"] = atom(output).format_plain()
                     expected_gamma = (
-                        gamma_value.reduce_algebra(
-                            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                        ).contract(
-                            ContractSettings(collect_chains=False, collect_traces=False)
+                        gamma_value.reduce_algebra(gamma=True, epsilon=True).contract(
+                            collect_chains=False, collect_traces=False
                         )
                         if method == "reduce_algebra"
                         else gamma_value
@@ -314,7 +298,7 @@ class FactorProbe:
             self.internal += 1
             value = atom(
                 TensorExpression(value).contract(
-                    ContractSettings(collect_chains=False, collect_traces=False)
+                    collect_chains=False, collect_traces=False
                 )
             )
         state[index] = value

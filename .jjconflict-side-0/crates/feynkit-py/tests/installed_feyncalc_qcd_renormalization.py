@@ -13,13 +13,6 @@ Massless reference:
 https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-    ColorSimplifySettings,
-)
-
 import json
 from pathlib import Path
 
@@ -196,8 +189,8 @@ for kind, incoming, outgoing, loops, vertices, count in [
             fundamental_dimension = CA
         numerator = (
             TensorExpression(numerator)
-            .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(color=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
         )
@@ -277,12 +270,10 @@ for kind, incoming, outgoing, loops, vertices, count in [
         for label, projector in probes:
             traced = (
                 TensorExpression(numerator * projector)
-                .reduce_algebra(
-                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(gamma=True, epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
                 .to_expression()
@@ -586,8 +577,8 @@ for kind, incoming, outgoing, count, qcd_order in [
             fundamental_dimension = CA
         numerator = (
             TensorExpression(numerator)
-            .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(color=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
         )
@@ -632,12 +623,10 @@ for kind, incoming, outgoing, count, qcd_order in [
         for label, projector in probes:
             trace = (
                 TensorExpression(numerator * projector)
-                .reduce_algebra(
-                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(gamma=True, epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
                 .to_expression()
@@ -828,16 +817,10 @@ for scenario in ("massive", "massless"):
                     continue
                 traced = (
                     TensorExpression(numerator * projector)
-                    .reduce_algebra(
-                        AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                    )
-                    .contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
+                    .reduce_algebra(gamma=True, epsilon=True)
+                    .contract(collect_chains=False, collect_traces=False)
                     .to_expression()
-                    .contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
+                    .contract(collect_chains=False, collect_traces=False)
                     .to_expression()
                     .to_dots()
                     .to_expression()

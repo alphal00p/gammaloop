@@ -8,12 +8,6 @@ parameter is specialized here.
 References: FeynCalcExamples/QCD/OneLoop/{Renormalization,GhGl-Gh}.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    ColorSimplifySettings,
-)
-
 import json
 from pathlib import Path
 
@@ -148,8 +142,8 @@ for pdg in (9000005, -9000005):
                 )
             tensor = (
                 TensorExpression(numerator.expand())
-                .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(color=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
                 .to_expression()

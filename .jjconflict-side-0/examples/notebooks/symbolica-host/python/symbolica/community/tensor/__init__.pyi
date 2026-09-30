@@ -43,143 +43,6 @@ _RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
 _ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
 _ScalarInput: typing.TypeAlias = "Expression | int | float | complex | str | decimal.Decimal | Float | ComplexFloat | tuple[_RealInput, _RealInput]"
 @typing.final
-class AlgebraSettings:
-    r"""
-    Select optional tensor-algebra identities for reduce_algebra().
-
-    Instances are immutable. Dirac, color, and Levi-Civita identities are disabled
-    by default. Enabling a family includes the contractions needed by that family;
-    use ContractSettings for general structural contraction.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings
-    >>> settings = AlgebraSettings(gamma=GammaSimplifySettings())
-    >>> settings.color is None
-    True
-    """
-    @property
-    def gamma(self) -> typing.Optional[GammaSimplifySettings]:
-        r"""
-        Dirac-algebra options; None disables this family.
-
-        Returns
-        -------
-        GammaSimplifySettings or None
-            Dirac-algebra options; None disables this family.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings
-        >>> value = AlgebraSettings().gamma
-        >>> value is None
-        True
-        """
-    @property
-    def color(self) -> typing.Optional[ColorSimplifySettings]:
-        r"""
-        Color-algebra options; None disables this family.
-
-        Returns
-        -------
-        ColorSimplifySettings or None
-            Color-algebra options; None disables this family.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings
-        >>> value = AlgebraSettings().color
-        >>> value is None
-        True
-        """
-    @property
-    def epsilon(self) -> builtins.bool:
-        r"""
-        Whether supported Levi-Civita identities are enabled.
-
-        Returns
-        -------
-        bool
-            Whether supported Levi-Civita identities are enabled.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings
-        >>> AlgebraSettings().epsilon
-        False
-        """
-    @property
-    def max_passes(self) -> builtins.int:
-        r"""
-        Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
-
-        Returns
-        -------
-        int
-            Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings
-        >>> AlgebraSettings().max_passes
-        16
-        """
-    def __new__(cls, *, gamma: typing.Optional[GammaSimplifySettings] = None, color: typing.Optional[ColorSimplifySettings] = None, epsilon: builtins.bool = False, max_passes: builtins.int = 16) -> AlgebraSettings:
-        r"""
-        Choose identity families and a transformation budget.
-
-        Parameters
-        ----------
-        gamma : GammaSimplifySettings, optional
-            Dirac-algebra options. None disables this family.
-        color : ColorSimplifySettings, optional
-            Color-algebra options. None disables this family.
-        epsilon : bool, default False
-            Enable supported Levi-Civita identities and their required contractions.
-        max_passes : int, default 16
-            Maximum successful transformations in each root or shared-definition domain.
-            Zero is allowed. Inspect the result's reduction_status to detect unfinished work.
-
-        Returns
-        -------
-        AlgebraSettings
-            Immutable options for reduce_algebra().
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings
-        >>> settings = AlgebraSettings(gamma=GammaSimplifySettings.canonical())
-        >>> settings.max_passes
-        16
-        """
-    @staticmethod
-    def hep() -> AlgebraSettings:
-        r"""
-        Enable Dirac, color, and Levi-Civita identities.
-
-        Returns
-        -------
-        AlgebraSettings
-            Default options for all three families, including their necessary contractions.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import AlgebraSettings
-        >>> AlgebraSettings.hep().epsilon
-        True
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a readable object description for inspection.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> settings = sp.AlgebraSettings()
-        >>> text = repr(settings)
-        """
-
-@typing.final
 class AliasedTensorExpression:
     r"""
     A symbolic tensor whose repeated subexpressions have named definitions.
@@ -462,15 +325,29 @@ class AliasedTensorExpression:
         >>> aliases = AliasedTensorExpression.from_expression(indexed)
         >>> replaced = aliases.replace(rule)
         """
-    def contract(self, settings: typing.Optional[ContractSettings] = None) -> AliasedTensorExpression:
+    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Contract compatible indices and collect compact matrix products.
 
         Parameters
         ----------
-        settings : ContractSettings, optional
-            Select representations, metrics, rank-one contractions, chain/trace collection,
-            factor order, and transformation budget. Defaults to ContractSettings().
+        representations : sequence of Representation or RepresentationName, optional
+            Filter connecting axes by representation name: None permits all, [] none.
+            Compatible dimensions and orientations are still required. Intrinsic
+            constructor normalization, including symmetric dots, is unaffected.
+        metrics : bool, default True
+            Contract compatible metric tensors.
+        rank_one : bool, default True
+            Contract compatible rank-one tensors into scalar products.
+        collect_chains : bool, default True
+            Collect compatible matrix products into ordered chains.
+        collect_traces : bool, default True
+            Collect closed chains without evaluating traces. False preserves indexed closure.
+        order : sequence of int, optional
+            Requested factor contraction order; None uses the planner's default.
+        max_steps_per_domain : int, default 16
+            Maximum successful transformations per root or alias definition; zero is allowed.
+            Inspect reduction_status for exact unfinished work.
 
         Returns
         -------
@@ -592,15 +469,37 @@ class AliasedTensorExpression:
         >>> expression = AliasedTensorExpression.from_expression(expression)
         >>> opened = expression.undo_trace()
         """
-    def reduce_algebra(self, settings: typing.Optional[AlgebraSettings] = None) -> AliasedTensorExpression:
+    def reduce_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
         Parameters
         ----------
-        settings : AlgebraSettings, optional
-            Identity families and transformation budget. The default enables no optional
-            families. AlgebraSettings.hep() enables Dirac, color, and Levi-Civita identities.
+        gamma, color, epsilon : bool, default False
+            Enable only the selected identity families and their prerequisite contractions.
+        gamma_output : {"reduced", "chains"}, optional
+            Apply Clifford identities (default), or only collect Dirac chains.
+        gamma_ordering : {"repeated_pairs", "canonical"}, optional
+            Open-chain ordering; defaults to repeated-pair reduction.
+        gamma_evaluate_traces : bool, optional
+            Evaluate closed Dirac traces; defaults to True for reduced output.
+        gamma0 : bool, optional
+            Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+        gamma_conjugate : bool, optional
+            Rewrite complex-conjugated Dirac matrices; defaults to False.
+        gamma_expand_three_gamma_epsilon : bool, optional
+            Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
+            to False. This does not enable epsilon identities.
+        color_evaluate_traces : bool, optional
+            Evaluate supported closed color traces; defaults to True.
+        color_expand_fierz : bool, optional
+            Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+        color_substitute_cof_dimension_invariants : bool, optional
+            Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
+        max_steps_per_domain : int, default 16
+            Maximum successful transformations per root or alias definition; zero is allowed.
+            Capped results retain exact unfinished work. Family-specific options require
+            the corresponding family to be enabled. None selects its native default.
 
         Returns
         -------
@@ -617,12 +516,12 @@ class AliasedTensorExpression:
 
         Examples
         --------
-        >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings, TensorExpression
+        >>> from symbolica.community.tensor import TensorExpression
         >>> gamma = TensorExpression.dirac_gamma(4)
         >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         >>> from symbolica.community.tensor import AliasedTensorExpression
         >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> result = expression.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))
+        >>> result = expression.reduce_algebra(gamma=True)
         >>> result.to_expression().rank
         2
         """
@@ -927,110 +826,6 @@ class CanonicalizationError(builtins.ValueError):
     ...
 
 @typing.final
-class ColorSimplifySettings:
-    r"""
-    Options for SU(N) color-algebra simplification.
-
-    Instances are immutable. Pass a configured instance to the corresponding
-    tensor operation; its properties expose the selected values.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import ColorSimplifySettings
-    >>> settings = ColorSimplifySettings()
-    """
-    @property
-    def evaluate_traces(self) -> builtins.bool:
-        r"""
-        Evaluate supported closed color traces.
-
-        Returns
-        -------
-        bool
-            Evaluate supported closed color traces.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ColorSimplifySettings
-        >>> settings = ColorSimplifySettings()
-        >>> value = settings.evaluate_traces
-        """
-    @property
-    def expand_cross_chain_fierz(self) -> builtins.bool:
-        r"""
-        Apply Fierz identities to contracted generators on separate open
-
-        Returns
-        -------
-        bool
-            Apply Fierz identities to contracted generators on separate open
-            chains or traces; this may introduce sums.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ColorSimplifySettings
-        >>> settings = ColorSimplifySettings()
-        >>> value = settings.expand_cross_chain_fierz
-        """
-    @property
-    def substitute_cof_dimension_invariants(self) -> builtins.bool:
-        r"""
-        Replace supported fundamental SU(N) representation invariants by
-
-        Returns
-        -------
-        bool
-            Replace supported fundamental SU(N) representation invariants by
-            explicit dimension formulas with T_R = 1/2.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ColorSimplifySettings
-        >>> settings = ColorSimplifySettings()
-        >>> value = settings.substitute_cof_dimension_invariants
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a readable object description for inspection.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> settings = sp.ColorSimplifySettings()
-        >>> text = repr(settings)
-        """
-    def __new__(cls, *, evaluate_traces: builtins.bool = True, expand_cross_chain_fierz: builtins.bool = True, substitute_cof_dimension_invariants: builtins.bool = False) -> ColorSimplifySettings:
-        r"""
-        Configure options for SU(N) color-algebra simplification.
-
-        Parameters
-        ----------
-        evaluate_traces : bool, default True
-            Evaluate supported closed color traces.
-        expand_cross_chain_fierz : bool, default True
-            Apply Fierz identities to contracted generators on separate open
-            chains or traces; this may introduce sums.
-        substitute_cof_dimension_invariants : bool, default False
-            Replace supported fundamental SU(N) representation invariants by
-            explicit dimension formulas with T_R = 1/2.
-
-        Returns
-        -------
-        ColorSimplifySettings
-            Immutable settings with the requested options.
-
-        Notes
-        -----
-        With invariant substitution disabled, Casimir and Dynkin invariants remain
-        symbolic wherever possible. Dimensions are read from the tensor slots.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ColorSimplifySettings
-        >>> settings = ColorSimplifySettings()
-        """
-
-@typing.final
 class CompiledTensorEvaluator:
     r"""
     A tensor evaluator compiled into a loaded native library.
@@ -1237,185 +1032,6 @@ class CompiledTensorEvaluator:
         >>> compiled.evaluate_complex([[2.0]])[0][1]
         (4+0j)
         >>> directory.cleanup()
-        """
-
-@typing.final
-class ContractSettings:
-    r"""
-    Select structural contractions and compact tensor forms.
-
-    The default enables metrics, rank-one contractions, matrix-chain collection,
-    and trace collection in every representation. Filters select representation
-    names, independently of dimensions or other axes of a tensor. An empty filter
-    permits no representations. Intrinsic constructor normalization is unaffected.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import ContractSettings, Representation
-    >>> settings = ContractSettings(representations=[Representation.euc(3)], collect_traces=False)
-    >>> settings.collect_traces
-    False
-    """
-    @property
-    def representations(self) -> typing.Optional[builtins.list[RepresentationName]]:
-        r"""
-        Allowed representation names; None permits all and an empty list permits none.
-
-        Returns
-        -------
-        list of RepresentationName or None
-            Allowed representation names; None permits all and an empty list permits none.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().representations is None
-        True
-        """
-    @property
-    def metrics(self) -> builtins.bool:
-        r"""
-        Whether compatible metric tensors are contracted.
-
-        Returns
-        -------
-        bool
-            Whether compatible metric tensors are contracted.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().metrics
-        True
-        """
-    @property
-    def rank_one(self) -> builtins.bool:
-        r"""
-        Whether compatible rank-one factors form compact scalar products.
-
-        Returns
-        -------
-        bool
-            Whether compatible rank-one factors form compact scalar products.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().rank_one
-        True
-        """
-    @property
-    def collect_chains(self) -> builtins.bool:
-        r"""
-        Whether compatible matrix products are collected as chains.
-
-        Returns
-        -------
-        bool
-            Whether compatible matrix products are collected as chains.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().collect_chains
-        True
-        """
-    @property
-    def collect_traces(self) -> builtins.bool:
-        r"""
-        Whether closed matrix products are collected as traces. This does not evaluate their algebraic identities.
-
-        Returns
-        -------
-        bool
-            Whether closed matrix products are collected as traces. This does not evaluate their algebraic identities.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().collect_traces
-        True
-        """
-    @property
-    def order(self) -> typing.Optional[builtins.list[builtins.int]]:
-        r"""
-        Requested tensor-factor contraction order. None uses the default order.
-
-        Returns
-        -------
-        list of int or None
-            Requested tensor-factor contraction order. None uses the default order.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().order is None
-        True
-        """
-    @property
-    def max_passes(self) -> builtins.int:
-        r"""
-        Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
-
-        Returns
-        -------
-        int
-            Maximum successful transformations in each root or shared-definition domain. Zero is allowed.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings
-        >>> ContractSettings().max_passes
-        16
-        """
-    def __new__(cls, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_passes: builtins.int = 16) -> ContractSettings:
-        r"""
-        Choose which compatible indices and matrix channels to contract.
-
-        Parameters
-        ----------
-        representations : sequence of Representation or RepresentationName, optional
-            Restrict eligible connecting axes by representation name. None permits all
-            representations; an empty sequence permits none. Dimensions are not filtered.
-        metrics : bool, default True
-            Contract compatible metric tensors.
-        rank_one : bool, default True
-            Contract compatible rank-one tensors into compact scalar products.
-        collect_chains : bool, default True
-            Collect connected matrix factors into compact chains.
-        collect_traces : bool, default True
-            Collect closed matrix products into compact traces, without evaluating
-            Dirac or color trace identities.
-        order : sequence of int, optional
-            Requested order of tensor factors for contraction. None selects the default.
-            This does not reorder the tensor's external axes.
-        max_passes : int, default 16
-            Maximum successful transformations in each root or shared-definition domain.
-            Zero is allowed. Inspect reduction_status for unfinished work.
-
-        Returns
-        -------
-        ContractSettings
-            Immutable settings for contract().
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import ContractSettings, Representation, TensorExpression
-        >>> space = Representation.euc(3)
-        >>> settings = ContractSettings(collect_chains=False, collect_traces=False)
-        >>> result = TensorExpression.g(space)("i", "i").contract(settings)
-        >>> result.to_expression().is_scalar
-        True
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a readable object description for inspection.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> settings = sp.ContractSettings()
-        >>> text = repr(settings)
         """
 
 class CookingError(builtins.TypeError):
@@ -2265,225 +1881,6 @@ class FactorProjector(typing.Generic[_Projected]):
     def _repr_html_(self) -> builtins.str:
         r"""
         Show the checked factor group using the tensor index printer.
-        """
-
-@typing.final
-class GammaChainOrdering:
-    r"""
-    Ordering strategy for open Dirac-matrix chains.
-
-    ``RepeatedPairs`` moves matching matrices together while preserving unrelated
-    order where possible. ``Canonical`` orders the complete chain using Clifford
-    anticommutation, which may introduce additional metric terms.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import GammaChainOrdering, GammaSimplifySettings
-    >>> settings = GammaSimplifySettings(chain_ordering=GammaChainOrdering.Canonical)
-    """
-    RepeatedPairs: typing.ClassVar[GammaChainOrdering]
-    r"""
-    Move repeated gamma matrices toward each other without reordering unrelated factors.
-    """
-    Canonical: typing.ClassVar[GammaChainOrdering]
-    r"""
-    Canonically order open chains using adjacent Clifford-algebra swaps.
-    """
-    def __int__(self) -> builtins.int:
-        r"""
-        Return the underlying integer discriminant.
-        """
-
-@typing.final
-class GammaSimplifySettings:
-    r"""
-    Options for Dirac Clifford-algebra simplification.
-
-    Instances are immutable. Pass a configured instance to the corresponding
-    tensor operation; its properties expose the selected values.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import GammaSimplifySettings
-    >>> settings = GammaSimplifySettings()
-    """
-    @property
-    def output(self) -> typing.Literal['reduced', 'chains']:
-        r"""
-        "reduced" applies identities. "chains" only joins chains, without
-
-        Returns
-        -------
-        str
-            "reduced" applies identities. "chains" only joins chains, without
-            Clifford reduction or trace evaluation.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.output
-        """
-    @property
-    def chain_ordering(self) -> GammaChainOrdering:
-        r"""
-        Ordering of open Dirac chains. None selects RepeatedPairs.
-
-        Returns
-        -------
-        GammaChainOrdering
-            Ordering of open Dirac chains. None selects RepeatedPairs.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.chain_ordering
-        """
-    @property
-    def evaluate_traces(self) -> builtins.bool:
-        r"""
-        Evaluate closed Dirac traces when output is "reduced".
-
-        Returns
-        -------
-        bool
-            Evaluate closed Dirac traces when output is "reduced".
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.evaluate_traces
-        """
-    @property
-    def gamma0(self) -> builtins.bool:
-        r"""
-        Reduce four-dimensional gamma^0 sandwiches before ordinary identities.
-
-        Returns
-        -------
-        bool
-            Reduce four-dimensional gamma^0 sandwiches before ordinary identities.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.gamma0
-        """
-    @property
-    def conjugate(self) -> builtins.bool:
-        r"""
-        Rewrite complex-conjugated Dirac matrices before gamma^0 reduction.
-
-        Returns
-        -------
-        bool
-            Rewrite complex-conjugated Dirac matrices before gamma^0 reduction.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.conjugate
-        """
-    @property
-    def expand_three_gamma_epsilon(self) -> builtins.bool:
-        r"""
-        Expand three four-dimensional gamma matrices into a gamma^5/epsilon basis.
-
-        Returns
-        -------
-        bool
-            Expand three four-dimensional gamma matrices into a gamma^5/epsilon basis.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        >>> value = settings.expand_three_gamma_epsilon
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a readable object description for inspection.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> settings = sp.GammaSimplifySettings()
-        >>> text = repr(settings)
-        """
-    def __new__(cls, *, output: typing.Literal['reduced', 'chains'] = "reduced", chain_ordering: typing.Optional[GammaChainOrdering] = None, evaluate_traces: builtins.bool = True, gamma0: builtins.bool = False, conjugate: builtins.bool = False, expand_three_gamma_epsilon: builtins.bool = False) -> GammaSimplifySettings:
-        r"""
-        Configure options for Dirac Clifford-algebra simplification.
-
-        Parameters
-        ----------
-        output : str, default "reduced"
-            "reduced" applies identities. "chains" only joins chains, without
-            Clifford reduction or trace evaluation.
-        chain_ordering : GammaChainOrdering or None, default None
-            Ordering of open Dirac chains. None selects RepeatedPairs.
-        evaluate_traces : bool, default True
-            Evaluate closed Dirac traces when output is "reduced".
-        gamma0 : bool, default False
-            Reduce four-dimensional gamma^0 sandwiches before ordinary identities.
-        conjugate : bool, default False
-            Rewrite complex-conjugated Dirac matrices before gamma^0 reduction.
-        expand_three_gamma_epsilon : bool, default False
-            Expand three four-dimensional gamma matrices into a gamma^5/epsilon basis.
-
-        Returns
-        -------
-        GammaSimplifySettings
-            Immutable settings with the requested options.
-
-        Notes
-        -----
-        Four-dimensional identities require explicit four-dimensional index spaces;
-        these settings do not define a gamma^5 scheme in noninteger dimension.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings()
-        """
-    @staticmethod
-    def repeated_pairs() -> GammaSimplifySettings:
-        r"""
-        Select repeated-pair reduction and evaluate traces.
-
-        Returns
-        -------
-        GammaSimplifySettings
-            Reduced output with the selected ordering; optional gamma^0,
-            conjugation, and three-gamma epsilon passes remain disabled.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings.repeated_pairs()
-        >>> settings.evaluate_traces
-        True
-        """
-    @staticmethod
-    def canonical() -> GammaSimplifySettings:
-        r"""
-        Select canonical open-chain ordering and evaluate traces.
-
-        Returns
-        -------
-        GammaSimplifySettings
-            Reduced output with the selected ordering; optional gamma^0,
-            conjugation, and three-gamma epsilon passes remain disabled.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import GammaSimplifySettings
-        >>> settings = GammaSimplifySettings.canonical()
-        >>> settings.evaluate_traces
-        True
         """
 
 class NetworkToolingError(builtins.ValueError):
@@ -5900,15 +5297,37 @@ class TensorExpression:
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def reduce_algebra(self, settings: typing.Optional[AlgebraSettings] = None) -> AliasedTensorExpression:
+    def reduce_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Apply selected tensor identities while retaining shared subexpressions.
 
         Parameters
         ----------
-        settings : AlgebraSettings, optional
-            Identity families and transformation budget. The default enables no optional
-            families. AlgebraSettings.hep() enables Dirac, color, and Levi-Civita identities.
+        gamma, color, epsilon : bool, default False
+            Enable only the selected identity families and their prerequisite contractions.
+        gamma_output : {"reduced", "chains"}, optional
+            Apply Clifford identities (default), or only collect Dirac chains.
+        gamma_ordering : {"repeated_pairs", "canonical"}, optional
+            Open-chain ordering; defaults to repeated-pair reduction.
+        gamma_evaluate_traces : bool, optional
+            Evaluate closed Dirac traces; defaults to True for reduced output.
+        gamma0 : bool, optional
+            Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+        gamma_conjugate : bool, optional
+            Rewrite complex-conjugated Dirac matrices; defaults to False.
+        gamma_expand_three_gamma_epsilon : bool, optional
+            Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
+            to False. This does not enable epsilon identities.
+        color_evaluate_traces : bool, optional
+            Evaluate supported closed color traces; defaults to True.
+        color_expand_fierz : bool, optional
+            Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+        color_substitute_cof_dimension_invariants : bool, optional
+            Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
+        max_steps_per_domain : int, default 16
+            Maximum successful transformations per root or alias definition; zero is allowed.
+            Capped results retain exact unfinished work. Family-specific options require
+            the corresponding family to be enabled. None selects its native default.
 
         Returns
         -------
@@ -5925,10 +5344,10 @@ class TensorExpression:
 
         Examples
         --------
-        >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings, TensorExpression
+        >>> from symbolica.community.tensor import TensorExpression
         >>> gamma = TensorExpression.dirac_gamma(4)
         >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        >>> result = expression.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))
+        >>> result = expression.reduce_algebra(gamma=True)
         >>> result.to_expression().rank
         2
         """
@@ -6502,15 +5921,29 @@ class TensorExpression:
         >>> A = sp.TensorName("docs::A")(r, r)
         >>> nonzero = bool(A)
         """
-    def contract(self, settings: typing.Optional[ContractSettings] = None) -> AliasedTensorExpression:
+    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
         r"""
         Contract compatible indices and collect compact matrix products.
 
         Parameters
         ----------
-        settings : ContractSettings, optional
-            Select representations, metrics, rank-one contractions, chain/trace collection,
-            factor order, and transformation budget. Defaults to ContractSettings().
+        representations : sequence of Representation or RepresentationName, optional
+            Filter connecting axes by representation name: None permits all, [] none.
+            Compatible dimensions and orientations are still required. Intrinsic
+            constructor normalization, including symmetric dots, is unaffected.
+        metrics : bool, default True
+            Contract compatible metric tensors.
+        rank_one : bool, default True
+            Contract compatible rank-one tensors into scalar products.
+        collect_chains : bool, default True
+            Collect compatible matrix products into ordered chains.
+        collect_traces : bool, default True
+            Collect closed chains without evaluating traces. False preserves indexed closure.
+        order : sequence of int, optional
+            Requested factor contraction order; None uses the planner's default.
+        max_steps_per_domain : int, default 16
+            Maximum successful transformations per root or alias definition; zero is allowed.
+            Inspect reduction_status for exact unfinished work.
 
         Returns
         -------
@@ -11497,4 +10930,3 @@ def trace(representation: Representation, *factors: TensorExpression | _ScalarIn
     >>> trace(space, A, A).is_scalar
     True
     """
-

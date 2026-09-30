@@ -5,12 +5,6 @@ with the ordinary-amplitude reference in installed_feyncalc_diphoton.py.
 Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from symbolica import E, Replacement, S
 from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression
@@ -93,12 +87,10 @@ for coordinate_index in (0, 1):
                 numerator = numerator.replace(edge_metric, -physical)
             scalar = (
                 TensorExpression(numerator.expand(), intern="flattened")
-                .reduce_algebra(
-                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-                )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(gamma=True, epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .expand()
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
             )

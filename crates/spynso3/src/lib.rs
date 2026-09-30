@@ -301,11 +301,9 @@ define_spenso_python_surface! {
     ],
     registered_modules: [
         simplification => [
-            "CanonicalizationError", "ColorSimplifySettings",
-            "CookingError",
-            "DiracAdjointError", "GammaChainOrdering",
-            "GammaSimplifySettings", "NetworkToolingError",
-            "AlgebraSettings", "ContractSettings", "ReductionStatus",
+            "CanonicalizationError", "CookingError",
+            "DiracAdjointError", "NetworkToolingError",
+            "ReductionStatus",
         ],
         display => [
             "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",

@@ -152,7 +152,6 @@ impl PyAmplitudeLeg {
 /// --------
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hep
-/// >>> from symbolica.community.tensor import ContractSettings
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -162,7 +161,7 @@ impl PyAmplitudeLeg {
 /// >>> adjoint = amplitude.conjugate().expression()
 /// >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
 /// >>> scalar = squared.expression()
-/// >>> scalar = scalar.contract(ContractSettings(collect_chains=False, collect_traces=False))
+/// >>> scalar = scalar.contract(collect_chains=False, collect_traces=False)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Amplitude",
@@ -423,7 +422,6 @@ impl PyAmplitude {
 /// --------
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hep
-/// >>> from symbolica.community.tensor import ContractSettings
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -517,7 +515,7 @@ impl PySquaredAmplitude {
     /// Using the setup in the ``SquaredAmplitude`` class example:
     ///
     /// >>> tensor = squared.expression()
-    /// >>> tensor = tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
+    /// >>> tensor = tensor.contract(collect_chains=False, collect_traces=False)
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.expression().clone(), None)
     }

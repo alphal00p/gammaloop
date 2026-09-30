@@ -377,14 +377,14 @@ one native Single step, including the executor's normal preprocessing. Self trac
 can therefore run before a reported ready operation. Repeat `step`, inspect or display
 the returned network, or execute it to completion.
 
-`expression.contract(ContractSettings(...))` performs structural contractions and optional
+`expression.contract(...)` performs structural contractions and optional
 chain or trace collection without evaluating algebraic identities. Independently,
-`expression.reduce_algebra(AlgebraSettings(...))` selects gamma, color, and epsilon families
+`expression.reduce_algebra(...)` selects gamma, color, and epsilon families
 with their existing dimension and gamma5 conventions. Its default enables none;
-`AlgebraSettings.hep()` selects all three. Each identity includes its necessary local
+`reduce_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
 contractions. No nested contraction settings or implicit global expansion is involved.
 The result retains aliases and reports `Complete`, `Deferred`, or `Capped` through
-`reduction_status`. A `max_passes` budget caps work while retaining the exact
+`reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
 remaining expression. Explicit `expand()` requests polynomial materialization.
 
 == Numerical evaluation
@@ -699,14 +699,12 @@ unevaluated. The result remains a `TensorExpression` with its two bispinor ports
 
 // docs-example: compile
 ```python
-from symbolica.community.tensor import (
-    AlgebraSettings, GammaSimplifySettings, Representation, TensorExpression, TensorName,
-)
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.contract().reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(output="chains"))).to_expression()
+pslash = indexed.contract().reduce_algebra(gamma=True, gamma_output='chains').to_expression()
 pslash.formatted()
 ```
 

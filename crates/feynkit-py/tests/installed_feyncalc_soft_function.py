@@ -6,18 +6,9 @@ The reference's explicit 1/(32 pi^2) prefactor is included; this is not an
 integrated or dimensionally regulated real-emission phase-space calculation.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    ColorSimplifySettings,
-    GammaChainOrdering,
-    GammaSimplifySettings,
-    Representation,
-    TensorExpression,
-    TensorName,
-)
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 model = hep.Model.standard_model()
 vertices = [
@@ -50,7 +41,7 @@ gamma, metric = S("spenso::gamma", "spenso::g")
 si, sj, sx, sy, sm, sn = S(
     "soft::si", "soft::sj", "soft::sx", "soft::sy", "soft::sm", "soft::sn"
 )
-ordering = GammaSimplifySettings(chain_ordering=GammaChainOrdering.Canonical)
+ordering = dict(gamma=True, gamma_ordering="canonical")
 
 
 def simplify(expression):
@@ -58,11 +49,11 @@ def simplify(expression):
         kin.apply(
             TensorExpression(expression)
             .expand()
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
-            .reduce_algebra(AlgebraSettings(gamma=ordering, epsilon=True))
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
+            .reduce_algebra(**ordering, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )
@@ -172,7 +163,7 @@ for outgoing in (["b", "b~"], ["b", "b~", "g"]):
             kin.apply(
                 TensorExpression(denominator)
                 .expand()
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
             )
@@ -228,19 +219,15 @@ for tensor in (color_born, color_real):
         TensorExpression(
             tensor.to_expression() * tensor.dirac_adjoint().to_expression()
         )
-        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
     colors.append(
         TensorExpression(norm.replace(dA, Nc**2 - 1))
-        .reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )

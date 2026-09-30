@@ -4,17 +4,11 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa
 The ordinary amplitudes retain both labeled diagrams and their interference.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import feynkit as fk
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    Representation,
-    TensorExpression,
-)
+from symbolica.community.tensor import Representation, TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -79,13 +73,8 @@ operator = TensorExpression(amplitude)
 assert len(operator.structure.slots) == 4
 adjoint = (
     operator.dirac_adjoint()
-    .reduce_algebra(
-        AlgebraSettings(
-            gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-            epsilon=True,
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
 )
@@ -102,8 +91,8 @@ spins = model.particle_by_pdg(11).spin_sum(
 )
 spin_summed = (
     TensorExpression(operator.to_expression() * adjoint * spins, intern="flattened")
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )
 x, y = t - mass**2, u - mass**2
@@ -139,7 +128,7 @@ for references, ward in (
             )
     scalar = (
         TensorExpression(spin_summed.to_expression() * density, intern="flattened")
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
     )

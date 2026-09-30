@@ -233,11 +233,7 @@ class TensorOperationsTests(unittest.TestCase):
             for method in ["to_dots", "reduce_algebra"]:
                 with self.subTest(case=label, method=method):
                     result = (
-                        getattr(source, method)(
-                            sp.AlgebraSettings(
-                                gamma=sp.GammaSimplifySettings(), epsilon=True
-                            )
-                        )
+                        getattr(source, method)(gamma=True, epsilon=True)
                         if method == "reduce_algebra"
                         else source.to_dots()
                     )
@@ -248,11 +244,7 @@ class TensorOperationsTests(unittest.TestCase):
                     self.assertEqual(typed.to_expression(), expression)
                     self.assertEqual(typed.structure, structure)
                     rerun = (
-                        getattr(result, method)(
-                            sp.AlgebraSettings(
-                                gamma=sp.GammaSimplifySettings(), epsilon=True
-                            )
-                        )
+                        getattr(result, method)(gamma=True, epsilon=True)
                         if method == "reduce_algebra"
                         else result.to_dots()
                     )
@@ -509,29 +501,25 @@ class TensorOperationsTests(unittest.TestCase):
         self.assertEqual(metric.reduce_algebra().expand(), metric.expand())
         gamma = sp.TensorExpression.dirac_gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        simplified = chain.reduce_algebra(sp.AlgebraSettings.hep())
+        simplified = chain.reduce_algebra(gamma=True, color=True, epsilon=True)
         self.assertEqual(
             simplified.expand(),
-            simplified.reduce_algebra(sp.AlgebraSettings.hep()).expand(),
+            simplified.reduce_algebra(gamma=True, color=True, epsilon=True).expand(),
         )
         self.assertEqual(simplified.root.rank, 2)
         d = S("api_operations::D")
         symbolic_metric = sp.TensorExpression.g(sp.Representation.mink(d))("mu", "mu")
         self.assertEqual(symbolic_metric.reduce_algebra().expand().to_expression(), d)
-        capped = chain.reduce_algebra(
-            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=0)
-        )
+        capped = chain.reduce_algebra(gamma=True, max_steps_per_domain=0)
         self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
         self.assertEqual(capped.to_expression(), chain)
-        bounded = chain.reduce_algebra(
-            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=1)
-        )
+        bounded = chain.reduce_algebra(gamma=True, max_steps_per_domain=1)
         self.assertIn(
             bounded.reduction_status,
             (sp.ReductionStatus.Complete, sp.ReductionStatus.Capped),
         )
         self.assertEqual(
-            bounded.reduce_algebra(sp.AlgebraSettings.hep()).expand(),
+            bounded.reduce_algebra(gamma=True, color=True, epsilon=True).expand(),
             simplified.expand(),
         )
 

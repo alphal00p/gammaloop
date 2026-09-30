@@ -25,9 +25,6 @@ from time import perf_counter_ns, process_time_ns
 from symbolica import E, Replacement, S
 from symbolica.community.tensor import (
     AUTO,
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
     Representation,
     TensorExpression,
     TensorName,
@@ -105,7 +102,7 @@ class FermionLadder:
         }
         # The three-loop 4D scalar is small enough to expand in one step. Larger
         # cases benefit from collecting each momentum substitution separately.
-        self.settings = GammaSimplifySettings()
+        self.settings = dict(gamma=True)
         self.staged_routing = mode == "tracen" or loops == 4
         if self.staged_routing:
             self._prepare_polynomial_routing()
@@ -215,9 +212,9 @@ class FermionLadder:
         """Trace, insert physical momentum routing, then fully collect the scalar."""
         if source is None:
             source = self.source
-        traced = source.reduce_algebra(
-            AlgebraSettings(gamma=self.settings, epsilon=True)
-        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
+        traced = source.reduce_algebra(**self.settings, epsilon=True).contract(
+            collect_chains=False, collect_traces=False
+        )
         traced = (
             traced.expand() if self.staged_routing else traced.to_expression()
         ).to_expression()
@@ -243,12 +240,8 @@ class FermionLadder:
         from tensor_benchmark_cases import completed
 
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(
-            AlgebraSettings(gamma=self.settings, epsilon=True)
-        )
-        owner = algebra.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        owner = algebra.contract(collect_chains=False, collect_traces=False)
         traced = owner
         after_gamma = process_time_ns()
         traced = (
@@ -715,9 +708,7 @@ def consolidation_child(args):
             typed = case.typed()
             assert (
                 atom(
-                    typed.contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    ).expand()
+                    typed.contract(collect_chains=False, collect_traces=False).expand()
                 )
                 == result
             )

@@ -9,7 +9,7 @@ consolidation are the acceptance criteria; measured speedups are not required.
 
 == API and consolidation
 
-The public reduction operations are `contract(ContractSettings)` and
+The Rust reduction operations are `contract(ContractSettings)` and
 `reduce_algebra(AlgebraSettings)`, on the existing `SymbolicTensor` abstraction
 and its existing alias-capable owner. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
@@ -21,6 +21,16 @@ Representation filters select the `LibraryRep` base family, including duals;
 for example, a Python `Representation.mink(4)` filter does not restrict permission
 to four-dimensional slots. Actual connections must still satisfy dimension,
 variance and positional port compatibility.
+Python exposes both operations through explicit keyword-only parameters on
+`TensorExpression` and `AliasedTensorExpression`. For example,
+`expr.contract(representations=[lorentz], collect_traces=False)` and
+`expr.reduce_algebra(gamma=True, gamma_ordering="canonical", color=True)`.
+The binding lowers those parameters into the existing Rust settings; it owns no
+planning or contraction logic. Family-specific options require the corresponding
+family to be enabled, and omitted options retain native defaults. The Python budget
+is named `max_steps_per_domain`; reusable configurations are ordinary dictionaries
+passed with `**options`. Python settings classes are removed.
+
 `AlgebraSettings` does not contain contraction settings. Algebra identities authorize their
 required structural dependencies, not unrelated identity families.
 

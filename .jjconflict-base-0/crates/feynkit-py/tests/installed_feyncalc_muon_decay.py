@@ -4,17 +4,12 @@ Reference: FeynCalc EW/Tree/Mu-ElAnelNmu. The full unitary-gauge squared
 amplitude is retained before the low-energy limit and analytic integrations.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import json
 
 import numpy as np
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()
 # The built-in model uses Feynman-gauge vector propagators. This reference
@@ -70,13 +65,8 @@ operator = TensorExpression(
 )
 adjoint = (
     operator.dirac_adjoint()
-    .reduce_algebra(
-        AlgebraSettings(
-            gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-            epsilon=True,
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
 )
@@ -92,16 +82,13 @@ projector = (
     * model.particle_by_pdg(14).spin_sum(P(3), scope(wrapped, ports[0]), ports[3])
 )
 contracted = (
-    TensorExpression(
-        operator.to_expression() * adjoint * projector,
-        intern="flattened",
-    )
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
-    .reduce_algebra(AlgebraSettings(epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    TensorExpression(operator.to_expression() * adjoint * projector, intern="flattened")
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
+    .reduce_algebra(epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
 )
 assert contracted.contraction_complete
 contracted = contracted.to_expression().to_dots()

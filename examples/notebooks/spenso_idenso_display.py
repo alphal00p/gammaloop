@@ -59,13 +59,12 @@ def _():
     return (
         AUTO,
         DisplaySettings,
+        PortPattern,
         Representation,
         Tensor,
         TensorExpression,
         TensorName,
-        PortPattern,
         chain,
-        as_tensor,
         dot,
         lp,
         spenso,
@@ -178,7 +177,7 @@ def _(AUTO, Representation, TensorExpression, TensorName, dot, trace):
         gamma(AUTO, AUTO, nu),
     )
     amplitude = kinematic_factor * dirac_trace
-    return amplitude, mu, nu, p, q
+    return amplitude, mu, p, q
 
 
 @app.cell
@@ -192,14 +191,14 @@ def _(mo):
 @app.cell
 def _(
     AUTO,
+    PortPattern,
     Representation,
     TensorExpression,
     TensorName,
-    PortPattern,
     chain,
     dot,
-    trace,
     sy,
+    trace,
 ):
     # `raw` keeps compact rank-one vectors in their contextual form. That is
     # what lets a vector appear inside a tensor port or a gamma factor, just as
@@ -454,7 +453,7 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
 
 
 @app.cell
-def _(Representation, TensorExpression, mu, p, spenso):
+def _(Representation, TensorExpression, mu, p):
     metric = Representation.mink(4).g("mu", "nu")
 
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
@@ -462,11 +461,7 @@ def _(Representation, TensorExpression, mu, p, spenso):
     metric_product = metric.to_expression() * p(1, mu).to_expression()
     simplified_tensor = (
         TensorExpression(metric_product)
-        .contract(
-            spenso.ContractSettings(
-                rank_one=False, collect_chains=False, collect_traces=False
-            )
-        )
+        .contract(rank_one=False, collect_chains=False, collect_traces=False)
         .to_expression()
     )
     simplified_atom = simplified_tensor.to_expression()
@@ -490,7 +485,7 @@ def _(
             mo.md(
                 "## 3. Idenso transformation on a TensorExpression\n\n"
                 "`TensorExpression` validates the Symbolica input. Its "
-                "`contract(ContractSettings(rank_one=False, collect_chains=False, collect_traces=False))` method contracts metrics while retaining "
+                "`contract(rank_one=False, collect_chains=False, collect_traces=False)` method contracts metrics while retaining "
                 "the typed external interface. `to_expression()` resolves its aliases."
             ),
             mo.hstack(

@@ -6,8 +6,6 @@ lorentz.py defines UUV1 = P(3,2) + P(3,3), which equals -p1 with all
 three momenta incoming. No external MadGraph installation is required.
 """
 
-from symbolica.community.tensor import ContractSettings
-
 import copy
 import json
 from pathlib import Path
@@ -143,7 +141,7 @@ for name, (particles, coupling_name) in vertices.items():
         assert diagram.numerator_prefactor_expression() == one
         residual = (
             TensorExpression(actual - coupling * color * momentum)
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
             .collect_factors()
@@ -193,7 +191,7 @@ for name in ("V_18", "V_19", "V_35"):
                 - linearity[name, "P2"]
                 - coefficient * linearity[name, "P3"]
             )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
             .collect_factors()

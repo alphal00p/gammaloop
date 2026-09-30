@@ -10,7 +10,7 @@ use symbolica::{
     atom::{AliasedAtom, Atom, Symbol},
 };
 
-use crate::{ModuleInit, expression::TensorExpression, simplification::PyAlgebraSettings};
+use crate::{ModuleInit, expression::TensorExpression};
 
 type Descriptor = (Option<Symbol>, Vec<Atom>);
 
@@ -80,6 +80,7 @@ impl AliasedTensorExpression {
 }
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl AliasedTensorExpression {
@@ -476,9 +477,23 @@ impl AliasedTensorExpression {
     ///
     /// Parameters
     /// ----------
-    /// settings : ContractSettings, optional
-    ///     Select representations, metrics, rank-one contractions, chain/trace collection,
-    ///     factor order, and transformation budget. Defaults to ContractSettings().
+    /// representations : sequence of Representation or RepresentationName, optional
+    ///     Filter connecting axes by representation name: None permits all, [] none.
+    ///     Compatible dimensions and orientations are still required. Intrinsic
+    ///     constructor normalization, including symmetric dots, is unaffected.
+    /// metrics : bool, default True
+    ///     Contract compatible metric tensors.
+    /// rank_one : bool, default True
+    ///     Contract compatible rank-one tensors into scalar products.
+    /// collect_chains : bool, default True
+    ///     Collect compatible matrix products into ordered chains.
+    /// collect_traces : bool, default True
+    ///     Collect closed chains without evaluating traces. False preserves indexed closure.
+    /// order : sequence of int, optional
+    ///     Requested factor contraction order; None uses the planner's default.
+    /// max_steps_per_domain : int, default 16
+    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Inspect reduction_status for exact unfinished work.
     ///
     /// Returns
     /// -------
@@ -503,15 +518,32 @@ impl AliasedTensorExpression {
     /// >>> result = expression.contract()
     /// >>> result.to_expression().rank
     /// 1
-    #[pyo3(signature=(settings=None))]
+    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=16))]
+    #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
-        settings: Option<&crate::simplification::PyContractSettings>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
+        representations: Option<Vec<Bound<'_, PyAny>>>,
+        metrics: bool,
+        rank_one: bool,
+        collect_chains: bool,
+        collect_traces: bool,
+        order: Option<Vec<usize>>,
+        max_steps_per_domain: usize,
     ) -> PyResult<Self> {
-        let settings = settings.cloned().unwrap_or_default();
+        let representations = crate::simplification::contraction_representations(representations)?;
+        let settings = idenso::tensor::ContractSettings {
+            representations: representations.as_deref(),
+            metrics,
+            rank_one,
+            collect_chains,
+            collect_traces,
+            order: order.as_deref(),
+            max_passes: max_steps_per_domain,
+        };
         let value = self
             .value
-            .contract(settings.rust())
+            .contract(settings)
             .map_err(TensorExpression::inference_error)?;
         Ok(self.with_value(value))
     }
@@ -632,9 +664,31 @@ impl AliasedTensorExpression {
     ///
     /// Parameters
     /// ----------
-    /// settings : AlgebraSettings, optional
-    ///     Identity families and transformation budget. The default enables no optional
-    ///     families. AlgebraSettings.hep() enables Dirac, color, and Levi-Civita identities.
+    /// gamma, color, epsilon : bool, default False
+    ///     Enable only the selected identity families and their prerequisite contractions.
+    /// gamma_output : {"reduced", "chains"}, optional
+    ///     Apply Clifford identities (default), or only collect Dirac chains.
+    /// gamma_ordering : {"repeated_pairs", "canonical"}, optional
+    ///     Open-chain ordering; defaults to repeated-pair reduction.
+    /// gamma_evaluate_traces : bool, optional
+    ///     Evaluate closed Dirac traces; defaults to True for reduced output.
+    /// gamma0 : bool, optional
+    ///     Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+    /// gamma_conjugate : bool, optional
+    ///     Rewrite complex-conjugated Dirac matrices; defaults to False.
+    /// gamma_expand_three_gamma_epsilon : bool, optional
+    ///     Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
+    ///     to False. This does not enable epsilon identities.
+    /// color_evaluate_traces : bool, optional
+    ///     Evaluate supported closed color traces; defaults to True.
+    /// color_expand_fierz : bool, optional
+    ///     Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+    /// color_substitute_cof_dimension_invariants : bool, optional
+    ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
+    /// max_steps_per_domain : int, default 16
+    ///     Maximum successful transformations per root or alias definition; zero is allowed.
+    ///     Capped results retain exact unfinished work. Family-specific options require
+    ///     the corresponding family to be enabled. None selects its native default.
     ///
     /// Returns
     /// -------
@@ -651,20 +705,52 @@ impl AliasedTensorExpression {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import AlgebraSettings, GammaSimplifySettings, TensorExpression
+    /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> gamma = TensorExpression.dirac_gamma(4)
     /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
     /// >>> from symbolica.community.tensor import AliasedTensorExpression
     /// >>> expression = AliasedTensorExpression.from_expression(expression)
-    /// >>> result = expression.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))
+    /// >>> result = expression.reduce_algebra(gamma=True)
     /// >>> result.to_expression().rank
     /// 2
-    #[pyo3(signature=(settings=None))]
-    fn reduce_algebra(&self, settings: Option<&PyAlgebraSettings>) -> PyResult<Self> {
-        let settings = settings.copied().unwrap_or_default();
+    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    #[allow(clippy::too_many_arguments)]
+    fn reduce_algebra(
+        &self,
+        gamma: bool,
+        color: bool,
+        epsilon: bool,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['reduced', 'chains']]", imports=("typing")))]
+        gamma_output: Option<&str>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['repeated_pairs', 'canonical']]", imports=("typing")))]
+        gamma_ordering: Option<&str>,
+        gamma_evaluate_traces: Option<bool>,
+        gamma0: Option<bool>,
+        gamma_conjugate: Option<bool>,
+        gamma_expand_three_gamma_epsilon: Option<bool>,
+        color_evaluate_traces: Option<bool>,
+        color_expand_fierz: Option<bool>,
+        color_substitute_cof_dimension_invariants: Option<bool>,
+        max_steps_per_domain: usize,
+    ) -> PyResult<Self> {
+        let settings = crate::simplification::algebra_settings(
+            gamma,
+            color,
+            epsilon,
+            gamma_output,
+            gamma_ordering,
+            gamma_evaluate_traces,
+            gamma0,
+            gamma_conjugate,
+            gamma_expand_three_gamma_epsilon,
+            color_evaluate_traces,
+            color_expand_fierz,
+            color_substitute_cof_dimension_invariants,
+            max_steps_per_domain,
+        )?;
         let value = self
             .value
-            .reduce_algebra(settings.rust())
+            .reduce_algebra(&settings)
             .map_err(TensorExpression::inference_error)?;
         Ok(self.with_value(value))
     }

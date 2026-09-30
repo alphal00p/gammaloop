@@ -12,11 +12,7 @@ from symbolica import E, S, T
 from symbolica.community.feynkit import Symbols
 from symbolica.community.tensor import (
     AUTO,
-    AlgebraSettings,
     AliasedTensorExpression,
-    ColorSimplifySettings,
-    ContractSettings,
-    GammaSimplifySettings,
     ReductionStatus,
     Representation,
     TensorExpression,
@@ -374,9 +370,7 @@ L F = vx(1,-k0, k0-k1, k1, k10, mu1, mu8)*
             start = process_time_ns() if observer is not None else 0
             result = result.replace(self.rules[vertex - 1])
             replaced = process_time_ns() if observer is not None else 0
-            result = result.contract(
-                ContractSettings(collect_chains=False, collect_traces=False)
-            )
+            result = result.contract(collect_chains=False, collect_traces=False)
             contracted = process_time_ns() if observer is not None else 0
             if observer is not None:
                 observer.append(
@@ -469,7 +463,7 @@ class FreeTrace:
         self.indices = [self.lorentz(S(f"r3trace::i{i}")) for i in range(length)]
         gamma = TensorExpression.dirac_gamma(self.dimension)
         self.source = trace(self.spin, *(gamma(AUTO, AUTO, i) for i in self.indices))
-        self.settings = GammaSimplifySettings()
+        self.settings = dict(gamma=True)
         self.strategy = {
             "gammas": length,
             "trace_materialization": "explicit alias expansion inside the operation",
@@ -479,22 +473,16 @@ class FreeTrace:
 
     def reduce(self):
         return (
-            self.source.reduce_algebra(
-                AlgebraSettings(gamma=self.settings, epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            self.source.reduce_algebra(**self.settings, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .expand()
             .to_expression()
         )
 
     def phases(self, expected):
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(
-            AlgebraSettings(gamma=self.settings, epsilon=True)
-        )
-        reduced = algebra.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        reduced = algebra.contract(collect_chains=False, collect_traces=False)
         after_gamma = process_time_ns()
         expanded = reduced.expand()
         after_expansion = process_time_ns()
@@ -680,9 +668,9 @@ class AxialTrace(FreeTrace):
         )
 
     def reduce(self):
-        reduced = self.source.reduce_algebra(
-            AlgebraSettings(gamma=self.settings, epsilon=True)
-        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
+        reduced = self.source.reduce_algebra(**self.settings, epsilon=True).contract(
+            collect_chains=False, collect_traces=False
+        )
         # M1 and FORM materialize the trace while retaining the scalar factor.
         # Applying expand to the entire aliased tensor would also distribute
         # (x+y)^8, which is outside this case's declared materialization scope.
@@ -691,12 +679,8 @@ class AxialTrace(FreeTrace):
 
     def phases(self, expected):
         start = process_time_ns()
-        algebra = self.source.reduce_algebra(
-            AlgebraSettings(gamma=self.settings, epsilon=True)
-        )
-        reduced = algebra.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        algebra = self.source.reduce_algebra(**self.settings, epsilon=True)
+        reduced = algebra.contract(collect_chains=False, collect_traces=False)
         after_gamma = process_time_ns()
         trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
         after_interface = process_time_ns()
@@ -763,14 +747,8 @@ class ProductionNumerator:
 
     def reduce(self):
         return (
-            self.source.reduce_algebra(
-                AlgebraSettings(
-                    gamma=GammaSimplifySettings(),
-                    epsilon=True,
-                    color=ColorSimplifySettings(),
-                )
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            self.source.reduce_algebra(gamma=True, epsilon=True, color=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_expression()
         )
@@ -918,17 +896,9 @@ class ProductionNumerator:
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(),
-                color=ColorSimplifySettings(),
-                epsilon=True,
-            )
-        )
+        reduced = self.source.reduce_algebra(gamma=True, color=True, epsilon=True)
         after_algebra = process_time_ns()
-        contracted = reduced.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        contracted = reduced.contract(collect_chains=False, collect_traces=False)
         after_contract = process_time_ns()
         result = atom(contracted)
         end = process_time_ns()
@@ -978,7 +948,7 @@ class ColourFierz:
                 for color, left, right in ports
             )
         )
-        self.settings = ColorSimplifySettings()
+        self.settings = dict(color=True)
         self.trace_index = E("spenso::idx(2,spenso::cof(3))")
         self.strategy = {
             "color_group": "SU(3)",
@@ -989,22 +959,20 @@ class ColourFierz:
 
     def reduce(self):
         return atom(
-            self.source.reduce_algebra(AlgebraSettings(color=self.settings)).contract(
-                ContractSettings(collect_chains=False, collect_traces=False)
+            self.source.reduce_algebra(**self.settings).contract(
+                collect_chains=False, collect_traces=False
             )
         ).replace(self.trace_index, E("1/2"))
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.reduce_algebra(AlgebraSettings(color=self.settings))
+        reduced = self.source.reduce_algebra(**self.settings)
         after_color = process_time_ns()
-        repeated = reduced.reduce_algebra(AlgebraSettings(color=self.settings))
+        repeated = reduced.reduce_algebra(**self.settings)
         after_rerun = process_time_ns()
         assert atom(repeated) == atom(reduced)
         start_contract = process_time_ns()
-        contracted = reduced.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        contracted = reduced.contract(collect_chains=False, collect_traces=False)
         after_contract = process_time_ns()
         result = atom(contracted).replace(self.trace_index, E("1/2"))
         end = process_time_ns()
@@ -1063,23 +1031,17 @@ class MixedColourTrace(FreeTrace):
 
     def reduce(self):
         value = self.source.reduce_algebra(
-            AlgebraSettings(
-                gamma=self.settings, color=self.color.settings, epsilon=True
-            )
-        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
+            **self.settings, **self.color.settings, epsilon=True
+        ).contract(collect_chains=False, collect_traces=False)
         return atom(value.expand()).replace(self.color.trace_index, E("1/2"))
 
     def phases(self, expected):
         start = process_time_ns()
         reduced = self.source.reduce_algebra(
-            AlgebraSettings(
-                gamma=self.settings, color=self.color.settings, epsilon=True
-            )
+            **self.settings, **self.color.settings, epsilon=True
         )
         after_algebra = process_time_ns()
-        contracted = reduced.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        contracted = reduced.contract(collect_chains=False, collect_traces=False)
         after_contraction = process_time_ns()
         result = atom(contracted.expand()).replace(self.color.trace_index, E("1/2"))
         end = process_time_ns()

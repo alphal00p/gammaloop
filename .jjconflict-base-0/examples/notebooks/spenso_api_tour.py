@@ -2,7 +2,7 @@
 
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.24.0"
 app = marimo.App(width="full")
 
 
@@ -89,21 +89,9 @@ def example_specification():
             "status",
         ),
         (
-            "AlgebraSettings",
-            "Choose gamma, color and epsilon identities independently. The HEP preset enables all three with native conventions; polynomial expansion remains explicit.",
-            "algebra_settings = sp.AlgebraSettings.hep()\nreduced = indexed.reduce_algebra(algebra_settings)",
-            "algebra_settings",
-        ),
-        (
-            "ContractSettings",
-            "Choose structural metric and vector contraction, permitted representations, and chain/trace collection independently of algebra identities.",
-            "contract_settings = sp.ContractSettings(representations=[rep], collect_traces=False)\ncontracted = indexed.contract(contract_settings)",
-            "contract_settings",
-        ),
-        (
             "ReductionStatus",
             "Complete means no eligible work remains under the selected settings. Deferred and Capped retain an exact expression for subsequent work.",
-            "reduction_status = contracted.reduction_status",
+            "contracted = indexed.contract(representations=[rep], collect_traces=False)\nreduction_status = contracted.reduction_status",
             "reduction_status",
         ),
         (
@@ -155,18 +143,6 @@ def example_specification():
             "display_settings",
         ),
         (
-            "GammaSimplifySettings",
-            "Controls gamma-chain ordering, closed traces and the optional four-dimensional three-gamma epsilon identity.",
-            "gamma_settings = sp.GammaSimplifySettings.canonical()",
-            "gamma_settings",
-        ),
-        (
-            "ColorSimplifySettings",
-            "Controls closed color traces, Fierz expansion across chains and substitution of fundamental-dimension invariants.",
-            "color_settings = sp.ColorSimplifySettings(expand_cross_chain_fierz=False)",
-            "color_settings",
-        ),
-        (
             "ExecutionMode",
             "Network execution policy: All performs every possible contraction, Single selects one smallest-degree rewrite per step, Scalar only contracts scalar operations.",
             "execution_mode = sp.ExecutionMode.All",
@@ -177,12 +153,6 @@ def example_specification():
             "Selects how Symbolica work is scheduled through Rayon. set_symbolica_rayon_enabled sets this process-wide policy.",
             "parallelism = sp.SymbolicParallelism.Auto",
             "parallelism",
-        ),
-        (
-            "GammaChainOrdering",
-            "RepeatedPairs moves matching gamma matrices together; Canonical orders the whole open chain.",
-            "gamma_order = sp.GammaChainOrdering.Canonical",
-            "gamma_order",
         ),
     ]
 
@@ -302,7 +272,7 @@ def _(mo):
             ]
         )
     mo.accordion(panels)
-    return examples, namespace
+    return (namespace,)
 
 
 @app.cell
@@ -332,8 +302,8 @@ def _(mo):
     - `replace` applies a reusable `TensorRule` or an ordered rule list.
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
     - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
-    - Dirac algebra: `reduce_algebra`, with `GammaSimplifySettings(output="chains")` for collected words, gamma conjugation and `dirac_adjoint`.
-    - Color algebra: `reduce_algebra`, with dimension-invariant substitution selected in `ColorSimplifySettings`.
+    - Dirac algebra: `reduce_algebra`, with `gamma=True, gamma_output="chains"` for collected words, gamma conjugation and `dirac_adjoint`.
+    - Color algebra: `reduce_algebra`, with dimension-invariant substitution selected by `color_substitute_cof_dimension_invariants=True`.
     - Index algebra: `contract`, `reduce_algebra`, `with_lorentz_dimension`, cooking and canonicalization.
     - Compact notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`. Shared `contract` handles indexed contractions and chain or trace collection.
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.

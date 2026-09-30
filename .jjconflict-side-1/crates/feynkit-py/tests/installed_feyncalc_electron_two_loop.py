@@ -7,12 +7,6 @@ explicit analytic inputs. Actual generated diagrams, UV expansion, tensor
 projection, topology mappings and bounded native IBP produce the bare poles.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from pathlib import Path
 
 from symbolica import E, Replacement, S
@@ -115,8 +109,8 @@ one_numerator *= (
 )
 one_trace = kinematics.apply(
     TensorExpression(one_numerator)
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
     .to_expression()
@@ -217,8 +211,8 @@ for diagram in result.diagrams:
         )
     traced = (
         TensorExpression(uv)
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
         .to_expression()

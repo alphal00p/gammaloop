@@ -9,12 +9,6 @@ No automatic counterterm diagrams, subtraction forest or finite two-loop
 self-energy is claimed; bounded IBP residuals are not certified masters.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import json
 from pathlib import Path
 
@@ -176,8 +170,8 @@ for diagram in result.diagrams:
     uv = uv.replace(uv_mass, zero)
     traced = (
         TensorExpression(uv.expand())
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()
         .to_expression()
@@ -383,8 +377,8 @@ for label, inserted, powers, weight in insertions:
     selective = uv.replace(uv_mass, zero)
     trace = (
         TensorExpression(selective.expand())
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .expand()
         .to_dots()
         .to_expression()

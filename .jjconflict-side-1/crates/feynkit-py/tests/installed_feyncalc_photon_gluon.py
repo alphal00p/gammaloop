@@ -6,16 +6,10 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGa-GlQ
 https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GaGl
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    ColorSimplifySettings,
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -85,12 +79,9 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     adjoint = (
         operator.dirac_adjoint()
         .reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-                epsilon=True,
-            )
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .replace(conj(P(a, b)), P(a, b))
@@ -139,20 +130,16 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     )
     colored = (
         TensorExpression(generic, intern="flattened")
-        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     print("COLOR PASS", flush=True)
@@ -169,16 +156,13 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
             P(position), left_port, right_port, average=position < 2
         )
     traced = (
-        TensorExpression(
-            colored.to_expression() * spins,
-            intern="flattened",
-        )
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        TensorExpression(colored.to_expression() * spins, intern="flattened")
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     reduced = kin.apply(
-        traced.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        traced.contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
     )
@@ -229,10 +213,9 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
         # retaining scalar coefficients; no coefficient-splitting API is needed.
         contracted = (
             TensorExpression(
-                reduced.to_expression() * photon * gluon,
-                intern="flattened",
+                reduced.to_expression() * photon * gluon, intern="flattened"
             )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )

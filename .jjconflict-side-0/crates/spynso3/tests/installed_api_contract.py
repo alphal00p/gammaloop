@@ -26,7 +26,7 @@ class FactorizedContractionTests(unittest.TestCase):
             uncertified.contraction_complete = True
         for order in (None, [0, 1], [1, 0]):
             with self.subTest(order=order):
-                result = source.contract(sp.ContractSettings(order=order))
+                result = source.contract(order=order)
                 self.assertIsInstance(result, sp.AliasedTensorExpression)
                 self.assertTrue(result.contraction_complete)
                 self.assertGreater(len(result.aliases), 0)
@@ -50,10 +50,7 @@ class FactorizedContractionTests(unittest.TestCase):
                     result.to_expression().to_expression().expand(), expected
                 )
                 self.assertEqual(
-                    source.contract(sp.ContractSettings(order=order))
-                    .expand()
-                    .to_expression(),
-                    expected,
+                    source.contract(order=order).expand().to_expression(), expected
                 )
                 evaluator = result.evaluator([first, second], iterations=1, n_cores=1)
                 self.assertEqual(evaluator.evaluate([[2.0, 3.0]])[0][0], 5.0)
@@ -61,7 +58,7 @@ class FactorizedContractionTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError, "every normalized top-level factor"
             ):
-                source.contract(sp.ContractSettings(order=order))
+                source.contract(order=order)
         with self.assertRaisesRegex(TypeError, "output"):
             source.contract(output="invalid")
         with self.assertRaises(TypeError):
@@ -74,9 +71,7 @@ class FactorizedContractionTests(unittest.TestCase):
         source = gamma(spin("i"), spin("j"), lorentz("mu")) * gamma(
             spin("j"), spin("i"), lorentz("nu")
         )
-        untouched = source.contract(
-            sp.ContractSettings(representations=[])
-        ).to_expression()
+        untouched = source.contract(representations=[]).to_expression()
         self.assertEqual(untouched, source)
         collected = source.contract().to_expression()
         self.assertIn("trace", collected.to_expression().format_plain())
@@ -88,9 +83,7 @@ class FactorizedContractionTests(unittest.TestCase):
         # Independent finite HEP components compare represented tensors, not printed dummy labels.
         self.assertEqual(explicit.components(), collected.components())
         self.assertEqual(source.reduce_algebra().to_expression(), source)
-        reduced = source.reduce_algebra(
-            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings())
-        )
+        reduced = source.reduce_algebra(gamma=True)
         self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
         self.assertEqual(reduced.expand().components(), collected.components())
         for obsolete in (
@@ -103,23 +96,75 @@ class FactorizedContractionTests(unittest.TestCase):
         ):
             self.assertFalse(hasattr(source, obsolete))
 
-    def test_contract_settings_repr_preserves_representation_identities(self):
-        custom = sp.Representation("settings_repr::custom", 3, is_self_dual=False)
-        for representations in (
-            None,
-            [],
-            [sp.Representation.mink(4), sp.Representation.cof(3).dual()],
-            [custom.name, custom.dual().name],
-        ):
-            with self.subTest(representations=representations):
-                source = sp.ContractSettings(
-                    representations=representations, collect_traces=False, order=[1, 0]
+    def test_keyword_configs_and_family_validation(self):
+        import inspect
+
+        tensor = sp.TensorExpression(3)
+        for carrier in (tensor, sp.AliasedTensorExpression.from_expression(tensor)):
+            for operation in (carrier.contract, carrier.reduce_algebra):
+                signature = inspect.signature(operation)
+                self.assertTrue(
+                    all(
+                        p.kind == inspect.Parameter.KEYWORD_ONLY
+                        for p in signature.parameters.values()
+                    )
                 )
-                restored = eval(repr(source), vars(sp))
-                self.assertEqual(repr(restored), repr(source))
-                self.assertEqual(restored.representations, source.representations)
-                self.assertEqual(restored.order, source.order)
-                self.assertFalse(restored.collect_traces)
+                with self.assertRaises(TypeError):
+                    operation({})
+                with self.assertRaises(TypeError):
+                    operation(settings={})
+                with self.assertRaises(TypeError):
+                    operation(max_passes=0)
+            for family, options in (
+                (
+                    "gamma",
+                    dict(
+                        gamma_output="reduced",
+                        gamma_ordering="repeated_pairs",
+                        gamma_evaluate_traces=False,
+                        gamma0=False,
+                        gamma_conjugate=False,
+                        gamma_expand_three_gamma_epsilon=False,
+                    ),
+                ),
+                (
+                    "color",
+                    dict(
+                        color_evaluate_traces=False,
+                        color_expand_fierz=False,
+                        color_substitute_cof_dimension_invariants=False,
+                    ),
+                ),
+            ):
+                for option, value in options.items():
+                    with self.subTest(option=option):
+                        with self.assertRaisesRegex(
+                            ValueError, f"{option} requires {family}=True"
+                        ):
+                            carrier.reduce_algebra(**{option: value})
+                config = {family: True, **options}
+                self.assertEqual(
+                    carrier.reduce_algebra(**config).to_expression(), tensor
+                )
+            for option in ("gamma_ordering", "gamma_output"):
+                with self.assertRaisesRegex(ValueError, option):
+                    carrier.reduce_algebra(gamma=True, **{option: "invalid"})
+            for representations in (
+                None,
+                [],
+                [sp.Representation.mink(4)],
+                [sp.Representation.mink(4).name],
+            ):
+                config = dict(representations=representations, collect_traces=False)
+                self.assertEqual(carrier.contract(**config).to_expression(), tensor)
+        for obsolete in (
+            "ContractSettings",
+            "AlgebraSettings",
+            "GammaSimplifySettings",
+            "ColorSimplifySettings",
+            "GammaChainOrdering",
+        ):
+            self.assertFalse(hasattr(sp, obsolete), obsolete)
 
     def test_scalar_product_notation_is_distinct_from_index_contraction(self):
         rep = sp.Representation.mink(4)

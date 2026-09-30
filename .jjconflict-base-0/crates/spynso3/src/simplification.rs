@@ -3,22 +3,17 @@ use pyo3::{
     types::{PyModule, PyModuleMethods},
 };
 
-mod algebra;
 mod pipeline;
 mod tooling;
 
-pub(crate) use pipeline::{PyAlgebraSettings, PyContractSettings, PyReductionStatus};
+pub(crate) use pipeline::{PyReductionStatus, algebra_settings, contraction_representations};
 
-pub(crate) use algebra::{PyColorSimplifySettings, PyGammaSimplifySettings};
 pub(crate) use tooling::{
     CanonicalizationError, CookingError, DiracAdjointError, Intern, NetworkToolingError,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PyAlgebraSettings>()?;
-    module.add_class::<PyContractSettings>()?;
     module.add_class::<PyReductionStatus>()?;
-    algebra::register(module)?;
     tooling::register(module)
 }
 
@@ -41,14 +36,9 @@ mod tests {
 
     const PUBLIC_API: &[&str] = &[
         "CanonicalizationError",
-        "ColorSimplifySettings",
         "CookingError",
         "DiracAdjointError",
-        "GammaChainOrdering",
-        "GammaSimplifySettings",
         "NetworkToolingError",
-        "AlgebraSettings",
-        "ContractSettings",
         "ReductionStatus",
         "canonize",
         "dirac_adjoint",
@@ -164,9 +154,9 @@ spin = sp.Representation.bis(4)
 lorentz = sp.Representation.mink(4)
 gamma = sp.TensorExpression.dirac_gamma(4)
 source = gamma(spin('i'), spin('j'), lorentz('mu')) * gamma(spin('j'), spin('i'), lorentz('nu'))
-assert source.contract(sp.ContractSettings(representations=[])).to_expression() == source
+assert source.contract(representations=[]).to_expression() == source
 assert source.reduce_algebra().to_expression() == source
-assert sp.ContractSettings(representations=[lorentz]).representations == [lorentz.name]
+assert source.contract(representations=[lorentz]).to_expression() == source.contract(representations=[lorentz.name]).to_expression()
 collected = source.contract().to_expression()
 assert 'trace' in collected.to_expression().format_plain()
 unfolded = collected.undo_trace()
@@ -175,10 +165,10 @@ assert 'chain' in unfolded.to_expression().format_plain()
 explicit = unfolded.undo_chain()
 assert 'chain' not in explicit.to_expression().format_plain()
 assert explicit.components() == collected.components()
-reduced = source.reduce_algebra(sp.AlgebraSettings(gamma=sp.GammaSimplifySettings()))
+reduced = source.reduce_algebra(gamma=True)
 assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression().to_expression()))
 assert reduced.expand().components() == collected.components()
-capped = source.reduce_algebra(sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=0))
+capped = source.reduce_algebra(gamma=True, max_steps_per_domain=0)
 assert capped.reduction_status == sp.ReductionStatus.Capped
 assert capped.to_expression() == source
 assert not hasattr(sp.Tensor, 'contract')
@@ -280,12 +270,20 @@ assert hasattr(sp.Tensor, 'contract_ports')
 
             for (class, expected) in [
                 (
-                    module.getattr("GammaSimplifySettings").unwrap(),
-                    "(*, output='reduced', chain_ordering=None, evaluate_traces=True, gamma0=False, conjugate=False, expand_three_gamma_epsilon=False)",
-                ),
-                (
                     py.get_type::<TensorExpression>().into_any(),
                     "(expression, *, structure=None, intern=None)",
+                ),
+                (
+                    py.get_type::<TensorExpression>()
+                        .getattr("contract")
+                        .unwrap(),
+                    "($self, *, representations=None, metrics=True, rank_one=True, collect_chains=True, collect_traces=True, order=None, max_steps_per_domain=16)",
+                ),
+                (
+                    py.get_type::<TensorExpression>()
+                        .getattr("reduce_algebra")
+                        .unwrap(),
+                    "($self, *, gamma=False, color=False, epsilon=False, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16)",
                 ),
             ] {
                 let name = class.getattr("__name__").unwrap();

@@ -1,14 +1,9 @@
 """Generated massive e- e+ -> W- W+ with Higgs and gauge interference."""
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -104,7 +99,7 @@ transverse_test = (longitudinal * projection).replace(
 )
 transverse_test = (
     TensorExpression(transverse_test)
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
 )
@@ -131,12 +126,9 @@ for pdg, term in diagram_terms.items():
     adjoint = (
         operator.dirac_adjoint()
         .reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-                epsilon=True,
-            )
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .replace(conjugate(P(a, b)), P(a, b))
@@ -154,17 +146,15 @@ for left, left_operator in operators.items():
             intern="flattened",
         )
         traced = (
-            paired.reduce_algebra(
-                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
-            )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
-            .reduce_algebra(AlgebraSettings(epsilon=True))
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            paired.reduce_algebra(gamma=True, epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
+            .reduce_algebra(epsilon=True)
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
         )
         scalar = (
             TensorExpression(traced.to_expression() * density, intern="flattened")
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )
@@ -183,8 +173,8 @@ for left, left_operator in operators.items():
         result = (
             kin.apply(
                 TensorExpression(conserved)
-                .reduce_algebra(AlgebraSettings(epsilon=True))
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .reduce_algebra(epsilon=True)
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
                 .to_expression()

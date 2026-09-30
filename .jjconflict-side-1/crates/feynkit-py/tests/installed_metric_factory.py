@@ -1,7 +1,5 @@
 """Typed metrics support explicit dual representations and preserve index order."""
 
-from symbolica.community.tensor import ContractSettings
-
 from symbolica import E, S
 from symbolica.community.tensor import (
     PortPattern,
@@ -23,7 +21,7 @@ for dimension in (2, 3, 5):
         assert indexed.to_expression() == expected
         assert metric("i", "i").is_scalar
         assert metric("i", "i").contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
+            collect_chains=False, collect_traces=False
         ).to_expression().to_expression() == E(str(dimension))
         network = indexed.to_network()
         network.execute()
@@ -54,13 +52,13 @@ assert (
     == TensorExpression.g(mink, mink)("mu", "nu").to_expression()
 )
 assert TensorExpression.g(mink)("mu", "mu").contract(
-    ContractSettings(collect_chains=False, collect_traces=False)
+    collect_chains=False, collect_traces=False
 ).to_expression().to_expression() == E("4")
 n, m = S("metric_N", "metric_M")
 symbolic = Representation.cof(n)
 assert (
     TensorExpression.g(symbolic, symbolic.dual())("i", "i")
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
     == n

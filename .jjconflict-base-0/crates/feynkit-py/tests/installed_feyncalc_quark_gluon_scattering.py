@@ -6,16 +6,10 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl-2
 The extra angular-cut rates retain the quark mass and use native phase space.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
-from symbolica.community.tensor import (
-    ColorSimplifySettings,
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -86,12 +80,9 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     adjoint = (
         operator.dirac_adjoint()
         .reduce_algebra(
-            AlgebraSettings(
-                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-                epsilon=True,
-            )
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
     )
@@ -147,20 +138,16 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     print("color", boson, flush=True)
     colored = (
         TensorExpression(generic, intern="flattened")
-        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
 
@@ -171,18 +158,13 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     ) * quark.spin_sum(P(2), index_scope(adjoint_index, ports[0]), ports[2])
     print("spin", boson, flush=True)
     spin_summed = (
-        TensorExpression(
-            colored.to_expression() * spin_projector,
-            intern="flattened",
-        )
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        TensorExpression(colored.to_expression() * spin_projector, intern="flattened")
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
     reduced = kinematics.apply(
-        spin_summed.contract(
-            ContractSettings(collect_chains=False, collect_traces=False)
-        )
+        spin_summed.contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
     )
@@ -205,10 +187,9 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         # scalar coefficients without splitting them into a second representation.
         scalar = (
             TensorExpression(
-                reduced.to_expression() * polarizations,
-                intern="flattened",
+                reduced.to_expression() * polarizations, intern="flattened"
             )
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
         )

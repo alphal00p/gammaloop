@@ -1222,7 +1222,7 @@ mod tests {
         Python::attach(|py| -> PyResult<()> {
             let factory = py
                 .get_type::<TensorExpression>()
-                .call_method1("f", (8,))?
+                .call_method1("color_f", (8,))?
                 .extract::<Py<TensorExpression>>()?;
             let reference = ExactLibraryReference::from_expression(&factory.bind(py).borrow())?;
             assert_eq!(reference.key, CS.f_strct::<AbstractIndex>(8));

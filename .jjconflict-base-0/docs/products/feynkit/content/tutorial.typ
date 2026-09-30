@@ -175,7 +175,6 @@ exactly once; the diagnostic automorphism order is not a second symmetry factor.
 
 // docs-example: compile
 ```python
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
 from symbolica.community.feynkit import Amplitude
 
 amplitude = Amplitude(generated.diagrams)
@@ -183,8 +182,8 @@ operator = amplitude.expression()
 adjoint = amplitude.conjugate().expression()
 squared = amplitude.squared()
 unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
-tensor = unpolarized.expression().reduce_algebra(AlgebraSettings.hep())
-tensor = tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
+tensor = unpolarized.expression().reduce_algebra(gamma=True, color=True, epsilon=True)
+tensor = tensor.contract(collect_chains=False, collect_traces=False)
 ```
 
 These expressions are amputated and unintegrated. External wavefunctions remain open

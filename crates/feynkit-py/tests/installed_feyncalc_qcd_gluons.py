@@ -4,17 +4,11 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl
 The ordinary amplitudes include all three diagrams and their interference.
 """
 
-from symbolica.community.tensor import AlgebraSettings, ContractSettings
-
 from pathlib import Path
 
 from symbolica import E, Replacement, S
 from symbolica.community import feynkit as fk
-from symbolica.community.tensor import (
-    ColorSimplifySettings,
-    GammaSimplifySettings,
-    TensorExpression,
-)
+from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")
 
@@ -74,13 +68,8 @@ operator = TensorExpression(amplitude)
 assert len(operator.structure.slots) == 8
 adjoint = (
     operator.dirac_adjoint()
-    .reduce_algebra(
-        AlgebraSettings(
-            gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
-            epsilon=True,
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
 )
@@ -127,20 +116,16 @@ generic = (
 )
 colored = (
     TensorExpression(generic, intern="flattened")
-    .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(color=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
     .replace(dA, Nc**2 - 1)
 )
 colored = (
     TensorExpression(colored)
-    .reduce_algebra(
-        AlgebraSettings(
-            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-        )
-    )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )
 
@@ -153,8 +138,8 @@ spin_projector = model.particle_by_pdg(5).spin_sum(
 )
 spin_summed = (
     TensorExpression(colored.to_expression() * spin_projector, intern="flattened")
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
 )
 expected = (
@@ -186,10 +171,9 @@ for references in ((P(3), P(2)), (P(0), P(0))):
         )
     scalar = (
         TensorExpression(
-            spin_summed.to_expression() * polarizations,
-            intern="flattened",
+            spin_summed.to_expression() * polarizations, intern="flattened"
         )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
     )

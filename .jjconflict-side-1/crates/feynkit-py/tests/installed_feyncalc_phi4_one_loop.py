@@ -5,8 +5,6 @@ Native graph routing determines all three bubble invariants. Independent
 Feynman-parameter integrals check massive and massless finite coefficients.
 """
 
-from symbolica.community.tensor import ContractSettings
-
 import cmath
 import json
 import math
@@ -204,7 +202,7 @@ for label, legs, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
         )
         numerator = (
             TensorExpression(numerator)
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
             .to_expression()

@@ -1,7 +1,5 @@
 """Physical state counts, transverse projectors and sewing in arbitrary dimensions."""
 
-from symbolica.community.tensor import ContractSettings
-
 from symbolica import E, S
 from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression, TensorName
@@ -29,9 +27,7 @@ for dimension in (4, 6, E("4"), E("6"), D):
             for vector in (p, n) if reference is not None else (p,):
                 contraction = (
                     TensorExpression((projector * vector(mink(dimension, i))).expand())
-                    .contract(
-                        ContractSettings(collect_chains=False, collect_traces=False)
-                    )
+                    .contract(collect_chains=False, collect_traces=False)
                     .to_expression()
                     .to_dots()
                 )
@@ -42,7 +38,7 @@ for dimension in (4, 6, E("4"), E("6"), D):
                         projector * metric(mink(dimension, i), mink(dimension, j))
                     ).expand()
                 )
-                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+                .contract(collect_chains=False, collect_traces=False)
                 .to_expression()
                 .to_dots()
             )

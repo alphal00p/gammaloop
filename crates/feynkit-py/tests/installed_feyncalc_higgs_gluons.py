@@ -5,19 +5,13 @@ The gallery uses CreateFeynAmp PreFactor -> -1. Native UFO amplitudes retain
 all graph/Feynman-rule phases, so their overall sign is opposite to that page.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from math import asin, asinh, log, pi, sqrt
 from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import feynkit as hep
 from symbolica.community.feynkit import oneloop
-from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 D, s, m, gs, y, mu, nu, ca, cb, eps = S(
@@ -129,15 +123,11 @@ for orientation, diagram in enumerate(result.diagrams):
     # orientations. Promote Lorentz dimension before Dirac trace; tr(1)=4.
     trace = (
         TensorExpression(numerator.expand())
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .expand()
-        .reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
         .to_expression()
@@ -298,7 +288,7 @@ assert (tensor - exchanged).expand() == E("0")
 for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
     ward = (
         TensorExpression((tensor * contraction).expand())
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
         .to_expression()
@@ -306,7 +296,7 @@ for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
     assert kinematics.apply(ward).expand() == E("0")
 norm = kinematics.apply(
     TensorExpression((tensor**2).expand())
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
     .to_expression()
@@ -314,7 +304,7 @@ norm = kinematics.apply(
 assert (norm - (D - 2) * s**2 / 4).expand() == E("0")
 color_norm = (
     TensorExpression(color**2)
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_expression()
 )
@@ -339,7 +329,7 @@ polarization_sum = gluon.spin_sum(P(1), mu, rho, reference=P(2)) * gluon.spin_su
 )
 physical_norm = physical_kinematics.apply(
     TensorExpression((physical_tensor * conjugate_tensor * polarization_sum).expand())
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
     .to_expression()
@@ -361,7 +351,7 @@ physical_projection_residual = physical_kinematics.apply(
             (full_finite_tensor - finite_factor * physical_tensor) * polarization_sum
         ).expand()
     )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_expression()
     .to_dots()
     .to_expression()

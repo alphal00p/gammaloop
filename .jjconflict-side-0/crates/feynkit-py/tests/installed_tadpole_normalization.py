@@ -1,18 +1,12 @@
 """Generated fermion and neutral scalar tadpoles agree with Wick contractions."""
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 from math import factorial, pi
 from pathlib import Path
 
 from symbolica import E, S, Symbol
 from symbolica.community import feynkit as hep
 from symbolica.community.feynkit import oneloop
-from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 top, higgs = (model.particle_by_pdg(pdg) for pdg in (6, 25))
@@ -95,15 +89,11 @@ for label, vertices, outgoing, mass, expected_trace, wick_weight in [
     )
     trace = (
         TensorExpression(numerator.expand())
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .expand()
-        .reduce_algebra(
-            AlgebraSettings(
-                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
-            )
-        )
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         .to_dots()
         .to_expression()

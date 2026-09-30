@@ -4,12 +4,6 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 This tests the squared current contraction, not diagram generation or phase space.
 """
 
-from symbolica.community.tensor import (
-    AlgebraSettings,
-    ContractSettings,
-    GammaSimplifySettings,
-)
-
 import importlib
 import sys
 from pathlib import Path
@@ -54,15 +48,15 @@ kin = fk.Kinematics.mandelstam(
 contracted = (
     (
         TensorExpression(incoming)
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
         * TensorExpression(outgoing)
-        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(gamma=True, epsilon=True)
+        .contract(collect_chains=False, collect_traces=False)
         .to_expression()
     )
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .contract(collect_chains=False, collect_traces=False)
     .to_dots()
     .to_expression()
     .to_expression()
@@ -106,12 +100,12 @@ right_current = chain(
 projected = (incoming * outgoing).replace(pattern, right_current)
 traces = (
     TensorExpression(projected)
-    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(gamma=True, epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
 )
 contracted = (
-    traces.reduce_algebra(AlgebraSettings(epsilon=True))
-    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    traces.reduce_algebra(epsilon=True)
+    .contract(collect_chains=False, collect_traces=False)
     .to_dots()
     .to_expression()
     .to_expression()

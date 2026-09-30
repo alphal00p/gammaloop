@@ -5,8 +5,6 @@ Native graph factors and propagators feed the shared tadpole IBP recurrence.
 OneLOop evaluates its master; direct parameter integrals check finite terms.
 """
 
-from symbolica.community.tensor import ContractSettings
-
 import json
 import math
 
@@ -218,7 +216,7 @@ for label, incoming, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
         )
         numerator = (
             TensorExpression(numerator)
-            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .contract(collect_chains=False, collect_traces=False)
             .to_expression()
             .to_dots()
             .to_expression()
