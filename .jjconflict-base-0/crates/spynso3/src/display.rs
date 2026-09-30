@@ -20,7 +20,7 @@ use spenso::{
     portable_payload::register_math_display_symbol,
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
     structure::{
-        TensorDataLayout, TensorStructure,
+        TensorDataLayout,
         partial::PartialStructureExt,
         representation::{
             IndexDisplay, IndexPalette, IndexRow, RepName, RepresentationClass,
@@ -146,12 +146,29 @@ pub struct DisplaySettings {
     /// >>> value = DisplaySettings().tensor_view
     #[pyo3(get)]
     tensor_view: String,
+    /// Choose compact or degree-explicit scalar invariant notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     "compact" uses C_F, C_A and T_R for the quadratic color invariants;
+    ///     "explicit" uses C_2(F), C_2(A) and I_2(F). Higher degrees use
+    ///     C_k(R), I_k(R) and G_k(R, S) in either style.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings(invariant_style="explicit").invariant_style
+    /// 'explicit'
+    #[pyo3(get)]
+    invariant_style: String,
     /// Include representation dimensions in index notation.
     ///
     /// Returns
     /// -------
     /// bool
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     ///
     /// Examples
     /// --------
@@ -235,6 +252,7 @@ impl Default for DisplaySettings {
             index_style: "alphabet".to_owned(),
             component_style: "superscript".to_owned(),
             tensor_view: "interactive".to_owned(),
+            invariant_style: "compact".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -273,7 +291,8 @@ impl DisplaySettings {
     ///     Rich layout: "ports" places indices by tensor axes; "schoonschip"
     ///     uses compact contracted-vector notation; "call" uses function-call notation.
     /// show_dimensions : bool, default False
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     /// parentheses : bool, default True
     ///     Include the optional grouping parentheses used by tensor notation.
     /// commas : bool or None, default None
@@ -295,6 +314,13 @@ impl DisplaySettings {
     /// tensor_view : str, default "interactive"
     ///     Concrete-tensor HTML: "interactive" provides a component explorer with
     ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+    ///
+    /// invariant_style : {"compact", "explicit"}, default "compact"
+    ///     Compact quadratic color notation uses C_F, C_A and T_R. Explicit
+    ///     notation uses C_2(F), C_2(A) and I_2(F). Both use C_k(R), I_k(R)
+    ///     and G_k(R, S) for higher invariants. show_dimensions adds the
+    ///     dimension to each representation label and disables quadratic aliases.
+    ///     Older scalar symbols have no representation dimension to display.
     ///
     /// Returns
     /// -------
@@ -322,6 +348,7 @@ impl DisplaySettings {
         index_style = "alphabet",
         component_style = "superscript",
         tensor_view = "interactive",
+        invariant_style = "compact",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
@@ -335,6 +362,7 @@ impl DisplaySettings {
         index_style: &str,
         component_style: &str,
         tensor_view: &str,
+        invariant_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
@@ -357,12 +385,18 @@ impl DisplaySettings {
                 "tensor_view must be 'interactive' or 'matrix'",
             ));
         }
+        if !matches!(invariant_style, "compact" | "explicit") {
+            return Err(PyValueError::new_err(
+                "invariant_style must be 'compact' or 'explicit'",
+            ));
+        }
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
             component_style: component_style.to_owned(),
             tensor_view: tensor_view.to_owned(),
+            invariant_style: invariant_style.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -463,6 +497,7 @@ impl DisplaySettings {
                 ("index_style", "index_style"),
                 ("component_style", "component_style"),
                 ("tensor_view", "tensor_view"),
+                ("invariant_style", "invariant_style"),
             ],
         )
     }
@@ -504,7 +539,10 @@ fn has_renderer_only_settings(settings: &DisplaySettings) -> bool {
         || settings.factor_gap != defaults.factor_gap
 }
 
-fn reject_renderer_only_settings(settings: &DisplaySettings, method: &str) -> PyResult<()> {
+pub(crate) fn reject_renderer_only_settings(
+    settings: &DisplaySettings,
+    method: &str,
+) -> PyResult<()> {
     if has_renderer_only_settings(settings) {
         return Err(PyValueError::new_err(format!(
             "{method} emits ports-style source; Schoonschip, call, and custom spacing layouts require to_html or to_svg"
@@ -531,9 +569,6 @@ enum TensorDisplayMode {
 const MAX_DISPLAY_ELEMENTS: usize = 100;
 const DISPLAY_EDGE: usize = 3;
 const DISPLAY_SLICE_EDGE: usize = 1;
-// Bound automatic symbolic displays before interface presentation, printer
-// callbacks, portable attachment discovery, or render-tree serialization.
-const MAX_FORMULA_BYTES: usize = 4_096;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisplayIndex {
@@ -579,6 +614,7 @@ fn display_options_with_settings(
     presentation.commas = settings.commas.unwrap_or(settings.tensor_layout == "call");
     presentation.symbol_scripts = settings.symbol_scripts;
     presentation.array_components = settings.component_style == "array";
+    presentation.explicit_invariants = settings.invariant_style == "explicit";
 
     let mut options = match mode {
         TensorDisplayMode::Plain => presentation.nice_symbolica(),
@@ -1050,12 +1086,12 @@ pub(crate) fn format_structured(
 
 pub(crate) fn atom_to_latex(
     atom: &Atom,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    let mut options = display_options(TensorDisplayMode::Latex, show_dimensions);
+    let mut options = display_options_with_settings(TensorDisplayMode::Latex, settings);
     options.max_line_length = max_line_length;
-    let body = format_atom_with_options(atom, &options, "alphabet");
+    let body = format_atom_with_options(atom, &options, &settings.index_style);
     if body.contains("\\\\\n") {
         format!("$$\\begin{{gathered}}\n{body}\n\\end{{gathered}}$$")
     } else {
@@ -1065,10 +1101,10 @@ pub(crate) fn atom_to_latex(
 
 pub(crate) fn structured_to_latex(
     value: &SymbolicTensor<PartialStructure>,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    atom_to_latex(&value.presentation_atom(), show_dimensions, max_line_length)
+    atom_to_latex(&value.presentation_atom(), settings, max_line_length)
 }
 
 fn format_atom_backend(
@@ -1092,104 +1128,13 @@ fn format_atom_backend(
     }
 }
 
-/// A display-only prefix: omitted terms never enter the tensor or its proofs.
-fn symbolic_preview(
-    py: Python<'_>,
-    atom: &Atom,
-    rank: Option<usize>,
-    settings: &DisplaySettings,
-    notation_source: Option<&str>,
-    backend: FormattedOutputBackend,
-) -> PyResult<String> {
-    let mut terms = Vec::new();
-    let total = if let AtomView::Add(sum) = atom.as_view() {
-        // A scalar sum's terms have no external interface to reorder. For a
-        // tensor, retain an honest rank summary rather than assigning the
-        // original interface to an unvalidated partial expression.
-        if rank.is_none_or(|rank| rank == 0) {
-            let mut remaining = MAX_FORMULA_BYTES;
-            for term in sum
-                .iter()
-                .take(DISPLAY_EDGE.min(sum.get_nargs().saturating_sub(1)))
-            {
-                let bytes = term.get_byte_size();
-                if bytes > remaining {
-                    break;
-                }
-                remaining -= bytes;
-                terms.push(term.to_owned());
-            }
-        }
-        Some(sum.get_nargs())
-    } else {
-        None
-    };
-    let caption = match total {
-        Some(total) => format!("{} of {total} terms shown", terms.len()),
-        None => "Large expression; full formula not shown".to_owned(),
-    };
-    let caption = match rank {
-        Some(rank) if rank != 0 => format!("Rank-{rank} tensor; {caption}"),
-        _ => caption,
-    };
-    let prefix = (!terms.is_empty()).then(|| Atom::add_many(&terms));
-    match backend {
-        FormattedOutputBackend::Text => {
-            let body = prefix.map_or_else(
-                || "…".to_owned(),
-                |prefix| {
-                    format!(
-                        "{} + …",
-                        format_atom_with_settings(&prefix, TensorDisplayMode::Plain, settings)
-                    )
-                },
-            );
-            Ok(format!("{body}\n[{caption}]"))
-        }
-        FormattedOutputBackend::Latex => {
-            let body = prefix.map_or_else(
-                || r"\cdots".to_owned(),
-                |prefix| {
-                    format!(
-                        r"{} + \cdots",
-                        format_atom_with_settings(&prefix, TensorDisplayMode::Latex, settings)
-                    )
-                },
-            );
-            Ok(format!(
-                r"$$\begin{{gathered}}{body}\\\text{{{caption}}}\end{{gathered}}$$"
-            ))
-        }
-        FormattedOutputBackend::Html => {
-            let body = if let Some(prefix) = prefix {
-                atom_to_html_with_ellipsis(py, &prefix, settings, notation_source, true)?
-            } else {
-                notebook_html_fragment("<body><math display=\"block\"><mo>⋯</mo></math></body>")?
-            };
-            Ok(format!(
-                "<div data-spenso-preview>{body}<div class=\"spenso-preview-caption\">{caption}</div></div>"
-            ))
-        }
-    }
-}
-
-pub(crate) fn structured_preview(
+pub(crate) fn format_structured_backend(
     py: Python<'_>,
     value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
     backend: FormattedOutputBackend,
 ) -> PyResult<String> {
-    if value.expression().as_view().get_byte_size() > MAX_FORMULA_BYTES {
-        return symbolic_preview(
-            py,
-            value.expression(),
-            Some(value.structure().canonical().order()),
-            settings,
-            notation_source,
-            backend,
-        );
-    }
     format_atom_backend(
         py,
         &value.presentation_atom(),
@@ -1207,7 +1152,8 @@ pub(crate) fn format_structured_output_rich(
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
     PythonFormattedOutput::lazy(move |py, backend| {
-        let result = structured_preview(py, &value, &settings, notation_source.as_deref(), backend);
+        let result =
+            format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend);
         // Typst is optional; LaTeX remains the notebook fallback.
         if matches!(backend, FormattedOutputBackend::Html) {
             Ok(result.ok())
@@ -1231,6 +1177,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
             "(\n",
             "  tensor-layout: {:?},\n",
             "  component-style: {:?},\n",
+            "  invariant-style: {:?},\n",
             "  with-dim: {},\n",
             "  parens: {},\n",
             "  commas: {},\n",
@@ -1242,6 +1189,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
         ),
         settings.tensor_layout,
         settings.component_style,
+        settings.invariant_style,
         settings.show_dimensions,
         settings.parentheses,
         commas,
@@ -1328,7 +1276,7 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
     ))
 }
 
-fn typst_main_source(settings: &DisplaySettings, atom: &Atom, ellipsis: bool) -> PyResult<String> {
+fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
     Ok(format!(
         concat!(
             "#import \"notation.typ\" as tensor-notation\n",
@@ -1340,11 +1288,10 @@ fn typst_main_source(settings: &DisplaySettings, atom: &Atom, ellipsis: bool) ->
             "  tree,\n",
             "  notation: tensor-notation.default-notation(settings: settings),\n",
             ")\n",
-            "$ #visual{} $\n"
+            "$ #visual $\n"
         ),
         typst_settings_source(settings, atom),
         typst_custom_print_source(settings, atom)?,
-        if ellipsis { " + dots.c" } else { "" },
     ))
 }
 
@@ -1438,18 +1385,8 @@ pub(crate) fn atom_to_html(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
-    atom_to_html_with_ellipsis(py, atom, settings, notation_source, false)
-}
-
-fn atom_to_html_with_ellipsis(
-    py: Python<'_>,
-    atom: &Atom,
-    settings: &DisplaySettings,
-    notation_source: Option<&str>,
-    ellipsis: bool,
-) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom, ellipsis)?;
+    let source = typst_main_source(settings, atom)?;
     let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
@@ -1511,7 +1448,7 @@ pub(crate) fn atom_to_svg(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom, false)?;
+    let source = typst_main_source(settings, atom)?;
     let svg = compile_typst(py, &source, "svg", notation_source, Some(&tree))?;
     String::from_utf8(svg)
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
@@ -2677,7 +2614,7 @@ fn to_svg(
     atom_to_svg(py, &expression.expr, &settings, notation_source.as_deref())
 }
 
-/// Create a lazy, bounded rich display value for a notebook.
+/// Create a lazy rich display value for a notebook.
 ///
 /// Parameters
 /// ----------
@@ -2696,12 +2633,12 @@ fn to_svg(
 /// Returns
 /// -------
 /// FormattedOutput
-///     Each requested backend is rendered once and cached. Large expressions
-///     show a marked preview; the original expression remains exact.
+///     Each requested backend renders the complete expression once and caches it.
 ///
 /// Notes
 /// -----
-/// Use to_html(), to_svg(), or format_tensor() for explicit full output.
+/// Settings are captured here; custom printers run on the first request
+/// for each backend. Create a new formatted value after changing printers.
 ///
 /// Examples
 /// --------
@@ -2726,18 +2663,7 @@ fn formatted(
     PythonFormattedOutput::lazy(move |py, backend| {
         let expression = expression.borrow(py);
         let atom = &expression.expr;
-        let result = if atom.as_view().get_byte_size() > MAX_FORMULA_BYTES {
-            symbolic_preview(
-                py,
-                atom,
-                None,
-                &settings,
-                notation_source.as_deref(),
-                backend,
-            )
-        } else {
-            format_atom_backend(py, atom, &settings, notation_source.as_deref(), backend)
-        };
+        let result = format_atom_backend(py, atom, &settings, notation_source.as_deref(), backend);
         if matches!(backend, FormattedOutputBackend::Html) {
             Ok(result.ok())
         } else {
@@ -2832,6 +2758,7 @@ mod tests {
                 style,
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.index_style, style);
@@ -2858,6 +2785,7 @@ mod tests {
                 "invalid",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -2878,6 +2806,7 @@ mod tests {
                 "alphabet",
                 style,
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.component_style, style);
@@ -2908,6 +2837,7 @@ mod tests {
                 "alphabet",
                 "invalid",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -2938,7 +2868,7 @@ mod tests {
         ] {
             assert!(!format_atom_with_mode(&atom, mode, false).contains("hedge"));
         }
-        let source = typst_main_source(&DisplaySettings::default(), &atom, false).unwrap();
+        let source = typst_main_source(&DisplaySettings::default(), &atom).unwrap();
         assert!(source.contains("index-aliases:"));
         assert!(source.contains("display_index_tests::hedge"));
         assert_eq!(atom.to_canonical_string(), original);
@@ -3513,6 +3443,7 @@ mod tests {
                 "alphabet",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             let source = typst_settings_source(&settings, &Atom::Zero);
@@ -3547,7 +3478,7 @@ mod tests {
 
     #[test]
     fn generated_project_reads_the_portable_render_tree_as_binary() {
-        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero, false).unwrap();
+        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero).unwrap();
         assert!(source.contains("cbor(read(\"tree.cbor\", encoding: none))"));
         assert!(source.contains("tensor-notation.render"));
     }

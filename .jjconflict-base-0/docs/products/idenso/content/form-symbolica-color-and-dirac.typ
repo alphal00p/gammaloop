@@ -401,7 +401,7 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
   -> trace(cof(Nc),
        t(coad(Nc^2-1,a),in,out),
        t(coad(Nc^2-1,b),in,out))
-  -> TR * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
+  -> idx(2,cof(Nc)) * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
 ```
 
 === C3. Fundamental Casimir and adjacent contractions
@@ -427,7 +427,7 @@ Pattern:
 chain(cof(Nc,i),dind(cof(Nc,k)),
   t(coad(Nc^2-1,a),in,out),
   t(coad(Nc^2-1,a),in,out))
-  -> C_F * g(cof(Nc,i),dind(cof(Nc,k)))
+  -> cas(2,cof(Nc)) * g(cof(Nc,i),dind(cof(Nc,k)))
 ```
 Assumptions: `color.h` keeps `C_F` as `cR`, not automatically as $(N_c^2 - 1) / (2 N_c)$.
 
@@ -443,7 +443,7 @@ $ #anchor("eq-color-fierz")
 This identity is not written in this explicit form in `color.h`, whose main algorithm uses trace joining and invariant reductions. It is implemented directly in GammaLoop/idenso:
 ```rs
 t(e,a,b) * t(e,c,d)
-  -> TR * (id(a,d) * id(c,b) - id(a,b) * id(c,d) / Nc)
+  -> idx(2,cof(Nc)) * (id(a,d) * id(c,b) - id(a,b) * id(c,d) / Nc)
 ```
 Source: #source(color-rs + "#L407-L414"). Symbolica documentation for replacement mechanics: #source(sym-pattern).
 
@@ -451,7 +451,7 @@ Pattern:
 ```rs
 t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
 * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))
-  -> TR * (
+  -> idx(2,cof(Nc)) * (
        g(cof(Nc,i),dind(cof(Nc,l)))
        * g(cof(Nc,k),dind(cof(Nc,j)))
        - g(cof(Nc,i),dind(cof(Nc,j)))
@@ -753,14 +753,14 @@ trace(cof(nc_),t(coad(na_,a_),in,out))
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out))
-  -> TR * g(coad(na_,a_),coad(na_,b_))
+  -> idx(2,cof(nc_)) * g(coad(na_,a_),coad(na_,b_))
 
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out),
   t(coad(na_,c_),in,out))
   -> dR(coad(na_,a_),coad(na_,b_),coad(na_,c_))
-     + i_ / 2 * TR * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
+     + i_ / 2 * idx(2,cof(nc_)) * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
 ```
 
 Casimir and separated-generator shortcuts:
@@ -770,14 +770,14 @@ chain(cof(nc_,i_),dind(cof(nc_,k_)),
   t(coad(na_,a_),in,out),
   t(coad(na_,a_),in,out),
   ys___)
-  -> CF * chain(cof(nc_,i_),dind(cof(nc_,k_)),xs___,ys___)
+  -> cas(2,cof(nc_)) * chain(cof(nc_,i_),dind(cof(nc_,k_)),xs___,ys___)
 
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out),
   t(coad(na_,a_),in,out),
   xs___)
-  -> (CF - CA / 2) * trace(cof(nc_),t(coad(na_,b_),in,out),xs___)
+  -> (cas(2,cof(nc_)) - cas(2,coad(na_)) / 2) * trace(cof(nc_),t(coad(na_,b_),in,out),xs___)
 ```
 
 Source: `color.h` selected-trace terminal rules at lines 459--464 and easy contraction rules at lines 108--111 and 173--175.
@@ -788,12 +788,12 @@ Structure-constant contractions:
 ```rs
 f(coad(na_,a_),coad(na_,c_),coad(na_,d_))
 * f(coad(na_,b_),coad(na_,c_),coad(na_,d_))
-  -> CA * g(coad(na_,a_),coad(na_,b_))
+  -> cas(2,coad(na_)) * g(coad(na_,a_),coad(na_,b_))
 
 f(coad(na_,a_),coad(na_,b_),coad(na_,e_))
 * f(coad(na_,b_),coad(na_,c_),coad(na_,f_))
 * f(coad(na_,c_),coad(na_,a_),coad(na_,g_))
-  -> CA / 2 * f(coad(na_,e_),coad(na_,f_),coad(na_,g_))
+  -> cas(2,coad(na_)) / 2 * f(coad(na_,e_),coad(na_,f_),coad(na_,g_))
 ```
 
 Trace--structure shortcut:
@@ -803,7 +803,7 @@ trace(cof(nc_),
   t(coad(na_,b_),in,out),
   xs___)
 * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
-  -> i_ * CA / 2 * trace(cof(nc_),t(coad(na_,c_),in,out),xs___)
+  -> i_ * cas(2,coad(na_)) / 2 * trace(cof(nc_),t(coad(na_,c_),in,out),xs___)
 ```
 
 Symmetric-invariant contraction:
@@ -843,7 +843,7 @@ Rust implementation note: implement the short-circuit order as ordered passes, n
 
 == FORM-side test cases in Symbolica/Spenso syntax
 
-This section translates the compact FORM-side rule tests and the package example cases into the `chain`/`trace` notation used above. Expected values are written in the same symbolic convention: `TR` for `I2R`, `CA` for `cA`, `CF` for `cR`, and `NA` for adjoint dimension. The local validation used FORM 4.3.1 for the explicitly listed compact values.
+This section translates the compact FORM-side rule tests and the package example cases into the `chain`/`trace` notation used above. The FORM comparison tables below use the abbreviations `TR = idx(2,cof(Nc))`, `CA = cas(2,coad(NA))`, and `CF = cas(2,cof(Nc))` for `I2R`, `cA`, and `cR`; `NA` is the adjoint dimension. In Symbolica these are representation-dependent invariants, not standalone scalar symbols. The local validation used FORM 4.3.1 for the explicitly listed compact values.
 
 === Gamma trace tests
 
@@ -948,7 +948,7 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
 chain(cof(Nc,i),dind(cof(Nc,i)),
   t(coad(NA,a),in,out),
   t(coad(NA,b),in,out))
-  -> TR * g(coad(NA,a),coad(NA,b))
+  -> idx(2,cof(Nc)) * g(coad(NA,a),coad(NA,b))
 
 // FORM: T(i1,i1,a,b,c)
 chain(cof(Nc,i),dind(cof(Nc,i)),

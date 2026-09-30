@@ -1,6 +1,6 @@
 = Bundled Typst packages
 
-These unmodified packages are embedded in the `linnet` wheel so rendering
+These packages are embedded in the `linnet` wheel so rendering
 does not depend on a network connection or an installed Typst package cache.
 
 - CeTZ 0.5.1 (`preview/cetz/0.5.1`), LGPL-3.0-or-later
@@ -12,3 +12,15 @@ does not depend on a network connection or an installed Typst package cache.
 
 The corresponding license files and package manifests remain in each package
 directory.
+
+== Local performance patch
+
+CeTZ's `merge-path` skips per-element bounding-box calculations when debug
+rendering is disabled. The merged path still computes its final bounds; debug
+behavior and path geometry are unchanged. The hashes above identify the
+unmodified upstream archives.
+
+CeTZ content separates preparation from placement. Repeated content can reuse
+resolved styles, measurements and local geometry while preserving per-position
+coordinate resolution, transformed bounds, frames and named anchors. Linnest
+uses this preparation for consecutive identical inspection targets.

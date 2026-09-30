@@ -7,7 +7,7 @@
 #let _point-x(p) = p.at(0)
 #let _point-y(p) = p.at(1)
 #let _point-pair(p) = (_point-x(p), _point-y(p))
-#let _point(p, unit: 1) = (_point-x(p) * unit, _point-y(p) * unit)
+#let _point(p, unit: 1) = (p.at(0) * unit, p.at(1) * unit)
 
 /// Build a numeric point tuple.
 ///
@@ -479,30 +479,21 @@
 ///
 /// -> dictionary
 #let cubic-point(segment, t) = {
-  let ab = (
-    _lerp(_point-x(segment.start), _point-x(segment.control-start), t),
-    _lerp(_point-y(segment.start), _point-y(segment.control-start), t),
-  )
-  let bc = (
-    _lerp(_point-x(segment.control-start), _point-x(segment.control-end), t),
-    _lerp(_point-y(segment.control-start), _point-y(segment.control-end), t),
-  )
-  let cd = (
-    _lerp(_point-x(segment.control-end), _point-x(segment.end), t),
-    _lerp(_point-y(segment.control-end), _point-y(segment.end), t),
-  )
-  let abc = (
-    _lerp(_point-x(ab), _point-x(bc), t),
-    _lerp(_point-y(ab), _point-y(bc), t),
-  )
-  let bcd = (
-    _lerp(_point-x(bc), _point-x(cd), t),
-    _lerp(_point-y(bc), _point-y(cd), t),
-  )
-  (
-    _lerp(_point-x(abc), _point-x(bcd), t),
-    _lerp(_point-y(abc), _point-y(bcd), t),
-  )
+  let (ax, ay, ..) = segment.start
+  let (bx, by, ..) = segment.control-start
+  let (cx, cy, ..) = segment.control-end
+  let (dx, dy, ..) = segment.end
+  let abx = ax + (bx - ax) * t
+  let aby = ay + (by - ay) * t
+  let bcx = bx + (cx - bx) * t
+  let bcy = by + (cy - by) * t
+  let cdx = cx + (dx - cx) * t
+  let cdy = cy + (dy - cy) * t
+  let abcx = abx + (bcx - abx) * t
+  let abcy = aby + (bcy - aby) * t
+  let bcdx = bcx + (cdx - bcx) * t
+  let bcdy = bcy + (cdy - bcy) * t
+  (abcx + (bcdx - abcx) * t, abcy + (bcdy - abcy) * t)
 }
 
 /// Evaluate the tangent of a cubic segment at parameter `t`.
@@ -1079,10 +1070,17 @@
 #let to-cetz(path, unit: 1, ..style) = {
   let style = style.named()
   let subpaths = to-cetz-data(path, unit: unit)
-  if subpaths.len() == 0 {
-    ()
-  } else {
-    cetz.draw.merge-path(
+  if subpaths.len() == 0 { return () }
+  (ctx => {
+    // Numeric paths need no per-segment coordinate resolution, anchors or
+    // bounds. Keep CeTZ's primitive processing when user hooks or inherited
+    // marks can change those segments before the final merge.
+    let custom = (type(unit) not in (int, float)
+      or ctx.debug
+      or subpaths.len() != 1 or subpaths.first().last().len() == 0
+      or (type(ctx.resolve-coordinate) == array and ctx.resolve-coordinate.len() > 0)
+      or ("line", "bezier").any(root => cetz.mark.check-mark(cetz.styles.resolve(ctx.style, root: root).mark)))
+    let body = if custom {
       {
         for (origin, closed, segments) in subpaths {
           let current = origin
@@ -1098,10 +1096,28 @@
             cetz.draw.line(current, origin)
           }
         }
-      },
-      ..style,
-    )
-  }
+      }
+    } else {
+      let point = p => (float(p.at(0)), float(p.at(1)), 0.0)
+      let (start, closed, segments) = subpaths.first()
+      let origin = point(start)
+      let current = origin
+      let joined = ()
+      for (kind, ..args) in segments {
+        let points = args.map(point)
+        joined.push((kind, ..points))
+        current = points.last()
+      }
+      if closed and current != origin { joined.push(("l", origin)); current = origin }
+      (ctx => {
+        ctx.prev.pt = current
+        (ctx: ctx, drawables: cetz.drawable.apply-transform(ctx.transform,
+          cetz.drawable.path(((origin, false, joined),)),
+        ))
+      },)
+    }
+    (cetz.draw.merge-path(body, ..style).first())(ctx)
+  },)
 }
 
 /// Split a path through a point sequence into per-span paths.

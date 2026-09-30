@@ -997,17 +997,22 @@ fn simpli_contracts_projected_f_pair() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"CA*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
 }
 
 #[test]
 #[ignore = "pending color.tar.gz tloop qloop size 3 family"]
 fn tloop_qloop_size_3() {
     test_initialize();
-    let result =
-        parse_lit!(dA * TR * CF ^ 2 - 3 / 2 * dA * TR * CA * CF + 1 / 2 * dA * TR * CA ^ 2);
+    let result = parse_lit!(
+        dA * idx(2, cof(Nc)) * cas(2, cof(Nc))
+            ^ 2 - 3 / 2 * dA * idx(2, cof(Nc)) * cas(2, coad(dA)) * cas(2, cof(Nc))
+                + 1 / 2 * dA * idx(2, cof(Nc)) * cas(2, coad(dA))
+            ^ 2,
+        default_namespace = "spenso"
+    );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-3/2*CA*CF*dA*TR+1/2*CA^2*dA*TR+CF^2*dA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*1/2*dA*idx(2,cof(Nc))+(cas(2,cof(Nc)))^2*dA*idx(2,cof(Nc))+-3/2*cas(2,coad(dA))*cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -1023,27 +1028,36 @@ fn tloop_gloop_size_3() {
 #[ignore = "pending color.tar.gz tloop qqloop size 3 family"]
 fn tloop_qqloop_size_3() {
     test_initialize();
-    let result = parse_lit!(-1 / 4 * dA * TR ^ 2 * CA + d33(R1, R2));
+    let result = parse_lit!(
+        -1 / 4 * dA * idx(2, cof(Nc)) ^ 2 * cas(2, coad(dA)) + d33(R1, R2),
+        default_namespace = "spenso"
+    );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-1/4*CA*dA*TR^2+d33(R1,R2)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(idx(2,cof(Nc)))^2*-1/4*cas(2,coad(dA))*dA+d33(R1,R2)");
 }
 
 #[test]
 #[ignore = "pending color.tar.gz tloop qgloop size 3 family"]
 fn tloop_qgloop_size_3() {
     test_initialize();
-    let result = parse_lit!(1𝑖 / 4 * dA * TR * CA ^ 2);
+    let result = parse_lit!(
+        1𝑖 / 4 * dA * idx(2, cof(Nc)) * cas(2, coad(dA)) ^ 2,
+        default_namespace = "spenso"
+    );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1𝑖/4*CA^2*dA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*dA*idx(2,cof(Nc))*𝑖/4");
 }
 
 #[test]
 #[ignore = "pending color.tar.gz tloop ggloop size 3 family"]
 fn tloop_ggloop_size_3() {
     test_initialize();
-    let result = parse_lit!(1 / 4 * dA * CA ^ 3);
+    let result = parse_lit!(
+        1 / 4 * dA * cas(2, coad(dA)) ^ 3,
+        default_namespace = "spenso"
+    );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/4*CA^3*dA");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^3*1/4*dA");
 }
 
 #[test]
@@ -1051,10 +1065,12 @@ fn tloop_ggloop_size_3() {
 fn tloop_g14() {
     test_initialize();
     let result = parse_lit!(
-        1 / 648 * dA * CA ^ 7 - 8 / 15 * d444(A1, A2, A3) * CA + 16 / 9 * d644(A1, A2, A3)
+        1 / 648 * dA * cas(2, coad(dA))
+            ^ 7 - 8 / 15 * d444(A1, A2, A3) * cas(2, coad(dA)) + 16 / 9 * d644(A1, A2, A3),
+        default_namespace = "spenso"
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-8/15*CA*d444(A1,A2,A3)+1/648*CA^7*dA+16/9*d644(A1,A2,A3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^7*1/648*dA+-8/15*cas(2,coad(dA))*d444(A1,A2,A3)+16/9*d644(A1,A2,A3)");
 }
 
 #[test]
@@ -1062,19 +1078,22 @@ fn tloop_g14() {
 fn tloop_fiveq() {
     test_initialize();
     let result = parse_lit!(
-        1 / 192 * dA * TR
-            ^ 5 * CA
-            ^ 3 + 1 / 4 * d33(R1, R2) * TR
-            ^ 3 * CA
+        1 / 192 * dA * idx(2, cof(Nc))
+            ^ 5 * cas(2, coad(dA))
+            ^ 3 + 1 / 4 * d33(R1, R2) * idx(2, cof(Nc))
+            ^ 3 * cas(2, coad(dA))
             ^ 2 + 5 / 48 * d33(R1, R2) * d33(R3, R4) * dA
-            ^ -1 * TR * CA + 5 / 48 * d33(R1, R3) * d33(R2, R4) * dA
-            ^ -1 * TR * CA + 1 / 8 * d33(R1, R4) * d33(R2, R3) * dA
-            ^ -1 * TR * CA + 1 / 16 * d44(R1, A1) * TR
-            ^ 4 + 3 / 8 * d433(R3, R1, R2) * TR
-            ^ 2 * CA + 1 / 2 * d3333(R1, R2, R3, R4) * TR * CA + d43333a(R5, R2, R1, R4, R3)
+            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 5 / 48 * d33(R1, R3) * d33(R2, R4) * dA
+            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 1 / 8 * d33(R1, R4) * d33(R2, R3) * dA
+            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 1 / 16 * d44(R1, A1) * idx(2, cof(Nc))
+            ^ 4 + 3 / 8 * d433(R3, R1, R2) * idx(2, cof(Nc))
+            ^ 2 * cas(2, coad(dA))
+                + 1 / 2 * d3333(R1, R2, R3, R4) * idx(2, cof(Nc)) * cas(2, coad(dA))
+                + d43333a(R5, R2, R1, R4, R3),
+        default_namespace = "spenso"
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/16*TR^4*d44(R1,A1)+1/192*CA^3*dA*TR^5+1/2*CA*TR*d3333(R1,R2,R3,R4)+1/4*CA^2*TR^3*d33(R1,R2)+1/8*CA*dA^(-1)*TR*d33(R1,R4)*d33(R2,R3)+3/8*CA*TR^2*d433(R3,R1,R2)+5/48*CA*dA^(-1)*TR*d33(R1,R2)*d33(R3,R4)+5/48*CA*dA^(-1)*TR*d33(R1,R3)*d33(R2,R4)+d43333a(R5,R2,R1,R4,R3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(idx(2,cof(Nc)))^3*1/4*d33(R1,R2)+(cas(2,coad(dA)))^3*(idx(2,cof(Nc)))^5*1/192*dA+(idx(2,cof(Nc)))^2*3/8*cas(2,coad(dA))*d433(R3,R1,R2)+(idx(2,cof(Nc)))^4*1/16*d44(R1,A1)+1/2*cas(2,coad(dA))*d3333(R1,R2,R3,R4)*idx(2,cof(Nc))+1/8*cas(2,coad(dA))*d33(R1,R4)*d33(R2,R3)*dA^(-1)*idx(2,cof(Nc))+5/48*cas(2,coad(dA))*d33(R1,R2)*d33(R3,R4)*dA^(-1)*idx(2,cof(Nc))+5/48*cas(2,coad(dA))*d33(R1,R3)*d33(R2,R4)*dA^(-1)*idx(2,cof(Nc))+d43333a(R5,R2,R1,R4,R3)");
 }
 
 #[test]

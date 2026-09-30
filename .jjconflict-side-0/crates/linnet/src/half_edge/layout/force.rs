@@ -1,18 +1,18 @@
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
 use crate::half_edge::{
+    NodeIndex, NodeVec,
     involution::{EdgeIndex, EdgeVec, Flow},
     layout::spring::{
-        apply_edge_shift_with_groups, apply_vertex_shift_with_groups, directional_force_shift,
         Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, PointConstraint,
-        SpringChargeEnergy,
+        SpringChargeEnergy, apply_edge_shift_with_groups, apply_vertex_shift_with_groups,
+        directional_force_shift,
     },
     nodestore::NodeStorageOps,
     subgraph::SubSetLike,
     swap::Swap,
-    NodeIndex, NodeVec,
 };
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 #[derive(Debug, Clone, Copy)]
 pub struct ForceLayoutConfig {
     pub steps: usize,
@@ -57,6 +57,7 @@ where
     energy: SpringChargeEnergy,
     cfg: ForceLayoutConfig,
     workset: ForceWorkSet,
+    forces: ForceBuffers,
     node_z: NodeVec<f64>,
     edge_z: EdgeVec<f64>,
     z_bound: f64,
@@ -137,11 +138,13 @@ where
             .fold(z_spread, |bound, z| bound.max(z.abs()));
         let no_active_points = workset.active_nodes.is_empty() && workset.active_edges.is_empty();
 
+        let forces = ForceBuffers::new(state.vertex_points.len().0, state.edge_points.len().0);
         Self {
             state,
             energy,
             cfg,
             workset,
+            forces,
             node_z,
             edge_z,
             z_bound,
@@ -201,7 +204,7 @@ where
             let u = iteration as f64 / self.flattening_finish;
             self.cfg.depth_scale * (1.0 - u).powi(2) * (1.0 + 2.0 * u)
         };
-        let (mut forces_v, mut forces_e) = compute_forces(
+        self.forces.compute(
             &self.state,
             &self.energy,
             &self.node_z,
@@ -209,6 +212,8 @@ where
             scale,
             &self.workset,
         );
+        let forces_v = &mut self.forces.vertices;
+        let forces_e = &mut self.forces.edges;
         if self.state.directional_force != 0.0 {
             for &idx in &self.workset.movable_nodes {
                 let bias = directional_force_shift(
@@ -274,9 +279,10 @@ struct ForceWorkSet {
     movable_node_depth: NodeVec<bool>,
     movable_edge_depth: EdgeVec<bool>,
     force_nodes: Vec<NodeIndex>,
-    force_edges: Vec<EdgeIndex>,
     force_node: NodeVec<bool>,
     force_edge: EdgeVec<bool>,
+    node_targets: NodeVec<[Option<LayoutPointIndex>; 2]>,
+    edge_targets: EdgeVec<[Option<LayoutPointIndex>; 2]>,
     incident_edges: NodeVec<Vec<EdgeIndex>>,
     dangling_edges: Vec<EdgeIndex>,
 }
@@ -297,10 +303,16 @@ impl ForceWorkSet {
         let mut movable_node_depth = NodeVec::with_capacity(n);
         let mut force_nodes = Vec::new();
         let mut force_node = NodeVec::with_capacity(n);
+        let mut node_targets = NodeVec::with_capacity(n);
         for i in 0..n {
             let idx = NodeIndex(i);
             let active = state.node_is_active(idx);
             let constraints = state.graph[idx].point_constraint();
+            let point = LayoutPointIndex::Node(idx);
+            node_targets.push([
+                constraints.x.force_target(point),
+                constraints.y.force_target(point),
+            ]);
             let movable = active && can_shift_directly(constraints, LayoutPointIndex::Node(idx));
             let movable_depth = active
                 && !state.vertex_depth_pins[idx]
@@ -319,12 +331,17 @@ impl ForceWorkSet {
 
         let mut movable_edges = Vec::new();
         let mut movable_edge_depth = EdgeVec::with_capacity(m);
-        let mut force_edges = Vec::new();
         let mut force_edge = EdgeVec::with_capacity(m);
+        let mut edge_targets = EdgeVec::with_capacity(m);
         for i in 0..m {
             let idx = EdgeIndex(i);
             let active = state.edge_is_active(idx);
             let constraints = state.graph[idx].point_constraint();
+            let point = LayoutPointIndex::Edge(idx);
+            edge_targets.push([
+                constraints.x.force_target(point),
+                constraints.y.force_target(point),
+            ]);
             let movable = active && can_shift_directly(constraints, LayoutPointIndex::Edge(idx));
             let movable_depth = active
                 && !state.edge_depth_pins[idx]
@@ -335,9 +352,6 @@ impl ForceWorkSet {
             }
             let receives_force = active
                 && (can_receive_force(constraints, LayoutPointIndex::Edge(idx)) || movable_depth);
-            if receives_force {
-                force_edges.push(idx);
-            }
             force_edge.push(receives_force);
         }
 
@@ -364,9 +378,10 @@ impl ForceWorkSet {
             movable_node_depth,
             movable_edge_depth,
             force_nodes,
-            force_edges,
             force_node,
             force_edge,
+            node_targets,
+            edge_targets,
             incident_edges,
             dangling_edges,
         }
@@ -429,267 +444,278 @@ fn apply_initial_jitter<'a, E, V, H, N>(
     }
 }
 
-fn compute_forces<'a, E, V, H, N>(
-    state: &LayoutState<'a, E, V, H, N>,
-    energy: &SpringChargeEnergy,
-    node_z: &NodeVec<f64>,
-    edge_z: &EdgeVec<f64>,
-    scale: f64,
-    workset: &ForceWorkSet,
-) -> (NodeVec<Vector3<f64>>, EdgeVec<Vector3<f64>>)
-where
-    E: HasPointConstraint,
-    V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    let n = state.vertex_points.len().0;
-    let m = state.edge_points.len().0;
+struct ForceBuffers {
+    vertices: NodeVec<Vector3<f64>>,
+    edges: EdgeVec<Vector3<f64>>,
+    projected_vertices: NodeVec<Vector3<f64>>,
+    projected_edges: EdgeVec<Vector3<f64>>,
+}
 
-    let mut forces_v = NodeVec::with_capacity(n);
-    for _ in 0..n {
-        forces_v.push(Vector3::zero());
-    }
-
-    let mut forces_e = EdgeVec::with_capacity(m);
-    for _ in 0..m {
-        forces_e.push(Vector3::zero());
-    }
-
-    // Vertex-vertex repulsion. Fixed vertices still act as static sources, but
-    // we only accumulate forces that can reach a planar or raw-depth degree of freedom.
-    for &ni in &workset.force_nodes {
-        let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
-        for &nj in &workset.active_nodes {
-            if ni == nj {
-                continue;
-            }
-            let pj = point3_from_point(state.vertex_points[nj], node_z[nj], scale);
-            let d = pi - pj;
-            let dist = d.magnitude();
-            if dist <= 1e-9 {
-                continue;
-            }
-            let dir = d / dist;
-            let fmag = 0.5 * energy.c_vv / (dist + energy.eps).powi(2);
-            let f = dir * fmag;
-            forces_v[ni] += f;
+impl ForceBuffers {
+    fn new(nodes: usize, edges: usize) -> Self {
+        Self {
+            vertices: vec![Vector3::zero(); nodes].into(),
+            edges: vec![Vector3::zero(); edges].into(),
+            projected_vertices: vec![Vector3::zero(); nodes].into(),
+            projected_edges: vec![Vector3::zero(); edges].into(),
         }
     }
 
-    // Edge-vertex repulsion.
-    if energy.c_ev != 0.0 {
+    fn compute<'a, E, V, H, N>(
+        &mut self,
+        state: &LayoutState<'a, E, V, H, N>,
+        energy: &SpringChargeEnergy,
+        node_z: &NodeVec<f64>,
+        edge_z: &EdgeVec<f64>,
+        scale: f64,
+        workset: &ForceWorkSet,
+    ) where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+        N: NodeStorageOps<NodeData = V> + Clone,
+    {
+        let forces_v = &mut self.vertices;
+        let forces_e = &mut self.edges;
+        for (_, force) in forces_v.iter_mut() {
+            *force = Vector3::zero();
+        }
+        for (_, force) in forces_e.iter_mut() {
+            *force = Vector3::zero();
+        }
+
+        // Vertex-vertex repulsion. Fixed vertices still act as static sources, but
+        // we only accumulate forces that can reach a planar or raw-depth degree of freedom.
         for &ni in &workset.force_nodes {
             let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
-            for &ei in &workset.active_edges {
-                let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
-                let d = pi - pe;
-                let dist = d.magnitude();
-                if dist <= 1e-9 {
+            for &nj in &workset.active_nodes {
+                if ni == nj {
                     continue;
                 }
-                let dir = d / dist;
-                let fmag = energy.c_ev / (dist + energy.eps).powi(2);
-                let f = dir * fmag;
-                forces_v[ni] += f;
-            }
-        }
-
-        for &ni in &workset.active_nodes {
-            let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
-            for &ei in &workset.force_edges {
-                let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
-                let d = pi - pe;
-                let dist = d.magnitude();
-                if dist <= 1e-9 {
-                    continue;
-                }
-                let dir = d / dist;
-                let fmag = energy.c_ev / (dist + energy.eps).powi(2);
-                let f = dir * fmag;
-                forces_e[ei] -= f;
-            }
-        }
-    }
-
-    // Springs and local edge-edge repulsion around nodes.
-    for &ni in &workset.active_nodes {
-        let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
-        let edges = &workset.incident_edges[ni];
-
-        for &ei in edges {
-            if !workset.force_node[ni] && !workset.force_edge[ei] {
-                continue;
-            }
-            let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
-            let d = pi - pe;
-            let dist = d.magnitude();
-            if dist <= 1e-9 {
-                continue;
-            }
-            let dir = d / dist;
-            let length = SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
-            let fmag = energy.k_spring * (length - dist);
-            let f = dir * fmag;
-            if workset.force_node[ni] {
-                forces_v[ni] += f;
-            }
-            if workset.force_edge[ei] {
-                forces_e[ei] -= f;
-            }
-        }
-
-        for a in 0..edges.len() {
-            for b in (a + 1)..edges.len() {
-                let ea = edges[a];
-                let eb = edges[b];
-                if !workset.force_edge[ea] && !workset.force_edge[eb] {
-                    continue;
-                }
-                let pa = point3_from_point(state.edge_points[ea], edge_z[ea], scale);
-                let pb = point3_from_point(state.edge_points[eb], edge_z[eb], scale);
-                let d = pa - pb;
-                let dist = d.magnitude();
-                if dist <= 1e-9 {
-                    continue;
-                }
-                let dir = d / dist;
-                let fmag = energy.c_ee_local / (dist + energy.eps).powi(2);
-                let f = dir * fmag;
-                if workset.force_edge[ea] {
-                    forces_e[ea] += f;
-                }
-                if workset.force_edge[eb] {
-                    forces_e[eb] -= f;
-                }
-            }
-        }
-    }
-
-    // Dangling edge repulsion.
-    if energy.dangling_charge != 0.0 {
-        let ext_edges = &workset.dangling_edges;
-
-        for i in 0..ext_edges.len() {
-            for j in (i + 1)..ext_edges.len() {
-                let ei = ext_edges[i];
-                let ej = ext_edges[j];
-                if !workset.force_edge[ei] && !workset.force_edge[ej] {
-                    continue;
-                }
-                let pi = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
-                let pj = point3_from_point(state.edge_points[ej], edge_z[ej], scale);
+                let pj = point3_from_point(state.vertex_points[nj], node_z[nj], scale);
                 let d = pi - pj;
                 let dist = d.magnitude();
                 if dist <= 1e-9 {
                     continue;
                 }
                 let dir = d / dist;
-                let fmag = 0.5 * energy.dangling_charge / (dist + energy.eps).powi(2);
+                let fmag = 0.5 * energy.c_vv / (dist + energy.eps).powi(2);
                 let f = dir * fmag;
+                forces_v[ni] += f;
+            }
+        }
+
+        // Edge-vertex repulsion.
+        if energy.c_ev != 0.0 {
+            // Evaluate each pair once. Node-major traversal retains each
+            // vertex's edge order and each edge's node order when summing.
+            for &ni in &workset.active_nodes {
+                let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
+                for &ei in &workset.active_edges {
+                    if !workset.force_node[ni] && !workset.force_edge[ei] {
+                        continue;
+                    }
+                    let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
+                    let d = pi - pe;
+                    let dist = d.magnitude();
+                    if dist <= 1e-9 {
+                        continue;
+                    }
+                    let dir = d / dist;
+                    let fmag = energy.c_ev / (dist + energy.eps).powi(2);
+                    let f = dir * fmag;
+                    if workset.force_node[ni] {
+                        forces_v[ni] += f;
+                    }
+                    if workset.force_edge[ei] {
+                        forces_e[ei] -= f;
+                    }
+                }
+            }
+        }
+
+        // Springs and local edge-edge repulsion around nodes.
+        for &ni in &workset.active_nodes {
+            let pi = point3_from_point(state.vertex_points[ni], node_z[ni], scale);
+            let edges = &workset.incident_edges[ni];
+
+            for &ei in edges {
+                if !workset.force_node[ni] && !workset.force_edge[ei] {
+                    continue;
+                }
+                let pe = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
+                let d = pi - pe;
+                let dist = d.magnitude();
+                if dist <= 1e-9 {
+                    continue;
+                }
+                let dir = d / dist;
+                let length =
+                    SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
+                let fmag = energy.k_spring * (length - dist);
+                let f = dir * fmag;
+                if workset.force_node[ni] {
+                    forces_v[ni] += f;
+                }
                 if workset.force_edge[ei] {
-                    forces_e[ei] += f;
+                    forces_e[ei] -= f;
                 }
-                if workset.force_edge[ej] {
-                    forces_e[ej] -= f;
+            }
+
+            for a in 0..edges.len() {
+                for b in (a + 1)..edges.len() {
+                    let ea = edges[a];
+                    let eb = edges[b];
+                    if !workset.force_edge[ea] && !workset.force_edge[eb] {
+                        continue;
+                    }
+                    let pa = point3_from_point(state.edge_points[ea], edge_z[ea], scale);
+                    let pb = point3_from_point(state.edge_points[eb], edge_z[eb], scale);
+                    let d = pa - pb;
+                    let dist = d.magnitude();
+                    if dist <= 1e-9 {
+                        continue;
+                    }
+                    let dir = d / dist;
+                    let fmag = energy.c_ee_local / (dist + energy.eps).powi(2);
+                    let f = dir * fmag;
+                    if workset.force_edge[ea] {
+                        forces_e[ea] += f;
+                    }
+                    if workset.force_edge[eb] {
+                        forces_e[eb] -= f;
+                    }
                 }
             }
         }
-    }
 
-    // Repel each dangling endpoint from the current node centroid, and bias
-    // incoming endpoints left and outgoing endpoints right with an X-only spring.
-    // Its target distance scales the external edge's natural spring length. Sharing the
-    // opposite reaction over active nodes prevents this internal force from
-    // introducing translational drift. This term is intentionally planar, so
-    // auxiliary depth cannot reduce its pressure on the visible endpoints.
-    if (energy.dangling_centroid_charge != 0.0 || energy.external_centroid_strength != 0.0)
-        && !workset.active_nodes.is_empty()
-    {
-        let centroid = workset
-            .active_nodes
-            .iter()
-            .fold(Vector2::zero(), |sum, &node| {
-                sum + state.vertex_points[node].to_vec()
-            })
-            / workset.active_nodes.len() as f64;
-        let mut reaction = Vector2::zero();
-        for hedge in state.ext.included_iter() {
-            let ei = state.graph[&hedge];
-            let d = state.edge_points[ei].to_vec() - centroid;
-            let dist = d.magnitude();
-            let mut force = if dist > 1e-9 && energy.dangling_centroid_charge != 0.0 {
-                d / dist * (energy.dangling_centroid_charge / (dist + energy.eps).powi(2))
+        // Dangling edge repulsion.
+        if energy.dangling_charge != 0.0 {
+            let ext_edges = &workset.dangling_edges;
+
+            for i in 0..ext_edges.len() {
+                for j in (i + 1)..ext_edges.len() {
+                    let ei = ext_edges[i];
+                    let ej = ext_edges[j];
+                    if !workset.force_edge[ei] && !workset.force_edge[ej] {
+                        continue;
+                    }
+                    let pi = point3_from_point(state.edge_points[ei], edge_z[ei], scale);
+                    let pj = point3_from_point(state.edge_points[ej], edge_z[ej], scale);
+                    let d = pi - pj;
+                    let dist = d.magnitude();
+                    if dist <= 1e-9 {
+                        continue;
+                    }
+                    let dir = d / dist;
+                    let fmag = 0.5 * energy.dangling_charge / (dist + energy.eps).powi(2);
+                    let f = dir * fmag;
+                    if workset.force_edge[ei] {
+                        forces_e[ei] += f;
+                    }
+                    if workset.force_edge[ej] {
+                        forces_e[ej] -= f;
+                    }
+                }
+            }
+        }
+
+        // Repel each dangling endpoint from the current node centroid, and bias
+        // incoming endpoints left and outgoing endpoints right with an X-only spring.
+        // Its target distance scales the external edge's natural spring length. Sharing the
+        // opposite reaction over active nodes prevents this internal force from
+        // introducing translational drift. This term is intentionally planar, so
+        // auxiliary depth cannot reduce its pressure on the visible endpoints.
+        if (energy.dangling_centroid_charge != 0.0 || energy.external_centroid_strength != 0.0)
+            && !workset.active_nodes.is_empty()
+        {
+            let centroid = workset
+                .active_nodes
+                .iter()
+                .fold(Vector2::zero(), |sum, &node| {
+                    sum + state.vertex_points[node].to_vec()
+                })
+                / workset.active_nodes.len() as f64;
+            let mut reaction = Vector2::zero();
+            for hedge in state.ext.included_iter() {
+                let ei = state.graph[&hedge];
+                let d = state.edge_points[ei].to_vec() - centroid;
+                let dist = d.magnitude();
+                let mut force = if dist > 1e-9 && energy.dangling_centroid_charge != 0.0 {
+                    d / dist * (energy.dangling_centroid_charge / (dist + energy.eps).powi(2))
+                } else {
+                    Vector2::zero()
+                };
+                let side = match state.graph.flow(hedge) {
+                    Flow::Source => 1.0,
+                    Flow::Sink => -1.0,
+                };
+                let target = side
+                    * energy.external_centroid_distance
+                    * SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
+                force.x -= energy.external_centroid_strength * (d.x - target);
+                if workset.force_edge[ei] {
+                    forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
+                }
+                reaction += force;
+            }
+            reaction /= workset.active_nodes.len() as f64;
+            for &ni in &workset.force_nodes {
+                forces_v[ni] -= Vector3::new(reaction.x, reaction.y, 0.0);
+            }
+        }
+
+        // Center gravity (if enabled).
+        if energy.c_center != 0.0 {
+            for &ni in &workset.force_nodes {
+                forces_v[ni] += center_gravity_force(
+                    point3_from_point(state.vertex_points[ni], node_z[ni], scale),
+                    energy.c_center,
+                );
+            }
+        }
+
+        // Chain rule for effective z = scale * raw z. Mask pins before the movement
+        // clamp so a forbidden depth force cannot consume the planar movement budget.
+        for (ni, force) in forces_v.iter_mut() {
+            force.z = if scale != 0.0 && workset.movable_node_depth[ni] {
+                force.z * scale
             } else {
-                Vector2::zero()
+                0.0
             };
-            let side = match state.graph.flow(hedge) {
-                Flow::Source => 1.0,
-                Flow::Sink => -1.0,
+        }
+        for (ei, force) in forces_e.iter_mut() {
+            force.z = if scale != 0.0 && workset.movable_edge_depth[ei] {
+                force.z * scale
+            } else {
+                0.0
             };
-            let target = side
-                * energy.external_centroid_distance
-                * SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
-            force.x -= energy.external_centroid_strength * (d.x - target);
-            if workset.force_edge[ei] {
-                forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
-            }
-            reaction += force;
         }
-        reaction /= workset.active_nodes.len() as f64;
-        for &ni in &workset.force_nodes {
-            forces_v[ni] -= Vector3::new(reaction.x, reaction.y, 0.0);
-        }
-    }
 
-    // Center gravity (if enabled).
-    if energy.c_center != 0.0 {
-        for &ni in &workset.force_nodes {
-            forces_v[ni] += center_gravity_force(
-                point3_from_point(state.vertex_points[ni], node_z[ni], scale),
-                energy.c_center,
-            );
-        }
+        // A grouped axis is one shared degree of freedom. Its generalized force is
+        // the sum of every dependent point's force along that axis.
+        project_grouped_forces(
+            workset,
+            forces_v,
+            forces_e,
+            &mut self.projected_vertices,
+            &mut self.projected_edges,
+        );
     }
-
-    // Chain rule for effective z = scale * raw z. Mask pins before the movement
-    // clamp so a forbidden depth force cannot consume the planar movement budget.
-    for (ni, force) in forces_v.iter_mut() {
-        force.z = if scale != 0.0 && workset.movable_node_depth[ni] {
-            force.z * scale
-        } else {
-            0.0
-        };
-    }
-    for (ei, force) in forces_e.iter_mut() {
-        force.z = if scale != 0.0 && workset.movable_edge_depth[ei] {
-            force.z * scale
-        } else {
-            0.0
-        };
-    }
-
-    // A grouped axis is one shared degree of freedom. Its generalized force is
-    // the sum of every dependent point's force along that axis.
-    project_grouped_forces(state, &mut forces_v, &mut forces_e);
-
-    (forces_v, forces_e)
 }
 
-fn project_grouped_forces<'a, E, V, H, N>(
-    state: &LayoutState<'a, E, V, H, N>,
+fn project_grouped_forces(
+    workset: &ForceWorkSet,
     forces_v: &mut NodeVec<Vector3<f64>>,
     forces_e: &mut EdgeVec<Vector3<f64>>,
-) where
-    E: HasPointConstraint,
-    V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    let mut projected_v = state
-        .graph
-        .new_nodevec(|node, _, _| Vector3::new(0.0, 0.0, forces_v[node].z));
-    let mut projected_e = state
-        .graph
-        .new_edgevec(|_, edge, _| Vector3::new(0.0, 0.0, forces_e[edge].z));
+    projected_v: &mut NodeVec<Vector3<f64>>,
+    projected_e: &mut EdgeVec<Vector3<f64>>,
+) {
+    for (node, force) in projected_v.iter_mut() {
+        *force = Vector3::new(0.0, 0.0, forces_v[node].z);
+    }
+    for (edge, force) in projected_e.iter_mut() {
+        *force = Vector3::new(0.0, 0.0, forces_e[edge].z);
+    }
 
     let mut add = |target: LayoutPointIndex, x: Option<f64>, y: Option<f64>| {
         let force = match target {
@@ -700,31 +726,25 @@ fn project_grouped_forces<'a, E, V, H, N>(
         force.y += y.unwrap_or(0.0);
     };
 
-    for i in 0..forces_v.len().0 {
-        let index = NodeIndex(i);
-        let point = LayoutPointIndex::Node(index);
-        let constraints = state.graph[index].point_constraint();
-        if let Some(target) = constraints.x.force_target(point) {
+    for (index, targets) in &workset.node_targets {
+        if let Some(target) = targets[0] {
             add(target, Some(forces_v[index].x), None);
         }
-        if let Some(target) = constraints.y.force_target(point) {
+        if let Some(target) = targets[1] {
             add(target, None, Some(forces_v[index].y));
         }
     }
-    for i in 0..forces_e.len().0 {
-        let index = EdgeIndex(i);
-        let point = LayoutPointIndex::Edge(index);
-        let constraints = state.graph[index].point_constraint();
-        if let Some(target) = constraints.x.force_target(point) {
+    for (index, targets) in &workset.edge_targets {
+        if let Some(target) = targets[0] {
             add(target, Some(forces_e[index].x), None);
         }
-        if let Some(target) = constraints.y.force_target(point) {
+        if let Some(target) = targets[1] {
             add(target, None, Some(forces_e[index].y));
         }
     }
 
-    *forces_v = projected_v;
-    *forces_e = projected_e;
+    std::mem::swap(forces_v, projected_v);
+    std::mem::swap(forces_e, projected_e);
 }
 
 fn point3_from_point(p: Point2<f64>, z: f64, scale: f64) -> Point3<f64> {
@@ -777,6 +797,7 @@ fn init_edge_z(
 mod tests {
     use super::*;
     use crate::half_edge::{
+        HedgeGraph, NoData,
         builder::HedgeGraphBuilder,
         involution::{Flow, HedgePair},
         layout::{
@@ -785,8 +806,25 @@ mod tests {
         },
         nodestore::DefaultNodeStore,
         subgraph::{ModifySubSet, SuBitGraph},
-        HedgeGraph, NoData,
     };
+
+    fn compute_forces<'a, E, V, H, N>(
+        state: &LayoutState<'a, E, V, H, N>,
+        energy: &SpringChargeEnergy,
+        node_z: &NodeVec<f64>,
+        edge_z: &EdgeVec<f64>,
+        scale: f64,
+        workset: &ForceWorkSet,
+    ) -> (NodeVec<Vector3<f64>>, EdgeVec<Vector3<f64>>)
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+        N: NodeStorageOps<NodeData = V> + Clone,
+    {
+        let mut buffers = ForceBuffers::new(state.vertex_points.len().0, state.edge_points.len().0);
+        buffers.compute(state, energy, node_z, edge_z, scale, workset);
+        (buffers.vertices, buffers.edges)
+    }
 
     #[test]
     fn external_centroid_bias_is_horizontal_balanced_and_matches_energy() {
@@ -1030,6 +1068,7 @@ mod tests {
         let workset = ForceWorkSet::new(&state);
         let node_z = vec![0.0; 2].into();
         let edge_z = vec![0.0; 3].into();
+        let mut buffers = ForceBuffers::new(2, 3);
         for (scales, expected_energy, node_forces, edge_forces) in [
             (
                 [1.0, 1.0, 1.0],
@@ -1064,10 +1103,11 @@ mod tests {
         ] {
             state.edge_spring_length_scales = scales.to_vec().into();
             assert_eq!(energy.energy(None, &state), expected_energy);
-            let (forces_v, forces_e) =
-                compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
-            assert_eq!(forces_v, node_forces.to_vec().into());
-            assert_eq!(forces_e, edge_forces.to_vec().into());
+            buffers.compute(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+            let forces_v = &buffers.vertices;
+            let forces_e = &buffers.edges;
+            assert_eq!(*forces_v, node_forces.to_vec().into());
+            assert_eq!(*forces_e, edge_forces.to_vec().into());
 
             for (index, force) in forces_v
                 .iter()
@@ -1175,7 +1215,9 @@ mod tests {
         assert_eq!(workset.movable_nodes, vec![NodeIndex(1)]);
         assert_eq!(workset.movable_edges, vec![EdgeIndex(1)]);
         assert_eq!(workset.force_nodes, vec![NodeIndex(1)]);
-        assert_eq!(workset.force_edges, vec![EdgeIndex(1)]);
+        assert!(!workset.force_edge[EdgeIndex(0)]);
+        assert!(workset.force_edge[EdgeIndex(1)]);
+        assert!(!workset.force_edge[EdgeIndex(2)]);
         let energy = SpringChargeEnergy {
             spring_length: 1.0,
             k_spring: 1.0,
@@ -1572,7 +1614,14 @@ mod tests {
         let mut forces_e = EdgeVec::new();
         forces_e.push(Vector3::new(3.0, 30.0, 300.0));
 
-        project_grouped_forces(&state, &mut forces_v, &mut forces_e);
+        let mut buffers = ForceBuffers::new(forces_v.len().0, forces_e.len().0);
+        project_grouped_forces(
+            &ForceWorkSet::new(&state),
+            &mut forces_v,
+            &mut forces_e,
+            &mut buffers.projected_vertices,
+            &mut buffers.projected_edges,
+        );
 
         assert_eq!(forces_v[NodeIndex(0)], Vector3::new(4.0, 10.0, 100.0));
         assert_eq!(forces_v[NodeIndex(1)], Vector3::new(0.0, 0.0, 200.0));

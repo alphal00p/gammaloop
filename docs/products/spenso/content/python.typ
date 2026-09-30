@@ -429,6 +429,10 @@ T_aij = generator("a", "i", "j")
 Gamma's public argument order is its stored interface: bispinor-in, bispinor-out, then
 Minkowski. `_` (also exported as `AUTO`) leaves a local port unresolved; it is not a shared
 Einstein index. Calling a partially indexed expression assigns only its remaining open ports.
+Unresolved axes display as hollow squares; several unresolved axes on one tensor carry
+zero-based axis numbers. Scalar parameters do not count as axes, and matching square
+numbers on different tensors do not imply contraction. Hover over a square in HTML output
+to see its axis and representation. Assigned indices retain their usual alphabet notation.
 Raw predefined `TensorName` accessors expose heads for inspection and matching, not concrete
 construction.
 
@@ -624,22 +628,23 @@ sandboxed frame and requires no live Python callbacks or external assets.
 
 `TensorExpression` and `Tensor` expose semantic display methods. A network's
 `expression()` provides the same formula display separately from its graph.
-Symbolic notebook outputs are bounded previews: small expressions retain their
-full mathematical notation, large scalar sums show a few affordable leading
-terms and an explicit count, and a large single term or tensor receives a
-compact summary. This changes only presentation; the exact expression,
-factorization, and ordered ports remain intact. Automatic HTML, LaTeX, and
-notebook pretty-text representations follow this rule.
+Symbolic notebook outputs render the complete expression in HTML, LaTeX, and
+pretty text, regardless of its size. Display preserves factorization and ordered
+ports without expanding or simplifying the calculation.
+
+The notebook frontend can impose its own output limit. Marimo's
+`tool.marimo.runtime.output_max_bytes` setting in `pyproject.toml` controls that
+separate limit; a frontend warning does not mean the tensor renderer omitted
+terms.
 
 `TensorExpression.formatted()` and the free `formatted(expression)` defer each
 backend until the notebook requests it and cache that representation. Their
-plain-text fallback uses the same preview. Settings are captured when creating
-the display value; custom printers run when a backend is first requested.
-Create a new formatted value to reflect later changes to printer rules.
-For deliberate full output, use
-`to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, or `format_tensor()` on the
-tensor expression. Explicit exports remain unabridged; displaying a preview
-never expands or simplifies the calculation.
+plain-text fallback also includes the complete expression. Settings are captured
+when creating the display value; custom printers run when a backend is first
+requested. Create a new formatted value to reflect later changes to printer rules.
+The explicit `to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, and
+`format_tensor()` methods provide the same complete expression in the requested
+format.
 
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
@@ -651,6 +656,30 @@ color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeate
 share a label throughout an expression, and existing numeric or manually named labels are
 reserved to prevent collisions. Scoped copies keep the same base letters with primes;
 internal dummy identifiers never become alphabet labels.
+
+Color invariants use compact notation by default: $C_F$, $C_A$, $T_R$, and $N_c$.
+Select `DisplaySettings(invariant_style="explicit")` to display the degree and
+representation as $C_2(F)$, $C_2(A)$, and $I_2(F)$. Higher invariants always use
+$C_k(R)$, $I_k(R)$, and $G_k(R,S)$, with $F$ and $A$ denoting the fundamental and
+adjoint representations. These scalar arguments retain parentheses and commas
+independently of the tensor-index layout settings.
+
+`show_dimensions=True` adds representation dimensions and disables compact
+quadratic aliases, for example $C_2(F_3)$ and $C_2(A_8)$. Use it to distinguish
+multiple color spaces. Older scalar constants carry no dimension metadata.
+These settings affect presentation only: exact expressions and representation
+identities are preserved across plain text, LaTeX, Typst source, HTML and SVG.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import DisplaySettings, Representation, TensorExpression
+
+invariant = TensorExpression(Representation.cof(3).casimir())
+explicit = DisplaySettings(invariant_style="explicit")
+source = invariant.to_typst(settings=explicit)  # C_2(F)
+latex = invariant.to_latex(settings=explicit)
+preview = invariant.formatted(settings=explicit)
+```
 
 Choose `DisplaySettings(index_style="graph")` to retain graph identifiers, for example
 $mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.

@@ -13,6 +13,56 @@
   let path = curve.path(source, sink)
   let geometry-checks = ()
 
+  // The batched sampler must retain the exact arithmetic of scalar prefix
+  // trimming, including endpoint clamps, degenerate curves and mixed segments.
+  for sampled in (
+    path, curve.line((0, 0), (4, 2)), curve.line((0, 0), (0, 0)),
+    curve.line((0, 0), (1e-8, 0)),
+    curve.path(curve.move-to((1, 2)), curve.quad-to((3, 7), (5, -1)), curve.line-to((7, 3))),
+  ) {
+    let total = curve.length(sampled, accuracy: accuracy)
+    let shifts = (-total, -total / 2, -total / 3, 0, total / 3, total / 2, total)
+    let actual = curve.frames(sampled, shifts.map(shift => total / 2 + shift), accuracy: accuracy)
+    let expected = shifts.map(shift => drawing._path-mid-frame(sampled, accuracy, shift: shift))
+    assert.eq(actual, expected, message: "batched frames preserve scalar sampling")
+  }
+
+  // Native obstacle sampling retains the scalar Kurvst/CeTZ arithmetic and
+  // ordering, including empty paths, mixed curves and singular transforms.
+  for sampled in (
+    none, path, curve.line((0, 0), (4, 2)), curve.line((1, -2), (1, -2)),
+    curve.path(curve.move-to((1, 2)), curve.quad-to((3, 7), (5, -1)), curve.line-to((7, 3))),
+  ) {
+    let segments = if sampled == none { () } else { curve.segments(sampled) }
+    for transform in (
+      ((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1)),
+      ((2, 0.4, 0, 10), (-0.3, 1.5, 0, -4), (0.2, 0.7, 1, 3), (0, 0, 0, 1)),
+      ((0, 0, 0, 0), (0, -2, 0, 7), (0, 0, 1, 0), (0, 0, 0, 1)),
+    ) {
+      for (pad-x, pad-y) in ((0, 0), (0.03, 0.07)) {
+        let expected = ()
+        for segment in segments {
+          let points = range(13).map(step => cetz.matrix.mul4x4-vec3(
+            transform, (..curve.cubic-point(segment, step / 12), 0),
+          ))
+          for (start, end) in points.slice(0, 12).zip(points.slice(1)) {
+            expected.push((
+              left: calc.min(start.at(0), end.at(0)) - pad-x,
+              right: calc.max(start.at(0), end.at(0)) + pad-x,
+              bottom: calc.min(start.at(1), end.at(1)) - pad-y,
+              top: calc.max(start.at(1), end.at(1)) + pad-y,
+            ))
+          }
+        }
+        let actual = cbor(drawing._plugin.label_obstacle_boxes(cbor.encode((
+          segments: segments, transform: transform.map(row => row.map(float)),
+          pad-x: pad-x, pad-y: pad-y,
+        ))))
+        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "obstacle boxes preserve scalar sampling exactly")
+      }
+    }
+  }
+
   // Length, ratio and shift are measured on the offset path, not its centerline.
   for offset in (-0.35, 0.35) {
     let parallel = curve.parallel(path, distance: offset, accuracy: accuracy)
@@ -159,6 +209,37 @@
         shorten-to: auto,
       )
       let identity = cetz.matrix.ident(4)
+      // Batching path drawing preserves CeTZ primitives, including disconnected
+      // or empty subpaths and transforms that collapse distinct endpoints.
+      for sampled in (
+        path, straight, curved,
+        curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close()),
+        curve.path(curve.move-to((0, 0)), curve.move-to((1, 1)), curve.line-to((2, 3))),
+        curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.move-to((3, 2)), curve.line-to((4, 1))),
+      ) {
+        let primitives = {
+          for (origin, closed, segments) in curve.to-cetz-data(sampled) {
+            let current = origin
+            for (kind, ..args) in segments {
+              if kind == "l" { cetz.draw.line(current, args.last()) }
+              else { cetz.draw.bezier(current, args.last(), args.at(0), args.at(1)) }
+              current = args.last()
+            }
+            if closed and current != origin { cetz.draw.line(current, origin) }
+          }
+        }
+        for transform in (
+          identity, cetz.matrix.transform-scale((0, 0, 1)),
+          cetz.matrix.transform-shear-x(0.6),
+          cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
+        ) {
+          let local = ctx + (transform: transform)
+          let actual = curve.to-cetz(sampled).first()(local)
+          let expected = cetz.draw.merge-path(primitives).first()(local)
+          assert.eq(actual.drawables, expected.drawables, message: "batched path geometry")
+          assert.eq(actual.ctx.prev, expected.ctx.prev, message: "batched path context")
+        }
+      }
       let cases = ()
       let comparisons = ()
 

@@ -2,8 +2,8 @@
 
 use aind::Aind;
 use idenso::{
-    CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
-    tensor::SymbolicTensor,
+    CookMode, CookSettings, coad, cof, color::ColorSimplifySettings, color_cas, color_idx,
+    dirac::GammaSimplifySettings, tensor::SymbolicTensor,
 };
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
@@ -216,7 +216,11 @@ impl<S: NumeratorState> Numerator<S> {
             .unwrap();
 
         fn_map
-            .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
+            .add_aliases([
+                (color_idx!(2, cof!(3)), Atom::num(Rational::from((1, 2)))),
+                (color_cas!(2, cof!(3)), Atom::num(Rational::from((4, 3)))),
+                (color_cas!(2, coad!(8)), Atom::num(3)),
+            ])
             .unwrap();
     }
 }

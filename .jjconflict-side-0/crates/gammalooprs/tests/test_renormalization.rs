@@ -12,9 +12,9 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    CookMode, CookSettings, IndexTooling, cof,
+    CookMode, CookSettings, IndexTooling, coad, cof,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
-    color_idx,
+    color_cas, color_idx,
     dirac::GammaSimplifySettings,
     tensor::{ContractSettings, SymbolicTensor},
 };
@@ -96,10 +96,8 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .unwrap();
     (cooking
         .uncook(expression.expression().as_view())
-        .replace(CS.tr)
-        .with(Atom::num((1, 2)))
         .replace(CS.nc)
-        .with(CS.ca)
+        .with(color_cas!(2, coad!(8)))
         // RQFT closed-quark-loop references write the flavor-summed index as
         // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))

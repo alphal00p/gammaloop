@@ -1044,6 +1044,230 @@
   },)
 }
 
+/// Prepare content for repeated placement in one canvas style and transform.
+/// The returned function accepts a context and an already-resolved center point.
+/// Reuse it while the canvas style, length and transform remain unchanged;
+/// coordinate resolution may still update the context between placements.
+#let prepare-content(ctx, body, size: auto, angle: 0deg, ..style) = {
+  let style = styles.resolve(ctx.style, merge: style.named(), root: "content")
+  let padding = util.map-dict(util.as-padding-dict(style.padding), (_, v) => {
+    util.resolve-number(ctx, v)
+  })
+
+  let body = if "wrap" in style and type(style.wrap) == function {
+    (style.wrap)(body)
+  } else {
+    body
+  }
+
+  // Optionally scale content with current canvas scaling
+  if style.auto-scale == true {
+    let sx = vector.len(matrix.column(ctx.transform, 0))
+    let sy = vector.len(matrix.column(ctx.transform, 1))
+
+    body = std.scale(x: sx * 100%, y: sy * 100%, body, reflow: true)
+  }
+
+  // Compute the baseline offset
+  let (_, line-baseline-height) = util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "baseline",
+    [ #show linebreak: [ ]; #body]))
+  let (_, line-bounds-height) = util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "bounds",
+    [ #show linebreak: [ ]; #body]))
+  let baseline-offset = line-bounds-height - line-baseline-height
+
+  // Size of the bounding box
+  let (content-width, content-height, ..) = if size == auto {
+    util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "baseline", body))
+  } else {
+    size
+  }
+
+  let bounds-width = calc.abs(content-width)
+  let bounds-height = calc.abs(content-height + baseline-offset)
+  let content-width = calc.abs(content-width)
+
+  let width = calc.max(0, bounds-width + padding.left + padding.right)
+  let height = calc.max(0, bounds-height + padding.top + padding.bottom)
+
+  let w = width / 2
+  let h = height / 2
+  let rotate-z(v, angle) = {
+    let (x, y, _) = v
+    v.at(0) = x * calc.cos(angle) - y * calc.sin(angle)
+    v.at(1) = x * calc.sin(angle) + y * calc.cos(angle)
+    return v
+  }
+
+  let east-dir = rotate-z((1, 0, 0), angle)
+  let north-dir = rotate-z((0, 1, 0), angle)
+  let east-scaled = vector.scale(east-dir, +w)
+  let west-scaled = vector.scale(east-dir, -w)
+  let north-scaled = vector.scale(north-dir, +h)
+  let south-scaled = vector.scale(north-dir, -h)
+
+  let north-east-offset = vector.add(north-scaled, east-scaled)
+  let south-east-offset = vector.add(south-scaled, east-scaled)
+  let base-offset = vector.scale(north-dir, padding.bottom + baseline-offset)
+  let top-padding = vector.scale(north-dir, padding.top)
+  let text-offset = vector.scale(east-dir, -content-width / 2)
+
+  let frame-stroke = if style.frame != none {
+    style.stroke
+  }
+  let frame-fill = if style.frame != none {
+    style.fill
+  }
+
+  // Because of precision problems with some fonts (e.g. "Source Sans 3")
+  // we need to round the block sizes up. Otherwise, unwanted hyphenation
+  // gets introduced.
+  let round-up(v, digits: 8) = {
+    calc.ceil(v * calc.pow(10, digits)) / calc.pow(10, digits)
+  }
+
+  let shown-body = std.rotate(-angle,
+    reflow: true,
+    origin: center + horizon,
+    block(
+      width: round-up(width) * ctx.length,
+      height: round-up(height) * ctx.length,
+      inset: (
+        top: padding.at("top", default: 0) * ctx.length,
+        left: padding.at("left", default: 0) * ctx.length,
+        bottom: padding.at("bottom", default: 0) * ctx.length,
+        right: padding.at("right", default: 0) * ctx.length,
+      ),
+      text(top-edge: "cap-height", bottom-edge: "baseline", body)
+    )
+  )
+
+  (ctx, center, anchor: none, name: none, default: "center") => {
+    // Only the center is transformed. Other anchors remain relative to that
+    // transformed center, so their floating-point arithmetic stays unchanged.
+    let bounds-center = matrix.mul4x4-vec3(ctx.transform,
+      vector.as-vec(center, init: (0, 0, 0)))
+    let anchors = {
+      let north = vector.add(bounds-center, north-scaled)
+      let south = vector.add(bounds-center, south-scaled)
+      let east = vector.add(bounds-center, east-scaled)
+      let west = vector.add(bounds-center, west-scaled)
+      let north-east = vector.add(bounds-center, north-east-offset)
+      let north-west = vector.sub(bounds-center, south-east-offset)
+      let south-east = vector.add(bounds-center, south-east-offset)
+      let south-west = vector.sub(bounds-center, north-east-offset)
+
+      let base = vector.add(south,
+        base-offset)
+      let mid = vector.lerp(
+        vector.sub(north, top-padding),
+        base,
+        0.5)
+      let base-east = vector.add(base, east-scaled)
+      let base-west = vector.add(base, west-scaled)
+      let text = vector.add(base, text-offset)
+      let mid-east = vector.add(mid, east-scaled)
+      let mid-west = vector.add(mid, west-scaled)
+
+      (
+        center: bounds-center,
+        mid: mid,
+        mid-east: mid-east,
+        mid-west: mid-west,
+        base: base,
+        base-east: base-east,
+        base-west: base-west,
+        text: text,
+        north: north,
+        north-east: north-east,
+        north-west: north-west,
+        south: south,
+        south-east: south-east,
+        south-west: south-west,
+        east: east,
+        west: west,
+      )
+    }
+
+    let rect-shape = drawable.apply-tags(
+      drawable.line-strip(
+        (anchors.north-west, anchors.north-east,
+         anchors.south-east, anchors.south-west),
+        close: true,
+        stroke: frame-stroke,
+        fill: frame-fill,
+      ),
+      drawable.TAG.content-frame,
+    )
+
+    let frame-shape = if style.frame in (none, "rect") {
+      rect-shape
+    } else if style.frame == "circle" {
+      let (x, y, z) = util.calculate-circle-center-3pt(anchors.north-west, anchors.south-west, anchors.south-east)
+      let r = vector.dist((x, y, z), anchors.north-west)
+      drawable.apply-tags(drawable.ellipse(
+        x, y, z,
+        r, r,
+        stroke: frame-stroke,
+        fill: frame-fill,
+      ), drawable.TAG.content-frame)
+    }
+
+    // Shape used for path & border-anchors. Defaults
+    // to "rect" if the content frame is unset.
+    let anchor-shape = if frame-shape != none {
+      frame-shape
+    } else {
+      rect-shape
+    }
+
+    let (aabb-width, aabb-height, ..) = aabb.size(aabb.aabb(
+      (anchors.north-west, anchors.north-east,
+       anchors.south-west, anchors.south-east)))
+
+    let drawables = ()
+    if frame-shape != none {
+      drawables.push(frame-shape)
+    }
+
+    drawables.push(
+      drawable.content(
+        anchors.center,
+        aabb-width,
+        aabb-height,
+        frame-shape.segments,
+        shown-body
+      )
+    )
+
+    let (transform, anchors) = anchor_.setup(
+      anchor => {
+        if type(anchor) == str {
+          anchors.at(anchor)
+        }
+      },
+      anchors.keys(),
+      default: default,
+      offset-anchor: anchor,
+      transform: none, // Content does not get transformed, see the calculation of anchors.
+      name: name,
+      path-anchors: anchor-shape != none,
+      border-anchors: anchor-shape != none,
+      path: anchor-shape,
+      radii: (calc.max(width, height) * 2, calc.max(width, height) * 2),
+    )
+
+    return (
+      ctx: ctx,
+      name: name,
+      anchors: anchors,
+      drawables: drawable.apply-transform(
+        transform,
+        drawables
+      )
+    )
+  }
+}
+
 /// Positions Typst content in the canvas. Note that the content itself is not transformed only its position is.
 ///
 /// ```example
@@ -1116,17 +1340,6 @@
   }
 
   return (ctx => {
-    let style = styles.resolve(ctx.style, merge: style, root: "content")
-    let padding = util.map-dict(util.as-padding-dict(style.padding), (_, v) => {
-      util.resolve-number(ctx, v)
-    })
-
-    let body = if "wrap" in style and type(style.wrap) == function {
-      (style.wrap)(body)
-    } else {
-      body
-    }
-
     let (ctx, a) = coordinate.resolve(ctx, a)
     let b = b
     let auto-size = b == auto
@@ -1141,211 +1354,10 @@
       angle
     }
 
-    // Optionally scale content with current canvas scaling
-    if style.auto-scale == true {
-      let sx = vector.len(matrix.column(ctx.transform, 0))
-      let sy = vector.len(matrix.column(ctx.transform, 1))
-
-      body = std.scale(x: sx * 100%, y: sy * 100%, body, reflow: true)
-    }
-
-    // Compute the baseline offset
-    let (_, line-baseline-height) = util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "baseline",
-      [ #show linebreak: [ ]; #body]))
-    let (_, line-bounds-height) = util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "bounds",
-      [ #show linebreak: [ ]; #body]))
-    let baseline-offset = line-bounds-height - line-baseline-height
-
-    // Size of the bounding box
-    let (content-width, content-height, ..) = if auto-size {
-      util.measure(ctx, text(top-edge: "cap-height", bottom-edge: "baseline", body))
-    } else {
-      vector.sub(b, a)
-    }
-
-    let baseline-height = calc.abs(content-height)
-    let bounds-width = calc.abs(content-width)
-    let bounds-height = calc.abs(content-height + baseline-offset)
-    let content-width = calc.abs(content-width)
-
-    let width = calc.max(0, bounds-width + padding.left + padding.right)
-    let height = calc.max(0, bounds-height + padding.top + padding.bottom)
-
-    let anchors = {
-      let w = width / 2
-      let h = height / 2
-
-      let bounds-center = if auto-size {
-        a
-      } else {
-        vector.lerp(a, b, .5)
-      }
-
-      // Only the center anchor gets transformed. All other anchors
-      // must be calculated relative to the transformed center!
-      bounds-center = matrix.mul4x4-vec3(ctx.transform,
-        vector.as-vec(bounds-center, init: (0, 0, 0)))
-
-      let rotate-z(v, angle) = {
-        let (x, y, _) = v
-        v.at(0) = x * calc.cos(angle) - y * calc.sin(angle)
-        v.at(1) = x * calc.sin(angle) + y * calc.cos(angle)
-        return v
-      }
-
-      let east-dir = rotate-z((1, 0, 0), angle)
-      let north-dir = rotate-z((0, 1, 0), angle)
-      let east-scaled = vector.scale(east-dir, +w)
-      let west-scaled = vector.scale(east-dir, -w)
-      let north-scaled = vector.scale(north-dir, +h)
-      let south-scaled = vector.scale(north-dir, -h)
-
-      let north = vector.add(bounds-center, north-scaled)
-      let south = vector.add(bounds-center, south-scaled)
-      let east = vector.add(bounds-center, east-scaled)
-      let west = vector.add(bounds-center, west-scaled)
-      let north-east = vector.add(bounds-center, vector.add(north-scaled, east-scaled))
-      let north-west = vector.sub(bounds-center, vector.add(south-scaled, east-scaled))
-      let south-east = vector.add(bounds-center, vector.add(south-scaled, east-scaled))
-      let south-west = vector.sub(bounds-center, vector.add(north-scaled, east-scaled))
-
-      let base = vector.add(south,
-        vector.scale(north-dir, padding.bottom + baseline-offset))
-      let mid = vector.lerp(
-        vector.sub(north, vector.scale(north-dir, padding.top)),
-        base,
-        0.5)
-      let base-east = vector.add(base, east-scaled)
-      let base-west = vector.add(base, west-scaled)
-      let text = vector.add(base, vector.scale(east-dir, -content-width / 2))
-      let mid-east = vector.add(mid, east-scaled)
-      let mid-west = vector.add(mid, west-scaled)
-
-      (
-        center: bounds-center,
-        mid: mid,
-        mid-east: mid-east,
-        mid-west: mid-west,
-        base: base,
-        base-east: base-east,
-        base-west: base-west,
-        text: text,
-        north: north,
-        north-east: north-east,
-        north-west: north-west,
-        south: south,
-        south-east: south-east,
-        south-west: south-west,
-        east: east,
-        west: west,
-      )
-    }
-
-    let frame-stroke = if style.frame != none {
-      style.stroke
-    }
-    let frame-fill = if style.frame != none {
-      style.fill
-    }
-
-    let rect-shape = drawable.apply-tags(
-      drawable.line-strip(
-        (anchors.north-west, anchors.north-east,
-         anchors.south-east, anchors.south-west),
-        close: true,
-        stroke: frame-stroke,
-        fill: frame-fill,
-      ),
-      drawable.TAG.content-frame,
-    )
-
-    let frame-shape = if style.frame in (none, "rect") {
-      rect-shape
-    } else if style.frame == "circle" {
-      let (x, y, z) = util.calculate-circle-center-3pt(anchors.north-west, anchors.south-west, anchors.south-east)
-      let r = vector.dist((x, y, z), anchors.north-west)
-      drawable.apply-tags(drawable.ellipse(
-        x, y, z,
-        r, r,
-        stroke: frame-stroke,
-        fill: frame-fill,
-      ), drawable.TAG.content-frame)
-    }
-
-    // Shape used for path & border-anchors. Defaults
-    // to "rect" if the content frame is unset.
-    let anchor-shape = if frame-shape != none {
-      frame-shape
-    } else {
-      rect-shape
-    }
-
-    let (aabb-width, aabb-height, ..) = aabb.size(aabb.aabb(
-      (anchors.north-west, anchors.north-east,
-       anchors.south-west, anchors.south-east)))
-
-    let drawables = ()
-    if frame-shape != none {
-      drawables.push(frame-shape)
-    }
-
-    // Because of precision problems with some fonts (e.g. "Source Sans 3")
-    // we need to round the block sizes up. Otherwise, unwanted hyphenation
-    // gets introduced.
-    let round-up(v, digits: 8) = {
-      calc.ceil(v * calc.pow(10, digits)) / calc.pow(10, digits)
-    }
-
-    drawables.push(
-      drawable.content(
-        anchors.center,
-        aabb-width,
-        aabb-height,
-        frame-shape.segments,
-        std.rotate(-angle,
-          reflow: true,
-          origin: center + horizon,
-          block(
-            width: round-up(width) * ctx.length,
-            height: round-up(height) * ctx.length,
-            inset: (
-              top: padding.at("top", default: 0) * ctx.length,
-              left: padding.at("left", default: 0) * ctx.length,
-              bottom: padding.at("bottom", default: 0) * ctx.length,
-              right: padding.at("right", default: 0) * ctx.length,
-            ),
-            text(top-edge: "cap-height", bottom-edge: "baseline", body)
-          )
-        )
-      )
-    )
-
-    let (transform, anchors) = anchor_.setup(
-      anchor => {
-        if type(anchor) == str {
-          anchors.at(anchor)
-        }
-      },
-      anchors.keys(),
-      default: if auto-size { "center" } else { "north-west" },
-      offset-anchor: anchor,
-      transform: none, // Content does not get transformed, see the calculation of anchors.
-      name: name,
-      path-anchors: anchor-shape != none,
-      border-anchors: anchor-shape != none,
-      path: anchor-shape,
-      radii: (calc.max(width, height) * 2, calc.max(width, height) * 2),
-    )
-
-    return (
-      ctx: ctx,
-      name: name,
-      anchors: anchors,
-      drawables: drawable.apply-transform(
-        transform,
-        drawables
-      )
-    )
+    let place = prepare-content(ctx, body,
+      size: if auto-size { auto } else { vector.sub(b, a) }, angle: angle, ..style)
+    place(ctx, if auto-size { a } else { vector.lerp(a, b, .5) },
+      anchor: anchor, name: name, default: if auto-size { "center" } else { "north-west" })
   },)
 }
 
@@ -1926,7 +1938,9 @@
       let subpaths = ()
 
       for element in body {
-        let r = process.element(ctx, element)
+        // The merged path computes its own bounds. Per-element bounds are used
+        // here only for debug drawing, which must retain its usual behavior.
+        let r = process.element(ctx, element, compute-bounds: ctx.debug)
         if r != none {
           ctx = r.ctx
 

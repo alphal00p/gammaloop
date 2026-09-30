@@ -601,7 +601,10 @@ struct PathFramesSpec {
     #[serde(deserialize_with = "deserialize_bez_path")]
     path: BezPath,
     distances: Vec<F64OrInt>,
-    #[serde(default = "default_arclen_accuracy", deserialize_with = "deserialize_f64")]
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
     accuracy: f64,
 }
 
@@ -616,18 +619,30 @@ impl CubicBezierSpec {
     // equivalent rearrangements can perturb the label optimizer's tie-breaking.
     fn drawable(segment: PathSeg) -> Self {
         let lerp_third = |a: Point, b: Point, twice: bool| CurvePoint {
-            x: a.x + if twice { (b.x - a.x) * 2.0 / 3.0 } else { (b.x - a.x) / 3.0 },
-            y: a.y + if twice { (b.y - a.y) * 2.0 / 3.0 } else { (b.y - a.y) / 3.0 },
+            x: a.x
+                + if twice {
+                    (b.x - a.x) * 2.0 / 3.0
+                } else {
+                    (b.x - a.x) / 3.0
+                },
+            y: a.y
+                + if twice {
+                    (b.y - a.y) * 2.0 / 3.0
+                } else {
+                    (b.y - a.y) / 3.0
+                },
         };
         match segment {
             PathSeg::Cubic(cubic) => cubic.into(),
             PathSeg::Line(line) => Self {
-                start: line.p0.into(), end: line.p1.into(),
+                start: line.p0.into(),
+                end: line.p1.into(),
                 control_start: lerp_third(line.p0, line.p1, false),
                 control_end: lerp_third(line.p0, line.p1, true),
             },
             PathSeg::Quad(quad) => Self {
-                start: quad.p0.into(), end: quad.p2.into(),
+                start: quad.p0.into(),
+                end: quad.p2.into(),
                 control_start: lerp_third(quad.p0, quad.p1, true),
                 control_end: lerp_third(quad.p2, quad.p1, true),
             },
@@ -647,7 +662,10 @@ impl CubicBezierSpec {
         let bcd = lerp(bc, cd);
         PathFrame {
             point: if at_end { self.end } else { self.start },
-            tangent: CurvePoint { x: bcd.x - abc.x, y: bcd.y - abc.y },
+            tangent: CurvePoint {
+                x: bcd.x - abc.x,
+                y: bcd.y - abc.y,
+            },
         }
     }
 }
@@ -656,25 +674,36 @@ impl PathFramesSpec {
     fn frames(self) -> Result<Vec<Option<PathFrame>>, String> {
         let accuracy = validate_positive_accuracy(self.accuracy)?;
         let segments: Vec<_> = self.path.segments().collect();
-        let total: f64 = segments.iter().map(|segment| segment.arclen(accuracy)).sum();
-        self.distances.into_iter().map(|distance| {
-            let Some(first) = segments.first() else { return Ok(None) };
-            if distance.0.is_nan() {
-                return Err("frame distance must not be NaN".to_owned());
-            }
-            let at = distance.0.clamp(0.0, total);
-            let (segment, at_end) = if at == 0.0 {
-                (*first, false)
-            } else if at == total {
-                (*segments.last().unwrap(), true)
-            } else if total <= accuracy {
-                (*first, false)
-            } else {
-                let prefix = trim_path_segments(segments.iter().copied(), 0.0, total - at, accuracy)?;
-                (*prefix.last().unwrap_or(first), !prefix.is_empty())
-            };
-            Ok(Some(CubicBezierSpec::drawable(segment).endpoint_frame(at_end)))
-        }).collect()
+        let total: f64 = segments
+            .iter()
+            .map(|segment| segment.arclen(accuracy))
+            .sum();
+        self.distances
+            .into_iter()
+            .map(|distance| {
+                let Some(first) = segments.first() else {
+                    return Ok(None);
+                };
+                if distance.0.is_nan() {
+                    return Err("frame distance must not be NaN".to_owned());
+                }
+                let at = distance.0.clamp(0.0, total);
+                let (segment, at_end) = if at == 0.0 {
+                    (*first, false)
+                } else if at == total {
+                    (*segments.last().unwrap(), true)
+                } else if total <= accuracy {
+                    (*first, false)
+                } else {
+                    let prefix =
+                        trim_path_segments(segments.iter().copied(), 0.0, total - at, accuracy)?;
+                    (*prefix.last().unwrap_or(first), !prefix.is_empty())
+                };
+                Ok(Some(
+                    CubicBezierSpec::drawable(segment).endpoint_frame(at_end),
+                ))
+            })
+            .collect()
     }
 }
 
@@ -1647,6 +1676,35 @@ fn solve_tridiagonal(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batched_frames_clamp_and_handle_empty_or_short_paths() {
+        let samples = |path, distances: &[f64], accuracy| {
+            PathFramesSpec {
+                path,
+                distances: distances.iter().copied().map(F64OrInt).collect(),
+                accuracy,
+            }
+            .frames()
+            .unwrap()
+        };
+        let line = BezPath::from_path_segments(
+            [PathSeg::Line(Line::new((0.0, 0.0), (3.0, 0.0)))].into_iter(),
+        );
+        let frames = samples(line, &[-1.0, 0.0, 1.5, 3.0, 4.0], 1e-6);
+        assert_eq!(frames[0], frames[1]);
+        assert_eq!(frames[3], frames[4]);
+        for (frame, x) in frames.iter().zip([0.0, 0.0, 1.5, 3.0, 3.0]) {
+            assert_point_close(frame.as_ref().unwrap().point, point(x, 0.0));
+        }
+        assert_eq!(samples(BezPath::new(), &[0.0, 1.0], 1e-6), [None, None]);
+        let short = BezPath::from_path_segments(
+            [PathSeg::Line(Line::new((0.0, 0.0), (1e-8, 0.0)))].into_iter(),
+        );
+        let frames = samples(short, &[5e-9, 1e-8], 1e-6);
+        assert_eq!(frames[0].as_ref().unwrap().point, point(0.0, 0.0));
+        assert_eq!(frames[1].as_ref().unwrap().point, point(1e-8, 0.0));
+    }
 
     fn point(x: f64, y: f64) -> CurvePoint {
         CurvePoint { x, y }

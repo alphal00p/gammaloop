@@ -26,15 +26,3 @@
 [data-spenso-wrap] > [data-spenso-term] {
   flex: 0 0 auto;
 }
-
-[data-spenso-preview] {
-  max-width: 100%;
-}
-
-.spenso-preview-caption {
-  margin-top: 0.2em;
-  color: inherit;
-  opacity: 0.65;
-  font-size: 0.85em;
-  text-align: center;
-}

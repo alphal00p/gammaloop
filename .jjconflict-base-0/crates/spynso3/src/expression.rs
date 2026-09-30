@@ -66,6 +66,10 @@ use crate::{
 /// Use the exported singleton ``AUTO`` (also available as ``_``), rather than
 /// constructing this type. During index() or reindex(), AUTO leaves that axis
 /// unchanged. It is not a wildcard and not a component coordinate.
+/// Unresolved axes display as hollow squares. When several axes of a tensor
+/// are unresolved, their squares carry zero-based axis numbers, excluding
+/// scalar parameters. These local numbers do not imply contractions. Hover
+/// over a square in HTML output to see its axis and representation.
 ///
 /// Examples
 /// --------
@@ -3361,11 +3365,14 @@ impl TensorExpression {
     /// ----------
     /// max_line_length : int, optional
     ///     Requested line-length bound for the printer. None leaves it unbounded.
+    /// settings : DisplaySettings, optional
+    ///     Index labels, dimensions and invariant notation. Defaults to
+    ///     DisplaySettings(). Only ports layout and default spacing are supported.
     ///
     /// Returns
     /// -------
     /// str
-    ///     LaTeX tensor notation with dimensions omitted.
+    ///     LaTeX tensor notation, including the enclosing math delimiters.
     ///
     /// Examples
     /// --------
@@ -3373,9 +3380,19 @@ impl TensorExpression {
     /// >>> space = Representation.euc(2)
     /// >>> A = TensorName("M")(space, space)
     /// >>> source = A.to_latex()
-    #[pyo3(signature = (max_line_length = None))]
-    fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
-        display::structured_to_latex(Self::structured(&self_), false, max_line_length)
+    #[pyo3(signature = (max_line_length = None, *, settings = None))]
+    fn to_latex(
+        self_: PyRef<'_, Self>,
+        max_line_length: Option<usize>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(None, settings.as_deref());
+        display::reject_renderer_only_settings(&settings, "to_latex")?;
+        Ok(display::structured_to_latex(
+            Self::structured(&self_),
+            &settings,
+            max_line_length,
+        ))
     }
 
     /// Produce static Typst math source.
@@ -3420,7 +3437,7 @@ impl TensorExpression {
         ))
     }
 
-    /// Create a lazy, bounded rich display value for a notebook.
+    /// Create a lazy rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
@@ -3436,14 +3453,12 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Each requested backend is rendered once and cached. Large expressions
-    ///     show a marked preview; the original tensor and its ports remain exact.
+    ///     Each requested backend renders the complete expression once and caches it.
     ///
     /// Notes
     /// -----
-    /// Automatic HTML, LaTeX, and pretty-text representations use the same bounded
-    /// preview. Explicit to_html(), to_svg(), to_latex(), to_typst(), and
-    /// format_tensor() retain the full expression.
+    /// Automatic HTML, LaTeX, and pretty-text representations retain the complete
+    /// expression, its factorization, and ordered ports.
     /// Settings are captured here; custom printers run on the first request
     /// for each backend. Create a new formatted value after changing printers.
     ///
@@ -3590,7 +3605,7 @@ impl TensorExpression {
         let text = if cycle {
             "...".to_string()
         } else {
-            display::structured_preview(
+            display::format_structured_backend(
                 pretty.py(),
                 Self::structured(&self_),
                 &display::DisplaySettings::default(),
@@ -3604,7 +3619,7 @@ impl TensorExpression {
 
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
         let settings = display::DisplaySettings::default();
-        display::structured_preview(
+        display::format_structured_backend(
             py,
             Self::structured(&self_),
             &settings,
@@ -3614,14 +3629,8 @@ impl TensorExpression {
         .ok()
     }
 
-    fn _repr_latex_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<String> {
-        display::structured_preview(
-            py,
-            Self::structured(&self_),
-            &display::DisplaySettings::default(),
-            None,
-            FormattedOutputBackend::Latex,
-        )
+    fn _repr_latex_(self_: PyRef<'_, Self>) -> PyResult<String> {
+        Self::to_latex(self_, None, None)
     }
 }
 

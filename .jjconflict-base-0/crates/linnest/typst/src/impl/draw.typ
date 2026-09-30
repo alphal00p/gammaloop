@@ -5,6 +5,8 @@
 #import "../graph.typ" as graph-api
 #import "../subgraph.typ" as subgraph-api
 
+#let _plugin = plugin("../../linnest.wasm")
+
 #let _style-key = "linnest-style"
 
 #let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
@@ -54,23 +56,37 @@
 }
 
 #let _identity-target(pos, href, width: 8pt, height: 8pt) = {
-  cetz.draw.floating(cetz.draw.content(
-    _point(pos),
-    link(href, box(width: width, height: height)),
-    padding: 0,
-  ))
+  ((position: _point(pos), body: link(href, box(width: width, height: height))),)
+}
+
+#let _draw-identity-targets(ctx, targets) = {
+  let drawables = ()
+  let previous = none
+  let place = none
+  for target in targets {
+    // Consecutive samples share their link and box size. Resolve their content
+    // once, while preserving coordinate hooks and context updates for each hit.
+    if target.body != previous {
+      place = cetz.draw.prepare-content(ctx, target.body, padding: 0)
+      previous = target.body
+    }
+    let position = none
+    (ctx, position) = cetz.coordinate.resolve(ctx, target.position)
+    let result = place(ctx, position)
+    ctx = result.ctx
+    drawables += result.drawables
+  }
+  (ctx: ctx, drawables: cetz.drawable.apply-tags(drawables, cetz.drawable.TAG.no-bounds))
 }
 
 #let _edge-identity-targets(ctx, parts, hrefs) = {
   let targets = ()
-  let lengths = parts.map(part => curve-api.length(
-    curve-api.path(..part.segments.map(curve-api.from-cubic)),
-  ))
+  let paths = parts.map(part => curve-api.path(..part.segments.map(curve-api.from-cubic)))
+  let lengths = paths.map(curve-api.length)
   let total = lengths.sum()
   let offset = 0
-  for (part, length) in parts.zip(lengths) {
+  for (part, path, length) in parts.zip(paths, lengths) {
     if part.visible and length > 0 {
-      let path = curve-api.path(..part.segments.map(curve-api.from-cubic))
       // Pick the endpoint half-edges in the outer quarters of arc length.
       // Keep the two central quarters separately tagged for half-edge highlighting.
       for quarter in range(4) {
@@ -1921,42 +1937,16 @@
     let frames = if fixed-position != none { (frame,) } else {
       curve-api.frames(candidate-path, positions.map(at => total / 2 + (at - total / 2)), accuracy: accuracy)
     }
-    for (at, frame) in positions.zip(frames) {
-      let tangent-length = _point-length(frame.tangent)
-      let normal = if tangent-length <= 1e-9 { (0, candidate-side) } else {
-        _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
-      }
-      let outward = cetz.vector.sub(
-        cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
-      )
-      let normal-squared = cetz.vector.dot(outward, outward)
-      let nearest = if clear-box and normal-squared > 1e-18 {
-        calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
-      } else { 0 }
-      let position = if fixed-position != none { frame.point } else {
-        _point-add(frame.point, _point-scale(normal, gap - nearest))
-      }
-      let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
-      let bounds = corners.map(corner => cetz.vector.add(center, corner))
-      candidates.push((
-        position: position,
-        at: at,
-        side: candidate-side,
-        path-index: path-index,
-        path-shift: at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift },
-        bounds: (
-          left: calc.min(..bounds.map(p => p.at(0))),
-          right: calc.max(..bounds.map(p => p.at(0))),
-          bottom: calc.min(..bounds.map(p => p.at(1))),
-          top: calc.max(..bounds.map(p => p.at(1))),
-        ),
-        // Prefer the original side when both placements are otherwise equivalent.
-        cost: (
-          (if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) })
-            + if candidate-side == side { 0 } else { 0.00002 }
-        ),
-      ))
-    }
+    candidates += cbor(_plugin.label_candidates(cbor.encode((
+      frames: frames.map(frame => (point: frame.point.map(float), tangent: frame.tangent.map(float))),
+      positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),
+      origin: origin.map(float), corners: corners.map(corner => corner.map(float)),
+      total: float(total), preferred: float(preferred),
+      accuracy: float(accuracy), side: float(candidate-side), preferred-side: float(side),
+      path-index: path-index,
+      path-shift: float(if attached == none { 0 } else { _style-value(attached, "shift") - shift }),
+      gap: float(gap), clear-box: clear-box, fixed: fixed-position != none,
+    ))))
   }
   if attached == none and sides.len() == 2 {
     let count = calc.quo(candidates.len(), 2)
@@ -1981,101 +1971,29 @@
   if placements.all(label => label.candidates.len() == 1) {
     return placements.map(label => label.candidates.first())
   }
-  let expanded = box => (
-    left: box.left - label-padding, right: box.right + label-padding,
-    bottom: box.bottom - label-padding, top: box.top + label-padding,
+  let geometry = _plugin.label_collision_geometry(cbor.encode((
+    placements: placements.map(label => (
+      edge: label.at("edge", default: none),
+      candidates: label.candidates.map(candidate => (bounds: candidate.bounds, cost: candidate.cost)),
+    )),
+    obstacles: obstacles, label-padding: label-padding,
+    obstacle-padding: _label-collision-padding.obstacles,
+  )))
+  let math = (
+    temperatures: range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)),
+    exponentials: (), pair-padding: _label-collision-padding.labels,
   )
-  let overlap = (left, right, padding) => {
-    // Inflate label bounds before intersecting, including when one box contains
-    // the other; adding extra padding to the overlap would miscount that case.
-    let width = calc.max(0, calc.min(left.right, right.right) - calc.max(left.left, right.left) + padding)
-    if width == 0 { return 0 }
-    width * calc.max(0, calc.min(left.top, right.top) - calc.max(left.bottom, right.bottom) + padding)
+  let result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
+  // Native exp is only a prediction. Replay with Typst's exact results until
+  // every acceptance calculation is certified. Each replay extends the exact
+  // execution prefix, so even differing platform math cannot change the result.
+  while result.missing.len() > 0 {
+    math.exponentials += result.missing.map(argument => (argument, calc.exp(argument)))
+    result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
   }
-  let boxes = placements.map(label => label.candidates.map(candidate => expanded(candidate.bounds)))
-  let areas = placements.map(label => label.candidates.map(candidate => {
-    let box = candidate.bounds
-    (box.right - box.left) * (box.top - box.bottom)
-  }))
-  let extents = boxes.map(candidates => (
-    left: calc.min(..candidates.map(box => box.left)),
-    right: calc.max(..candidates.map(box => box.right)),
-    bottom: calc.min(..candidates.map(box => box.bottom)),
-    top: calc.max(..candidates.map(box => box.top)),
-  ))
-  let choices = placements.map(_ => 0)
-  for i in range(placements.len()) {
-    let edge = placements.at(i).at("edge", default: none)
-    let extent = extents.at(i)
-    // The union only rejects obstacles whose contribution is zero for every
-    // candidate. Retain obstacle order for identical floating-point sums.
-    // Normal clearance already constrains the label against its own carrier.
-    // Keep self-loop obstacles: a different part of the loop can approach it.
-    let relevant = obstacles.filter(obstacle => (
-      (edge == none or obstacle.at("edge", default: none) != edge
-        or obstacle.at("self-loop", default: false))
-        and overlap(extent, obstacle, _label-collision-padding.obstacles) > 0
-    ))
-    let candidates = placements.at(i).candidates
-    for j in range(candidates.len()) {
-      let box = boxes.at(i).at(j)
-      let area = calc.max(1e-9, areas.at(i).at(j))
-      let cost = candidates.at(j).cost
-      for obstacle in relevant {
-        cost += overlap(box, obstacle, _label-collision-padding.obstacles) / area
-      }
-      candidates.at(j).cost = cost
-    }
-    placements.at(i).candidates = candidates
-  }
-  let best-choices = choices
-  // Energy is relative to the initial arrangement; only deltas matter.
-  let energy = 0
-  let best-energy = 0
-  let random = 42
-  for sweep in range(84) {
-    if sweep == 80 { choices = best-choices; energy = best-energy }
-    for i in range(placements.len()) {
-      let candidates = placements.at(i).candidates
-      if candidates.len() <= 1 { continue }
-      random = calc.rem(1664525 * random + 1013904223, 4294967296)
-      // Use upper bits so interleaved side candidates both receive proposals.
-      let proposals = if sweep < 80 { (calc.rem(calc.floor(random / 65536), candidates.len()),) } else { range(candidates.len()) }
-      // Other labels stay fixed throughout this label's proposals. Reuse their
-      // selected geometry and the current score, preserving summation order.
-      let others = range(placements.len()).filter(j => j != i).map(j => (
-        box: boxes.at(j).at(choices.at(j)), area: areas.at(j).at(choices.at(j)),
-      )).filter(other => overlap(extents.at(i), other.box, _label-collision-padding.labels) > 0)
-      let score = choice => {
-        let box = boxes.at(i).at(choice)
-        let area = areas.at(i).at(choice)
-        let cost = candidates.at(choice).cost
-        for other in others {
-          // Repel nearby labels before their text boxes touch.
-          cost += 4 * overlap(box, other.box, _label-collision-padding.labels) / calc.max(1e-9, calc.min(area, other.area))
-        }
-        cost
-      }
-      let current-score = score(choices.at(i))
-      for proposal in proposals {
-        if proposal == choices.at(i) { continue }
-        let proposal-score = score(proposal)
-        let delta = proposal-score - current-score
-        random = calc.rem(1664525 * random + 1013904223, 4294967296)
-        let temperature = 0.15 * calc.pow(0.9, sweep)
-        if delta < -1e-12 or (sweep < 80 and random / 4294967296 < calc.exp(-calc.max(0, delta) / temperature)) {
-          choices.at(i) = proposal
-          current-score = proposal-score
-          energy += delta
-          if energy < best-energy - 1e-12 {
-            best-energy = energy
-            best-choices = choices
-          }
-        }
-      }
-    }
-  }
-  placements.zip(best-choices).map(pair => pair.first().candidates.at(pair.last()))
+  placements.enumerate().map(((i, label)) => {
+    label.candidates.at(result.choices.at(i)) + (cost: result.costs.at(i))
+  })
 }
 
 #let _paired-layer-label-element(
@@ -3718,24 +3636,12 @@
           )))
           let pad-x = radius * (calc.abs(ctx.transform.at(0).at(0)) + calc.abs(ctx.transform.at(0).at(1)))
           let pad-y = radius * (calc.abs(ctx.transform.at(1).at(0)) + calc.abs(ctx.transform.at(1).at(1)))
-          for segments in (source-label-segments, sink-label-segments) {
-            if segments == none { continue }
-            for segment in segments {
-              let points = range(13).map(step => {
-                let point = curve-api.cubic-point(segment, step / 12)
-                cetz.matrix.mul4x4-vec3(ctx.transform, (.._point(point), 0))
-              })
-              for (start, end) in points.slice(0, 12).zip(points.slice(1)) {
-                label-obstacles.push((
-                  edge: edge.edge, self-loop: self-loop,
-                  left: calc.min(start.at(0), end.at(0)) - pad-x,
-                  right: calc.max(start.at(0), end.at(0)) + pad-x,
-                  bottom: calc.min(start.at(1), end.at(1)) - pad-y,
-                  top: calc.max(start.at(1), end.at(1)) + pad-y,
-                ))
-              }
-            }
-          }
+          let obstacle-segments = (source-label-segments, sink-label-segments)
+            .filter(segments => segments != none).flatten()
+          label-obstacles += cbor(_plugin.label_obstacle_boxes(cbor.encode((
+            segments: obstacle-segments, transform: ctx.transform.map(row => row.map(float)),
+            pad-x: pad-x, pad-y: pad-y,
+          )))).map(box => (edge: edge.edge, self-loop: self-loop, ..box))
 
           if ev-label != none {
             let gap = _statement-number(edge, "layout-label-gap")
@@ -3875,9 +3781,7 @@
           compute-bounds: false,
         )
         // Nodes come last so incident edge targets cannot intercept node hits.
-        let targets = cetz.process.many(
-          after.ctx, edge-targets + node-targets, compute-bounds: false,
-        )
+        let targets = _draw-identity-targets(after.ctx, edge-targets + node-targets)
         (ctx: targets.ctx, drawables: rendered.drawables + after.drawables + targets.drawables)
       },
     ),

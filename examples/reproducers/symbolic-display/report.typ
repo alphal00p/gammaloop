@@ -1,5 +1,11 @@
 = Symbolic notebook display
 
+This records the original bounded-preview experiment and its measurements.
+The preview policy below was superseded on 2026-09-30: symbolic notebook
+outputs now render the complete expression. Lazy backend caching and the
+chain-collection optimization remain; the historical timings below are
+retained as measured, not presented as full-render timings.
+
 The chain-collection optimization records compatible matrix channels during the
 existing regional observation pass. Metrics, vectors, and completed scalar dots
 do not by themselves authorize matrix-chain matching. This changes scheduling,
@@ -133,3 +139,49 @@ Of the latter, 8.34 ms is inside `typst.compile`; preparation, temporary files,
 and output processing account for the remainder. These compare serialization
 with compilation, and exclude the browser's subsequent LaTeX typesetting or
 MathML layout. A fresh Typst project is still used for each uncached formula.
+
+== Complete-output follow-up: 2026-09-30
+
+Automatic symbolic displays now render every term. The compact/explicit
+invariant display, hollow unresolved-index placeholders, and color-symbol
+migration reuse `tztusnmp`, `xmzwzlsl`, and `ywkyrvvr`. Lazy backend caching and
+the chain-collection optimization remain in place.
+
+The live gluon notebook constructs its projector from two metrics bound to the
+generated ports and reduces the complete projected tensor in one call. It
+displays the explicitly expanded tensor already needed by its scalar-coordinate
+calculation. This exposes 6,001 top-level terms to the existing line wrapping;
+the preceding factored result otherwise forms one enormous, unbreakable MathML
+row. Neither representation is truncated.
+
+Marimo independently rejected outputs above 8,000,000 bytes. The notebook host's
+`tool.marimo.runtime.output_max_bytes` is now the platform-sized integer maximum.
+The release extension was rebuilt and installed, the two notebook servers were
+restarted, and the saved session was regenerated without either kind of preview.
+The installed core has SHA256
+`70434f75ef341916c07c42eb67787c147154feaee2134fbb8d3a5215b0178192`.
+
+A fresh Chromium run matched all three complete formula fingerprints against
+the executed session, including all 6,001 result terms, with no truncation,
+MathML errors, JavaScript errors, or document overflow. It completed in 38.72 s,
+including startup, calculation, and display. The large display cell took
+11.81 s in the kernel. Projected algebra reduction alone took about 0.26 s,
+explicit expansion about 12 ms, and a completed reduction rerun about 0.15 ms.
+These are full-output measurements; the earlier 11.70 s notebook measurement
+used bounded previews and is not an equivalent rendering workload.
+
+The installed display/API suite passes all 45 tests; the generated-ladder suite
+passes all five. Formatting, strict Spynso/Idenso Clippy, generated stubs, the
+API catalog, and affected production-library checks pass. The broader native
+selection passes 301 of 302 tests: its remaining component validator rejects
+zero sampling calls after the tested identity has already produced 64 exact
+zero components. An isolated diagnostic preserved that assertion and proved
+the cancellation; the test was not relaxed. The broader all-targets caller
+check also encounters seven type-inference ambiguities in unchanged GammaLoop
+graph-parser tests. These failures prevent claiming a fully green workspace.
+
+The full-formula audit also exposes two remaining notation issues: the small
+raw-expression excerpt uses a different display style, and powers of dot
+products retain their MathML grouping but lack visible parentheses. These are
+separate from the removed output limits; this follow-up does not claim a
+complete notation-polish audit.

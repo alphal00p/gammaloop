@@ -633,6 +633,24 @@ class DisplaySettings:
         >>> value = DisplaySettings().tensor_view
         """
     @property
+    def invariant_style(self) -> typing.Literal['compact', 'explicit']:
+        r"""
+        Choose compact or degree-explicit scalar invariant notation.
+
+        Returns
+        -------
+        str
+            "compact" uses C_F, C_A and T_R for the quadratic color invariants;
+            "explicit" uses C_2(F), C_2(A) and I_2(F). Higher degrees use
+            C_k(R), I_k(R) and G_k(R, S) in either style.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import DisplaySettings
+        >>> DisplaySettings(invariant_style="explicit").invariant_style
+        'explicit'
+        """
+    @property
     def show_dimensions(self) -> builtins.bool:
         r"""
         Include representation dimensions in index notation.
@@ -640,7 +658,8 @@ class DisplaySettings:
         Returns
         -------
         bool
-            Include representation dimensions in index notation.
+            Include representation dimensions in index notation and scalar invariants.
+            Invariants then show their degree and representation, such as C_2(F_3).
 
         Examples
         --------
@@ -724,7 +743,7 @@ class DisplaySettings:
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().factor_gap
         """
-    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive') -> DisplaySettings:
+    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
         r"""
         Choose tensor notation, index labels, and component presentation.
 
@@ -734,7 +753,8 @@ class DisplaySettings:
             Rich layout: "ports" places indices by tensor axes; "schoonschip"
             uses compact contracted-vector notation; "call" uses function-call notation.
         show_dimensions : bool, default False
-            Include representation dimensions in index notation.
+            Include representation dimensions in index notation and scalar invariants.
+            Invariants then show their degree and representation, such as C_2(F_3).
         parentheses : bool, default True
             Include the optional grouping parentheses used by tensor notation.
         commas : bool or None, default None
@@ -756,6 +776,13 @@ class DisplaySettings:
         tensor_view : str, default "interactive"
             Concrete-tensor HTML: "interactive" provides a component explorer with
             a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+
+        invariant_style : {"compact", "explicit"}, default "compact"
+            Compact quadratic color notation uses C_F, C_A and T_R. Explicit
+            notation uses C_2(F), C_2(A) and I_2(F). Both use C_k(R), I_k(R)
+            and G_k(R, S) for higher invariants. show_dimensions adds the
+            dimension to each representation label and disables quadratic aliases.
+            Older scalar symbols have no representation dimension to display.
 
         Returns
         -------
@@ -5833,7 +5860,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> output = A.format_tensor()
         """
-    def to_latex(self, max_line_length: typing.Optional[builtins.int] = None) -> builtins.str:
+    def to_latex(self, max_line_length: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
         Produce LaTeX for the symbolic tensor expression.
 
@@ -5841,11 +5868,14 @@ class TensorExpression:
         ----------
         max_line_length : int, optional
             Requested line-length bound for the printer. None leaves it unbounded.
+        settings : DisplaySettings, optional
+            Index labels, dimensions and invariant notation. Defaults to
+            DisplaySettings(). Only ports layout and default spacing are supported.
 
         Returns
         -------
         str
-            LaTeX tensor notation with dimensions omitted.
+            LaTeX tensor notation, including the enclosing math delimiters.
 
         Examples
         --------
@@ -5887,7 +5917,7 @@ class TensorExpression:
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
-        Create a lazy, bounded rich display value for a notebook.
+        Create a lazy rich display value for a notebook.
 
         Parameters
         ----------
@@ -5903,14 +5933,12 @@ class TensorExpression:
         Returns
         -------
         FormattedOutput
-            Each requested backend is rendered once and cached. Large expressions
-            show a marked preview; the original tensor and its ports remain exact.
+            Each requested backend renders the complete expression once and caches it.
 
         Notes
         -----
-        Automatic HTML, LaTeX, and pretty-text representations use the same bounded
-        preview. Explicit to_html(), to_svg(), to_latex(), to_typst(), and
-        format_tensor() retain the full expression.
+        Automatic HTML, LaTeX, and pretty-text representations retain the complete
+        expression, its factorization, and ordered ports.
         Settings are captured here; custom printers run on the first request
         for each backend. Create a new formatted value after changing printers.
 
@@ -8408,7 +8436,7 @@ class TensorNetwork:
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
-        Create a lazy, bounded rich display value for a notebook.
+        Create a lazy rich display value for a notebook.
 
         Parameters
         ----------
@@ -8424,8 +8452,8 @@ class TensorNetwork:
         Returns
         -------
         FormattedOutput
-            Each requested backend is rendered once and cached. Large expressions
-            show the same marked preview as TensorExpression.
+            Each requested backend renders the complete source expression once
+            and caches it.
 
         Notes
         -----
@@ -10139,6 +10167,10 @@ class _AutoIndex:
     Use the exported singleton ``AUTO`` (also available as ``_``), rather than
     constructing this type. During index() or reindex(), AUTO leaves that axis
     unchanged. It is not a wildcard and not a component coordinate.
+    Unresolved axes display as hollow squares. When several axes of a tensor
+    are unresolved, their squares carry zero-based axis numbers, excluding
+    scalar parameters. These local numbers do not imply contractions. Hover
+    over a square in HTML output to see its axis and representation.
 
     Examples
     --------
@@ -10443,7 +10475,7 @@ def format_tensor(expression: Expression, show_dimensions: typing.Optional[built
 
 def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
     r"""
-    Create a lazy, bounded rich display value for a notebook.
+    Create a lazy rich display value for a notebook.
 
     Parameters
     ----------
@@ -10462,12 +10494,12 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     Returns
     -------
     FormattedOutput
-        Each requested backend is rendered once and cached. Large expressions
-        show a marked preview; the original expression remains exact.
+        Each requested backend renders the complete expression once and caches it.
 
     Notes
     -----
-    Use to_html(), to_svg(), or format_tensor() for explicit full output.
+    Settings are captured here; custom printers run on the first request
+    for each backend. Create a new formatted value after changing printers.
 
     Examples
     --------

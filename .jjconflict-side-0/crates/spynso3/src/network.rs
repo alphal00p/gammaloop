@@ -1431,7 +1431,7 @@ impl SpensoNet {
     }
 
     fn _repr_latex_(&self) -> String {
-        display::structured_to_latex(&self.structure, false, None)
+        display::structured_to_latex(&self.structure, &Default::default(), None)
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
@@ -1638,7 +1638,7 @@ impl SpensoNet {
         ))
     }
 
-    /// Create a lazy, bounded rich display value for a notebook.
+    /// Create a lazy rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
@@ -1654,8 +1654,8 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Each requested backend is rendered once and cached. Large expressions
-    ///     show the same marked preview as TensorExpression.
+    ///     Each requested backend renders the complete source expression once
+    ///     and caches it.
     ///
     /// Notes
     /// -----

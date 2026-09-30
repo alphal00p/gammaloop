@@ -7,7 +7,7 @@ use symbolica::function;
 // https://github.com/FeynCalc/feyncalc/blob/027e6a741fe62a21e6d979f9d555bd2736029108/Tests/SUN/SUNSimplify.test
 //
 // FeynCalc normally substitutes TR=1/2 and can rewrite SUNN in terms of CA/CF.
-// These tests keep idenso's symbolic TR, Nc, and dA conventions visible.
+// These tests keep the representation-aware Dynkin index, Nc, and dA visible.
 // The rest of SUNSimplify.test mostly exercises explicit SUND tensors, full
 // Fierz products of two open chains, or SUNNToCACF-specific presentation rules.
 

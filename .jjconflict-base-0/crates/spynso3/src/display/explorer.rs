@@ -4,6 +4,7 @@ use super::*;
 const STYLE: &str = include_str!("../../typst/explorer.css");
 const SCRIPT: &str = include_str!("../../typst/explorer.js");
 const MAX_COMPONENTS: usize = 512;
+const MAX_FORMULA_BYTES: usize = 4_096;
 const MAX_HTML_BYTES: usize = 2_000_000;
 
 type Component = (usize, String, String);
