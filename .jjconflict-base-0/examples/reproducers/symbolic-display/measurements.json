@@ -1,0 +1,598 @@
+{
+  "input_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+  "baseline_revision": "35699f2ece33",
+  "chain_revision": "0ee3e274",
+  "display_change": "rnymnsty",
+  "symbolica_commit": "7d157e04f4ce4dce226ef87ca781aa4917d3735a",
+  "environment": {
+    "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "python": "Python 3.11.16",
+    "maturin": "maturin 1.15.0",
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "profile": "release",
+    "features": [
+      "native"
+    ]
+  },
+  "settings": {
+    "color": true,
+    "gamma": true,
+    "epsilon": false,
+    "contract": "fully",
+    "max_steps_per_domain": null
+  },
+  "baseline": {
+    "source_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+    "rows": [
+      {
+        "name": "color_only",
+        "seconds": [
+          0.010410489980131388,
+          0.008046405855566263,
+          0.007962236180901527
+        ],
+        "median": 0.008046405855566263,
+        "rank": 4,
+        "bytes": 6986
+      },
+      {
+        "name": "combined_full",
+        "seconds": [
+          2.0957927918061614,
+          2.0805530319921672,
+          2.049911743029952
+        ],
+        "median": 2.0805530319921672,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "contract_after_color",
+        "seconds": [
+          1.8023321339860559,
+          1.8405142198316753,
+          1.8162440732121468
+        ],
+        "median": 1.8162440732121468,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "no_chain_or_trace_collection",
+        "seconds": [
+          0.5426916340366006,
+          0.5850195772945881,
+          0.5708259488455951
+        ],
+        "median": 0.5708259488455951,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "all_identities_off_after_color",
+        "seconds": [
+          1.802572405897081,
+          1.8621914037503302,
+          1.8113344353623688
+        ],
+        "median": 1.8113344353623688,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "projected_spacetime_scalar",
+        "seconds": [
+          0.2406214359216392,
+          0.2412489471025765,
+          0.2409700369462371
+        ],
+        "median": 0.2409700369462371,
+        "rank": 0,
+        "bytes": 951622
+      }
+    ],
+    "combined_equals_structural": true,
+    "chain_collection_changes_expression": false
+  },
+  "candidate": {
+    "source_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+    "rows": [
+      {
+        "name": "color_only",
+        "seconds": [
+          0.0167938731610775,
+          0.008155846036970615,
+          0.008059665095061064
+        ],
+        "median": 0.008155846036970615,
+        "rank": 4,
+        "bytes": 6986
+      },
+      {
+        "name": "combined_full",
+        "seconds": [
+          0.8425223850645125,
+          0.8621949339285493,
+          0.8088767896406353
+        ],
+        "median": 0.8425223850645125,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "contract_after_color",
+        "seconds": [
+          0.5545488470233977,
+          0.6302186930552125,
+          0.5947115449234843
+        ],
+        "median": 0.5947115449234843,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "no_chain_or_trace_collection",
+        "seconds": [
+          0.5580046433024108,
+          0.5967727890238166,
+          0.5836441330611706
+        ],
+        "median": 0.5836441330611706,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "all_identities_off_after_color",
+        "seconds": [
+          0.5455808988772333,
+          0.5949695147573948,
+          0.573219383135438
+        ],
+        "median": 0.573219383135438,
+        "rank": 4,
+        "bytes": 3315315
+      },
+      {
+        "name": "projected_spacetime_scalar",
+        "seconds": [
+          0.2418213188648224,
+          0.239792225882411,
+          0.2406769972294569
+        ],
+        "median": 0.2406769972294569,
+        "rank": 0,
+        "bytes": 951622
+      }
+    ],
+    "combined_equals_structural": true,
+    "chain_collection_changes_expression": false
+  },
+  "modes_and_reruns": {
+    "source_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+    "core_path": "/tmp/chain-display-optimization/python/symbolica/core.abi3.so",
+    "core_sha256": "9cb2497e3eec18eeb4f5f42992ef44facd0b082d7cc86a4a0f2b81ffe5fe4dc9",
+    "settings": {
+      "color": true,
+      "gamma": true,
+      "epsilon": false,
+      "max_steps_per_domain": null
+    },
+    "setup_phases": {
+      "imports": 0.006207311991602182,
+      "model_initialization": 0.0029377760365605354,
+      "diagram_generation": 0.0769707690924406,
+      "numerator_building": 0.004149377811700106,
+      "admission_and_dimension": 0.0038844780065119267
+    },
+    "rows": [
+      {
+        "mode": "none",
+        "samples_seconds": [
+          0.010404720902442932,
+          0.00804320489987731,
+          0.00786742614582181,
+          0.007851595059037209
+        ],
+        "warmed_median_seconds": 0.00786742614582181,
+        "rerun_seconds": 3.203004598617554e-05,
+        "status": "ReductionStatus.Complete",
+        "rank": 4,
+        "bytes": 6986
+      },
+      {
+        "mode": "minimal",
+        "samples_seconds": [
+          0.020215129014104605,
+          0.019775387831032276,
+          0.019928828813135624,
+          0.01949824672192335
+        ],
+        "warmed_median_seconds": 0.019775387831032276,
+        "rerun_seconds": 8.955970406532288e-05,
+        "status": "ReductionStatus.Complete",
+        "rank": 4,
+        "bytes": 6359
+      },
+      {
+        "mode": "fully",
+        "samples_seconds": [
+          0.8446728107519448,
+          0.8137274412438273,
+          0.7810545978136361,
+          0.7792809740640223
+        ],
+        "warmed_median_seconds": 0.7810545978136361,
+        "rerun_seconds": 0.0002476712688803673,
+        "status": "ReductionStatus.Complete",
+        "rank": 4,
+        "bytes": 3315315
+      }
+    ],
+    "logical_slots_preserved": true,
+    "minimal_then_full_same_expression": true,
+    "minimal_projected_exact_saved_oracle_equal": true
+  },
+  "preview": {
+    "core_sha256": "9cb2497e3eec18eeb4f5f42992ef44facd0b082d7cc86a4a0f2b81ffe5fe4dc9",
+    "samples": [
+      {
+        "formatted": 5.709938704967499e-06,
+        "html": 6.837025284767151e-05,
+        "direct_html": 6.829854100942612e-06,
+        "repeat_html": 1.3401731848716736e-06
+      },
+      {
+        "formatted": 1.8901191651821136e-06,
+        "html": 4.359986633062363e-06,
+        "direct_html": 3.8496218621730804e-06,
+        "repeat_html": 1.0202638804912567e-06
+      },
+      {
+        "formatted": 5.802139639854431e-07,
+        "html": 3.569759428501129e-06,
+        "direct_html": 3.200024366378784e-06,
+        "repeat_html": 9.997747838497162e-07
+      },
+      {
+        "formatted": 4.898756742477417e-07,
+        "html": 3.289896994829178e-06,
+        "direct_html": 3.6102719604969025e-06,
+        "repeat_html": 9.997747838497162e-07
+      },
+      {
+        "formatted": 4.800967872142792e-07,
+        "html": 3.2400712370872498e-06,
+        "direct_html": 3.0598603188991547e-06,
+        "repeat_html": 8.800998330116272e-07
+      }
+    ],
+    "warmed_medians": {
+      "formatted": 5.350448191165924e-07,
+      "html": 3.4298282116651535e-06,
+      "direct_html": 3.4051481634378433e-06,
+      "repeat_html": 9.997747838497162e-07
+    },
+    "html_bytes": 1316,
+    "tensor_bytes": 3315315,
+    "rank": 4
+  },
+  "formatter_before": {
+    "core_sha256": "3a2e131f286b7b7ca9eb4004a3c55e411dcab3180aca02890f81760031a23608",
+    "input": "(a+b+c)*(d+e+f)^2",
+    "samples": [
+      {
+        "formatted": 0.02472805604338646,
+        "html": 1.7960090190172195e-05,
+        "repeat_html": 3.119930624961853e-06
+      },
+      {
+        "formatted": 0.010113578755408525,
+        "html": 5.300156772136688e-06,
+        "repeat_html": 2.6100315153598785e-06
+      },
+      {
+        "formatted": 0.009132797364145517,
+        "html": 5.289912223815918e-06,
+        "repeat_html": 2.420041710138321e-06
+      },
+      {
+        "formatted": 0.009054037276655436,
+        "html": 5.289912223815918e-06,
+        "repeat_html": 2.4703331291675568e-06
+      },
+      {
+        "formatted": 0.009049267042428255,
+        "html": 4.829838871955872e-06,
+        "repeat_html": 2.919696271419525e-06
+      }
+    ],
+    "warmed_medians": {
+      "formatted": 0.009093417320400476,
+      "html": 5.289912223815918e-06,
+      "repeat_html": 2.5401823222637177e-06
+    }
+  },
+  "formatter_after": {
+    "core_sha256": "9cb2497e3eec18eeb4f5f42992ef44facd0b082d7cc86a4a0f2b81ffe5fe4dc9",
+    "input": "(a+b+c)*(d+e+f)^2",
+    "samples": [
+      {
+        "formatted": 6.319954991340637e-06,
+        "html": 0.025458798743784428,
+        "repeat_html": 9.339768439531326e-06
+      },
+      {
+        "formatted": 7.991213351488113e-06,
+        "html": 0.010558851063251495,
+        "repeat_html": 4.88990917801857e-06
+      },
+      {
+        "formatted": 5.959998816251755e-06,
+        "html": 0.00968240899965167,
+        "repeat_html": 4.840083420276642e-06
+      },
+      {
+        "formatted": 6.780028343200684e-06,
+        "html": 0.010109169408679008,
+        "repeat_html": 6.579793989658356e-06
+      },
+      {
+        "formatted": 8.440110832452774e-06,
+        "html": 0.00991283031180501,
+        "repeat_html": 5.329027771949768e-06
+      }
+    ],
+    "warmed_medians": {
+      "formatted": 7.3856208473443985e-06,
+      "html": 0.01001099986024201,
+      "repeat_html": 5.109468474984169e-06
+    }
+  },
+  "exact_full_tensor_unchanged": true,
+  "small_mathml_unchanged": [
+    "factorized",
+    "slash",
+    "trace",
+    "custom"
+  ],
+  "compilation_excluded": true,
+  "artifact_directory": "/tmp/chain-display-optimization",
+  "final_binary": {
+    "core": "/tmp/chain-display-optimization/python/symbolica/core.abi3.so",
+    "core_sha256": "a8d15d60ee19178e8de4b1445df8b7bfa563f27c53c72cb75876dab23faa0ab2",
+    "input_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+    "full_samples_seconds": [
+      0.8257290050387383,
+      0.817891426384449,
+      0.7921880222856998
+    ],
+    "full_median_seconds": 0.817891426384449,
+    "completed_rerun_seconds": 0.00015596020966768265,
+    "exact_baseline_equal": true,
+    "status": "Complete",
+    "rank": 4,
+    "tensor_bytes": 3315315,
+    "html_bytes": 1316,
+    "changes_since_initial_measured_build": [
+      "Fix sum-prefix ellipsis at the encoded-size boundary",
+      "Correct network formatting documentation and regenerate stubs"
+    ]
+  },
+  "final_build": {
+    "seconds": 66.8247410915792,
+    "core_sha256": "a8d15d60ee19178e8de4b1445df8b7bfa563f27c53c72cb75876dab23faa0ab2",
+    "wheel_sha256": "e154ff6eeaf11d8cb872dc0870cdbaec7800fad277dc308563ebf515c54c6f61",
+    "stub_sha256": {
+      "/common/dev/gammaloop/feynkit-rich-display/docs/api/python/spynso3.pyi": "34c3cb3db338aee24d81aff76a5018b578ada84249918628e15968e628c38b88",
+      "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": "34c3cb3db338aee24d81aff76a5018b578ada84249918628e15968e628c38b88",
+      "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi": "34c3cb3db338aee24d81aff76a5018b578ada84249918628e15968e628c38b88"
+    },
+    "sources_changed": [],
+    "manifests_changed": []
+  },
+  "validation": {
+    "python": {
+      "core": "/tmp/chain-display-optimization/python/symbolica/core.abi3.so",
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 10.650931574869901
+    },
+    "ipython": {
+      "core": "/tmp/chain-display-optimization/python/symbolica/core.abi3.so",
+      "mime_types": [
+        "text/html",
+        "text/latex",
+        "text/plain"
+      ],
+      "html_bytes": 3369,
+      "typst_compile_calls": 1,
+      "per_mime_requests": true,
+      "repeated_bundle_equal": true
+    },
+    "guide_examples": {
+      "exit_code": 0,
+      "seconds": 0.07308184588328004,
+      "log": "/tmp/chain-display-optimization/candidate-guide-runtime-tests.log",
+      "package": "/tmp/chain-display-optimization/python",
+      "core_sha256": "a8d15d60ee19178e8de4b1445df8b7bfa563f27c53c72cb75876dab23faa0ab2",
+      "source_sha256": {
+        "/common/dev/gammaloop/feynkit-rich-display/docs/api/python/spynso3.pyi": "34c3cb3db338aee24d81aff76a5018b578ada84249918628e15968e628c38b88",
+        "/common/dev/gammaloop/feynkit-rich-display/docs/products/idenso/content/api.typ": "be8ede1a4183b134e643af59211970658fb84a78777cf4cfec85c72dfe401b7c",
+        "/common/dev/gammaloop/feynkit-rich-display/docs/products/spenso/content/python.typ": "0fb523bfc820ee1b181752ae749b7af4a0cbd0a6946682e17bcf0cdc96ffa28d"
+      }
+    },
+    "native_idenso": {
+      "passed": 815,
+      "skipped": 25,
+      "run_id": "7c57599d-a080-4cf3-89f4-28b1ac4fca8f"
+    },
+    "native_spynso": {
+      "passed": 125,
+      "skipped": 0,
+      "run_id": "580d6d63-3438-4bbc-a675-4991d5876914"
+    },
+    "formatted_owner": {
+      "passed": 6
+    },
+    "strict_clippy": [
+      "idenso",
+      "spynso3"
+    ],
+    "generated_stubs": "pass",
+    "small_mathml_against_baseline": "exactly equal in four cases",
+    "visual_gallery": {
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "widths": [
+        320,
+        1280
+      ],
+      "failed": 0
+    },
+    "hakari": {
+      "generate": "no changes detected",
+      "verify": "workspace hack correct"
+    },
+    "nix_ci_update": {
+      "status": "blocked by local development dependency packaging",
+      "reason": "Isolated source cannot resolve /symbolica-lazy-formatting/Cargo.toml",
+      "derivation": "/nix/store/7xk54xjrddznb9ig7lj7ciq6lyiz73s1-gammaloop-guppy-workspace-graph.json.drv",
+      "log": "/tmp/chain-display-optimization/ci-update.log",
+      "prerequisite": "Publish and pin the Symbolica dependency commit for standard Git vendoring",
+      "ci_enabled": false,
+      "pushed": false
+    },
+    "fresh_notebook": {
+      "complete": true,
+      "seconds": 11.698466981761158,
+      "result": "Result: 6,001 terms in 15 scalar products. Every term has momentum degree eight (four dot products).",
+      "preview_captions": [
+        "Rank-4 tensor; Large expression; full formula not shown",
+        "Rank-4 tensor; Large expression; full formula not shown"
+      ],
+      "source_sha256": "1065c30cc381af627537182ea6699fee80dc3b50a6a972a7e477a01cf6d87a90",
+      "source_unchanged": true,
+      "runtime_errors": 0,
+      "math_errors": [],
+      "native_math_errors": [],
+      "screenshots": [
+        "/tmp/chain-display-optimization/isolated-notebook-preview.png",
+        "/tmp/chain-display-optimization/isolated-notebook-result.png"
+      ],
+      "note": "Separate read-only Marimo run; includes startup and all notebook cells. The active editor and its cached outputs were preserved."
+    }
+  },
+  "installed": {
+    "installed_utc": "2026-09-30T17:51:01.597865+00:00",
+    "target": "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+    "previous_sha256": "3a2e131f286b7b7ca9eb4004a3c55e411dcab3180aca02890f81760031a23608",
+    "backup": "/tmp/chain-display-optimization/previous-core.abi3.so",
+    "backup_sha256": "3a2e131f286b7b7ca9eb4004a3c55e411dcab3180aca02890f81760031a23608",
+    "sha256": "a8d15d60ee19178e8de4b1445df8b7bfa563f27c53c72cb75876dab23faa0ab2",
+    "stub": "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi",
+    "stub_sha256": "34c3cb3db338aee24d81aff76a5018b578ada84249918628e15968e628c38b88",
+    "probe_exit_code": 0,
+    "probe_output": "contract: Contract compatible indices without applying tensor-algebra identities.\nsimplify_algebra: Reduce enabled tensor identities and their required index contractions.\n/common/dev/symbolica-community/main/python/symbolica/core.abi3.so\nTensorExpression"
+  },
+  "notebook_servers": {
+    "core_sha256": "a8d15d60ee19178e8de4b1445df8b7bfa563f27c53c72cb75876dab23faa0ab2",
+    "servers": [
+      {
+        "port": "2726",
+        "source": "examples/hep_showcase.py",
+        "previous_pid": 3730989,
+        "pid": 552892,
+        "log": "/tmp/chain-display-optimization/notebook-server-2726.log",
+        "http_status": 200
+      },
+      {
+        "port": "2727",
+        "source": "examples/",
+        "previous_pid": 3731006,
+        "pid": 552908,
+        "log": "/tmp/chain-display-optimization/notebook-server-2727.log",
+        "http_status": 200
+      }
+    ]
+  },
+  "profile": {
+    "reductions": 8,
+    "event": "cpu-clock:u",
+    "frequency": 199,
+    "lost_samples": 0,
+    "data_sha256": "3b6f6b5870e5de470f2024923ee61feedae2f9cafbe06611adc921d2b68ce032",
+    "inclusive_percent": {
+      "replacement_observations": 38.1,
+      "structural_contraction": 23.9,
+      "color_candidate_discovery": 21.5
+    },
+    "chain_collector": "not sampled; instrumented regressions verify admission skip",
+    "note": "Inclusive values overlap; sampling includes process startup and teardown."
+  },
+  "typst_vs_latex": {
+    "input": "(a+b+c)*(d+e+f)^2",
+    "samples_seconds": [
+      {
+        "latex": 0.0007264818996191025,
+        "html": 0.021186274010688066,
+        "compile": 0.016957991756498814,
+        "outside_compile": 0.004228282254189253
+      },
+      {
+        "latex": 2.3419968783855438e-05,
+        "html": 0.009956659749150276,
+        "compile": 0.00914877699688077,
+        "outside_compile": 0.0008078827522695065
+      },
+      {
+        "latex": 1.7010141164064407e-05,
+        "html": 0.009074256755411625,
+        "compile": 0.008277684915810823,
+        "outside_compile": 0.0007965718396008015
+      },
+      {
+        "latex": 1.8090009689331055e-05,
+        "html": 0.009006277658045292,
+        "compile": 0.008260624948889017,
+        "outside_compile": 0.0007456527091562748
+      },
+      {
+        "latex": 1.5819910913705826e-05,
+        "html": 0.009105336852371693,
+        "compile": 0.00834300508722663,
+        "outside_compile": 0.0007623317651450634
+      },
+      {
+        "latex": 1.8649734556674957e-05,
+        "html": 0.009076267015188932,
+        "compile": 0.008365544956177473,
+        "outside_compile": 0.0007107220590114594
+      }
+    ],
+    "warm_medians_seconds": {
+      "latex": 1.8090009689331055e-05,
+      "html": 0.009076267015188932,
+      "compile": 0.00834300508722663,
+      "outside_compile": 0.0007623317651450634
+    },
+    "note": "LaTeX serialization vs HTML generation; browser typesetting/painting excluded from both."
+  },
+  "loaded_core_mappings": {
+    "installed_inode": 14886388,
+    "loaded_processes": [
+      {
+        "pid": 623791,
+        "inodes": [
+          14886388
+        ],
+        "current_core": true,
+        "old_mapping_deleted": false
+      }
+    ]
+  }
+}

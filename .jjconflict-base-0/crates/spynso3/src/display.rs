@@ -2,6 +2,7 @@ use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet},
     fmt::Write,
+    sync::Arc,
 };
 
 use pyo3::{
@@ -19,7 +20,7 @@ use spenso::{
     portable_payload::register_math_display_symbol,
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
     structure::{
-        TensorDataLayout,
+        TensorDataLayout, TensorStructure,
         partial::PartialStructureExt,
         representation::{
             IndexDisplay, IndexPalette, IndexRow, RepName, RepresentationClass,
@@ -35,7 +36,7 @@ use spenso::{
 };
 use std::path::Path;
 use symbolica::{
-    api::python::{PythonExpression, PythonFormattedOutput},
+    api::python::{FormattedOutputBackend, PythonExpression, PythonFormattedOutput},
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
@@ -530,6 +531,9 @@ enum TensorDisplayMode {
 const MAX_DISPLAY_ELEMENTS: usize = 100;
 const DISPLAY_EDGE: usize = 3;
 const DISPLAY_SLICE_EDGE: usize = 1;
+// Bound automatic symbolic displays before interface presentation, printer
+// callbacks, portable attachment discovery, or render-tree serialization.
+const MAX_FORMULA_BYTES: usize = 4_096;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisplayIndex {
@@ -1067,31 +1071,150 @@ pub(crate) fn structured_to_latex(
     atom_to_latex(&value.presentation_atom(), show_dimensions, max_line_length)
 }
 
-// Typst supplies semantic HTML when the optional renderer is installed;
-// Symbolica's LaTeX remains the notebook fallback otherwise.
-pub(crate) fn format_atom_output_rich(
+fn format_atom_backend(
     py: Python<'_>,
     atom: &Atom,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
-) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
-        html: atom_to_html(py, atom, settings, notation_source).ok(),
-        latex: Some({
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    match backend {
+        FormattedOutputBackend::Text => Ok(format_atom_with_settings(
+            atom,
+            TensorDisplayMode::Plain,
+            settings,
+        )),
+        FormattedOutputBackend::Html => atom_to_html(py, atom, settings, notation_source),
+        FormattedOutputBackend::Latex => {
             let body = format_atom_with_settings(atom, TensorDisplayMode::Latex, settings);
-            format!("$${body}$$")
-        }),
+            Ok(format!("$${body}$$"))
+        }
     }
 }
 
-pub(crate) fn format_structured_output_rich(
+/// A display-only prefix: omitted terms never enter the tensor or its proofs.
+fn symbolic_preview(
+    py: Python<'_>,
+    atom: &Atom,
+    rank: Option<usize>,
+    settings: &DisplaySettings,
+    notation_source: Option<&str>,
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    let mut terms = Vec::new();
+    let total = if let AtomView::Add(sum) = atom.as_view() {
+        // A scalar sum's terms have no external interface to reorder. For a
+        // tensor, retain an honest rank summary rather than assigning the
+        // original interface to an unvalidated partial expression.
+        if rank.is_none_or(|rank| rank == 0) {
+            let mut remaining = MAX_FORMULA_BYTES;
+            for term in sum
+                .iter()
+                .take(DISPLAY_EDGE.min(sum.get_nargs().saturating_sub(1)))
+            {
+                let bytes = term.get_byte_size();
+                if bytes > remaining {
+                    break;
+                }
+                remaining -= bytes;
+                terms.push(term.to_owned());
+            }
+        }
+        Some(sum.get_nargs())
+    } else {
+        None
+    };
+    let caption = match total {
+        Some(total) => format!("{} of {total} terms shown", terms.len()),
+        None => "Large expression; full formula not shown".to_owned(),
+    };
+    let caption = match rank {
+        Some(rank) if rank != 0 => format!("Rank-{rank} tensor; {caption}"),
+        _ => caption,
+    };
+    let prefix = (!terms.is_empty()).then(|| Atom::add_many(&terms));
+    match backend {
+        FormattedOutputBackend::Text => {
+            let body = prefix.map_or_else(
+                || "…".to_owned(),
+                |prefix| {
+                    format!(
+                        "{} + …",
+                        format_atom_with_settings(&prefix, TensorDisplayMode::Plain, settings)
+                    )
+                },
+            );
+            Ok(format!("{body}\n[{caption}]"))
+        }
+        FormattedOutputBackend::Latex => {
+            let body = prefix.map_or_else(
+                || r"\cdots".to_owned(),
+                |prefix| {
+                    format!(
+                        r"{} + \cdots",
+                        format_atom_with_settings(&prefix, TensorDisplayMode::Latex, settings)
+                    )
+                },
+            );
+            Ok(format!(
+                r"$$\begin{{gathered}}{body}\\\text{{{caption}}}\end{{gathered}}$$"
+            ))
+        }
+        FormattedOutputBackend::Html => {
+            let body = if let Some(prefix) = prefix {
+                atom_to_html_with_ellipsis(py, &prefix, settings, notation_source, true)?
+            } else {
+                notebook_html_fragment("<body><math display=\"block\"><mo>⋯</mo></math></body>")?
+            };
+            Ok(format!(
+                "<div data-spenso-preview>{body}<div class=\"spenso-preview-caption\">{caption}</div></div>"
+            ))
+        }
+    }
+}
+
+pub(crate) fn structured_preview(
     py: Python<'_>,
     value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    if value.expression().as_view().get_byte_size() > MAX_FORMULA_BYTES {
+        return symbolic_preview(
+            py,
+            value.expression(),
+            Some(value.structure().canonical().order()),
+            settings,
+            notation_source,
+            backend,
+        );
+    }
+    format_atom_backend(
+        py,
+        &value.presentation_atom(),
+        settings,
+        notation_source,
+        backend,
+    )
+}
+
+// Each backend is rendered on demand and cached by Symbolica's shared output
+// owner. The original immutable tensor remains shared, without materialization.
+pub(crate) fn format_structured_output_rich(
+    value: Arc<SymbolicTensor<PartialStructure>>,
+    settings: DisplaySettings,
+    notation_source: Option<String>,
 ) -> PythonFormattedOutput {
-    format_atom_output_rich(py, &value.presentation_atom(), settings, notation_source)
+    PythonFormattedOutput::lazy(move |py, backend| {
+        let result = structured_preview(py, &value, &settings, notation_source.as_deref(), backend);
+        // Typst is optional; LaTeX remains the notebook fallback.
+        if matches!(backend, FormattedOutputBackend::Html) {
+            Ok(result.ok())
+        } else {
+            result.map(Some)
+        }
+    })
 }
 
 fn portable_attachments(atom: &Atom) -> Result<AttachmentSet, String> {
@@ -1205,7 +1328,7 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
     ))
 }
 
-fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
+fn typst_main_source(settings: &DisplaySettings, atom: &Atom, ellipsis: bool) -> PyResult<String> {
     Ok(format!(
         concat!(
             "#import \"notation.typ\" as tensor-notation\n",
@@ -1217,10 +1340,11 @@ fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String
             "  tree,\n",
             "  notation: tensor-notation.default-notation(settings: settings),\n",
             ")\n",
-            "$ #visual $\n"
+            "$ #visual{} $\n"
         ),
         typst_settings_source(settings, atom),
         typst_custom_print_source(settings, atom)?,
+        if ellipsis { " + dots.c" } else { "" },
     ))
 }
 
@@ -1314,8 +1438,18 @@ pub(crate) fn atom_to_html(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
+    atom_to_html_with_ellipsis(py, atom, settings, notation_source, false)
+}
+
+fn atom_to_html_with_ellipsis(
+    py: Python<'_>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+    notation_source: Option<&str>,
+    ellipsis: bool,
+) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom)?;
+    let source = typst_main_source(settings, atom, ellipsis)?;
     let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
     let html = String::from_utf8(html).map_err(|error| {
         PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
@@ -1377,7 +1511,7 @@ pub(crate) fn atom_to_svg(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings, atom)?;
+    let source = typst_main_source(settings, atom, false)?;
     let svg = compile_typst(py, &source, "svg", notation_source, Some(&tree))?;
     String::from_utf8(svg)
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
@@ -2317,20 +2451,9 @@ pub(crate) fn concrete_tensor_to_svg(
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
 }
 
-pub(crate) fn format_concrete_tensor_output(
-    tensor: &Spensor,
-    show_dimensions: bool,
-) -> PythonFormattedOutput {
+pub(crate) fn concrete_tensor_to_latex(tensor: &Spensor, show_dimensions: bool) -> String {
     let settings = resolved_settings(Some(show_dimensions), None);
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, &settings),
-        html: None,
-        latex: Some(format_concrete_with_settings(
-            tensor,
-            TensorDisplayMode::Latex,
-            &settings,
-        )),
-    }
+    format_concrete_with_settings(tensor, TensorDisplayMode::Latex, &settings)
 }
 
 pub(crate) fn format_concrete_tensor_output_rich(
@@ -2339,15 +2462,15 @@ pub(crate) fn format_concrete_tensor_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
-        html: concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
-        latex: Some(format_concrete_with_settings(
+    PythonFormattedOutput::new(
+        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
+        concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
+        Some(format_concrete_with_settings(
             tensor,
             TensorDisplayMode::Latex,
             settings,
         )),
-    }
+    )
 }
 
 /// Produce compact plain-text tensor notation.
@@ -2554,7 +2677,7 @@ fn to_svg(
     atom_to_svg(py, &expression.expr, &settings, notation_source.as_deref())
 }
 
-/// Create a rich display value for a notebook.
+/// Create a lazy, bounded rich display value for a notebook.
 ///
 /// Parameters
 /// ----------
@@ -2573,7 +2696,12 @@ fn to_svg(
 /// Returns
 /// -------
 /// FormattedOutput
-///     Symbolica display wrapper with text and available rich representations.
+///     Each requested backend is rendered once and cached. Large expressions
+///     show a marked preview; the original expression remains exact.
+///
+/// Notes
+/// -----
+/// Use to_html(), to_svg(), or format_tensor() for explicit full output.
 ///
 /// Examples
 /// --------
@@ -2589,14 +2717,33 @@ fn to_svg(
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn formatted(
-    py: Python<'_>,
-    expression: &PythonExpression,
+    expression: Py<PythonExpression>,
     show_dimensions: Option<bool>,
     settings: Option<PyRef<'_, DisplaySettings>>,
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
     let settings = resolved_settings(show_dimensions, settings.as_deref());
-    format_atom_output_rich(py, &expression.expr, &settings, notation_source.as_deref())
+    PythonFormattedOutput::lazy(move |py, backend| {
+        let expression = expression.borrow(py);
+        let atom = &expression.expr;
+        let result = if atom.as_view().get_byte_size() > MAX_FORMULA_BYTES {
+            symbolic_preview(
+                py,
+                atom,
+                None,
+                &settings,
+                notation_source.as_deref(),
+                backend,
+            )
+        } else {
+            format_atom_backend(py, atom, &settings, notation_source.as_deref(), backend)
+        };
+        if matches!(backend, FormattedOutputBackend::Html) {
+            Ok(result.ok())
+        } else {
+            result.map(Some)
+        }
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2791,7 +2938,7 @@ mod tests {
         ] {
             assert!(!format_atom_with_mode(&atom, mode, false).contains("hedge"));
         }
-        let source = typst_main_source(&DisplaySettings::default(), &atom).unwrap();
+        let source = typst_main_source(&DisplaySettings::default(), &atom, false).unwrap();
         assert!(source.contains("index-aliases:"));
         assert!(source.contains("display_index_tests::hedge"));
         assert_eq!(atom.to_canonical_string(), original);
@@ -3400,7 +3547,7 @@ mod tests {
 
     #[test]
     fn generated_project_reads_the_portable_render_tree_as_binary() {
-        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero).unwrap();
+        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero, false).unwrap();
         assert!(source.contains("cbor(read(\"tree.cbor\", encoding: none))"));
         assert!(source.contains("tensor-notation.render"));
     }

@@ -624,6 +624,23 @@ sandboxed frame and requires no live Python callbacks or external assets.
 
 `TensorExpression` and `Tensor` expose semantic display methods. A network's
 `expression()` provides the same formula display separately from its graph.
+Symbolic notebook outputs are bounded previews: small expressions retain their
+full mathematical notation, large scalar sums show a few affordable leading
+terms and an explicit count, and a large single term or tensor receives a
+compact summary. This changes only presentation; the exact expression,
+factorization, and ordered ports remain intact. Automatic HTML, LaTeX, and
+notebook pretty-text representations follow this rule.
+
+`TensorExpression.formatted()` and the free `formatted(expression)` defer each
+backend until the notebook requests it and cache that representation. Their
+plain-text fallback uses the same preview. Settings are captured when creating
+the display value; custom printers run when a backend is first requested.
+Create a new formatted value to reflect later changes to printer rules.
+For deliberate full output, use
+`to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, or `format_tensor()` on the
+tensor expression. Explicit exports remain unabridged; displaying a preview
+never expands or simplifies the calculation.
+
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors

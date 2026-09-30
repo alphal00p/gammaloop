@@ -5887,7 +5887,7 @@ class TensorExpression:
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
-        Create a rich display value for a notebook.
+        Create a lazy, bounded rich display value for a notebook.
 
         Parameters
         ----------
@@ -5903,7 +5903,16 @@ class TensorExpression:
         Returns
         -------
         FormattedOutput
-            Symbolica display wrapper with text and available rich representations.
+            Each requested backend is rendered once and cached. Large expressions
+            show a marked preview; the original tensor and its ports remain exact.
+
+        Notes
+        -----
+        Automatic HTML, LaTeX, and pretty-text representations use the same bounded
+        preview. Explicit to_html(), to_svg(), to_latex(), to_typst(), and
+        format_tensor() retain the full expression.
+        Settings are captured here; custom printers run on the first request
+        for each backend. Create a new formatted value after changing printers.
 
         Examples
         --------
@@ -8399,7 +8408,7 @@ class TensorNetwork:
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
-        Create a rich display value for a notebook.
+        Create a lazy, bounded rich display value for a notebook.
 
         Parameters
         ----------
@@ -8415,12 +8424,14 @@ class TensorNetwork:
         Returns
         -------
         FormattedOutput
-            Symbolica display wrapper with text and available rich representations.
+            Each requested backend is rendered once and cached. Large expressions
+            show the same marked preview as TensorExpression.
 
         Notes
         -----
         This formats the symbolic source expression, independent of execution
-        progress. Use render() or to_html() for the network graph.
+        progress, retaining a snapshot of that source. Use render() or to_html()
+        for the network graph.
 
         Examples
         --------
@@ -10432,7 +10443,7 @@ def format_tensor(expression: Expression, show_dimensions: typing.Optional[built
 
 def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
     r"""
-    Create a rich display value for a notebook.
+    Create a lazy, bounded rich display value for a notebook.
 
     Parameters
     ----------
@@ -10451,7 +10462,12 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     Returns
     -------
     FormattedOutput
-        Symbolica display wrapper with text and available rich representations.
+        Each requested backend is rendered once and cached. Large expressions
+        show a marked preview; the original expression remains exact.
+
+    Notes
+    -----
+    Use to_html(), to_svg(), or format_tensor() for explicit full output.
 
     Examples
     --------

@@ -40,7 +40,8 @@ use spenso::{
 };
 use symbolica::{
     api::python::{
-        ConvertibleToExpression, PythonExpression, PythonExpressionEvaluator, PythonFormattedOutput,
+        ConvertibleToExpression, FormattedOutputBackend, PythonExpression,
+        PythonExpressionEvaluator, PythonFormattedOutput,
     },
     atom::{Atom, AtomView, Symbol},
     domains::float::Complex,
@@ -3419,7 +3420,7 @@ impl TensorExpression {
         ))
     }
 
-    /// Create a rich display value for a notebook.
+    /// Create a lazy, bounded rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
@@ -3435,7 +3436,16 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Symbolica display wrapper with text and available rich representations.
+    ///     Each requested backend is rendered once and cached. Large expressions
+    ///     show a marked preview; the original tensor and its ports remain exact.
+    ///
+    /// Notes
+    /// -----
+    /// Automatic HTML, LaTeX, and pretty-text representations use the same bounded
+    /// preview. Explicit to_html(), to_svg(), to_latex(), to_typst(), and
+    /// format_tensor() retain the full expression.
+    /// Settings are captured here; custom printers run on the first request
+    /// for each backend. Create a new formatted value after changing printers.
     ///
     /// Examples
     /// --------
@@ -3446,18 +3456,12 @@ impl TensorExpression {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         self_: PyRef<'_, Self>,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_structured_output_rich(
-            py,
-            Self::structured(&self_),
-            &settings,
-            notation_source.as_deref(),
-        )
+        display::format_structured_output_rich(Arc::clone(&self_.value), settings, notation_source)
     }
 
     /// Render the tensor as an HTML fragment.
@@ -3586,7 +3590,13 @@ impl TensorExpression {
         let text = if cycle {
             "...".to_string()
         } else {
-            display::format_structured(Self::structured(&self_), false)
+            display::structured_preview(
+                pretty.py(),
+                Self::structured(&self_),
+                &display::DisplaySettings::default(),
+                None,
+                FormattedOutputBackend::Text,
+            )?
         };
         pretty.call_method1("text", (text,))?;
         Ok(())
@@ -3594,11 +3604,24 @@ impl TensorExpression {
 
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
         let settings = display::DisplaySettings::default();
-        display::structured_to_html(py, Self::structured(&self_), &settings, None).ok()
+        display::structured_preview(
+            py,
+            Self::structured(&self_),
+            &settings,
+            None,
+            FormattedOutputBackend::Html,
+        )
+        .ok()
     }
 
-    fn _repr_latex_(self_: PyRef<'_, Self>) -> String {
-        Self::to_latex(self_, None)
+    fn _repr_latex_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<String> {
+        display::structured_preview(
+            py,
+            Self::structured(&self_),
+            &display::DisplaySettings::default(),
+            None,
+            FormattedOutputBackend::Latex,
+        )
     }
 }
 
