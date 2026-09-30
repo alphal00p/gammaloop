@@ -1110,7 +1110,7 @@
 <a href=#1109 id=1109 data-nosnippet>1109</a>        <span class="kw">let </span>(rep, factors) = shadowing::trace_parts(f)<span class="question-mark">?</span>;
 <a href=#1110 id=1110 data-nosnippet>1110</a>
 <a href=#1111 id=1111 data-nosnippet>1111</a>        <span class="kw">if </span>factors.is_empty() {
-<a href=#1112 id=1112 data-nosnippet>1112</a>            <span class="kw">return </span><span class="self">Self</span>::simplify_trace_terminal(f.as_view());
+<a href=#1112 id=1112 data-nosnippet>1112</a>            <span class="kw">return </span><span class="self">Self</span>::simplify_trace_terminal(<span class="macro">trace!</span>(rep).as_view());
 <a href=#1113 id=1113 data-nosnippet>1113</a>        }
 <a href=#1114 id=1114 data-nosnippet>1114</a>
 <a href=#1115 id=1115 data-nosnippet>1115</a>        <span class="kw">let </span><span class="kw-2">mut </span>factor_kinds = DiracFactorKinds::default();

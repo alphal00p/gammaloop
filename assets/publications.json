@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-09-29",
+  "updated": "2026-09-30",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -102,7 +102,7 @@
     },
     {
       "id": 3082699,
-      "title": "A new approach to determine the thermodynamics of deconfined matter to high accuracy",
+      "title": "New approach to determine the thermodynamics of deconfined matter to high accuracy",
       "date": "2025-11-12",
       "year": 2025,
       "authors": [
@@ -115,6 +115,8 @@
       "people": [
         "kaapo-seppanen"
       ],
+      "venue": "Phys.Rev.D 114 (2026) 054056",
+      "doi": "10.1103/wd4z-cqw3",
       "arxiv": "2511.09627",
       "citations": 6,
       "types": [
@@ -473,7 +475,7 @@
       "venue": "Phys.Lett.B 849 (2024) 138468",
       "doi": "10.1016/j.physletb.2024.138468",
       "arxiv": "2310.05744",
-      "citations": 56,
+      "citations": 59,
       "types": [
         "article"
       ],
@@ -560,7 +562,7 @@
       "venue": "JHEP 08 (2023) 021",
       "doi": "10.1007/JHEP08(2023)021",
       "arxiv": "2304.09187",
-      "citations": 16,
+      "citations": 17,
       "types": [
         "article"
       ],
@@ -1039,7 +1041,7 @@
       "venue": "Phys.Lett.B 825 (2022) 136853",
       "doi": "10.1016/j.physletb.2021.136853",
       "arxiv": "2111.15561",
-      "citations": 90,
+      "citations": 92,
       "types": [
         "article"
       ],
@@ -1160,7 +1162,7 @@
       ],
       "venue": "J.Phys.Conf.Ser. 1525 (2020) 012013",
       "doi": "10.1088/1742-6596/1525/1/012013",
-      "citations": 13,
+      "citations": 14,
       "types": [
         "conference paper"
       ],
@@ -1636,7 +1638,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 1",
       "doi": "10.23731/CYRM-2019-007.1",
       "arxiv": "1902.04070",
-      "citations": 324,
+      "citations": 325,
       "types": [
         "book chapter"
       ],
@@ -2031,7 +2033,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 221",
       "doi": "10.23731/CYRM-2019-007.221",
       "arxiv": "1902.00134",
-      "citations": 1031,
+      "citations": 1032,
       "types": [
         "book chapter"
       ],
@@ -2103,7 +2105,7 @@
       "venue": "PoS LL2018 (2018) 050",
       "doi": "10.22323/1.303.0050",
       "arxiv": "1808.08981",
-      "citations": 29,
+      "citations": 30,
       "types": [
         "conference paper"
       ],
@@ -2194,7 +2196,7 @@
       "venue": "Phys.Lett.B 782 (2018) 627",
       "doi": "10.1016/j.physletb.2018.06.017",
       "arxiv": "1805.09638",
-      "citations": 166,
+      "citations": 168,
       "types": [
         "article"
       ],
@@ -2504,7 +2506,7 @@
       "venue": "JHEP 10 (2017) 041",
       "doi": "10.1007/JHEP10(2017)041",
       "arxiv": "1707.08315",
-      "citations": 295,
+      "citations": 297,
       "types": [
         "article"
       ],
@@ -2525,7 +2527,7 @@
         "ben-ruijl"
       ],
       "arxiv": "1707.06453",
-      "citations": 429,
+      "citations": 431,
       "types": [
         "article"
       ],
@@ -2573,7 +2575,7 @@
       "venue": "Comput.Phys.Commun. 253 (2020) 107198",
       "doi": "10.1016/j.cpc.2020.107198",
       "arxiv": "1704.06650",
-      "citations": 157,
+      "citations": 159,
       "types": [
         "article"
       ],
@@ -3066,7 +3068,7 @@
       "venue": "CERN Yellow Rep.Monogr. 2 (2017) 1",
       "doi": "10.23731/CYRM-2017-002",
       "arxiv": "1610.07922",
-      "citations": 2922,
+      "citations": 2923,
       "types": [
         "book"
       ],
@@ -3091,7 +3093,7 @@
       "venue": "Nucl.Phys.B 915 (2017) 13946",
       "doi": "10.1016/j.nuclphysb.2016.12.012",
       "arxiv": "1610.07477",
-      "citations": 158,
+      "citations": 160,
       "types": [
         "article"
       ],
@@ -3408,7 +3410,7 @@
       "venue": "PoS LL2016 (2016) 071",
       "doi": "10.22323/1.260.0071",
       "arxiv": "1605.08408",
-      "citations": 57,
+      "citations": 58,
       "types": [
         "conference paper"
       ],
@@ -3746,7 +3748,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10843,
+      "citations": 10847,
       "types": [
         "article"
       ],
@@ -3774,7 +3776,7 @@
       "venue": "Phys.Lett.B 732 (2014) 30073",
       "doi": "10.1016/j.physletb.2014.03.026",
       "arxiv": "1401.7340",
-      "citations": 335,
+      "citations": 334,
       "types": [
         "article"
       ],
