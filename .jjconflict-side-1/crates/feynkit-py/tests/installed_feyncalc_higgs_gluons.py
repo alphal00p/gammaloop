@@ -123,13 +123,12 @@ for orientation, diagram in enumerate(result.diagrams):
     # orientations. Promote Lorentz dimension before Dirac trace; tr(1)=4.
     trace = (
         TensorExpression(numerator.expand())
-        .simplify_algebra(gamma=True, color=False, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
-        .simplify_algebra(
-            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
-        )
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_dots()
         .to_expression()
     )
@@ -290,6 +289,7 @@ for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
     ward = (
         TensorExpression((tensor * contraction).expand())
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_dots()
         .to_expression()
     )
@@ -297,6 +297,7 @@ for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
 norm = kinematics.apply(
     TensorExpression((tensor**2).expand())
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_dots()
     .to_expression()
 )
@@ -304,6 +305,7 @@ assert (norm - (D - 2) * s**2 / 4).expand() == E("0")
 color_norm = (
     TensorExpression(color**2)
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_expression()
 )
 assert color_norm == dA
@@ -328,6 +330,7 @@ polarization_sum = gluon.spin_sum(P(1), mu, rho, reference=P(2)) * gluon.spin_su
 physical_norm = physical_kinematics.apply(
     TensorExpression((physical_tensor * conjugate_tensor * polarization_sum).expand())
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_dots()
     .to_expression()
 )
@@ -349,6 +352,7 @@ physical_projection_residual = physical_kinematics.apply(
         ).expand()
     )
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_dots()
     .to_expression()
 ).together()

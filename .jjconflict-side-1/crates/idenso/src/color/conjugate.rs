@@ -256,6 +256,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression()
                 .to_cof_dimension_invariants())
             .as_atom_view()
@@ -263,6 +265,8 @@ mod tests {
         )
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
         assert_eq!(norm, Atom::num(4));
@@ -317,6 +321,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             crate::tensor::SymbolicTensor::infer(
                 (explicit.spenso_conj()).as_atom_view().to_owned()
@@ -332,6 +338,8 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
         );
@@ -349,6 +357,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression()
                 .to_cof_dimension_invariants())
             .as_atom_view()
@@ -356,6 +366,8 @@ mod tests {
         )
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
         assert_eq!(norm, parse!("16/3"));
@@ -395,6 +407,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             crate::tensor::SymbolicTensor::infer(
                 (explicit.spenso_conj()).as_atom_view().to_owned()
@@ -410,6 +424,8 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
         );

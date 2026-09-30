@@ -659,7 +659,8 @@ impl Graph {
             collect_chains: false,
             collect_traces: false,
             ..Default::default()
-        })?;
+        })?
+        .resolved()?;
         if !full_num.is_zero() && color_simplified.expression().is_zero() {
             warn!(
                 "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",

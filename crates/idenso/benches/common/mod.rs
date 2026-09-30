@@ -2,14 +2,13 @@
 
 use idenso::{
     representations::initialize,
-    tensor::{SymbolicNet, SymbolicNetParse, SymbolicTensor},
+    tensor::{SymbolicNet, SymbolicNetParse, SymbolicTensor, aliases::AliasInterfaces},
 };
 use spenso::{
     network::parsing::ParseSettings,
     network::tags::SPENSO_TAG as T,
     structure::{
         abstract_index::AbstractIndex,
-        partial::PartialStructure,
         representation::{Minkowski, RepName, Representation},
         slot::IsAbstractSlot,
     },
@@ -17,7 +16,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
-    id::Pattern,
+    id::{AliasedAtom, Pattern},
     license::LicenseManager,
     parse, symbol,
     transformer::Transformer,
@@ -51,7 +50,7 @@ pub fn nested_dot_expression() -> Atom {
     &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2))
 }
 
-pub fn run_contraction(expr: Atom) -> SymbolicTensor<PartialStructure> {
+pub fn run_contraction(expr: Atom) -> SymbolicTensor<AliasInterfaces, AliasedAtom> {
     SymbolicTensor::infer(expr)
         .expect("valid benchmark tensor")
         .contract(idenso::tensor::ContractSettings {
@@ -63,7 +62,7 @@ pub fn run_contraction(expr: Atom) -> SymbolicTensor<PartialStructure> {
 }
 
 pub fn assert_contraction_invariants() {
-    let result = run_contraction(nested_dot_expression());
+    let result = std::sync::Arc::new(run_contraction(nested_dot_expression()));
     assert!(result.contraction_complete());
     let repeated = result
         .contract(idenso::tensor::ContractSettings {
@@ -72,9 +71,7 @@ pub fn assert_contraction_invariants() {
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(result.expression(), repeated.expression());
-    assert_eq!(result.structure(), repeated.structure());
-    assert!(repeated.contraction_complete());
+    assert!(std::sync::Arc::ptr_eq(&result, &repeated));
 }
 
 pub fn checked_nested_dot_expression() -> Atom {
@@ -329,7 +326,10 @@ pub fn network_parse_normalized(expr: Atom) -> SymbolicNet<AbstractIndex> {
 }
 
 pub fn network_contract_substituted(expr: Atom) -> Atom {
-    run_contraction(expr).into_expression()
+    run_contraction(expr)
+        .resolved()
+        .expect("valid alias registry")
+        .into_expression()
 }
 
 pub fn network_full_algebra_5(fixture: NetworkVertexFixture) -> Atom {

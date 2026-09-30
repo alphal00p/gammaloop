@@ -320,7 +320,7 @@ fn simplify_generated_metric_components(expr: Atom) -> Atom {
     SchoonschipWithSettings {
         settings: &SchoonschipSettings::default().without_rank1_tensors(),
     }
-    .run(result.as_view())
+    .run(result.as_view(), &mut Vec::new())
 }
 
 impl SymbolicTensor<PartialStructure> {
@@ -440,7 +440,7 @@ where
         SchoonschipWithSettings {
             settings: &SchoonschipSettings::default().without_rank1_tensors(),
         }
-        .run(value.expression.as_view())
+        .run(value.expression.as_view(), &mut Vec::new())
     }
 }
 

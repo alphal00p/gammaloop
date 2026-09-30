@@ -78,6 +78,7 @@ adjoint = (
     )
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
+    .to_expression()
 )
 adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
 # Physical momenta and tree-level parameters are real; keep that assumption explicit.
@@ -94,6 +95,7 @@ spin_summed = (
     TensorExpression(operator.to_expression() * adjoint * spins, intern="flattened")
     .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
 )
 x, y = t - mass**2, u - mass**2
 expected = (
@@ -129,6 +131,7 @@ for references, ward in (
     scalar = (
         TensorExpression(spin_summed.to_expression() * density, intern="flattened")
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar

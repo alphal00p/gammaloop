@@ -95,7 +95,7 @@ pub(crate) struct EpsilonSimplifierPass;
 
 impl EpsilonSimplifierPass {
     /// Apply epsilon identities once. The shared tensor scheduler contracts
-    /// emitted metrics at the replacement boundary.
+    /// emitted metrics after registering any changed literal alias uses.
     pub(crate) fn step(expr: AtomView<'_>) -> Atom {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
@@ -129,7 +129,7 @@ impl EpsilonSimplifierPass {
         let reducer = SchoonschipWithSettings {
             settings: &settings,
         };
-        let mut current = reducer.run(expr);
+        let mut current = reducer.run(expr, &mut Vec::new());
 
         loop {
             let next = Self::step(current.as_view());
@@ -139,7 +139,7 @@ impl EpsilonSimplifierPass {
 
             // Epsilon identities introduce determinants whose metrics may now
             // contract. Unchanged visits need no further tensor normalization.
-            let next = reducer.run(next.as_view());
+            let next = reducer.run(next.as_view(), &mut Vec::new());
             if next == current {
                 return next;
             }

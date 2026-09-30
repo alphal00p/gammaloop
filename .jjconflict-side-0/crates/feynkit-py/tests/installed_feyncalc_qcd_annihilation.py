@@ -84,7 +84,7 @@ for pdg in (5, -5, 21):
     identity = model.particle_by_pdg(pdg).color_sum(i, i, average=True)
     assert TensorExpression(identity).contract(
         collect_chains=False, collect_traces=False
-    ).to_expression() == E("1")
+    ).to_expression().to_expression() == E("1")
 
 # A named adjoint dimension is required by Spenso. Impose dA=Nc²-1 after
 # contraction, when the dimensions are ordinary scalar expressions.
@@ -103,6 +103,7 @@ contracted = (
         epsilon=True,
     )
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_dots()
 )
 assert contracted.is_scalar

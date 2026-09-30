@@ -39,10 +39,9 @@ assert color.dirac_adjoint().to_expression() == color.to_expression()
 # The Symbolica product contracts all three matching explicit adjoint indices.
 norm = (
     TensorExpression(color.to_expression() * color.dirac_adjoint().to_expression())
-    .simplify_algebra(
-        gamma=False, color=True, color_substitute_cof_dimension_invariants=True
-    )
+    .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
 )
 assert norm.is_scalar
 assert norm.to_expression() == E("40/3")
@@ -50,5 +49,5 @@ assert norm.to_expression() == E("40/3")
 particle = model.particle_by_pdg(25)
 assert TensorExpression(particle.color_sum(S("x"), S("x"), average=True)).contract(
     collect_chains=False, collect_traces=False
-).to_expression() == E("1")
+).to_expression().to_expression() == E("1")
 print("Generated UFO d tensor: real adjoint interface and SU(3) norm 40/3 passed")

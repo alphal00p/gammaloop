@@ -79,13 +79,10 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     adjoint = (
         operator.dirac_adjoint()
         .simplify_algebra(
-            color=False,
-            gamma=True,
-            gamma0=True,
-            gamma_evaluate_traces=False,
-            epsilon=True,
+            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
         )
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_expression()
         .replace(conj(P(a, b)), P(a, b))
     )
@@ -133,17 +130,17 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
     )
     colored = (
         TensorExpression(generic, intern="flattened")
-        .simplify_algebra(gamma=False, color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .simplify_algebra(
-            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
-        )
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
     )
     print("COLOR PASS", flush=True)
     # Adjoint reverses the single open fermion chain. The explicit endpoint
@@ -160,11 +157,14 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
         )
     traced = (
         TensorExpression(colored.to_expression() * spins, intern="flattened")
-        .simplify_algebra(color=False, gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
     )
     reduced = kin.apply(
-        traced.contract(collect_chains=False, collect_traces=False).to_dots()
+        traced.contract(collect_chains=False, collect_traces=False)
+        .to_expression()
+        .to_dots()
     )
     results = {}
     modes = (
@@ -216,6 +216,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
                 reduced.to_expression() * photon * gluon, intern="flattened"
             )
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_dots()
         )
         assert contracted.is_scalar

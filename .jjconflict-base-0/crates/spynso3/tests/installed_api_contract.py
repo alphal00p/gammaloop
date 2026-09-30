@@ -7,7 +7,7 @@ from symbolica.community import tensor as sp
 
 
 class FactorizedContractionTests(unittest.TestCase):
-    def test_contraction_outputs_and_evaluation(self):
+    def test_contraction_outputs_and_dag_evaluation(self):
         rep = sp.Representation.mink(4)
         p, q, r = [
             sp.TensorName.vector(f"api_contract::{name}") for name in ("p", "q", "r")
@@ -20,22 +20,35 @@ class FactorizedContractionTests(unittest.TestCase):
         source = sp.TensorExpression(
             (p(i).to_expression() + q(i).to_expression()) * r(i).to_expression()
         )
-        self.assertFalse(source.contraction_complete)
+        uncertified = sp.AliasedTensorExpression.from_expression(source)
+        self.assertFalse(uncertified.contraction_complete)
         with self.assertRaises(AttributeError):
-            source.contraction_complete = True
+            uncertified.contraction_complete = True
         for order in (None, [0, 1], [1, 0]):
             with self.subTest(order=order):
                 result = source.contract(order=order)
-                self.assertIsInstance(result, sp.TensorExpression)
+                self.assertIsInstance(result, sp.AliasedTensorExpression)
                 self.assertTrue(result.contraction_complete)
-                self.assertFalse(hasattr(result, "aliases"))
-                self.assertEqual(result.rank, 0)
+                self.assertGreater(len(result.aliases), 0)
+                self.assertEqual(result.root.rank, 0)
                 self.assertEqual(result.expand().to_expression(), expected)
                 rerun = result.contract()
                 self.assertTrue(rerun.contraction_complete)
                 self.assertEqual(rerun.expand(), result.expand())
-                self.assertEqual(rerun.structure, result.structure)
-                self.assertEqual(result.to_expression().expand(), expected)
+                self.assertEqual(rerun.root.structure, result.root.structure)
+                self.assertEqual(
+                    [
+                        (handle.to_expression(), body.to_expression())
+                        for handle, body in rerun.aliases
+                    ],
+                    [
+                        (handle.to_expression(), body.to_expression())
+                        for handle, body in result.aliases
+                    ],
+                )
+                self.assertEqual(
+                    result.to_expression().to_expression().expand(), expected
+                )
                 self.assertEqual(
                     source.contract(order=order).expand().to_expression(), expected
                 )
@@ -77,21 +90,27 @@ class FactorizedContractionTests(unittest.TestCase):
                 source = factors[order[0]]
                 for position in order[1:]:
                     source = source * factors[position]
-                result = source.contract()
-                self.assertEqual(result, expected)
-                self.assertEqual(result.components(), oracle)
-                self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
-                self.assertEqual(result.contract(), expected)
-                self.assertEqual(
-                    source.simplify_algebra(gamma=False, color=False), expected
-                )
-                capped = source.contract(max_steps_per_domain=0)
-                self.assertEqual(capped, source)
-                self.assertEqual(capped.contract(), expected)
-                uncollected = source.contract(collect_traces=False)
+                for value in (
+                    source,
+                    sp.AliasedTensorExpression.from_expression(source),
+                ):
+                    result = value.contract()
+                    self.assertEqual(result.to_expression(), expected)
+                    self.assertEqual(result.to_expression().components(), oracle)
+                    self.assertEqual(
+                        result.reduction_status, sp.ReductionStatus.Complete
+                    )
+                    self.assertEqual(result.contract().to_expression(), expected)
+                    self.assertEqual(value.simplify_algebra().to_expression(), expected)
+                    capped = value.contract(max_steps_per_domain=0)
+                    self.assertEqual(capped.to_expression(), source)
+                    self.assertEqual(capped.contract().to_expression(), expected)
+                uncollected = source.contract(collect_traces=False).to_expression()
                 self.assertNotIn("trace", uncollected.to_expression().format_plain())
-                self.assertEqual(uncollected.contract(), expected)
-                self.assertEqual(source.contract(representations=[]), source)
+                self.assertEqual(uncollected.contract().to_expression(), expected)
+                self.assertEqual(
+                    source.contract(representations=[]).to_expression(), source
+                )
 
     def test_independent_reduction_settings_and_notation(self):
         spin = sp.Representation.bis(4)
@@ -100,9 +119,9 @@ class FactorizedContractionTests(unittest.TestCase):
         source = gamma(spin("i"), spin("j"), lorentz("mu")) * gamma(
             spin("j"), spin("i"), lorentz("nu")
         )
-        untouched = source.contract(representations=[])
+        untouched = source.contract(representations=[]).to_expression()
         self.assertEqual(untouched, source)
-        collected = source.contract()
+        collected = source.contract().to_expression()
         self.assertIn("trace", collected.to_expression().format_plain())
         unfolded = collected.undo_trace()
         self.assertNotIn("trace", unfolded.to_expression().format_plain())
@@ -112,7 +131,7 @@ class FactorizedContractionTests(unittest.TestCase):
         # Independent finite HEP components compare represented tensors, not printed dummy labels.
         self.assertEqual(explicit.components(), collected.components())
         self.assertEqual(
-            source.simplify_algebra(gamma=False, color=False, contract="none"), source
+            source.simplify_algebra(contract="none").to_expression(), source
         )
         reduced = source.simplify_algebra(gamma=True)
         self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
@@ -127,27 +146,6 @@ class FactorizedContractionTests(unittest.TestCase):
         ):
             self.assertFalse(hasattr(source, obsolete))
 
-    def test_gamma_and_color_identities_are_enabled_by_default(self):
-        gamma = sp.TensorExpression.dirac_gamma(4)
-        word = gamma("a", "b", "mu") * gamma("b", "a", "mu")
-        reduced = word.simplify_algebra()
-        self.assertEqual(reduced.to_expression(), E("16"))
-        self.assertEqual(reduced.components(), word.components())
-        self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
-        self.assertIn(
-            "trace", word.simplify_algebra(gamma=False).to_expression().format_plain()
-        )
-
-        generator_trace = sp.TensorExpression.color_t(8, 3)("a", "i", "i")
-        reduced = generator_trace.simplify_algebra()
-        self.assertEqual(reduced.to_expression(), E("0"))
-        self.assertEqual(reduced.structure, generator_trace.structure)
-        self.assertEqual(reduced.components(), generator_trace.components())
-        self.assertEqual(reduced.reduction_status, sp.ReductionStatus.Complete)
-        self.assertNotEqual(
-            generator_trace.simplify_algebra(color=False).to_expression(), E("0")
-        )
-
     def test_algebra_contraction_modes(self):
         from symbolica import S
 
@@ -156,37 +154,40 @@ class FactorizedContractionTests(unittest.TestCase):
         metric = sp.TensorExpression.g(color, color.dual())
         source = metric("i", "j") * metric("j", "i")
         nc = S("algebra_modes::Nc")
-        full = source.simplify_algebra()
-        self.assertEqual(full.to_expression(), nc)
-        self.assertEqual(full.reduction_status, sp.ReductionStatus.Complete)
-        self.assertEqual(full.simplify_algebra(), full)
-        for mode, options in (
-            ("none", {}),
-            ("selected", {"representations": []}),
-            ("selected", {"representations": [lorentz]}),
-        ):
+        for value in (source, sp.AliasedTensorExpression.from_expression(source)):
+            full = value.simplify_algebra()
+            self.assertEqual(full.to_expression().to_expression(), nc)
+            self.assertEqual(full.reduction_status, sp.ReductionStatus.Complete)
             self.assertEqual(
-                source.simplify_algebra(
-                    gamma=False, color=False, contract=mode, **options
-                ),
-                source,
+                full.simplify_algebra().to_expression(), full.to_expression()
             )
-        selected = source.simplify_algebra(
-            contract="selected", representations=[color.name]
-        )
-        self.assertEqual(selected.to_expression(), nc)
-        capped = source.simplify_algebra(max_steps_per_domain=0)
-        self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
-        self.assertEqual(capped, source)
-        self.assertEqual(capped.simplify_algebra().to_expression(), nc)
-        for options in (
-            {"contract": "invalid"},
-            {"contract": "selected"},
-            {"contract": "fully", "representations": []},
-            {"contract": "none", "representations": [color]},
-        ):
-            with self.assertRaises(ValueError):
-                source.simplify_algebra(**options)
+            for mode, options in (
+                ("none", {}),
+                ("selected", {"representations": []}),
+                ("selected", {"representations": [lorentz]}),
+            ):
+                self.assertEqual(
+                    value.simplify_algebra(contract=mode, **options).to_expression(),
+                    source,
+                )
+            selected = value.simplify_algebra(
+                contract="selected", representations=[color.name]
+            )
+            self.assertEqual(selected.to_expression().to_expression(), nc)
+            capped = value.simplify_algebra(max_steps_per_domain=0)
+            self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
+            self.assertEqual(capped.to_expression(), source)
+            self.assertEqual(
+                capped.simplify_algebra().to_expression().to_expression(), nc
+            )
+            for options in (
+                {"contract": "invalid"},
+                {"contract": "selected"},
+                {"contract": "fully", "representations": []},
+                {"contract": "none", "representations": [color]},
+            ):
+                with self.assertRaises(ValueError):
+                    value.simplify_algebra(**options)
 
         # Algebra prerequisites ignore the optional structural representation filter.
         gamma = sp.TensorExpression.dirac_gamma(4)
@@ -197,25 +198,25 @@ class FactorizedContractionTests(unittest.TestCase):
             {"contract": "none"},
             {"contract": "selected", "representations": []},
         ):
-            result = word.simplify_algebra(gamma=True, **options)
+            result = word.simplify_algebra(gamma=True, **options).to_expression()
             self.assertEqual(result.components(), expected.components())
         # The closed colour delta is independent of gamma work, but full cleanup
         # still produces Nc without enabling any generator or Fierz identities.
         mixed = source * gamma("a", "b", "mu") * gamma("b", "a", "mu")
         self.assertEqual(
-            mixed.simplify_algebra(gamma=True, color=False).to_expression(), 16 * nc
+            mixed.simplify_algebra(gamma=True).to_expression().to_expression(), 16 * nc
         )
-        unevaluated = (gamma("a", "b", "mu") * gamma("b", "a", "nu")).simplify_algebra(
-            gamma=False, color=False
+        unevaluated = (gamma("a", "b", "mu") * gamma("b", "a", "nu")).simplify_algebra()
+        self.assertIn(
+            "trace", unevaluated.to_expression().to_expression().format_plain()
         )
-        self.assertIn("trace", unevaluated.to_expression().format_plain())
 
         p = sp.TensorName.vector("algebra_modes::p")(lorentz)
         q = sp.TensorName.vector("algebra_modes::q")(lorentz)
         compact = (p("mu") * q("mu")).contract()
         dots = compact.simplify_algebra(contract="dots")
-        self.assertEqual(dots, compact.to_dots())
-        self.assertIn("dot", dots.to_expression().format_plain())
+        self.assertEqual(dots.to_expression(), compact.to_dots().to_expression())
+        self.assertIn("dot", dots.to_expression().to_expression().format_plain())
         self.assertEqual(
             dots.simplify_algebra(
                 contract="dots", max_steps_per_domain=0
@@ -223,12 +224,12 @@ class FactorizedContractionTests(unittest.TestCase):
             sp.ReductionStatus.Complete,
         )
         pending = compact.simplify_algebra(contract="dots", max_steps_per_domain=0)
-        if compact != dots:
+        if compact.to_expression() != dots.to_expression():
             self.assertEqual(pending.reduction_status, sp.ReductionStatus.Capped)
-            self.assertEqual(pending, compact)
+            self.assertEqual(pending.to_expression(), compact.to_expression())
         self.assertEqual(
-            pending.simplify_algebra(contract="dots"),
-            dots,
+            pending.simplify_algebra(contract="dots").to_expression(),
+            dots.to_expression(),
         )
 
     def test_full_contraction_preserves_disabled_color_identities(self):
@@ -236,7 +237,7 @@ class FactorizedContractionTests(unittest.TestCase):
         source = generator("a", "i", "j") * generator("a", "k", "l")
         expected = source.components()
         for options in (
-            {"color": False},
+            {},
             {"color": True, "color_expand_fierz": False},
             {
                 "color": True,
@@ -246,78 +247,75 @@ class FactorizedContractionTests(unittest.TestCase):
             },
         ):
             result = source.simplify_algebra(**options)
-            self.assertIn("t(", result.to_expression().format_plain())
-            self.assertEqual(result.components(), expected)
+            self.assertIn("t(", result.to_expression().to_expression().format_plain())
+            self.assertEqual(result.to_expression().components(), expected)
             self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
             rerun = result.simplify_algebra(**options)
             self.assertEqual(rerun.reduction_status, sp.ReductionStatus.Complete)
-            self.assertEqual(rerun, result)
+            self.assertEqual(rerun.to_expression(), result.to_expression())
 
     def test_keyword_configs_and_family_validation(self):
         import inspect
 
         tensor = sp.TensorExpression(3)
-        self.assertFalse(hasattr(tensor, "reduce_algebra"))
-        defaults = inspect.signature(tensor.simplify_algebra).parameters
-        self.assertIs(defaults["gamma"].default, True)
-        self.assertIs(defaults["color"].default, True)
-        self.assertIs(defaults["epsilon"].default, False)
-        for operation in (tensor.contract, tensor.simplify_algebra):
-            signature = inspect.signature(operation)
-            self.assertTrue(
-                all(
-                    p.kind == inspect.Parameter.KEYWORD_ONLY
-                    for p in signature.parameters.values()
+        for carrier in (tensor, sp.AliasedTensorExpression.from_expression(tensor)):
+            self.assertFalse(hasattr(carrier, "reduce_algebra"))
+            for operation in (carrier.contract, carrier.simplify_algebra):
+                signature = inspect.signature(operation)
+                self.assertTrue(
+                    all(
+                        p.kind == inspect.Parameter.KEYWORD_ONLY
+                        for p in signature.parameters.values()
+                    )
                 )
-            )
-            with self.assertRaises(TypeError):
-                operation({})
-            with self.assertRaises(TypeError):
-                operation(settings={})
-            with self.assertRaises(TypeError):
-                operation(max_passes=0)
-        for family, options in (
-            (
-                "gamma",
-                {
-                    "gamma_output": "reduced",
-                    "gamma_ordering": "repeated_pairs",
-                    "gamma_evaluate_traces": False,
-                    "gamma0": False,
-                    "gamma_conjugate": False,
-                    "gamma_expand_three_gamma_epsilon": False,
-                },
-            ),
-            (
-                "color",
-                {
-                    "color_evaluate_traces": False,
-                    "color_expand_fierz": False,
-                    "color_substitute_cof_dimension_invariants": False,
-                },
-            ),
-        ):
-            for option, value in options.items():
-                with (
-                    self.subTest(option=option),
-                    self.assertRaisesRegex(
-                        ValueError, f"{option} requires {family}=True"
+                with self.assertRaises(TypeError):
+                    operation({})
+                with self.assertRaises(TypeError):
+                    operation(settings={})
+                with self.assertRaises(TypeError):
+                    operation(max_passes=0)
+            for family, options in (
+                (
+                    "gamma",
+                    dict(
+                        gamma_output="reduced",
+                        gamma_ordering="repeated_pairs",
+                        gamma_evaluate_traces=False,
+                        gamma0=False,
+                        gamma_conjugate=False,
+                        gamma_expand_three_gamma_epsilon=False,
                     ),
-                ):
-                    tensor.simplify_algebra(**{family: False, option: value})
-            config = {family: True, **options}
-            self.assertEqual(tensor.simplify_algebra(**config), tensor)
-        for option in ("gamma_ordering", "gamma_output"):
-            with self.assertRaisesRegex(ValueError, option):
-                tensor.simplify_algebra(gamma=True, **{option: "invalid"})
-        for representations in (
-            None,
-            [],
-            [sp.Representation.mink(4)],
-            [sp.Representation.mink(4).name],
-        ):
-            config = {"representations": representations, "collect_traces": False}
-            self.assertEqual(tensor.contract(**config), tensor)
+                ),
+                (
+                    "color",
+                    dict(
+                        color_evaluate_traces=False,
+                        color_expand_fierz=False,
+                        color_substitute_cof_dimension_invariants=False,
+                    ),
+                ),
+            ):
+                for option, value in options.items():
+                    with self.subTest(option=option):
+                        with self.assertRaisesRegex(
+                            ValueError, f"{option} requires {family}=True"
+                        ):
+                            carrier.simplify_algebra(**{option: value})
+                config = {family: True, **options}
+                self.assertEqual(
+                    carrier.simplify_algebra(**config).to_expression(), tensor
+                )
+            for option in ("gamma_ordering", "gamma_output"):
+                with self.assertRaisesRegex(ValueError, option):
+                    carrier.simplify_algebra(gamma=True, **{option: "invalid"})
+            for representations in (
+                None,
+                [],
+                [sp.Representation.mink(4)],
+                [sp.Representation.mink(4).name],
+            ):
+                config = dict(representations=representations, collect_traces=False)
+                self.assertEqual(carrier.contract(**config).to_expression(), tensor)
         for obsolete in (
             "ContractSettings",
             "AlgebraSettings",
@@ -335,7 +333,7 @@ class FactorizedContractionTests(unittest.TestCase):
             p(rep("mu")).to_expression() * q(rep("mu")).to_expression()
         )
         self.assertEqual(source.to_dots(), source)
-        contracted = source.contract()
+        contracted = source.contract().to_expression()
         self.assertEqual(contracted.to_expression().get_name(), "spenso::g")
         self.assertEqual(contracted.to_dots().to_expression().get_name(), "spenso::dot")
         with self.assertRaisesRegex(ValueError, "final structural port"):
@@ -369,8 +367,11 @@ class FactorizedContractionTests(unittest.TestCase):
         for value in (opened, permuted, 0 * opened, 0 * permuted):
             with self.subTest(zero=value.to_expression() == E("0")):
                 result = value.contract()
-                self.assertEqual(result.structure, value.structure)
-                self.assertEqual(result.to_expression(), value.to_expression())
+                self.assertEqual(result.root.structure, value.structure)
+                self.assertEqual(result.to_expression().structure, value.structure)
+                self.assertEqual(
+                    result.to_expression().to_expression(), value.to_expression()
+                )
 
 
 if __name__ == "__main__":

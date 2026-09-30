@@ -86,10 +86,8 @@ def check_types(
         expression.compose(expression, left=(0, 1), right=(0, 1)), sp.TensorExpression
     )
     assert_type(expression.compose(tensor, left=(0, 1), right=(0, 1)), sp.TensorNetwork)
-    assert_type(expression.contract(), sp.TensorExpression)
+    assert_type(expression.contract(), sp.AliasedTensorExpression)
     assert_type(expression.contract().contraction_complete, bool)
-    assert_type(expression.contract().reduction_status, sp.ReductionStatus)
-    assert_type(expression.simplify_algebra().to_expression(), Expression)
     assert_type(expression.contract().expand(), sp.TensorExpression)
     assert_type(expression.trace(), sp.TensorExpression)
     assert_type(expression**2, sp.TensorExpression)
@@ -114,19 +112,19 @@ def check_types(
     assert_type(expression.to_expression().collect_factors(), Expression)
     assert_type(
         expression.simplify_algebra(gamma=True, epsilon=True, contract="dots"),
-        sp.TensorExpression,
+        sp.AliasedTensorExpression,
     )
     assert_type(
         expression.simplify_algebra(
             color=True, contract="selected", representations=[representation]
         ),
-        sp.TensorExpression,
+        sp.AliasedTensorExpression,
     )
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
     assert_type(
         expression.simplify_algebra(gamma=True, color=True, epsilon=True),
-        sp.TensorExpression,
+        sp.AliasedTensorExpression,
     )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
     assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)
@@ -198,7 +196,7 @@ def check_types(
         expression.simplify_algebra(
             gamma=True, gamma_ordering="canonical", gamma0=True, gamma_conjugate=True
         ),
-        sp.TensorExpression,
+        sp.AliasedTensorExpression,
     )
     assert_type(
         expression.contract(
@@ -206,7 +204,7 @@ def check_types(
             collect_traces=False,
             max_steps_per_domain=8,
         ),
-        sp.TensorExpression,
+        sp.AliasedTensorExpression,
     )
     name = sp.TensorName("typing::Jbar", print={"typst": "macron(J)"})
     assert_type(name(representation), sp.TensorExpression)

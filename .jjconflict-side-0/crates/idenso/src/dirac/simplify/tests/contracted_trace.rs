@@ -24,6 +24,8 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
         assert_ne!(result, input);
         assert_eq!(
@@ -34,6 +36,8 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             result
@@ -232,6 +236,8 @@ fn sixteen_trace_preserves_open_words_and_metadata() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         open
     );
@@ -243,6 +249,8 @@ fn sixteen_trace_preserves_open_words_and_metadata() {
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         closed

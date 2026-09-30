@@ -37,6 +37,8 @@ fn contract(input: &Atom, settings: &ContractSettings<'_>) -> Atom {
         .unwrap()
         .contract(*settings)
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression()
 }
 

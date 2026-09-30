@@ -189,8 +189,9 @@ for kind, incoming, outgoing, loops, vertices, count in [
             fundamental_dimension = CA
         numerator = (
             TensorExpression(numerator)
-            .simplify_algebra(gamma=False, color=True)
+            .simplify_algebra(color=True)
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_expression()
         )
         # CF and CA are display names for shared representation-aware invariants;
@@ -269,9 +270,11 @@ for kind, incoming, outgoing, loops, vertices, count in [
         for label, projector in probes:
             traced = (
                 TensorExpression(numerator * projector)
-                .simplify_algebra(color=False, gamma=True, epsilon=True)
+                .simplify_algebra(gamma=True, epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
+                .to_expression()
                 .contract(collect_chains=False, collect_traces=False)
+                .to_expression()
                 .to_dots()
                 .to_expression()
             )
@@ -574,8 +577,9 @@ for kind, incoming, outgoing, count, qcd_order in [
             fundamental_dimension = CA
         numerator = (
             TensorExpression(numerator)
-            .simplify_algebra(gamma=False, color=True)
+            .simplify_algebra(color=True)
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_expression()
         )
         numerator = (
@@ -619,9 +623,11 @@ for kind, incoming, outgoing, count, qcd_order in [
         for label, projector in probes:
             trace = (
                 TensorExpression(numerator * projector)
-                .simplify_algebra(color=False, gamma=True, epsilon=True)
+                .simplify_algebra(gamma=True, epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
+                .to_expression()
                 .contract(collect_chains=False, collect_traces=False)
+                .to_expression()
                 .to_dots()
                 .to_expression()
             )
@@ -811,9 +817,11 @@ for scenario in ("massive", "massless"):
                     continue
                 traced = (
                     TensorExpression(numerator * projector)
-                    .simplify_algebra(color=False, gamma=True, epsilon=True)
+                    .simplify_algebra(gamma=True, epsilon=True)
                     .contract(collect_chains=False, collect_traces=False)
+                    .to_expression()
                     .contract(collect_chains=False, collect_traces=False)
+                    .to_expression()
                     .to_dots()
                     .to_expression()
                 )

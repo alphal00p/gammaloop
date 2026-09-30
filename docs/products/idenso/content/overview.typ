@@ -10,7 +10,7 @@ metric, epsilon, and color algebra.
 
 #callout("Symbolic, not component expansion", [
   Idenso rewrites abstract tensor expressions. Typed `collect` selects representation families
-  while preserving unrelated factors; it does not turn tensors into dense arrays
+  while preserving unrelated factors and aliases; it does not turn tensors into dense arrays
   of components. Concrete tensor storage and network execution belong to
   #product-link("spenso", label: "Spenso").
 ])
@@ -43,8 +43,8 @@ phase explicit:
 - contract indices and simplify gamma or color structures as appropriate;
 - canonicalize and compare results using the conventions of the consuming calculation.
 
-Contraction and simplification return a `TensorExpression` with factored sums.
-Request `expand` explicitly only when the complete polynomial is required.
+Contraction and simplification retain factored alias definitions. Resolve aliases when needed,
+and request `expand` explicitly only when the complete polynomial is required.
 Wrapping indices is especially important before multiplying independently constructed
 expressions: equal printed index names can otherwise acquire an unintended contraction.
 

@@ -41,7 +41,7 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
-        SchoonschipWithSettings { settings }.run(*self)
+        SchoonschipWithSettings { settings }.run(*self, &mut Vec::new())
     }
 
     fn to_dots(&self) -> Atom {

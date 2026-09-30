@@ -64,6 +64,8 @@ fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     let twice = crate::tensor::SymbolicTensor::infer((once).as_atom_view().to_owned())
         .unwrap()
@@ -78,6 +80,8 @@ fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
     let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
@@ -116,6 +120,8 @@ fn gamma_simplification_joins_chains_after_metric_contraction() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression();
         assert_eq!(
             result,
@@ -128,6 +134,8 @@ fn gamma_simplification_joins_chains_after_metric_contraction() {
                         ..Default::default()
                     })
                     .unwrap()
+                    .resolved()
+                    .unwrap()
                     .into_expression()
         );
         assert_eq!(
@@ -138,6 +146,8 @@ fn gamma_simplification_joins_chains_after_metric_contraction() {
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             result
@@ -225,6 +235,8 @@ fn chain_test() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
             .uncook_with_settings(&index_cooking)
@@ -331,9 +343,9 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
         gamma!(slot!(r.mink4, nu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))");
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::canonical()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::canonical()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -347,7 +359,7 @@ fn gamma5_anticommutes_with_four_dimensional_gamma() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-4*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-4*chain(bis(4,a),bis(4,b),gamma5(in,out))");
 }
 
 #[test]
@@ -360,7 +372,7 @@ fn gamma5_does_not_move_in_dimension_generic_chain() {
         gamma!(slot!(r.mink_d, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(in,out,mink(d,mu)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(in,out,mink(d,mu)))");
 }
 
 #[test]
@@ -368,7 +380,7 @@ fn gamma0_square_collapses_inside_chain() {
     let r = test_initialize();
     let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma0!(), gamma0!(),);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
 }
 
 #[test]
@@ -382,7 +394,7 @@ fn gamma0_conjugates_gamma5_inside_chain() {
         gamma0!(),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma5(in,out))");
 }
 
 #[test]
@@ -390,7 +402,7 @@ fn gamma0_square_is_four_dimensional() {
     let r = test_initialize();
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
 }
 
 #[test]
@@ -398,7 +410,7 @@ fn gamma5_square_collapses_inside_chain() {
     let r = test_initialize();
     let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma5!(), gamma5!(),);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
 }
 
 #[test]
@@ -412,7 +424,7 @@ fn gamma5_trace_pair_reduces_to_ordinary_trace() {
         gamma5!(),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -420,7 +432,7 @@ fn gamma0_trace_pair_reduces_to_spin_dimension() {
     let r = test_initialize();
     let expr = trace!(r.bis4.to_symbolic([]), gamma0!(), gamma0!());
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"4");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"4");
 }
 
 #[test]
@@ -428,7 +440,7 @@ fn gamma5_square_is_four_dimensional() {
     let r = test_initialize();
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma5!(), gamma5!(),);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma5(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma5(in,out))");
 }
 
 #[test]
@@ -442,7 +454,7 @@ fn four_dimensional_chisholm_requires_four_dimensional_interior() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(d,nu)),gamma(in,out,mink(4,mu)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(d,nu)),gamma(in,out,mink(4,mu)))");
 }
 
 #[test]
@@ -450,7 +462,7 @@ fn gamma_trace_evaluation_can_be_disabled() {
     test_initialize();
     let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
 }
 
 #[test]
@@ -478,6 +490,8 @@ fn gamma_metric_contraction_preserves_unevaluated_trace() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
         assert_eq!(simplified, expected);
         assert_eq!(
@@ -488,6 +502,8 @@ fn gamma_metric_contraction_preserves_unevaluated_trace() {
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             simplified
@@ -583,6 +599,8 @@ fn gl23() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression()
     );
 }
@@ -672,6 +690,8 @@ fn gl24() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression()
     );
@@ -781,6 +801,8 @@ fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression()
     .collect_rep(Minkowski {}.into())
     .expand_num();
@@ -817,6 +839,8 @@ fn gamma_alg() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
@@ -843,6 +867,8 @@ fn gamma_alg() {
         collect_traces: false,
         ..Default::default()
     })
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression();
     let expr = crate::test_support::contracted_atom(expr.as_view())
@@ -871,6 +897,8 @@ fn gamma_alg() {
         collect_traces: false,
         ..Default::default()
     })
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression()
     .collect_metrics()
@@ -904,6 +932,8 @@ fn gamma_alg() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression();
     let expr = crate::test_support::contracted_atom(expr.as_view())
         .unwrap()
@@ -933,6 +963,8 @@ fn gamma_alg() {
         collect_traces: false,
         ..Default::default()
     })
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression();
 
@@ -966,6 +998,8 @@ fn gamma_alg() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression();
 
     assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
@@ -994,6 +1028,8 @@ fn gamma_alg() {
         collect_traces: false,
         ..Default::default()
     })
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression();
     let expr = crate::shorthands::schoonschip::DotNormalizer::metric_shorthand_to_dot(
@@ -1025,6 +1061,8 @@ fn gamma_alg() {
         collect_traces: false,
         ..Default::default()
     })
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression()
     .collect_metrics()
@@ -1413,6 +1451,8 @@ fn val_test() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression()
     .uncook_with_settings(&index_cooking)
     .to_dots();
@@ -1485,6 +1525,8 @@ fn special_matrices_have_the_physical_dirac_adjoints() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
         assert_eq!(
             actual,
@@ -1501,6 +1543,8 @@ fn special_matrices_have_the_physical_dirac_adjoints() {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression()
         );
@@ -1549,6 +1593,8 @@ fn mixed_transposed_gamma_words_and_open_chains_remain_opaque() {
                             ..Default::default()
                         })
                         .unwrap()
+                        .resolved()
+                        .unwrap()
                         .into_expression();
                 // A closed, uniformly transposed word is the transpose of
                 // the reversed ordinary word. Its trace is unchanged.
@@ -1568,6 +1614,8 @@ fn mixed_transposed_gamma_words_and_open_chains_remain_opaque() {
                             ..Default::default()
                         })
                         .unwrap()
+                        .resolved()
+                        .unwrap()
                         .into_expression(),
                     simplified
                 );
@@ -1582,6 +1630,8 @@ fn mixed_transposed_gamma_words_and_open_chains_remain_opaque() {
                     epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             Atom::num(4) * id_atom(left.clone(), right.clone())
@@ -1621,6 +1671,8 @@ fn transposed_special_dirac_factors_remain_opaque() {
                             epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                             ..Default::default()
                         })
+                        .unwrap()
+                        .resolved()
                         .unwrap()
                         .into_expression(),
                     expression
@@ -1678,6 +1730,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
             -&identity
         );
@@ -1693,6 +1747,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
             identity
@@ -1710,6 +1766,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
             identity
         );
@@ -1724,6 +1782,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
             Atom::num(-4)
         );
@@ -1737,6 +1797,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
             Atom::Zero
@@ -1758,6 +1820,8 @@ fn charge_conjugation_square_and_transposed_norm() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         -identity
@@ -1789,6 +1853,8 @@ fn charge_conjugation_sandwich_tracks_gamma_transposition() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression();
             assert_eq!(result, chain!(&left, &right, expected));
             assert_eq!(
@@ -1799,6 +1865,8 @@ fn charge_conjugation_sandwich_tracks_gamma_transposition() {
                         epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                         ..Default::default()
                     })
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .into_expression(),
                 result
@@ -1819,6 +1887,8 @@ fn charge_conjugation_sandwich_tracks_gamma_transposition() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
             Atom::num(4) * id_atom(left.clone(), right.clone())
         );
@@ -1834,6 +1904,8 @@ fn charge_conjugation_sandwich_tracks_gamma_transposition() {
                 epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
             Atom::num(16)
@@ -1878,6 +1950,8 @@ fn charge_conjugation_special_sandwiches_retain_chirality_and_sign() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
             assert_eq!(result, Atom::num(sign) * chain!(&left, &right, &transpose));
             assert_eq!(
@@ -1894,6 +1968,8 @@ fn charge_conjugation_special_sandwiches_retain_chirality_and_sign() {
                         collect_traces: false,
                         ..Default::default()
                     })
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .into_expression(),
                 result
@@ -1929,6 +2005,8 @@ fn charge_conjugation_leaves_unspecified_dimensions_and_unknown_factors_opaque()
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             word
         );
@@ -1949,6 +2027,8 @@ fn charge_conjugation_leaves_unspecified_dimensions_and_unknown_factors_opaque()
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             square
@@ -1974,6 +2054,8 @@ fn charge_conjugation_leaves_unspecified_dimensions_and_unknown_factors_opaque()
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         word
@@ -2015,6 +2097,8 @@ fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         expected
     );
@@ -2032,6 +2116,8 @@ fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         expected
@@ -2063,6 +2149,8 @@ fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     assert_eq!(
         result,
@@ -2080,6 +2168,8 @@ fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
     );
     assert_eq!(
@@ -2096,6 +2186,8 @@ fn charge_conjugation_multiword_preserves_factor_order_and_complex_scalars() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         result
@@ -2134,6 +2226,8 @@ fn charge_conjugation_multiword_trace_matches_clifford_contractions() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     assert_eq!(result, Atom::num(32));
     assert_eq!(
@@ -2150,6 +2244,8 @@ fn charge_conjugation_multiword_trace_matches_clifford_contractions() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         result
@@ -2191,6 +2287,8 @@ fn charge_conjugation_multiword_requires_every_factor_to_be_known_and_four_dimen
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             word

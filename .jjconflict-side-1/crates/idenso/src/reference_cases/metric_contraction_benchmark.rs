@@ -4,7 +4,7 @@
 //! -- OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]`
 //!
 //! Domain methods include checked typed admission, the shared operation, and
-//! conversion into the diagnostic Atom result. They do not time
+//! explicit alias resolution into the diagnostic Atom result. They do not time
 //! retired raw contractors. Repeated-index discovery is measured independently.
 //! Input creation, validation and output snapshots are outside timing except for
 //! the named parser methods. Timed calls include output destruction. Inputs that
@@ -475,6 +475,7 @@ impl Method {
                     collect_traces: false,
                     ..Default::default()
                 })?
+                .resolved()?
                 .into_expression(),
             Self::EpsilonCleanup => SymbolicTensor::infer(expression.to_owned())?
                 .simplify_algebra(&crate::tensor::AlgebraSettings {
@@ -486,6 +487,7 @@ impl Method {
                     collect_traces: false,
                     ..Default::default()
                 })?
+                .resolved()?
                 .into_expression(),
             Self::FullGamma => SymbolicTensor::infer(expression.to_owned())?
                 .simplify_algebra(&crate::tensor::AlgebraSettings {
@@ -498,6 +500,7 @@ impl Method {
                     collect_traces: false,
                     ..Default::default()
                 })?
+                .resolved()?
                 .into_expression(),
         })
     }

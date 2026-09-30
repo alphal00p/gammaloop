@@ -214,6 +214,8 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap()
+                    .resolved()
+                    .unwrap()
                     .into_expression();
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer(
@@ -230,6 +232,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
                 expected
@@ -252,6 +256,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
                 expected
@@ -284,6 +290,8 @@ mod tests {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
             .is_zero()
         );
@@ -309,6 +317,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             expected
@@ -404,6 +414,8 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap();
         // The shared constructor can remove the bracket when normal product
         // order already preserves these two anonymous ports.

@@ -716,7 +716,8 @@ impl Numerator<Global> {
                         collect_chains: false,
                         collect_traces: false,
                         ..Default::default()
-                    })?;
+                    })?
+                    .resolved()?;
                 cooking.uncook(result.expression().as_view())
             },
             state: Color::Fully,
@@ -840,7 +841,8 @@ impl Numerator<AppliedFeynmanRule> {
                         collect_chains: false,
                         collect_traces: false,
                         ..Default::default()
-                    })?;
+                    })?
+                    .resolved()?;
                 cooking.uncook(result.expression().as_view())
             },
             state: Color::Fully,
@@ -873,7 +875,8 @@ impl Numerator<ColorSimplified> {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            })?;
+            })?
+            .resolved()?;
         let expr = cooking.uncook(result.expression().as_view());
         crate::debug_tags!(#generation, #inspect, #dump;
             stage = "numerator_after_simplify_gamma",

@@ -1,10 +1,5 @@
 = Tensor engine correctness checkpoint
 
-This checkpoint records the historical alias-enabled implementation preserved
-on `tensor-aliases-preserved`. Its validation counts and alias-owner references
-apply to that snapshot. The current plain-tensor API is described in
-#link("idenso-architecture.typ")[the current architecture].
-
 This checkpoint consolidates symbolic tensor operations in Idenso's existing
 `SymbolicTensor`. Composition, index substitution, interface bookkeeping,
 contraction, aliases and tensor rules share that owner. Spynso performs Python

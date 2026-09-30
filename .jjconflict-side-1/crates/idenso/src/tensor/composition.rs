@@ -685,7 +685,6 @@ struct PortRewriteState {
     claimed: Vec<bool>,
     applied: Vec<bool>,
     bulk_arithmetic: bool,
-    indices: Option<ParseState<AbstractIndex>>,
 }
 
 impl PortRewriteState {
@@ -694,7 +693,6 @@ impl PortRewriteState {
             claimed: vec![false; rank],
             applied: vec![false; rank],
             bulk_arithmetic: false,
-            indices: None,
         }
     }
 
@@ -932,6 +930,7 @@ fn rewrite_ports<'a>(
     slots: &[PartialSlot],
     replacements: &HashMap<usize, Atom>,
     state: &mut PortRewriteState,
+    on_leaf: &mut impl FnMut(AtomView<'_>, &Atom),
 ) -> AtomOrView<'a> {
     match value {
         AtomView::Add(add) => {
@@ -941,7 +940,7 @@ fn rewrite_ports<'a>(
             let mut terms = state.bulk_arithmetic.then(Vec::new);
             for (position, term) in add.iter().enumerate() {
                 let mut local = initial.clone();
-                let term = rewrite_ports(term, slots, replacements, &mut local);
+                let term = rewrite_ports(term, slots, replacements, &mut local, on_leaf);
                 if let Some(common) = &mut common {
                     for (common, local) in common.claimed.iter_mut().zip(&local.claimed) {
                         *common &= local;
@@ -996,7 +995,7 @@ fn rewrite_ports<'a>(
                                 || fun.get_symbol() == *shadowing::CYCLIC
                     );
                 let factor = if tensorial {
-                    rewrite_ports(factor, slots, replacements, state)
+                    rewrite_ports(factor, slots, replacements, state, on_leaf)
                 } else {
                     factor.into()
                 };
@@ -1033,7 +1032,7 @@ fn rewrite_ports<'a>(
         }
         AtomView::Pow(pow) => {
             let (base, exponent) = pow.get_base_exp();
-            let base = rewrite_ports(base, slots, replacements, state);
+            let base = rewrite_ports(base, slots, replacements, state, on_leaf);
             if !value.needs_normalization() && matches!(base, AtomOrView::View(_)) {
                 value.into()
             } else {
@@ -1047,7 +1046,7 @@ fn rewrite_ports<'a>(
                 rewritten.push(rep.into());
             }
             for arg in args {
-                rewritten.push(rewrite_ports(arg, slots, replacements, state));
+                rewritten.push(rewrite_ports(arg, slots, replacements, state, on_leaf));
             }
             if !value.needs_normalization()
                 && fun.get_symbol().get_normalization_function().is_none()
@@ -1068,26 +1067,6 @@ fn rewrite_ports<'a>(
         // positions in the dot expression's external interface.
         AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.dot => value.into(),
         AtomView::Fun(fun) => {
-            if fun.get_symbol() == SPENSO_TAG.chain
-                && fun.iter().take(2).any(|endpoint| {
-                    matching_interface_position(endpoint, slots, &state.claimed)
-                        .and_then(|position| replacements.get(&position))
-                        .is_some_and(|replacement| {
-                            matches!(replacement.as_view(), AtomView::Fun(vector)
-                            if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
-                        })
-                })
-            {
-                // A compact vector belongs in an endpoint matrix's port, not
-                // in the chain's channel declaration. Open just this word.
-                let indices = state.indices.get_or_insert_with(ParseState::default);
-                indices.reserve_indices(value);
-                if let Ok(indexed) = indices.materialize_indexed_chain(fun) {
-                    return rewrite_ports(indexed.as_view(), slots, replacements, state)
-                        .into_owned()
-                        .into();
-                }
-            }
             let tensor_leaf = is_tensor_leaf_head(fun.get_symbol());
             let mut rewritten = Vec::with_capacity(fun.get_nargs());
             for arg in fun.iter() {
@@ -1128,7 +1107,7 @@ fn rewrite_ports<'a>(
                 {
                     arg.into()
                 } else {
-                    rewrite_ports(arg, slots, replacements, state)
+                    rewrite_ports(arg, slots, replacements, state, on_leaf)
                 };
                 rewritten.push(replacement);
             }
@@ -1160,6 +1139,9 @@ fn rewrite_ports<'a>(
                 let result = FunctionBuilder::new(fun.get_symbol())
                     .add_args(rewritten)
                     .finish();
+                if tensor_leaf && result.as_view() != value {
+                    on_leaf(value, &result);
+                }
                 result.into()
             }
         }
@@ -1170,7 +1152,7 @@ fn rewrite_ports<'a>(
 pub(crate) fn rewrite_interface_ports(
     value: &SymbolicTensor<PartialStructure>,
     replacements: &HashMap<usize, Atom>,
-    indices: Option<&ParseState<AbstractIndex>>,
+    on_leaf: &mut impl FnMut(AtomView<'_>, &Atom),
 ) -> Result<Atom, TensorCompositionError> {
     if value.expression.as_view().is_zero() {
         return Ok(Atom::Zero);
@@ -1181,16 +1163,6 @@ pub(crate) fn rewrite_interface_ports(
         validate_position(&slots, position)?;
     }
     let mut state = PortRewriteState::new(slots.len());
-    if replacements.values().any(|replacement| {
-        matches!(replacement.as_view(), AtomView::Fun(vector)
-        if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
-    }) {
-        state.indices = Some(
-            indices
-                .cloned()
-                .unwrap_or_else(|| SymbolicTensor::reserved_dummies([value])),
-        );
-    }
     // Identity rewrites still walk every summand, but need no regrouping proof.
     state.bulk_arithmetic = replacements
         .iter()
@@ -1199,8 +1171,14 @@ pub(crate) fn rewrite_interface_ports(
         && replacements
             .values()
             .all(|replacement| PortRewriteState::exact_arithmetic(replacement.as_view()));
-    let atom =
-        rewrite_ports(value.expression.as_view(), &slots, replacements, &mut state).into_owned();
+    let atom = rewrite_ports(
+        value.expression.as_view(),
+        &slots,
+        replacements,
+        &mut state,
+        on_leaf,
+    )
+    .into_owned();
     if let Some(position) = replacements
         .keys()
         .copied()
@@ -1334,7 +1312,7 @@ fn channel_factor(
         (channel.input, Atom::var(SPENSO_TAG.chain_in)),
         (channel.output, Atom::var(SPENSO_TAG.chain_out)),
     ]);
-    rewrite_interface_ports(value, &replacements, None)
+    rewrite_interface_ports(value, &replacements, &mut |_, _| {})
 }
 
 #[derive(Clone, Debug)]
@@ -1663,7 +1641,7 @@ impl SymbolicTensor<PartialStructure> {
                 Ok((position, atom))
             })
             .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
-        let atom = rewrite_interface_ports(self, &replacements, None)?;
+        let atom = rewrite_interface_ports(self, &replacements, &mut |_, _| {})?;
         validate_explicit_index_occurrences(&atom)?;
         Ok(atom)
     }
@@ -1689,7 +1667,7 @@ impl SymbolicTensor<PartialStructure> {
                 ))
             })
             .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
-        let atom = rewrite_interface_ports(self, &replacements, None)?;
+        let atom = rewrite_interface_ports(self, &replacements, &mut |_, _| {})?;
         validate_explicit_index_occurrences(&atom)?;
         SymbolicTensor::new(atom, PartialStructure::from_logical_slots(logical))
             .validate_rewrite(&[self])
@@ -1861,12 +1839,12 @@ impl SymbolicTensor<PartialStructure> {
             let compact_left = rewrite_interface_ports(
                 self,
                 &HashMap::from([(0, left_slots[0].rep().to_symbolic([]))]),
-                None,
+                &mut |_, _| {},
             )?;
             let compact_right = rewrite_interface_ports(
                 right,
                 &HashMap::from([(0, right_slots[0].rep().to_symbolic([]))]),
-                None,
+                &mut |_, _| {},
             )?;
             FunctionBuilder::new(SPENSO_TAG.dot)
                 .add_arg(compact_left)
@@ -2601,16 +2579,23 @@ mod tests {
         let replacements = HashMap::from([(0, port_atom(target))]);
         assert!(PortRewriteState::exact_arithmetic(atom.as_view()));
         let mut old = PortRewriteState::new(2);
-        let expected = rewrite_ports(atom.as_view(), &slots, &replacements, &mut old).into_owned();
+        let expected = rewrite_ports(
+            atom.as_view(),
+            &slots,
+            &replacements,
+            &mut old,
+            &mut |_, _| {},
+        )
+        .into_owned();
         let value = SymbolicTensor::new(atom.clone(), PartialStructure::from_logical_slots(slots));
         assert_eq!(
-            rewrite_interface_ports(&value, &replacements, None).unwrap(),
+            rewrite_interface_ports(&value, &replacements, &mut |_, _| {}).unwrap(),
             expected
         );
         assert_ne!(expected, atom);
         let missing = SymbolicTensor::new(atom + Atom::num(1), value.structure);
         assert!(matches!(
-            rewrite_interface_ports(&missing, &replacements, None),
+            rewrite_interface_ports(&missing, &replacements, &mut |_, _| {}),
             Err(TensorCompositionError::MissingInterfacePort { position: 0 })
         ));
 
@@ -2624,11 +2609,17 @@ mod tests {
         ] {
             assert!(!PortRewriteState::exact_arithmetic(atom.as_view()));
             let mut old = PortRewriteState::new(2);
-            let expected =
-                rewrite_ports(atom.as_view(), &slots, &replacements, &mut old).into_owned();
+            let expected = rewrite_ports(
+                atom.as_view(),
+                &slots,
+                &replacements,
+                &mut old,
+                &mut |_, _| {},
+            )
+            .into_owned();
             let value = SymbolicTensor::new(atom, PartialStructure::from_logical_slots(slots));
             assert_eq!(
-                rewrite_interface_ports(&value, &replacements, None).unwrap(),
+                rewrite_interface_ports(&value, &replacements, &mut |_, _| {}).unwrap(),
                 expected
             );
         }
@@ -2811,7 +2802,13 @@ mod tests {
         let replacements = HashMap::from([(0, port_atom(port))]);
         let atom = &a.expression + &b.expression;
         let mut state = PortRewriteState::new(1);
-        let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+        let rewritten = rewrite_ports(
+            atom.as_view(),
+            &[port],
+            &replacements,
+            &mut state,
+            &mut |_, _| {},
+        );
         assert!(matches!(rewritten, AtomOrView::View(_)));
         assert_eq!(rewritten.as_view(), atom.as_view());
         assert_eq!(state.claimed, [true]);
@@ -2824,7 +2821,7 @@ mod tests {
         );
         let invalid = SymbolicTensor::new(&a.expression + missing.expression, a.structure);
         assert!(matches!(
-            rewrite_interface_ports(&invalid, &replacements, None),
+            rewrite_interface_ports(&invalid, &replacements, &mut |_, _| {}),
             Err(TensorCompositionError::MissingInterfacePort { position: 0 })
         ));
     }
@@ -2853,7 +2850,13 @@ mod tests {
         for replacements in [HashMap::new(), HashMap::from([(0, port_atom(port))])] {
             calls.store(0, Ordering::Relaxed);
             let mut state = PortRewriteState::new(1);
-            let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+            let rewritten = rewrite_ports(
+                atom.as_view(),
+                &[port],
+                &replacements,
+                &mut state,
+                &mut |_, _| {},
+            );
             assert!(matches!(rewritten, AtomOrView::Atom(_)));
             assert_eq!(rewritten.as_view(), atom.as_view());
             assert_eq!(calls.load(Ordering::Relaxed), 1);
@@ -2870,6 +2873,7 @@ mod tests {
             &[],
             &HashMap::new(),
             &mut PortRewriteState::new(0),
+            &mut |_, _| {},
         );
         assert!(rewritten.as_view().is_zero());
         assert_eq!(calls.load(Ordering::Relaxed), 2);
@@ -2892,7 +2896,13 @@ mod tests {
         let mut state = PortRewriteState::new(2);
         let identity = HashMap::from([(0, port_atom(a)), (1, port_atom(b))]);
         assert!(matches!(
-            rewrite_ports(input.as_view(), &[a, b], &identity, &mut state,),
+            rewrite_ports(
+                input.as_view(),
+                &[a, b],
+                &identity,
+                &mut state,
+                &mut |_, _| {}
+            ),
             AtomOrView::View(_)
         ));
         assert_eq!(state.applied, [true, true]);
@@ -2901,6 +2911,7 @@ mod tests {
             &[a, b],
             &HashMap::from([(1, port_atom(a))]),
             &mut PortRewriteState::new(2),
+            &mut |_, _| {},
         )
         .into_owned();
         assert_eq!(trace, Atom::num(4));
@@ -2928,6 +2939,7 @@ mod tests {
                 &[],
                 &HashMap::new(),
                 &mut PortRewriteState::new(0),
+                &mut |_, _| {}
             ),
             AtomOrView::View(_)
         ));
@@ -2955,6 +2967,7 @@ mod tests {
                 &[a],
                 &HashMap::new(),
                 &mut PortRewriteState::new(1),
+                &mut |_, _| {},
             );
             assert!(matches!(unchanged, AtomOrView::Atom(_)));
             calls.store(0, Ordering::Relaxed);
@@ -2963,6 +2976,7 @@ mod tests {
                 &[a],
                 &HashMap::from([(0, port_atom(replacement))]),
                 &mut PortRewriteState::new(1),
+                &mut |_, _| {},
             )
             .into_owned();
             assert_eq!(changed, expected);
@@ -2999,6 +3013,7 @@ mod tests {
                 &[],
                 &HashMap::new(),
                 &mut PortRewriteState::new(0),
+                &mut |_, _| {},
             )
             .into_owned();
             assert_eq!(rewritten, expected);

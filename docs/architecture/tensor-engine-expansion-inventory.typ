@@ -1,11 +1,6 @@
 = Tensor engine expansion inventory
 <tensor-engine-expansion-inventory>
 
-This is a historical alias-enabled implementation record, preserved on
-`tensor-aliases-preserved`. Alias-owner source paths below refer to that
-snapshot. The current API returns a plain `TensorExpression`; see
-#link("idenso-architecture.typ")[the current architecture].
-
 This is the M0 inventory for R17 of
 #link("tensor-engine-consolidation-plan.typ")[the tensor engine consolidation plan].
 It records the fixed implementation base `bfb80d8c`, including the preserved
@@ -14,7 +9,7 @@ work to do, not a claim that the internal expansion paths have been removed.
 Line numbers below refer to that base; function names identify the owners
 when subsequent changes move them.
 
-== Historical owner audit
+== Current owner audit
 
 The combined implementation was re-audited on 2026-09-28. The direct
 production expansion calls in Idenso and Spenso now belong to explicit

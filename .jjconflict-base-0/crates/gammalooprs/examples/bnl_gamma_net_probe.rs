@@ -67,7 +67,8 @@ fn main() -> Result<()> {
             collect_traces: false,
             ..Default::default()
         })?
-        .to_dots()?;
+        .to_dots()?
+        .resolved()?;
     let simplified = cooking.uncook(simplified.expression().as_view());
     println!(
         "evaluator_algebra\telapsed_ms={:.3}\tterms={}\tbytes={}",

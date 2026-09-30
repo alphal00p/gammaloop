@@ -47,6 +47,12 @@ def example_specification():
             "rule",
         ),
         (
+            "AliasedTensorExpression",
+            "A typed root and literal tensor definitions. Domain operations preserve the registry; to_expression resolves it, while expand explicitly materializes a polynomial.",
+            "aliased = sp.AliasedTensorExpression.from_expression(indexed)",
+            "aliased",
+        ),
+        (
             "TensorStructure",
             "Immutable metadata: optional name, scalar arguments, ordered slots, rank and shape. Unresolved ports retain their Representation.",
             "structure = indexed.structure",
@@ -295,7 +301,7 @@ def _(mo):
     - `outer`, `contract_ports`, `compose`, arithmetic and `trace` are methods on tensor expressions. `contract` performs graph contraction and returns a typed alias DAG.
     - `replace` applies a reusable `TensorRule` or an ordered rule list.
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
-    - Symbolic tensor operations return a `TensorExpression`. Its `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
+    - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
     - Dirac algebra: `simplify_algebra`, with `gamma=True, gamma_output="chains"` for collected words, gamma conjugation and `dirac_adjoint`.
     - Color algebra: `simplify_algebra`, with dimension-invariant substitution selected by `color_substitute_cof_dimension_invariants=True`.
     - Index algebra: `contract`, `simplify_algebra`, `with_lorentz_dimension`, cooking and canonicalization.

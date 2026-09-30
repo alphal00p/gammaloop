@@ -7,8 +7,6 @@ The evidence below is historical, taken on 2026-09-27 against `a27ca81d8958`. Sa
 measurements and later qualification records are separate artifacts; these
 tables are not claims about the final implementation. The audit of
 `15d64dd1` and the R5 work adds the correctness gates recorded below.
-The optional alias design discussed here is preserved on `tensor-aliases-preserved`;
-the current API always returns `TensorExpression` and creates no tensor aliases.
 
 #strong[Scope:] the index-contraction and simplification stack shared by
 `spenso`, `idenso` and `spynso3` (`TensorExpression`), and the way
@@ -304,7 +302,7 @@ What this plan takes from their work:
 
 === Spynso3: the surface
 
-- `TensorExpression` stays the typed atom. The optional alias result was proposed:
+- `TensorExpression` stays the typed atom. `AliasedTensorExpression` is added:
   root `TensorExpression`, aliases as `(handle, body)` pairs of
   `TensorExpression`s whose interfaces match, with `to_expression()`
   (resolve), `expand()` (polynomial forward pass), `evaluator(...)`,
@@ -401,7 +399,7 @@ findings of the other agent; their line references are to
   [R1], [O(n²) `sum +=` accumulation in the network schoonschip driver], [measured], [M0],
   [R2], [metric into gamma with `AUTO` spinor indices fails], [measured], [M0],
   [R3], [benchmark harness: ladder, traces, keep-the-rest probe, idempotent cost, production-derived numerator; alternating interpreters, medians, FORM reference], [this plan], [M0],
-  [R4], [Optional alias result and `TensorRule` types; parametric aliases in Symbolica or literal-per-labelling fallback], [this historical plan], [M1],
+  [R4], [`AliasedTensorExpression` and `TensorRule` types; parametric aliases in Symbolica or literal-per-labelling fallback], [this plan], [M1],
   [R5], [factor-graph DP contraction in Rust over the existing collector graph, `contract()`], [prototype], [M1],
   [R6], [colour `rewrite_terms` and `ProductView` rebuild sums and products by repeated binary operations; colour retries a failed root rewrite], [second audit, 5], [M1],
   [R7], [dot-normalization preflight constructs a replacement the rewrite constructs again], [second audit, 5], [M1],
@@ -627,15 +625,15 @@ An explicit normalized-factor permutation still overrides it. This is a heuristi
 optimality claim. Occurrence-local bindings and Complete/Deferred/Capped remain unchanged.
 
 D1 removes the unused Python alias, raw undo, cooking, unchecked construction/reinference,
-chain normalization, color-basis, and alternate conjugation wrappers. The optional
-alias owner is now preserved separately; cooking belongs at construction/indexing; typed
+chain normalization, color-basis, and alternate conjugation wrappers. Aliasing belongs to
+`AliasedTensorExpression`; cooking belongs at construction/indexing; typed
 `wrap_indices(scope, dummies_only=True)` replaces raw dummy wrapping. The unused Python
 `ColorCasimirSettings` class is removed with its consumer. Rust retains cooking and local
 algebra needed by production. The evaluator's invariant-only branch runs when `do_algebra`
 is false, whereas `simplify_algebra` runs when it is true: these are mutually exclusive, so
 removing the Rust-only invariant pass there would change behavior.
 
-Retain `simplify_algebra(settings)` as the documented shared Rust orchestrator returning the typed expression.
+Retain `simplify_algebra(settings)` as the documented shared Rust orchestrator returning aliases.
 Retain the deliberately documented construction, indexing, composition, and presentation
 surface. D2 adopts the binary-method rename, preserving network component data operations.
 

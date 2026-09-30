@@ -463,6 +463,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap();
                 let pexpr = cooking.uncook(contracted.expression().as_view());
                 assert_eq!(s.canonical().order(), 8);

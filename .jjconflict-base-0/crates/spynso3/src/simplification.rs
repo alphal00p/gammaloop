@@ -154,10 +154,10 @@ spin = sp.Representation.bis(4)
 lorentz = sp.Representation.mink(4)
 gamma = sp.TensorExpression.dirac_gamma(4)
 source = gamma(spin('i'), spin('j'), lorentz('mu')) * gamma(spin('j'), spin('i'), lorentz('nu'))
-assert source.contract(representations=[]) == source
-assert source.simplify_algebra(gamma=False, color=False, contract='none') == source
+assert source.contract(representations=[]).to_expression() == source
+assert source.simplify_algebra(contract='none').to_expression() == source
 assert source.contract(representations=[lorentz]).to_expression() == source.contract(representations=[lorentz.name]).to_expression()
-collected = source.contract()
+collected = source.contract().to_expression()
 assert 'trace' in collected.to_expression().format_plain()
 unfolded = collected.undo_trace()
 assert 'trace' not in unfolded.to_expression().format_plain()
@@ -166,11 +166,11 @@ explicit = unfolded.undo_chain()
 assert 'chain' not in explicit.to_expression().format_plain()
 assert explicit.components() == collected.components()
 reduced = source.simplify_algebra(gamma=True)
-assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression()))
+assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression().to_expression()))
 assert reduced.expand().components() == collected.components()
 capped = source.simplify_algebra(gamma=True, max_steps_per_domain=0)
 assert capped.reduction_status == sp.ReductionStatus.Capped
-assert capped == source
+assert capped.to_expression() == source
 generator = sp.TensorExpression.color_t(8, 3)
 word = generator('a', 'i', 'j') * generator('a', 'k', 'l')
 for mode in ('fully', 'dots', 'selected'):
@@ -179,7 +179,7 @@ for mode in ('fully', 'dots', 'selected'):
         options['representations'] = [sp.Representation.cof(3)]
     result = word.simplify_algebra(**options)
     assert result.reduction_status == sp.ReductionStatus.Complete, mode
-    assert result.components() == word.components()
+    assert result.to_expression().components() == word.components()
     assert result.simplify_algebra(**options).to_expression() == result.to_expression()
 assert not hasattr(sp.Tensor, 'contract')
 assert hasattr(sp.Tensor, 'contract_ports')
@@ -293,7 +293,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
                     py.get_type::<TensorExpression>()
                         .getattr("simplify_algebra")
                         .unwrap(),
-                    "($self, *, gamma=True, color=True, epsilon=False, contract=\"fully\", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16)",
+                    "($self, *, gamma=False, color=False, epsilon=False, contract=\"fully\", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16)",
                 ),
             ] {
                 let name = class.getattr("__name__").unwrap();

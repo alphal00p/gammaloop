@@ -574,6 +574,8 @@ mod shared_expression_tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .to_dots()
                 .unwrap();
         let previous = GS.den(

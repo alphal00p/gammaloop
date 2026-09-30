@@ -167,7 +167,8 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
             collect_chains: false,
             collect_traces: false,
             ..Default::default()
-        })?;
+        })?
+        .resolved()?;
     let dotted = simplified.to_dots()?;
     let dotted = cooking.uncook(dotted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #gamma;
@@ -389,6 +390,7 @@ impl Integrated<'_> {
                 collect_traces: false,
                 ..Default::default()
             })?
+            .resolved()?
             .to_dots()?;
         res = Self::dimensionally_regularized(&cooking.uncook(dotted.expression().as_view()));
 
@@ -399,16 +401,16 @@ impl Integrated<'_> {
 
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
-        let collected = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?.contract(
-            ContractSettings {
+        let collected = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?
+            .contract(ContractSettings {
                 representations: Some(&[Bispinor {}.into()]),
                 metrics: false,
                 rank_one: false,
                 collect_chains: true,
                 collect_traces: true,
                 ..Default::default()
-            },
-        )?;
+            })?
+            .resolved()?;
         // Collection already returns isolated one-factor words in indexed form.
         res = cooking.uncook(collected.expression().as_view());
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
@@ -710,14 +712,14 @@ pub(crate) fn to_vakint_integrand<
     // coefficients factorized throughout this independent color pass.
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let input = GS.erase_uv_momentum_provenance(integrand);
-    let color = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?.simplify_algebra(
-        &idenso::tensor::AlgebraSettings {
+    let color = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
             }),
             ..Default::default()
-        },
-    )?;
+        })?
+        .resolved()?;
     let mut integrand_vakint = cooking
         .uncook(color.expression().as_view())
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
@@ -759,11 +761,12 @@ pub(crate) fn to_vakint_integrand<
     // the expression is split into Vakint terms.
     let metric_contracted = SymbolicTensor::infer(cooking.try_cook(integrand_vakint.as_view())?)?
         .contract(ContractSettings {
-        rank_one: false,
-        collect_chains: false,
-        collect_traces: false,
-        ..Default::default()
-    })?;
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
+        .resolved()?;
     integrand_vakint = cooking.uncook(metric_contracted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_simplify_metrics",
@@ -1403,14 +1406,14 @@ impl VakintMomentumSolution {
         // metric edges. Keep vectors explicit while normalizing the new products.
         let numerator = numerator.replace_multiple(&self.replacements);
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let normalized = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?.contract(
-            ContractSettings {
+        let normalized = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
+            .contract(ContractSettings {
                 rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            },
-        )?;
+            })?
+            .resolved()?;
         Ok(cooking.uncook(normalized.expression().as_view()))
     }
 
@@ -2130,6 +2133,8 @@ mod tests {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .to_dots()
             .unwrap()
             .into_expression()
@@ -2191,6 +2196,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap();
             let prepared = cooking.uncook(prepared.expression().as_view());
             let rewritten = solution.rewrite_numerator(&prepared).unwrap();

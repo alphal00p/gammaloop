@@ -57,6 +57,7 @@ contracted = (
     TensorExpression(numerator)
     .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
+    .to_expression()
     .to_dots()
     .to_expression()
 )

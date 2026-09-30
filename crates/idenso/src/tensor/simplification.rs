@@ -1,20 +1,27 @@
 //! One domain planner for structural contraction and selected tensor identities.
-//! Only changed regions are reconsidered. Arithmetic expansion and explicit
-//! notation undo remain separate APIs.
+//! Definitions stay shared; only a changed domain or dependent call site is
+//! reconsidered. Materialization and explicit notation undo are separate APIs.
 
-use super::{ContractSettings, SymbolicTensor, inference::TensorInferenceError};
+use super::{
+    ContractSettings, SymbolicTensor,
+    aliases::{AliasInterfaces, Definition, TENSOR_ALIAS_SYMBOL},
+    inference::TensorInferenceError,
+};
 use crate::{
     color::ColorSimplifySettings, dirac::GammaSimplifySettings, epsilon::EpsilonSimplifierPass,
 };
-use spenso::structure::{partial::PartialStructure, representation::RepName};
-use std::{collections::HashMap, sync::Arc};
-use symbolica::atom::AtomView;
+use spenso::structure::partial::PartialStructure;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::Arc,
+};
+use symbolica::atom::{AliasedAtom, Atom, AtomView};
 
 pub(crate) mod observation;
 use observation::{DomainObservations, SettledRegions};
 
 /// Completion is relative to the requested capabilities and output forms.
-/// A deferred or capped result retains the exact expression.
+/// A deferred or capped result retains the exact expression and all definitions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReductionStatus {
     #[default]
@@ -88,7 +95,7 @@ pub(crate) enum ReductionPolicy {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ReductionRecord {
-    // Every entry describes this exact immutable expression. A no-op
+    // Every entry describes this exact immutable root and alias DAG. A no-op
     // under another policy preserves those facts; any domain change drops them.
     completed: Vec<ReductionPolicy>,
     pub(crate) status: ReductionStatus,
@@ -147,7 +154,10 @@ impl ReductionRequest<'_> {
 struct DomainPlan {
     value: SymbolicTensor<PartialStructure>,
     observed: Arc<DomainObservations>,
+    dependencies: HashSet<Atom>,
     pending: u8,
+    effective: u8,
+    prerequisites: bool,
     changes: usize,
     deferred: u8,
     settled: HashMap<u8, SettledRegions>,
@@ -155,17 +165,33 @@ struct DomainPlan {
 }
 
 impl DomainPlan {
-    fn new(value: SymbolicTensor<PartialStructure>, pending: u8) -> Self {
+    fn new(
+        value: SymbolicTensor<PartialStructure>,
+        registry: &HashMap<Atom, Definition>,
+        pending: u8,
+    ) -> Self {
         let observed = Arc::clone(value.reduction_observations());
-        Self {
+        let dependencies = observed
+            .literals(value.expression.as_view())
+            .iter()
+            .filter(|literal| registry.contains_key(*literal))
+            .cloned()
+            .collect();
+        let prerequisites = value.proofs.prerequisites && pending & GAMMA != 0;
+        let mut plan = Self {
             value,
             observed,
-            pending,
+            dependencies,
+            pending: pending | if prerequisites { STRUCTURE } else { 0 },
+            effective: 0,
+            prerequisites,
             changes: 0,
             deferred: 0,
             settled: HashMap::new(),
             status: ReductionStatus::Complete,
-        }
+        };
+        plan.effective = plan.local_candidates();
+        plan
     }
 
     fn local_candidates(&self) -> u8 {
@@ -184,7 +210,18 @@ impl SymbolicTensor<PartialStructure> {
     pub fn simplify_algebra(
         &self,
         settings: &AlgebraSettings,
-    ) -> Result<Self, TensorInferenceError> {
+    ) -> Result<Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>, TensorInferenceError> {
+        self.ensure_validated()?;
+        self.reduction_observations();
+        Arc::new(self.clone().with_aliases([])?).plan_reduction(ReductionRequest::Algebra(settings))
+    }
+}
+
+impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    pub fn simplify_algebra(
+        self: &Arc<Self>,
+        settings: &AlgebraSettings,
+    ) -> Result<Arc<Self>, TensorInferenceError> {
         self.plan_reduction(ReductionRequest::Algebra(settings))
     }
 
@@ -195,16 +232,12 @@ impl SymbolicTensor<PartialStructure> {
             .map_or(ReductionStatus::Deferred, |record| record.status)
     }
 
-    pub fn contraction_complete(&self) -> bool {
-        self.proofs.contracted
-    }
-
-    /// Both public settings types lower into this scheduler. A head is only a
+    /// Both public settings types lower into this queue. A head is an admission
     /// candidate; an unchanged kernel discharges it until its inputs change.
     pub(crate) fn plan_reduction(
-        &self,
+        self: &Arc<Self>,
         request: ReductionRequest<'_>,
-    ) -> Result<Self, TensorInferenceError> {
+    ) -> Result<Arc<Self>, TensorInferenceError> {
         #[cfg(feature = "reference-cases")]
         let _phase =
             crate::reference_cases::timing::scope(crate::reference_cases::timing::Phase::Planning);
@@ -213,7 +246,6 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Contract(_) => "contract",
             ReductionRequest::Algebra(_) => "simplify_algebra",
         };
-        self.ensure_validated()?;
         let policy = request.policy();
         if let Some(record) = &self.proofs.reduction
             && record.completed.contains(&policy)
@@ -223,8 +255,15 @@ impl SymbolicTensor<PartialStructure> {
                 diagnostic_operation,
                 ReductionStatus::Complete,
             );
-            let mut result = self.clone();
-            result.proofs.reduction.as_mut().unwrap().status = ReductionStatus::Complete;
+            let mut result = Arc::clone(self);
+            if record.status != ReductionStatus::Complete {
+                Arc::make_mut(&mut result)
+                    .proofs
+                    .reduction
+                    .as_mut()
+                    .unwrap()
+                    .status = ReductionStatus::Complete;
+            }
             return Ok(result);
         }
         let enabled = request.enabled();
@@ -246,19 +285,100 @@ impl SymbolicTensor<PartialStructure> {
                 _ => ContractSettings::default(),
             },
         };
-        let mut plan = DomainPlan::new(self.clone(), enabled);
-        while plan.pending != 0 {
-            let candidates = plan.local_candidates();
-            plan.pending &= candidates;
-            // Another identity can remove the region whose work was deferred.
-            // Completion follows the current expression, not a vanished head.
-            plan.deferred &= candidates;
-            if plan.status == ReductionStatus::Deferred && plan.deferred == 0 {
-                plan.status = ReductionStatus::Complete;
+        let original = self.aliases()?;
+        let mut registry: HashMap<_, _> = original
+            .iter()
+            .cloned()
+            .map(|mut pair| {
+                if pair.1.proofs.literal_origin.is_none()
+                    && matches!(pair.0.expression.as_view(), AtomView::Fun(function) if function.get_symbol() == *TENSOR_ALIAS_SYMBOL)
+                {
+                    pair.1.proofs.literal_origin = Some(Arc::new(pair.1.clone()));
+                }
+                (pair.0.expression.clone(), pair)
+            })
+            .collect();
+        let mut domains = HashMap::<Option<Atom>, DomainPlan>::new();
+        domains.insert(None, DomainPlan::new(self.root(), &registry, enabled));
+        let reachable = self.reachable_definitions();
+        for (handle, _) in original {
+            if reachable.contains(&handle.expression) {
+                let body = registry[&handle.expression].1.clone();
+                let mut plan = DomainPlan::new(body, &registry, enabled);
+                for dependency in &plan.dependencies {
+                    if let Some(previous) = domains.get(&Some(dependency.clone())) {
+                        plan.effective |= previous.effective;
+                    }
+                }
+                domains.insert(Some(handle.expression), plan);
             }
-            let mut eligible = plan.pending;
+        }
+        let mut dependents = HashMap::<Atom, HashSet<Option<Atom>>>::new();
+        for (key, plan) in &domains {
+            for dependency in &plan.dependencies {
+                dependents
+                    .entry(dependency.clone())
+                    .or_default()
+                    .insert(key.clone());
+            }
+        }
+        let mut queue = VecDeque::from([None]);
+        let mut initial = domains.keys().filter_map(Clone::clone).collect::<Vec<_>>();
+        initial.sort_unstable_by(|a, b| AtomView::cmp(&a.as_view(), &b.as_view()));
+        queue.extend(initial.into_iter().map(Some));
+        let mut queued = queue.iter().cloned().collect::<HashSet<_>>();
+        let mut alias_candidates = domains
+            .iter()
+            .filter_map(|(key, plan)| key.as_ref().map(|key| (key.clone(), plan.effective)))
+            .collect::<HashMap<_, _>>();
+        let mut available = None;
+        let mut changed = false;
+        let mut status = ReductionStatus::Complete;
+        while let Some(key) = queue.pop_front() {
+            queued.remove(&key);
+            // Local occurrence information crosses an alias boundary through its
+            // dependency edge, never through a registry-wide family flag.
+            let candidates = domains[&key].dependencies.iter().fold(
+                domains[&key].local_candidates(),
+                |mask, dependency| {
+                    mask | domains
+                        .get(&Some(dependency.clone()))
+                        .map_or(0, |plan| plan.effective)
+                },
+            );
+            if let Some(handle) = &key {
+                alias_candidates.insert(handle.clone(), candidates);
+                // A dependency can expose a candidate without rewriting this
+                // body's syntax. Propagate that changed observation through
+                // call sites as well as propagating actual body replacements.
+                if domains[&key].effective != candidates
+                    && let Some(users) = dependents.get(handle)
+                {
+                    for user in users {
+                        let dependent = domains.get_mut(user).unwrap();
+                        dependent.settled.clear();
+                        dependent.pending = enabled
+                            | if dependent.prerequisites {
+                                STRUCTURE
+                            } else {
+                                0
+                            };
+                        if queued.insert(user.clone()) {
+                            queue.push_back(user.clone());
+                        }
+                    }
+                }
+            }
+            let plan = domains.get_mut(&key).unwrap();
+            plan.effective = candidates;
+            let mut eligible = plan.pending & candidates;
+            plan.pending &= candidates;
+            // An identity authorizes cleanup of its emitted connections, but
+            // many emitted definitions contain only free ports. Discharge those
+            // prerequisites from their existing observations before allocating
+            // contraction state or charging the domain's work budget.
             if eligible & STRUCTURE != 0
-                && (structural.order.is_none() || plan.changes != 0)
+                && (structural.order.is_none() || key.is_some() || plan.changes != 0)
                 && !plan.value.structural_work_permitted(structural)
             {
                 plan.pending &= !STRUCTURE;
@@ -268,26 +388,30 @@ impl SymbolicTensor<PartialStructure> {
                     plan.status = ReductionStatus::Complete;
                 }
             }
-            // Exact notation work can discharge a no-op without charging budget.
-            let dot_result = if eligible == DOTS {
+            // Notation is cheap, exact local work. Discharge an already normalized
+            // region before charging its budget, and reuse the computed replacement.
+            let dot_result = if eligible & DOTS != 0 && eligible & !DOTS == 0 {
                 let value = plan.value.to_dots()?;
                 if value == plan.value {
                     plan.pending &= !DOTS;
-                    eligible = 0;
+                    eligible &= !DOTS;
                 }
                 Some(value)
             } else {
                 None
             };
             if eligible == 0 {
-                break;
+                continue;
             }
             if plan.changes >= request.budget() {
                 plan.status = ReductionStatus::Capped;
-                break;
+                status = status.max(plan.status);
+                continue;
             }
-            // Prefer an eligible identity before optional notation can hide it.
-            // Recompute costs only when the region's observations have changed.
+            // Identity kernels first contract their own prerequisites. Let them
+            // consume visible candidates before optional chain collection can hide
+            // those candidates in an unevaluated trace (for example epsilon^2).
+            // Recompute this choice only for changed inputs.
             let operation = [STRUCTURE, GAMMA, COLOR, EPSILON, DOTS]
                 .into_iter()
                 .filter(|operation| eligible & operation != 0)
@@ -304,83 +428,146 @@ impl SymbolicTensor<PartialStructure> {
                 .unwrap();
             plan.pending &= !operation;
             let mut before = plan.value.clone();
+            // Frontier facts describe one kernel invocation, not a permanent
+            // limitation of this expression or a subsequent resume.
             before.proofs.frontier = ReductionStatus::Complete;
-            let (value, operation_status) = match request {
+            let mut emitted;
+            let (mut value, operation_status) = match request {
                 ReductionRequest::Contract(settings) => {
                     let settings = ContractSettings {
-                        order: if plan.changes == 0 {
+                        order: if key.is_none() && plan.changes == 0 {
                             settings.order
                         } else {
                             None
                         },
                         ..settings
                     };
-                    before.contract_domain(settings)?
+                    let (value, definitions, status) =
+                        before.contract_domain(settings, &registry)?;
+                    emitted = definitions;
+                    (value, status)
                 }
                 ReductionRequest::Algebra(settings) => {
                     if operation == DOTS {
+                        emitted = Vec::new();
                         (
                             dot_result.expect("dot notation follows eligible identities"),
                             ReductionStatus::Complete,
                         )
                     } else if operation == STRUCTURE {
-                        before.contract_domain(structural)?
+                        let (value, definitions, status) =
+                            before.contract_domain(structural, &registry)?;
+                        emitted = definitions;
+                        (value, status)
                     } else {
+                        let definitions = available
+                            .get_or_insert_with(|| registry.values().cloned().collect::<Vec<_>>());
                         let observed = &plan.observed;
-                        let prerequisites = before.contract_prerequisites(prerequisite_settings, |value| {
+                        let (prerequisites, additions) = before.contract_prerequisites(prerequisite_settings, definitions, |value| {
+                            if alias_candidates.get(value.get_data()).is_some_and(|mask| mask & operation != 0) { return true; }
                             // A metric is a prerequisite, not the identity's seed.
+                            // Nested leaves may lack individual regional records;
+                            // the representation fallback must not select their
+                            // metrics and hide the incident connection from the
+                            // prerequisite contractor.
                             if matches!(value, AtomView::Fun(function) if function.get_symbol() == spenso::network::library::symbolic::ETS.metric) { return false; }
-                            if let Some(region) = observed.region(value) { return region.identity_candidates() & operation != 0; }
+                            if let Some(region) = observed.region(value) {
+                                return region.identity_candidates() & operation != 0;
+                            }
                             match operation {
                                 GAMMA => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::Bispinor {}.into()]).matches(value),
                                 COLOR => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::ColorFundamental {}.into(), crate::representations::ColorAdjoint {}.into(), crate::representations::ColorSextet {}.into()]).matches(value),
                                 _ => matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                             }
-                        }, |representation| {
-                            // Spinor wavefunctions are an optional boundary
-                            // contraction. Preserve the gamma word until its
-                            // identities run; Lorentz vector prerequisites remain enabled.
-                            operation != GAMMA || representation.base() != crate::representations::Bispinor {}.into()
                         })?;
                         if prerequisites.root != before
-                            || prerequisites.status == ReductionStatus::Capped
+                            || additions
+                                .iter()
+                                .any(|pair| registry.get(&pair.0.expression) != Some(pair))
                         {
+                            let mut retained = additions
+                                .into_iter()
+                                .map(|pair| (pair.0.expression.clone(), pair))
+                                .collect();
+                            Self::retain_contracted_definitions(
+                                &prerequisites,
+                                &registry,
+                                &mut retained,
+                            )?;
+                            emitted = retained.into_values().collect();
                             (prerequisites.root, prerequisites.status)
                         } else {
-                            let value = match operation {
-                                GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default())?,
-                                COLOR => before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
-                                EPSILON if observed.epsilon_degree < 2 => before.clone(),
-                                EPSILON => before.collect_with_map(None,
+                            let (value, definitions) = match operation {
+                                GAMMA => before.simplify_gamma_parts(definitions, settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default())?,
+                                COLOR => before.simplify_color_parts(definitions, settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
+                                EPSILON if before.reduction_observations().epsilon_degree < 2
+                                    && !before.reduction_observations().literals(before.expression.as_view()).iter().any(|literal| registry.get(literal).is_some_and(|(_, body)| !body.is_scalar())) => (before.clone(), Vec::new()),
+                                EPSILON => before.collect_with_map(None, definitions,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
-                                    |selected, complete| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
+                                    |selected, registry, complete| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
                                         let expression = EpsilonSimplifierPass::step(selected.expression.as_view());
                                         let rewritten = selected.with_identity_result(expression, None)?;
-                                        if rewritten == selected { return Ok(rewritten); }
-                                        let (mut value, status) = rewritten.contract_domain(prerequisite_settings)?;
+                                        if rewritten == selected { return Ok((rewritten, Vec::new())); }
+                                        let registry = registry.iter().cloned().map(|pair| (pair.0.expression.clone(), pair)).collect();
+                                        let (mut value, definitions, status) = rewritten.contract_domain(prerequisite_settings, &registry)?;
                                         value.proofs.frontier = status;
-                                        Ok(value)
+                                        Ok((value, definitions))
                                     }))?,
                                 _ => unreachable!("only enabled identities enter the algebra queue"),
                             };
+                            emitted = definitions;
                             let status = value.proofs.frontier;
                             (value, status)
                         }
                     }
                 }
             };
+            // Kernels may return their available registry along with additions.
+            // Unchanged associations are references, not replacement definitions.
+            emitted.retain(|pair| {
+                registry
+                    .get(&pair.0.expression)
+                    .is_none_or(|previous| previous != pair)
+            });
             if value.structure != before.structure {
                 return Err(TensorInferenceError::invalid(
                     "reduction changes its established logical interface",
                 ));
             }
-            if value != before {
+            let actual_change = value != before;
+            if actual_change {
+                value.proofs.literal_origin = before.proofs.literal_origin.clone();
                 value.observe_replacement(&before);
                 plan.observed = Arc::clone(value.reduction_observations());
+                for dependency in &plan.dependencies {
+                    if let Some(users) = dependents.get_mut(dependency) {
+                        users.remove(&key);
+                    }
+                }
+                plan.dependencies = plan
+                    .observed
+                    .literals(value.expression.as_view())
+                    .iter()
+                    .filter(|literal| registry.contains_key(*literal))
+                    .cloned()
+                    .collect();
+                for dependency in &plan.dependencies {
+                    dependents
+                        .entry(dependency.clone())
+                        .or_default()
+                        .insert(key.clone());
+                }
                 plan.value = value;
                 plan.changes += 1;
-                plan.pending = enabled;
+                plan.pending = enabled | if plan.prerequisites { STRUCTURE } else { 0 };
+                changed = true;
+                if let Some(handle) = &key {
+                    registry.get_mut(handle).unwrap().1 = plan.value.clone();
+                    available = None;
+                }
             }
+            // A completed family cannot discharge another family's exact
+            // unfinished frontier. Only revisiting that operation can do so.
             if operation_status == ReductionStatus::Deferred {
                 plan.deferred |= operation;
             } else {
@@ -393,14 +580,103 @@ impl SymbolicTensor<PartialStructure> {
             } else {
                 ReductionStatus::Complete
             };
+            status = status.max(plan.status);
             if operation_status == ReductionStatus::Capped {
-                break;
+                plan.pending = 0;
+            }
+            if plan.pending != 0 && queued.insert(key.clone()) {
+                queue.push_back(key.clone());
+            }
+            // Register all additions before deriving edges: a new definition
+            // may refer to another addition later in the kernel's result.
+            for pair in &mut emitted {
+                // Seed the new domain before cloning it into the registry and
+                // plan. Both owners then share its single initial observation.
+                pair.1.reduction_observations();
+                if pair.1.proofs.literal_origin.is_none()
+                    && matches!(pair.0.expression.as_view(), AtomView::Fun(function) if function.get_symbol() == *TENSOR_ALIAS_SYMBOL)
+                {
+                    pair.1.proofs.literal_origin = Some(Arc::new(pair.1.clone()));
+                }
+                let handle = pair.0.expression.clone();
+                if registry
+                    .get(&handle)
+                    .is_some_and(|previous| previous != pair)
+                {
+                    return Err(TensorInferenceError::invalid(
+                        "conflicting reduction alias definitions",
+                    ));
+                }
+                registry.insert(handle, pair.clone());
+                available = None;
+            }
+            for pair in emitted {
+                let handle = pair.0.expression.clone();
+                if let std::collections::hash_map::Entry::Vacant(entry) =
+                    domains.entry(Some(handle.clone()))
+                {
+                    let mut plan = DomainPlan::new(pair.1, &registry, enabled);
+                    if operation_status == ReductionStatus::Capped {
+                        plan.pending = 0;
+                        plan.status = ReductionStatus::Capped;
+                    }
+                    for dependency in &plan.dependencies {
+                        dependents
+                            .entry(dependency.clone())
+                            .or_default()
+                            .insert(Some(handle.clone()));
+                    }
+                    alias_candidates.insert(handle.clone(), plan.effective);
+                    entry.insert(plan);
+                    if queued.insert(Some(handle.clone())) {
+                        queue.push_back(Some(handle));
+                    }
+                    changed = true;
+                }
+            }
+            {
+                let plan = domains.get_mut(&key).unwrap();
+                for literal in plan.observed.literals(plan.value.expression.as_view()) {
+                    if registry.contains_key(literal) && plan.dependencies.insert(literal.clone()) {
+                        dependents
+                            .entry(literal.clone())
+                            .or_default()
+                            .insert(key.clone());
+                    }
+                }
+            }
+            if actual_change
+                && let Some(handle) = &key
+                && let Some(users) = dependents.get(handle)
+            {
+                for user in users {
+                    let plan = domains.get_mut(user).unwrap();
+                    plan.settled.clear();
+                    plan.pending = enabled | if plan.prerequisites { STRUCTURE } else { 0 };
+                    if queued.insert(user.clone()) {
+                        queue.push_back(user.clone());
+                    }
+                }
             }
         }
-        let changed = plan.changes != 0;
-        let status = plan.status;
-        let mut result = plan.value;
-        result.proofs.contracted = (!changed && self.proofs.contracted)
+        status = domains
+            .values()
+            .map(|plan| plan.status)
+            .max()
+            .unwrap_or(status);
+        let mut result = if changed {
+            Arc::new(
+                domains
+                    .remove(&None)
+                    .unwrap()
+                    .value
+                    .attach_aliases(registry.into_values(), Some(self))?,
+            )
+        } else {
+            Arc::clone(self)
+        };
+        let proofs = &mut Arc::make_mut(&mut result).proofs;
+        proofs.contracted = (!changed && self.proofs.contracted)
             || ((matches!(request, ReductionRequest::Contract(settings) if settings.unrestricted())
                 || matches!(request, ReductionRequest::Algebra(settings) if matches!(settings.contract, AlgebraContraction::Fully | AlgebraContraction::Dots)))
                 && status == ReductionStatus::Complete);
@@ -415,7 +691,7 @@ impl SymbolicTensor<PartialStructure> {
         if status == ReductionStatus::Complete {
             completed.push(policy);
         }
-        result.proofs.reduction = Some(ReductionRecord { completed, status });
+        proofs.reduction = Some(ReductionRecord { completed, status });
         #[cfg(feature = "reference-cases")]
         crate::reference_cases::timing::outcome(diagnostic_operation, status);
         Ok(result)
@@ -458,11 +734,8 @@ mod tests {
         let result = source.simplify_algebra(&settings).unwrap();
         assert_eq!(result.reduction_status(), ReductionStatus::Complete);
         assert!(Arc::ptr_eq(
-            result.reduction_observations(),
-            result
-                .simplify_algebra(&settings)
-                .unwrap()
-                .reduction_observations()
+            &result,
+            &result.simplify_algebra(&settings).unwrap()
         ));
     }
 
@@ -477,21 +750,20 @@ mod tests {
         let result = source
             .simplify_algebra(&AlgebraSettings::default())
             .unwrap();
-        assert_eq!(result.expression, p!(mink!(4, mode_mu)));
+        assert_eq!(result.resolved().unwrap().expression, p!(mink!(4, mode_mu)));
         INITIAL_SCANS.with(|count| count.set(0));
         assert!(Arc::ptr_eq(
-            result.reduction_observations(),
-            result
+            &result,
+            &result
                 .simplify_algebra(&AlgebraSettings::default())
                 .unwrap()
-                .reduction_observations()
         ));
         assert_eq!(INITIAL_SCANS.with(|count| count.get()), 0);
         let selected = AlgebraSettings {
             contract: AlgebraContraction::Selected(vec![reps.bis4.rep.into()]),
             ..Default::default()
         };
-        assert_eq!(source.simplify_algebra(&selected).unwrap(), source);
+        assert_eq!(source.simplify_algebra(&selected).unwrap().root(), source);
         let capped = source
             .simplify_algebra(&AlgebraSettings {
                 max_passes: 0,
@@ -499,13 +771,15 @@ mod tests {
             })
             .unwrap();
         assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
-        assert_eq!(capped, source);
+        assert_eq!(capped.root(), source);
         assert_eq!(
             capped
                 .simplify_algebra(&AlgebraSettings::default())
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .expression,
-            result.expression
+            result.resolved().unwrap().expression
         );
     }
 
@@ -547,7 +821,7 @@ mod tests {
                     .unwrap();
                 assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
                 assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
-                assert_eq!(result.structure, source.structure);
+                assert_eq!(result.root().structure, source.structure);
                 let repeated = result
                     .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
@@ -557,13 +831,10 @@ mod tests {
                     .unwrap();
                 assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
                 assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
-                assert!(Arc::ptr_eq(
-                    result.reduction_observations(),
-                    repeated.reduction_observations()
-                ));
+                assert!(Arc::ptr_eq(&result, &repeated));
 
                 // Independent validation is a test oracle, outside the algebra.
-                let resolved = result;
+                let resolved = result.resolved().unwrap();
                 SymbolicTensor::validate_interface(&resolved.expression, &source.structure)
                     .unwrap();
                 SymbolicTensor::validate_atom(&resolved.expression).unwrap();
@@ -615,7 +886,7 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap();
-                assert_eq!(collected.structure, source.structure);
+                assert_eq!(collected.root().structure, source.structure);
                 let result = source
                     .simplify_algebra(&AlgebraSettings {
                         gamma: Some(GammaSimplifySettings::default()),
@@ -623,10 +894,29 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap();
-                assert_eq!(result.structure, source.structure);
+                assert_eq!(result.root().structure, source.structure);
                 assert_eq!(
-                    result.expression,
+                    result.resolved().unwrap().expression,
                     &dimension * &scalar_dot * g!(&left, &right)
+                );
+                let handle = source.alias_handle().unwrap();
+                let aliased = Arc::new(
+                    handle
+                        .clone()
+                        .with_aliases([(handle, source.clone())])
+                        .unwrap(),
+                );
+                let alias_result = aliased
+                    .simplify_algebra(&AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                assert_eq!(alias_result.root().structure, source.structure);
+                assert_eq!(
+                    alias_result.resolved().unwrap().expression,
+                    result.resolved().unwrap().expression
                 );
                 let repeated = collected
                     .simplify_algebra(&AlgebraSettings {
@@ -635,7 +925,10 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap();
-                assert_eq!(repeated.expression, result.expression);
+                assert_eq!(
+                    repeated.resolved().unwrap().expression,
+                    result.resolved().unwrap().expression
+                );
             }
         }
     }
@@ -650,9 +943,9 @@ mod tests {
         )
         .unwrap();
         let settings = AlgebraSettings::hep();
-        assert_eq!(source.simplify_algebra(&settings).unwrap(), source);
+        assert_eq!(source.simplify_algebra(&settings).unwrap().root(), source);
         let zero = source.with_rewritten_expression(Atom::Zero).unwrap();
-        assert_eq!(zero.simplify_algebra(&settings).unwrap(), zero);
+        assert_eq!(zero.simplify_algebra(&settings).unwrap().root(), zero);
     }
 
     #[test]
@@ -668,31 +961,32 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(disabled, source);
+        assert_eq!(disabled.root(), source);
         assert_eq!(disabled.reduction_status(), ReductionStatus::Complete);
         let mut settings = ContractSettings::default();
-        let result = source.contract(settings).unwrap();
-        assert_eq!(result.expression, p!(mink!(4, mu)));
-        assert_eq!(result.structure, source.structure);
+        let result = Arc::new(source.contract(settings).unwrap());
+        assert_eq!(result.root().expression, p!(mink!(4, mu)));
+        assert_eq!(result.root().structure, source.structure);
         let rerun = result.contract(settings).unwrap();
-        assert!(Arc::ptr_eq(
-            result.reduction_observations(),
-            rerun.reduction_observations()
-        ));
-        assert_eq!(rerun, result);
+        assert!(Arc::ptr_eq(&result, &rerun));
+        assert_eq!(rerun.root(), result.root());
+        assert_eq!(
+            rerun.expression.get_aliases(),
+            result.expression.get_aliases()
+        );
         settings.max_passes = 1;
         let partial = source.contract(settings).unwrap();
         assert_eq!(partial.reduction_status(), ReductionStatus::Complete);
-        assert_eq!(partial.expression, p!(mink!(4, mu)));
-        assert_eq!(partial.structure, source.structure);
+        assert_eq!(partial.root().expression, p!(mink!(4, mu)));
+        assert_eq!(partial.root().structure, source.structure);
         settings.max_passes = 0;
         let untouched = source.contract(settings).unwrap();
         assert_eq!(untouched.reduction_status(), ReductionStatus::Capped);
-        assert_eq!(untouched, source);
+        assert_eq!(untouched.root(), source);
     }
 
     #[test]
-    fn shared_pipeline_preserves_trace_port_changes() {
+    fn shared_pipeline_registers_trace_alias_port_changes() {
         use crate::{gamma, test_support::test_initialize};
         use spenso::trace;
 
@@ -712,8 +1006,13 @@ mod tests {
             .unwrap();
         let metric = g!(&slots[0], &slots[4]);
         let input =
-            SymbolicTensor::<PartialStructure>::infer(&metric * &traced.expression).unwrap();
-        let source = input.clone();
+            SymbolicTensor::<PartialStructure>::infer(&metric * &traced.root().expression).unwrap();
+        let source = Arc::new(
+            input
+                .clone()
+                .with_aliases(traced.aliases().unwrap())
+                .unwrap(),
+        );
         let result = source
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
@@ -741,15 +1040,19 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(result.structure, input.structure);
-        assert_eq!(reference.structure, reference_input.structure);
+        assert_eq!(result.root().structure, input.structure);
+        assert_eq!(reference.root().structure, reference_input.structure);
         // The two syntactic inputs establish different logical port orders.
         // Each result retains its own order; compare their algebra by labels.
-        assert_eq!(result.expression.expand(), reference.expression.expand());
+        assert_eq!(
+            result.expanded().unwrap().expression,
+            reference.expanded().unwrap().expression
+        );
+        assert!(result.aliases().unwrap().len() > traced.aliases().unwrap().len());
     }
 
     #[test]
-    fn shared_pipeline_checks_callback_rank_loss_after_relabelling() {
+    fn shared_pipeline_checks_callback_rank_loss_inside_a_relabelled_alias() {
         use symbolica::atom::{AtomView, FunctionBuilder};
 
         crate::test_support::test_initialize();
@@ -757,7 +1060,7 @@ mod tests {
         let b = mink!(4, 93803);
         let target = b.clone();
         let head = spenso::tensor_symbol!(
-            "shared_pipeline_relabel_callback",
+            "shared_pipeline_alias_callback",
             norm = move |node, out| {
                 if let AtomView::Fun(function) = node
                     && function.iter().any(|argument| argument == target.as_view())
@@ -770,8 +1073,10 @@ mod tests {
             FunctionBuilder::new(head).add_arg(&a).finish(),
         )
         .unwrap();
-        let source =
-            SymbolicTensor::<PartialStructure>::infer(g!(&a, &b) * &body.expression).unwrap();
+        let handle = body.alias_handle().unwrap();
+        let root =
+            SymbolicTensor::<PartialStructure>::infer(g!(&a, &b) * &handle.expression).unwrap();
+        let source = Arc::new(root.with_aliases([(handle, body)]).unwrap());
         assert!(source.contract(ContractSettings::default()).is_err());
     }
     #[test]
@@ -795,19 +1100,19 @@ mod tests {
         };
         let result = source.simplify_algebra(&settings).unwrap();
         // The trace of one gamma matrix vanishes independently of its momentum.
-        assert_eq!(result.expression, Atom::num(3) * spectator);
+        assert_eq!(
+            result.resolved().unwrap().expression,
+            Atom::num(3) * spectator
+        );
         assert_eq!(result.reduction_status(), ReductionStatus::Complete);
         assert!(Arc::ptr_eq(
-            result.reduction_observations(),
-            result
-                .simplify_algebra(&settings)
-                .unwrap()
-                .reduction_observations()
+            &result,
+            &result.simplify_algebra(&settings).unwrap()
         ));
     }
 
     #[test]
-    fn shared_gamma_collection_combines_a_sum_with_an_adjacent_word() {
+    fn shared_gamma_collection_combines_an_owned_alias_with_an_adjacent_word() {
         use crate::gamma;
         use spenso::{chain, q};
 
@@ -822,12 +1127,13 @@ mod tests {
             chain!(&left, &right, gamma!(&p)) + chain!(&left, &right, gamma!(&q)),
         )
         .unwrap();
-        let spectator = Atom::var(symbol!("shared_gamma_sum_spectator")) + Atom::one();
+        let handle = body.alias_handle().unwrap();
+        let spectator = Atom::var(symbol!("shared_gamma_alias_spectator")) + Atom::one();
         let root = SymbolicTensor::<PartialStructure>::infer(
-            &spectator * &body.expression * chain!(&right, &left, gamma!(&r)),
+            &spectator * &handle.expression * chain!(&right, &left, gamma!(&r)),
         )
         .unwrap();
-        let source = root.clone();
+        let source = Arc::new(root.clone().with_aliases([(handle, body)]).unwrap());
         let collected = source
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings {
@@ -837,7 +1143,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(collected.structure, root.structure);
+        assert_eq!(collected.root().structure, root.structure);
         let result = collected
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
@@ -846,11 +1152,11 @@ mod tests {
             })
             .unwrap();
         let expected = Atom::num(4) * spectator * (g!(&p, &r) + g!(&q, &r));
-        assert_eq!(result.expression.expand(), expected.expand());
+        assert_eq!(result.expanded().unwrap().expression, expected.expand());
     }
 
     #[test]
-    fn shared_color_collection_combines_a_sum_with_an_adjacent_generator() {
+    fn shared_color_collection_combines_an_owned_alias_with_an_adjacent_generator() {
         use crate::color_t;
 
         crate::test_support::test_initialize();
@@ -859,11 +1165,12 @@ mod tests {
         let b_ik = color_t!([8, 94002], [3, 94003], [3, 94005]);
         let a_kj = color_t!([8, 94001], [3, 94005], [3, 94004]);
         let body = SymbolicTensor::<PartialStructure>::infer(a_ik * b_kj + b_ik * a_kj).unwrap();
+        let handle = body.alias_handle().unwrap();
         let root = SymbolicTensor::<PartialStructure>::infer(
-            &body.expression * color_t!([8, 94002], [3, 94004], [3, 94006]),
+            &handle.expression * color_t!([8, 94002], [3, 94004], [3, 94006]),
         )
         .unwrap();
-        let source = root.clone();
+        let source = Arc::new(root.clone().with_aliases([(handle, body)]).unwrap());
         let result = source
             .simplify_algebra(&AlgebraSettings {
                 color: Some(ColorSimplifySettings {
@@ -873,15 +1180,18 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(result.structure, root.structure);
+        assert_eq!(result.root().structure, root.structure);
         // Sum_b {T^a,T^b} T^b = (2 C_F - C_A/2) T^a = 7 T^a / 6.
         let expected = Atom::num(7) * color_t!([8, 94001], [3, 94003], [3, 94006]) / Atom::num(6);
         // The color output may retain its one-generator chain. Compare in the
         // existing explicit tensor representation, preserving the exact coefficient.
-        assert_eq!(result.expression.expand().undo_single_length(), expected);
+        assert_eq!(
+            result.expanded().unwrap().expression.undo_single_length(),
+            expected
+        );
     }
     #[test]
-    fn massive_chiral_current_product_preserves_its_interface() {
+    fn massive_chiral_current_product_registers_all_literal_aliases() {
         use spenso::structure::partial::PartialStructureExt;
 
         crate::test_support::test_initialize();
@@ -954,10 +1264,10 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap_or_else(|error| panic!("{name}: {error}"));
-            assert_eq!(result.structure, source.structure, "{name}");
+            assert_eq!(result.root().structure, source.structure, "{name}");
             assert!(
-                result.ensure_validated().is_ok(),
-                "{name}: the result remains validated"
+                result.resolved().is_ok(),
+                "{name}: all literal aliases must resolve"
             );
         }
     }

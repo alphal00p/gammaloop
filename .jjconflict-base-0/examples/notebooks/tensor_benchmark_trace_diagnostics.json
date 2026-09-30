@@ -28,7 +28,7 @@
     "fixed_warmups": 1,
     "samples": 3,
     "input": "prepared free12/axial12 source from the matched benchmark frontends",
-    "historical_gamma_stage": "source.simplify_gamma or shared simplify with independent metrics/epsilon switches; aliased results from the preserved tensor-aliases-preserved implementation",
+    "current_gamma_stage": "source.simplify_gamma or shared simplify with independent metrics/epsilon switches; all return AliasedTensorExpression",
     "m1_gamma_stage": "source.simplify_gamma(expand_traces=True), including direct expanded trace emission",
     "exclusions": "Input construction, alias-count inspection, output-equality assertion, and receipt hashing excluded from measured phase clocks. Stage medians are not summed as continuous end-to-end measurements.",
     "variants": {

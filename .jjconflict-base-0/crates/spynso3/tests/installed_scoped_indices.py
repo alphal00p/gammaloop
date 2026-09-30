@@ -19,8 +19,10 @@ class ScopedIndicesTests(unittest.TestCase):
         scoped = left.wrap_indices(lhs, dummies_only=True)
         self.assertEqual(scoped.structure.slots, left.structure.slots)
         self.assertEqual(scoped.wrap_indices(lhs, dummies_only=True), scoped)
-        result = (scoped * right.wrap_indices(rhs, dummies_only=True)).contract(
-            rank_one=False
+        result = (
+            (scoped * right.wrap_indices(rhs, dummies_only=True))
+            .contract(rank_one=False)
+            .to_expression()
         )
         self.assertEqual(result, p(rep("b")) * q(rep("c")))
         for dummies_only in (False, True):

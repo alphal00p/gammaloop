@@ -39,6 +39,7 @@ for matrix, values in zip(matrices, numeric_matrices, strict=True):
         matrix.dirac_adjoint()
         .simplify_algebra(gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
     )
     network = adjoint.to_network()
     network.execute()
@@ -95,6 +96,7 @@ for pdg, mass, weak_isospin, electric_charge in (
         )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
+        .to_expression()
     )
     for real in (charge, sw, cw, mz, mass):
         adjoint = adjoint.replace(conjugate(real), real)
@@ -144,6 +146,7 @@ for pdg, mass, weak_isospin, electric_charge in (
         )
         .simplify_algebra(gamma=True, epsilon=True, color=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar

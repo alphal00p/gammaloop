@@ -26,13 +26,14 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView},
+    atom::{AliasedAtom, Atom, AtomCore, AtomOrView, AtomView},
     domains::rational::Rational,
     id::ConditionResult,
 };
 
 use super::{
     SymbolicNet, SymbolicTensor,
+    aliases::{AliasInterfaces, Definition},
     inference::{InterfaceInference, LeafInference, TensorInferenceError},
     simplification::observation::DomainObservations,
 };
@@ -52,14 +53,22 @@ type CoefficientVisitor<'a> = dyn FnMut(
             SymbolicTensor<PartialStructure>,
         )],
         &[SymbolicTensor<PartialStructure>],
+        &[Definition],
     ) -> Result<()>
     + 'a;
 
 // Per-call intake state only. Graphs and arithmetic remain owned by Network and
-// TermTape; the call retains its selected leaves and interfaces.
-struct CollectionInput<Select> {
+// TermTape; cached templates retain borrowed source storage until this call ends.
+struct CollectionInput<'a, Select> {
+    definitions: &'a [Definition],
     observations: Arc<super::simplification::observation::DomainObservations>,
+    templates: HashMap<usize, Arc<SymbolicNet<AbstractIndex, AtomOrView<'a>>>>,
+    template_interfaces: HashMap<usize, PartialStructure>,
+    template_owned: HashMap<usize, bool>,
+    origins: HashMap<Atom, usize>,
+    registry: HashMap<Atom, Definition>,
     state: ParseState<AbstractIndex>,
+    template_intrinsic: std::cell::RefCell<HashMap<usize, bool>>,
     select: Select,
     values: Vec<(SymbolicTensor<PartialStructure>, bool)>,
     positions: HashMap<(Atom, Vec<PartialSlot>, bool), usize>,
@@ -71,11 +80,32 @@ type CollectionAnalysis = (
     HashMap<NodeIndex, PartialStructure>,
 );
 
-impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
-    fn new(source: &SymbolicTensor<PartialStructure>, select: Select) -> Self {
+impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
+    fn new(
+        source: &SymbolicTensor<PartialStructure>,
+        definitions: &'a [Definition],
+        select: Select,
+    ) -> Self {
         Self {
+            definitions,
             observations: Arc::clone(source.reduction_observations()),
-            state: SymbolicTensor::reserved_dummies(std::iter::once(source)),
+            templates: HashMap::new(),
+            template_interfaces: HashMap::new(),
+            template_owned: HashMap::new(),
+            origins: definitions
+                .iter()
+                .enumerate()
+                .map(|(i, pair)| (pair.0.expression.clone(), i))
+                .collect(),
+            registry: definitions
+                .iter()
+                .cloned()
+                .map(|pair| (pair.0.expression.clone(), pair))
+                .collect(),
+            state: SymbolicTensor::reserved_dummies(
+                std::iter::once(source).chain(definitions.iter().flat_map(|(a, b)| [a, b])),
+            ),
+            template_intrinsic: Default::default(),
             select,
             values: Vec::new(),
             positions: HashMap::new(),
@@ -85,10 +115,20 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     fn parse(
         &self,
         source: &SymbolicTensor<PartialStructure>,
-    ) -> Result<Arc<SymbolicNet<AbstractIndex>>> {
+    ) -> Result<SymbolicNet<AbstractIndex, AtomOrView<'a>>> {
         #[cfg(test)]
         SHALLOW_VIEWS.with(|count| count.set(count.get() + 1));
-        source.shallow_graph()
+        let graph = source.shallow_graph()?;
+        Ok(graph.map_ref(
+            |scalar| AtomOrView::Atom(scalar.clone()),
+            |tensor| SymbolicTensor {
+                expression: AtomOrView::Atom(tensor.expression.clone()),
+                structure: tensor.structure.clone(),
+                is_metric: tensor.is_metric,
+                is_composite: tensor.is_composite,
+                proofs: tensor.proofs.clone(),
+            },
+        ))
     }
 
     fn open<'src>(
@@ -113,36 +153,90 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         .map_err(|error| TensorInferenceError::invalid(error.to_string()))
     }
 
-    fn selected(&mut self, value: AtomView<'_>) -> bool {
-        if (self.select)(value) {
-            return true;
+    fn template(
+        &mut self,
+        index: usize,
+    ) -> Result<Arc<SymbolicNet<AbstractIndex, AtomOrView<'a>>>> {
+        if let Some(graph) = self.templates.get(&index) {
+            return Ok(Arc::clone(graph));
         }
-        if matches!(
-            value,
-            AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
-        ) {
-            if let Some(region) = self.observations.region(value) {
-                return region
-                    .leaves
-                    .iter()
-                    .any(|leaf| (self.select)(leaf.as_view()));
+        let graph = Arc::new(self.parse(&self.definitions[index].1)?);
+        self.templates.insert(index, Arc::clone(&graph));
+        Ok(graph)
+    }
+
+    fn definition_is_intrinsic(&self, index: usize, depth: usize) -> bool {
+        if let Some(&intrinsic) = self.template_intrinsic.borrow().get(&index) {
+            return intrinsic;
+        }
+        if depth >= TermTape::<usize>::MAX_EXPANSION_DEPTH {
+            return false;
+        }
+        let body = &self.definitions[index].1;
+        let intrinsic = body.normalization_is_intrinsic()
+            && body
+                .reduction_observations()
+                .literals(body.expression.as_view())
+                .iter()
+                .filter_map(|literal| self.origins.get(literal))
+                .all(|&dependency| self.definition_is_intrinsic(dependency, depth + 1));
+        self.template_intrinsic
+            .borrow_mut()
+            .insert(index, intrinsic);
+        intrinsic
+    }
+
+    fn selected(&mut self, value: AtomView<'_>, depth: usize) -> Result<bool> {
+        let Some(&index) = self.origins.get(value.get_data()) else {
+            if (self.select)(value) {
+                return Ok(true);
             }
-            // Arbitrary user selection and newly exposed replacement regions
-            // have no reusable family observation. Inspect only this leaf.
-            let mut selected = false;
-            value.visitor(&mut |node| {
-                if selected {
-                    return false;
+            if matches!(
+                value,
+                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+            ) {
+                if let Some(region) = self.observations.region(value) {
+                    return Ok(region
+                        .leaves
+                        .iter()
+                        .any(|leaf| (self.select)(leaf.as_view())));
                 }
-                if matches!(node, AtomView::Fun(_)) {
-                    selected = (self.select)(node);
-                    return false;
-                }
-                true
-            });
-            return selected;
+                // Arbitrary user selection and newly exposed replacement regions
+                // have no reusable family observation. Inspect only this leaf.
+                let mut selected = false;
+                value.visitor(&mut |node| {
+                    if selected {
+                        return false;
+                    }
+                    if matches!(node, AtomView::Fun(_)) {
+                        selected = (self.select)(node);
+                        return false;
+                    }
+                    true
+                });
+                return Ok(selected);
+            }
+            return Ok(false);
+        };
+        // Only this definition and its dependencies constrain exposure. An
+        // unrelated callback elsewhere in the registry cannot veto local work.
+        if !self.definition_is_intrinsic(index, depth) {
+            return Ok(false);
         }
-        false
+        if let Some(&owned) = self.template_owned.get(&index) {
+            return Ok(owned);
+        }
+        if depth >= TermTape::<usize>::MAX_EXPANSION_DEPTH {
+            return Ok(false);
+        }
+        let network = self.template(index)?;
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let (owned, interfaces) = self.analyze(&network, &tree, root, depth + 1)?;
+        self.template_owned.insert(index, owned[&root]);
+        self.template_interfaces
+            .insert(index, interfaces[&root].clone());
+        Ok(owned[&root])
     }
 
     fn emit<E: AtomCore>(
@@ -178,6 +272,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         network: &SymbolicNet<AbstractIndex, E>,
         tree: &CollectionTree,
         root: NodeIndex,
+        depth: usize,
     ) -> Result<CollectionAnalysis> {
         let traversal = tree
             .iter_preorder_tree_nodes(&network.graph.graph, root)
@@ -203,12 +298,12 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         }),
                     );
                     (
-                        self.selected(tensor.expression.as_atom_view()),
+                        self.selected(tensor.expression.as_atom_view(), depth)?,
                         InterfaceInference::merge_explicit_interface_sequence(&[interface])?,
                     )
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => (
-                    self.selected(network.store.get_scalar_ref(*index).as_atom_view()),
+                    self.selected(network.store.get_scalar_ref(*index).as_atom_view(), depth)?,
                     PartialStructure::from_logical_slots([]),
                 ),
                 NetworkNode::Op(operation) => {
@@ -276,11 +371,17 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             .all(|node| match &network.graph.graph[node] {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
                     let value = network.store.tensors[*index].expression.as_atom_view();
-                    InterfaceInference::normalization_is_intrinsic(value)
+                    self.origins
+                        .get(value.get_data())
+                        .is_none_or(|&index| self.definition_is_intrinsic(index, 0))
+                        && InterfaceInference::normalization_is_intrinsic(value)
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
                     let value = network.store.get_scalar_ref(*index).as_atom_view();
-                    InterfaceInference::normalization_is_intrinsic(value)
+                    self.origins
+                        .get(value.get_data())
+                        .is_none_or(|&index| self.definition_is_intrinsic(index, 0))
+                        && InterfaceInference::normalization_is_intrinsic(value)
                 }
                 NetworkNode::Op(NetworkOp::Function(symbol)) => {
                     InterfaceInference::intrinsic_normalization_head(*symbol)
@@ -295,122 +396,74 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         network: &SymbolicNet<AbstractIndex, E>,
         tree: &CollectionTree,
         node: NodeIndex,
+        interface: &PartialStructure,
     ) -> Result<Option<SymbolicNet<AbstractIndex, Atom>>> {
         // Prove this graph scope intrinsic before emitting a temporary body:
         // function reconstruction can itself invoke a registered normalizer.
         if !self.scope_is_intrinsic(network, tree, node) {
             return Ok(None);
         }
-        use linnet::half_edge::involution::Hedge;
-        use spenso::network::{TensorNetworkError, graph::NetworkEdge};
-        if network.graph.has_bound_ports() {
+        let logical = PartialStructure::from_logical_slots(
+            interface.logical_slots().into_iter().map(|slot| {
+                let index = match slot.aind {
+                    PartialIndex::Explicit(index) => {
+                        InterfaceInference::partial_index(index, LeafInference::Observe)
+                    }
+                    index => index,
+                };
+                slot.rep().slot(index)
+            }),
+        );
+        let body = SymbolicTensor::from_validated_parts(self.emit(network, tree, node)?, logical);
+        if !InterfaceInference::normalization_is_intrinsic(body.expression.as_atom_view()) {
             return Ok(None);
         }
+        let handle = body.alias_handle()?;
+        let replacements = interface
+            .logical_slots()
+            .into_iter()
+            .enumerate()
+            .map(|(position, slot)| {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!("parsed graph boundary is encoded")
+                };
+                (
+                    position,
+                    slot.rep().slot::<AbstractIndex, _>(index).to_atom(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let literal =
+            super::composition::rewrite_interface_ports(&handle, &replacements, &mut |_, _| {})
+                .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+        // This is graph scratch: encoded occurrence owners are not its public
+        // AUTO interface. The collection product publishes the declared layout.
+        let current = SymbolicTensor::from_normalized_parts(literal, interface.clone());
+        let definition = (handle, body);
         let mut subset: SuBitGraph = network.graph.graph.empty_subgraph();
         for child in tree.iter_preorder_tree_nodes(&network.graph.graph, node) {
             for hedge in network.graph.graph.iter_crown(child) {
                 subset.add(hedge);
             }
         }
-        let mut graph = network.map_ref(Clone::clone, Clone::clone);
-        graph.graph = graph.graph.extract(&subset);
-        let mut boundary = Vec::new();
-        for index in 0..graph.graph.graph.n_hedges() {
-            let hedge = Hedge(index);
-            if let NetworkEdge::Slot(slot) = graph.graph.graph[[&hedge]] {
-                self.state.reserve_index(slot.aind());
-                if graph.graph.graph.inv(hedge) == hedge {
-                    boundary.push((hedge, slot));
-                }
+        let mut template = network.map_ref(Clone::clone, Clone::clone);
+        template.graph = template.graph.extract(&subset);
+        let mut observations = Vec::new();
+        let graph = SymbolicTensor::<AliasInterfaces, AliasedAtom>::expose_literal_graph(
+            &template,
+            &definition,
+            interface,
+            &current,
+            &self.state,
+            &mut self.registry,
+            &mut |old, new| observations.push((old.clone(), new.clone())),
+        )?;
+        for (old, new) in observations {
+            if let Some(&origin) = self.origins.get(&old) {
+                self.origins.insert(new, origin);
             }
         }
-        let mut visited = graph
-            .graph
-            .relabel_slot_components(&boundary)
-            .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
-        for index in 0..graph.graph.graph.n_hedges() {
-            let hedge = Hedge(index);
-            if !visited.contains(&hedge)
-                && let NetworkEdge::Slot(slot) = graph.graph.graph[[&hedge]]
-            {
-                visited.extend(
-                    graph
-                        .graph
-                        .relabel_slot_components(&[(
-                            hedge,
-                            slot.rep().slot(self.state.fresh_index()),
-                        )])
-                        .map_err(|error| TensorInferenceError::invalid(error.to_string()))?,
-                );
-            }
-        }
-        let mut unavailable = false;
-        let mapped = graph.map_occurrences(
-            |scalar| Ok(scalar.as_atom_view().to_owned()),
-            |tensor, ports, logical_order| {
-                let fail = |message: &str| TensorNetworkError::Other(eyre::eyre!("{message}"));
-                let Some(logical_order) = logical_order else {
-                    return Err(fail("parsed occurrence has no logical layout"));
-                };
-                if ports.iter().any(|(_, _, bound)| bound.is_some()) {
-                    unavailable = true;
-                    return Err(fail("scope exposure requires an unbound occurrence"));
-                }
-                let source = tensor.structure.external_structure();
-                let source_interface =
-                    PartialStructure::from_logical_slots(logical_order.iter().map(|&position| {
-                        let slot = source[position];
-                        let index = match slot.aind() {
-                            AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
-                            index => PartialIndex::Explicit(index),
-                        };
-                        slot.rep().slot(index)
-                    }));
-                let targets = ports.iter().map(|(_, slot, _)| *slot).collect::<Vec<_>>();
-                let replacements = logical_order
-                    .iter()
-                    .enumerate()
-                    .map(|(logical, &storage)| (logical, targets[storage].to_atom()))
-                    .collect::<HashMap<_, _>>();
-                let source_tensor = SymbolicTensor::from_normalized_parts(
-                    tensor.expression.as_atom_view().to_owned(),
-                    source_interface,
-                );
-                let expression = super::composition::rewrite_interface_ports(
-                    &source_tensor,
-                    &replacements,
-                    Some(&self.state),
-                )
-                .map_err(|error| fail(&error.to_string()))?;
-                let expected =
-                    PartialStructure::from_logical_slots(logical_order.iter().map(|&position| {
-                        let slot = targets[position];
-                        slot.rep().slot(PartialIndex::Explicit(slot.aind()))
-                    }));
-                if SymbolicTensor::validate_observed_interface(
-                    &expression,
-                    &expected,
-                    LeafInference::ObserveStorage,
-                )
-                .is_err()
-                {
-                    unavailable = true;
-                    return Err(fail("normalized occurrence changed its interface"));
-                }
-                Ok(SymbolicTensor {
-                    expression,
-                    structure: OrderedStructure::new(targets).into_canonical(),
-                    is_metric: tensor.is_metric,
-                    is_composite: tensor.is_composite,
-                    proofs: Default::default(),
-                })
-            },
-        );
-        match mapped {
-            Ok(mapped) => Ok(Some(mapped)),
-            Err(_) if unavailable => Ok(None),
-            Err(error) => Err(TensorInferenceError::invalid(error.to_string())),
-        }
+        Ok(graph)
     }
 
     fn compile<E: AtomCore + Clone + From<E::Output>>(
@@ -419,12 +472,33 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         network: &SymbolicNet<AbstractIndex, E>,
         tree: &CollectionTree,
         root: NodeIndex,
+        expose: bool,
         depth: usize,
     ) -> Result<Option<(usize, (usize, usize))>> {
         if depth >= TermTape::<usize>::MAX_EXPANSION_DEPTH {
             return Ok(None);
         }
-        let (owned, interfaces) = self.analyze(network, tree, root)?;
+        let (owned, interfaces) = self.analyze(network, tree, root, depth)?;
+        // Exposure is contextual: a lone selected literal remains opaque and
+        // stable. Adjacent selected factors can inspect its owned body; foreign
+        // definitions never enter the selected tape.
+        let mut exposure = HashMap::new();
+        let mut pending = vec![(root, expose)];
+        while let Some((node, inherited)) = pending.pop() {
+            let children = tree
+                .iter_children(node, &network.graph.graph)
+                .collect::<Vec<_>>();
+            let adjacent = inherited
+                || match network.graph.graph[node] {
+                    NetworkNode::Op(NetworkOp::Product) => {
+                        children.iter().filter(|child| owned[child]).count() > 1
+                    }
+                    NetworkNode::Op(NetworkOp::Power(power)) => power > 1 && owned[&node],
+                    _ => false,
+                };
+            exposure.insert(node, adjacent);
+            pending.extend(children.into_iter().map(|child| (child, adjacent)));
+        }
         let mut failure = None;
         let mut refused = false;
         let compiled = tape.compile_graph(&network.graph, tree, root, &mut |tape, node, value| {
@@ -484,14 +558,14 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                             let opened = self.open(value.as_view())?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                             let root = opened.graph.graph.node_id(opened.graph.head());
-                            return self.compile(tape, &opened, &tree, root, depth + 1)
+                            return self.compile(tape, &opened, &tree, root, exposure[&node], depth + 1)
                                 .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                         }
                     }
                     let mut copies = Vec::new();
                     for _ in 0..power {
                         let Some(graph) =
-                            self.expose_scope(network, tree, base)?
+                            self.expose_scope(network, tree, base, &interfaces[&base])?
                         else {
                             refused = true;
                             return Ok(None);
@@ -499,7 +573,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                         let root = graph.graph.graph.node_id(graph.graph.head());
                         let Some(copy) =
-                            self.compile(tape, &graph, &tree, root, depth + 2)?
+                            self.compile(tape, &graph, &tree, root, true, depth + 2)?
                         else {
                             refused = true;
                             return Ok(None);
@@ -523,12 +597,49 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                     let opened_root = opened.graph.graph.node_id(opened.graph.head());
                     if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
-                        return self.compile(tape, &opened, &opened_tree, opened_root, depth + 1)
+                        return self.compile(tape, &opened, &opened_tree, opened_root, exposure[&node], depth + 1)
                             .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                     }
                 }
                 let value =
                     SymbolicTensor::from_normalized_parts(expression, interfaces[&node].clone());
+                if owned[&node]
+                    && exposure[&node]
+                    && let Some(&index) = self.origins.get(&value.expression)
+                    && self.definition_is_intrinsic(index, depth)
+                {
+                    let template = self.template(index)?;
+                    let definition = &self.definitions[index];
+                    let encoded = self.template_interfaces[&index].clone();
+                    let mut observations = Vec::new();
+                    let graph =
+                        SymbolicTensor::<AliasInterfaces, AliasedAtom>::expose_literal_graph(
+                            &template,
+                            definition,
+                            &encoded,
+                            &value,
+                            &self.state,
+                            &mut self.registry,
+                            &mut |old, new| observations.push((old.clone(), new.clone())),
+                        )?;
+                    for (old, new) in observations {
+                        if let Some(&origin) = self.origins.get(&old) {
+                            self.origins.insert(new, origin);
+                        }
+                    }
+                    if let Some(graph) = graph {
+                        let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
+                        let root = graph.graph.graph.node_id(graph.graph.head());
+                        if let Some((node, size)) =
+                            self.compile(tape, &graph, &tree, root, true, depth + 1)?
+                        {
+                            return Ok(Some(TermLeaf::Reference(node, size)));
+                        }
+                        // A refused tape must be discarded by the caller.
+                        refused = true;
+                        return Ok(None);
+                    }
+                }
                 Ok(Some(self.leaf(value, owned[&node])))
             })();
             match result {
@@ -610,7 +721,7 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<ConditionResult> {
         let mut proof = ConditionResult::Inconclusive;
         self.collect_with_map(
-            Some(&mut |states, spectators| {
+            Some(&mut |states, spectators, registry| {
                 let spectator = Self::collection_product(spectators)?;
                 proof = ConditionResult::True;
                 for (selected, coefficient) in states {
@@ -618,7 +729,9 @@ impl SymbolicTensor<PartialStructure> {
                         continue;
                     }
                     let coefficient =
-                        Self::collection_product(&[coefficient.clone(), spectator.clone()])?;
+                        Self::collection_product(&[coefficient.clone(), spectator.clone()])?
+                            .with_aliases(registry.iter().cloned())?
+                            .resolved()?;
                     // Symbolica's zero-iteration check keeps unresolved sums
                     // inconclusive. Only exact factor cancellation can prove zero.
                     match coefficient.expression.collect_factors().zero_test(0, 0.0) {
@@ -632,8 +745,9 @@ impl SymbolicTensor<PartialStructure> {
                 }
                 Ok(())
             }),
+            &[],
             |value| filter.matches(value),
-            |value, _| Ok(value),
+            |value, _, _| Ok((value, vec![])),
         )?;
         Ok(proof)
     }
@@ -641,7 +755,7 @@ impl SymbolicTensor<PartialStructure> {
     /// Return complete selected sectors and their factored coefficients.
     ///
     /// This is an explicit output of the same graph/tape collection used by
-    /// `collect`. Scalar
+    /// `collect`. Each pair resolves only its own alias dependencies; scalar
     /// spectators are retained in the coefficient without polynomial expansion.
     /// A refused or capped traversal returns an error, never partial rows.
     pub fn coefficient_list<const N: usize>(
@@ -650,62 +764,96 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<Vec<(Self, Self)>> {
         let mut rows = None;
         self.collect_with_map(
-            Some(&mut |states, spectators| {
+            Some(&mut |states, spectators, registry| {
                 let spectator = Self::collection_product(spectators)?;
                 rows = Some(
                     states
                         .iter()
                         .map(|(selected, coefficient)| {
                             Ok((
-                                selected.clone(),
+                                selected
+                                    .clone()
+                                    .with_aliases(registry.iter().cloned())?
+                                    .resolved()?,
                                 Self::collection_product(&[
                                     coefficient.clone(),
                                     spectator.clone(),
-                                ])?,
+                                ])?
+                                .with_aliases(registry.iter().cloned())?
+                                .resolved()?,
                             ))
                         })
                         .collect::<Result<Vec<_>>>()?,
                 );
                 Ok(())
             }),
+            &[],
             |value| filter.matches(value),
-            |value, _| Ok(value),
+            |value, _, _| Ok((value, vec![])),
         )?;
         rows.ok_or_else(|| {
             TensorInferenceError::invalid("selected coefficient collection did not complete")
         })
     }
 
-    /// Collect selected tensors with factored coefficients.
+    /// Keep selected tensor coefficients in the existing literal alias registry.
     /// Unselected scalar and tensor subtrees remain factored.
-    pub fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
-        self.collect_with_map(None, |value| filter.matches(value), |value, _| Ok(value))
+    pub fn collect<const N: usize>(
+        &self,
+        filter: TensorCollectFilter<N>,
+    ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
+        let mut handles = HashMap::<_, Self>::new();
+        let (root, definitions) = self.collect_with_map(
+            None,
+            &[],
+            |value| filter.matches(value),
+            |value, _registry, _complete| {
+                if value.expression.is_one() {
+                    return Ok((value, vec![]));
+                }
+                let key = (value.expression.clone(), value.structure.logical_slots());
+                if let Some(handle) = handles.get(&key) {
+                    return Ok((handle.clone(), vec![]));
+                }
+                let handle = value.alias_handle()?;
+                handles.insert(key, handle.clone());
+                Ok((handle.clone(), vec![(handle, value)]))
+            },
+        )?;
+        root.with_aliases(definitions)
     }
 
     /// Visit selected monomials through the graph's established factor order.
-    /// The final callback argument is true only when every selected factor has
-    /// entered this frontier. Refused and capped frontiers remain exact.
+    /// Domain callbacks receive no outer product of sums. Generated definitions
+    /// are returned to the alias owner, not resolved into the input expression.
+    /// Each callback receives every literal definition retained so far, including
+    /// earlier frontier results. It may use these handles without traversing the
+    /// new bodies; original definition traversal belongs to the outer scheduler.
+    /// The final argument is true only when every selected factor has entered
+    /// this frontier. It does not certify normalization callbacks or mark a
+    /// capped/refused prefix as complete.
     pub(crate) fn collect_with_map(
         &self,
         mut coefficients: Option<&mut CoefficientVisitor<'_>>,
+        definitions: &[Definition],
         mut select: impl FnMut(AtomView<'_>) -> bool,
-        mut step: impl FnMut(Self, bool) -> Result<Self>,
-    ) -> Result<Self> {
+        mut step: impl FnMut(Self, &[Definition], bool) -> Result<(Self, Vec<Definition>)>,
+    ) -> Result<(Self, Vec<Definition>)> {
         self.ensure_validated()?;
-        let mut input = CollectionInput::new(self, &mut select);
+        let mut input = CollectionInput::new(self, definitions, &mut select);
         let network = input.parse(self)?;
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
-        let (owned, interfaces) = input.analyze(&network, &tree, root)?;
+        let (owned, interfaces) = input.analyze(&network, &tree, root, 0)?;
         if !owned[&root] {
             if let Some(visit) = coefficients.as_mut() {
                 let one = Self::from_validated_parts(
                     Atom::one(),
                     PartialStructure::from_logical_slots([]),
                 );
-                visit(&[(one, self.clone())], &[])?;
+                visit(&[(one, self.clone())], &[], definitions)?;
             }
-            return Ok(self.clone());
+            return Ok((self.clone(), vec![]));
         }
         let nodes = if matches!(
             network.graph.graph[root],
@@ -763,22 +911,23 @@ impl SymbolicTensor<PartialStructure> {
                 // The parser can lower a tensor square into two product arms.
                 // Scope each already parsed factor's internal incidences before
                 // tape coalescence; free boundary names still join across arms.
-                let Some(graph) = input.expose_scope(&network, &tree, node)? else {
+                let Some(graph) = input.expose_scope(&network, &tree, node, &interfaces[&node])?
+                else {
                     let mut deferred = self.clone();
                     deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
-                    return Ok(deferred);
+                    return Ok((deferred, vec![]));
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let scoped_root = graph.graph.graph.node_id(graph.graph.head());
-                input.compile(&mut tape, &graph, &scoped_tree, scoped_root, 0)?
+                input.compile(&mut tape, &graph, &scoped_tree, scoped_root, expose, 0)?
             } else {
-                input.compile(&mut tape, &network, &tree, node, 0)?
+                input.compile(&mut tape, &network, &tree, node, expose, 0)?
             };
             let Some((compiled, _)) = compiled else {
                 // No domain callback has run; discard all refused tape scratch.
                 let mut deferred = self.clone();
                 deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
-                return Ok(deferred);
+                return Ok((deferred, vec![]));
             };
             factors.push((node, compiled));
         }
@@ -786,6 +935,39 @@ impl SymbolicTensor<PartialStructure> {
         let scalar = PartialStructure::from_logical_slots([]);
         let one = Self::from_validated_parts(Atom::one(), scalar);
         let mut states = vec![(one.clone(), one)];
+        let mut additional = input
+            .registry
+            .values()
+            .filter(|pair| {
+                !definitions
+                    .iter()
+                    .any(|old| old.0.expression == pair.0.expression)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        additional.sort_unstable_by(|a, b| {
+            AtomView::cmp(&a.0.expression.as_view(), &b.0.expression.as_view())
+        });
+        let mut available = definitions.to_vec();
+        available.extend(additional.iter().cloned());
+        let mut register = |pair: Definition,
+                            available: &mut Vec<Definition>,
+                            additional: &mut Vec<Definition>| {
+            if let Some(previous) = input.registry.get(&pair.0.expression) {
+                if previous != &pair {
+                    return Err(TensorInferenceError::invalid(
+                        "conflicting selected-domain alias definitions",
+                    ));
+                }
+            } else {
+                input
+                    .registry
+                    .insert(pair.0.expression.clone(), pair.clone());
+                available.push(pair.clone());
+                additional.push(pair);
+            }
+            Ok(())
+        };
         let mut generated = 0usize;
         let mut remaining = Vec::new();
         let mut frontier = super::simplification::ReductionStatus::Complete;
@@ -828,10 +1010,23 @@ impl SymbolicTensor<PartialStructure> {
                 })
                 .max()
                 .unwrap_or(0);
-            // Predict the next exact frontier before distributing it. Atom
-            // allocator overhead is not a hard heap bound.
+            let definition_bytes = additional
+                .iter()
+                .map(|(handle, body): &Definition| {
+                    handle
+                        .expression
+                        .as_atom_view()
+                        .get_byte_size()
+                        .saturating_add(body.expression.as_atom_view().get_byte_size())
+                })
+                .fold(0usize, usize::saturating_add);
+            // This predicts the next frontier and retained definitions. Atom
+            // allocator overhead is not a hard heap bound. Refusal retains the
+            // exact current frontier and unprocessed graph factors as aliases.
             if generated.saturating_add(count) > TermTape::<usize>::MAX_GENERATED_TERMS
-                || count.saturating_mul(state_bytes.saturating_add(row_bytes).saturating_mul(4))
+                || count
+                    .saturating_mul(state_bytes.saturating_add(row_bytes).saturating_mul(4))
+                    .saturating_add(definition_bytes)
                     > TermTape::<usize>::MAX_GENERATED_FACTOR_BYTES
             {
                 remaining.extend(factors[level..].iter().map(|(node, _)| *node));
@@ -869,13 +1064,14 @@ impl SymbolicTensor<PartialStructure> {
                     }
                     let monomial = Self::collection_product(&selected_factors)?;
                     monomial.observe_replacement(self);
-                    let mapped = if frontier == super::simplification::ReductionStatus::Capped {
-                        // Finish retaining the already distributed row frontier,
-                        // but do not invoke another kernel after its budget ended.
-                        monomial.clone()
-                    } else {
-                        step(monomial.clone(), level + 1 == factors.len())?
-                    };
+                    let (mapped, emitted) =
+                        if frontier == super::simplification::ReductionStatus::Capped {
+                            // Finish retaining the already distributed row frontier,
+                            // but do not invoke another kernel after its budget ended.
+                            (monomial.clone(), Vec::new())
+                        } else {
+                            step(monomial.clone(), &available, level + 1 == factors.len())?
+                        };
                     frontier = frontier.max(mapped.proofs.frontier);
                     // Internal domain owners publish certified typed results. Only
                     // unchecked callbacks need to have their payload observed again.
@@ -884,13 +1080,24 @@ impl SymbolicTensor<PartialStructure> {
                             "selected domain changes its established logical interface",
                         ));
                     }
-                    let mapped = if mapped.proofs.validated.get() == Some(&true) {
+                    let mut mapped = if mapped.proofs.validated.get() == Some(&true) {
                         mapped
                     } else if monomial.structure.open_positions().is_empty() {
                         monomial.with_checked_expression(mapped.expression)?
                     } else {
                         monomial.with_rewritten_expression(mapped.expression)?
                     };
+                    for pair in emitted {
+                        register(pair, &mut available, &mut additional)?;
+                    }
+                    // A domain can return a sum. Keep it in the same registry
+                    // so the next local step still receives a monomial; newly
+                    // generated definitions are visited on the next domain pass.
+                    if matches!(mapped.expression.as_atom_view(), AtomView::Add(_)) {
+                        let handle = mapped.alias_handle()?;
+                        register((handle.clone(), mapped), &mut available, &mut additional)?;
+                        mapped = handle;
+                    }
                     let coefficient = Self::collection_product(&coefficient_factors)?;
                     let facts = Self::collection_observations(std::slice::from_ref(&coefficient));
                     let coefficient = coefficient.with_identity_result(
@@ -925,7 +1132,14 @@ impl SymbolicTensor<PartialStructure> {
                         Atom::add_many(coefficients.iter().map(|value| &value.expression)),
                         Self::collection_observations(&coefficients),
                     )?;
-                    Ok((selected, body))
+                    if coefficients.len() == 1
+                        || !matches!(body.expression.as_atom_view(), AtomView::Add(_))
+                    {
+                        return Ok((selected, body));
+                    }
+                    let handle = body.alias_handle()?;
+                    register((handle.clone(), body), &mut available, &mut additional)?;
+                    Ok((selected, handle))
                 })
                 .collect::<Result<Vec<_>>>()?;
             if frontier == super::simplification::ReductionStatus::Capped {
@@ -933,12 +1147,13 @@ impl SymbolicTensor<PartialStructure> {
                 break;
             }
         }
-        // Only complete coefficient rows can certify coefficient queries.
+        // These are the complete coefficient rows. Definitions remain a
+        // dependency registry; a capped frontier cannot certify its coefficients.
         if remaining.is_empty()
             && frontier != super::simplification::ReductionStatus::Capped
             && let Some(visit) = coefficients.as_mut()
         {
-            visit(&states, &spectators)?;
+            visit(&states, &spectators, &available)?;
         }
         let terms = states
             .into_iter()
@@ -972,12 +1187,14 @@ impl SymbolicTensor<PartialStructure> {
                 })
                 .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
             // Convert the graph's occurrence-local ports before publishing a
-            // remaining factor with its declared logical layout.
+            // remaining factor as a public typed alias definition.
             let body = Self::collection_product(&[Self::from_normalized_parts(
                 expression,
                 interfaces[&node].clone(),
             )])?;
-            output.push(body.expression);
+            let handle = body.alias_handle()?;
+            output.push(handle.expression.clone());
+            register((handle, body), &mut available, &mut additional)?;
         }
         facts =
             facts
@@ -991,11 +1208,12 @@ impl SymbolicTensor<PartialStructure> {
         let expression = Atom::mul_many(output);
         let mut root = self.with_identity_result(expression, facts)?;
         root.proofs.frontier = frontier;
-        Ok(root)
+        Ok((root, additional))
     }
 
     // Addition and multiplication of certified scalar syntax cannot create an
-    // identity head or an index connection.
+    // identity head or an index connection. Dependencies stay in their own
+    // domains; exact surviving literals are queried lazily after normalization.
     fn collection_observations(values: &[Self]) -> Option<DomainObservations> {
         let mut needs_dots = false;
         for value in values {
@@ -1049,6 +1267,51 @@ impl SymbolicTensor<PartialStructure> {
     }
 }
 
+impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    pub fn collect<const N: usize>(
+        self: &Arc<Self>,
+        filter: TensorCollectFilter<N>,
+    ) -> Result<Arc<Self>> {
+        let definitions = self.aliases()?;
+        let registered = definitions
+            .iter()
+            .map(|pair| pair.0.expression.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let mut handles = definitions
+            .iter()
+            .map(|(handle, body)| {
+                (
+                    (body.expression.clone(), body.structure.logical_slots()),
+                    handle.clone(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let (root, additional) = self.root().collect_with_map(
+            None,
+            &definitions,
+            |value| filter.matches(value),
+            |value, _registry, _complete| {
+                if value.expression.is_one() || registered.contains(&value.expression) {
+                    return Ok((value, vec![]));
+                }
+                let key = (value.expression.clone(), value.structure.logical_slots());
+                if let Some(handle) = handles.get(&key) {
+                    return Ok((handle.clone(), vec![]));
+                }
+                let handle = value.alias_handle()?;
+                handles.insert(key, handle.clone());
+                Ok((handle.clone(), vec![(handle, value)]))
+            },
+        )?;
+        if root == self.root() && additional.is_empty() {
+            return Ok(Arc::clone(self));
+        }
+        Ok(Arc::new(
+            root.with_aliases(definitions.into_iter().chain(additional))?,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1061,15 +1324,25 @@ mod tests {
 
     fn contract_selected(
         value: SymbolicTensor<PartialStructure>,
+        registry: &[Definition],
         _complete: bool,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
-        let mut contracted = value.contract_parts(Default::default())?;
-        contracted.root.proofs.frontier = contracted.status;
-        Ok(contracted.root)
+    ) -> Result<(SymbolicTensor<PartialStructure>, Vec<Definition>)> {
+        let contracted = value.contract_parts(Default::default())?;
+        let mut registry = registry
+            .iter()
+            .cloned()
+            .map(|pair| (pair.0.expression.clone(), pair))
+            .collect();
+        SymbolicTensor::<AliasInterfaces, AliasedAtom>::retain_contracted_definitions(
+            &contracted,
+            &HashMap::new(),
+            &mut registry,
+        )?;
+        Ok((contracted.root, registry.into_values().collect()))
     }
 
     #[test]
-    fn collection_retains_scalar_spectators_and_is_stable() {
+    fn collection_retains_scalar_spectators_and_reuses_literal_result() {
         crate::test_support::test_initialize();
         let a = spenso::mink!(4, 97001);
         let t = spenso::tensor_symbol!("selected_collection_t");
@@ -1081,18 +1354,24 @@ mod tests {
             &spectator * (tensor(t, std::slice::from_ref(&a)) + tensor(u, &[a])),
         )
         .unwrap();
-        let result = source
-            .collect(TensorCollectFilter::<0>::TaggedTensors)
-            .unwrap();
-        assert_eq!(result.expression.expand(), source.expression.expand());
+        let result = Arc::new(
+            source
+                .collect(TensorCollectFilter::<0>::TaggedTensors)
+                .unwrap(),
+        );
+        assert_eq!(
+            result.resolved().unwrap().expression.expand(),
+            source.expression.expand()
+        );
+        assert!(!result.expression.get_aliases().is_empty());
         assert!(
-            matches!(result.expression.as_atom_view(), AtomView::Mul(product)
+            matches!(result.expression.get_root().as_atom_view(), AtomView::Mul(product)
             if product.iter().any(|factor| factor == spectator.as_atom_view()))
         );
         let repeated = result
             .collect(TensorCollectFilter::<0>::TaggedTensors)
             .unwrap();
-        assert_eq!(result, repeated);
+        assert!(Arc::ptr_eq(&result, &repeated));
     }
 
     #[test]
@@ -1110,14 +1389,15 @@ mod tests {
         )
         .unwrap();
         let mut seen = Vec::new();
-        let root = source
+        let (root, definitions) = source
             .collect_with_map(
                 None,
+                &[],
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == selected),
-                |value, _complete| {
+                |value, _registry, _complete| {
                     assert!(!matches!(value.expression.as_atom_view(), AtomView::Add(_)));
                     seen.push(value.expression.clone());
-                    Ok(value)
+                    Ok((value, vec![]))
                 },
             )
             .unwrap();
@@ -1126,7 +1406,15 @@ mod tests {
             seen.iter()
                 .all(|value| value == &tensor(selected, std::slice::from_ref(&a)))
         );
-        assert_eq!(root.expression.expand(), source.expression.expand());
+        assert_eq!(
+            root.with_aliases(definitions)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression
+                .expand(),
+            source.expression.expand()
+        );
     }
 
     #[test]
@@ -1142,11 +1430,12 @@ mod tests {
             source
                 .collect_with_map(
                     None,
+                    &[],
                     |_| true,
-                    |value, _complete| {
-                        Ok(SymbolicTensor::from_normalized_parts(
-                            Atom::one(),
-                            value.structure,
+                    |value, _registry, _complete| {
+                        Ok((
+                            SymbolicTensor::from_normalized_parts(Atom::one(), value.structure),
+                            vec![],
                         ))
                     }
                 )
@@ -1179,6 +1468,7 @@ mod tests {
             source
                 .collect_with_map(
                     None,
+                    &[],
                     |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                     contract_selected
                 )
@@ -1187,7 +1477,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_dual_metadata_keeps_nested_callback_payload_opaque() {
+    fn selected_dual_alias_keeps_nested_callback_templates_opaque() {
         use crate::representations::ColorAntiFundamental;
         use spenso::structure::{abstract_index::AIND_SYMBOLS, representation::RepName};
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1215,40 +1505,45 @@ mod tests {
             &[metadata, port],
         ))
         .unwrap();
+        let handle = body.alias_handle().unwrap();
         calls.store(0, Ordering::Relaxed);
         let mut steps = 0;
-        let root = body
+        let (root, additional) = handle
             .collect_with_map(
                 None,
+                &[(handle.clone(), body)],
                 |_| true,
-                |value, _complete| {
+                |value, _, _complete| {
                     steps += 1;
-                    Ok(value)
+                    Ok((value, vec![]))
                 },
             )
             .unwrap();
-        assert_eq!(root, body);
-        assert_eq!(steps, 1);
+        assert_eq!(root, handle);
+        assert!(additional.is_empty());
+        assert_eq!(steps, 0);
         assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
-    fn selected_body_is_visible_beside_another_selected_factor() {
+    fn selected_alias_body_is_visible_beside_another_selected_factor() {
         crate::test_support::test_initialize();
         let a = spenso::mink!(4, 97007);
         let b = spenso::mink!(4, 97008);
         let head = SPENSO_TAG.tensor_symbol("selected_collection_adjacent");
         let body = SymbolicTensor::infer(tensor(head, &[a])).unwrap();
+        let handle = body.alias_handle().unwrap();
         let right = tensor(head, &[b]);
-        let source = SymbolicTensor::infer(&body.expression * &right).unwrap();
+        let source = SymbolicTensor::infer(&handle.expression * &right).unwrap();
         let mut seen = Vec::new();
-        let root = source
+        let (root, definitions) = source
             .collect_with_map(
                 None,
+                &[(handle, body.clone())],
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == head),
-                |value, complete| {
+                |value, _registry, complete| {
                     seen.push((value.expression.clone(), complete));
-                    Ok(value)
+                    Ok((value, vec![]))
                 },
             )
             .unwrap();
@@ -1262,7 +1557,14 @@ mod tests {
                 .filter(|(_, complete)| *complete)
                 .all(|(value, _)| value == &(&body.expression * &right))
         );
-        assert_eq!(root.expression, &body.expression * right);
+        assert_eq!(
+            root.with_aliases(definitions)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            &body.expression * right
+        );
     }
     #[test]
     fn selected_power_copies_preserve_independent_internal_dummy_scopes() {
@@ -1282,14 +1584,15 @@ mod tests {
         let base = tensor(p, std::slice::from_ref(&a)) * tensor(q, std::slice::from_ref(&a)) + &x;
         for power in [2, 3] {
             let source = SymbolicTensor::infer(base.pow(power)).unwrap();
-            let root = source
+            let (root, definitions) = source
                 .collect_with_map(
                     None,
+                    &[],
                     |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                     contract_selected,
                 )
                 .unwrap();
-            let actual = root;
+            let actual = root.with_aliases(definitions).unwrap().resolved().unwrap();
             assert_eq!(actual.expression.expand(), (&dot + &x).pow(power).expand());
         }
         let open = (tensor(p, std::slice::from_ref(&a))
@@ -1298,9 +1601,10 @@ mod tests {
             + &x * tensor(q, &[b]))
         .pow(2);
         let source = SymbolicTensor::infer(open).unwrap();
-        let root = source
+        let (root, definitions) = source
             .collect_with_map(
                 None,
+                &[],
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                 contract_selected,
             )
@@ -1322,7 +1626,15 @@ mod tests {
                         tensor(q, &[spenso::mink!(4)]),
                     ],
                 );
-        assert_eq!(root.expression.expand(), expected.expand());
+        assert_eq!(
+            root.with_aliases(definitions)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression
+                .expand(),
+            expected.expand()
+        );
     }
     #[test]
     fn scalar_selected_sum_does_not_require_dummy_scope_exposure() {
@@ -1335,23 +1647,31 @@ mod tests {
         let x = Atom::var(symbolica::symbol!("scope_scalar_spectator"));
         let source = SymbolicTensor::infer(&x * (&selected + Atom::one())).unwrap();
         let mut seen = Vec::new();
-        let root = source
+        let (root, definitions) = source
             .collect_with_map(
                 None,
+                &[],
                 |value| matches!(value, AtomView::Fun(fun) if fun.get_symbol() == hook),
-                |value, _complete| {
+                |value, _, _complete| {
                     seen.push(value.expression.clone());
                     if value.expression == selected {
-                        value.with_checked_expression(Atom::num(2))
+                        Ok((value.with_checked_expression(Atom::num(2))?, vec![]))
                     } else {
                         assert!(value.expression.is_one());
-                        Ok(value)
+                        Ok((value, vec![]))
                     }
                 },
             )
             .unwrap();
         assert_eq!(seen.iter().filter(|value| **value == selected).count(), 1);
-        assert_eq!(root.expression, Atom::num(3) * x);
+        assert_eq!(
+            root.with_aliases(definitions)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            Atom::num(3) * x
+        );
     }
     #[test]
     fn one_selected_sum_preserves_its_existing_open_scope() {
@@ -1369,23 +1689,31 @@ mod tests {
         let x = Atom::var(symbolica::symbol!("open_scope_scalar_spectator"));
         let source = SymbolicTensor::infer(&x * (&selected + &target)).unwrap();
         let mut selected_calls = 0;
-        let root = source
+        let (root, definitions) = source
             .collect_with_map(
                 None,
+                &[],
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
-                |value, _complete| {
+                |value, _, _complete| {
                     if value.expression == selected {
                         selected_calls += 1;
-                        value.with_checked_expression(target.clone())
+                        Ok((value.with_checked_expression(target.clone())?, vec![]))
                     } else {
                         assert_eq!(value.expression, target);
-                        Ok(value)
+                        Ok((value, vec![]))
                     }
                 },
             )
             .unwrap();
         assert_eq!(selected_calls, 1);
-        assert_eq!(root.expression, Atom::num(2) * x * target);
+        assert_eq!(
+            root.with_aliases(definitions)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            Atom::num(2) * x * target
+        );
     }
 
     #[test]
@@ -1524,7 +1852,7 @@ mod tests {
         let mut observed = false;
         source
             .collect_with_map(
-                Some(&mut |_, spectators| {
+                Some(&mut |_, spectators, _| {
                     assert_eq!(spectators.len(), 30);
                     assert_eq!(
                         Atom::mul_many(spectators.iter().map(|value| &value.expression)),
@@ -1533,8 +1861,9 @@ mod tests {
                     observed = true;
                     Ok(())
                 }),
+                &[],
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
-                |value, _| Ok(value),
+                |value, _, _| Ok((value, vec![])),
             )
             .unwrap();
         assert!(observed);
@@ -1554,7 +1883,7 @@ mod tests {
     }
 
     #[test]
-    fn encoded_auto_scratch_is_converted_before_certified_publication() {
+    fn encoded_auto_scratch_is_converted_before_certified_alias_publication() {
         crate::test_support::test_initialize();
         let source = SymbolicTensor::<PartialStructure>::from_signature(
             &crate::dirac::AGS.gamma_strct::<AbstractIndex>(4),
@@ -1562,14 +1891,14 @@ mod tests {
         .unwrap()
         .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99513))]))
         .unwrap();
-        let mut input = CollectionInput::new(&source, |_| true);
+        let mut input = CollectionInput::new(&source, &[], |_| true);
         let network = input.parse(&source).unwrap();
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
         let mut tape = TermTape::<usize>::default();
         assert!(
             input
-                .compile(&mut tape, &network, &tree, root, 0)
+                .compile(&mut tape, &network, &tree, root, false, 0)
                 .unwrap()
                 .is_some()
         );
@@ -1595,7 +1924,9 @@ mod tests {
         assert_eq!(body.structure.open_positions(), vec![0, 1]);
         assert_eq!(body.proofs.validated.get(), Some(&true));
         SymbolicTensor::validate_interface(&body.expression, &body.structure).unwrap();
-        assert_eq!(body, source);
+        let handle = body.alias_handle().unwrap();
+        let aliased = handle.clone().with_aliases([(handle, body)]).unwrap();
+        assert_eq!(aliased.resolved().unwrap(), source);
     }
 
     #[test]
@@ -1608,22 +1939,24 @@ mod tests {
         .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99511))]))
         .unwrap();
         let mut calls = 0;
-        let result = source
+        let (result, definitions) = source
             .collect_with_map(
                 None,
+                &[],
                 |_| true,
-                |selected, _complete| {
+                |selected, _, _complete| {
                     calls += 1;
                     assert_eq!(
                         selected.structure.logical_slots(),
                         source.structure.logical_slots()
                     );
                     assert_eq!(selected.structure.open_positions(), vec![0, 1]);
-                    Ok(selected)
+                    Ok((selected, vec![]))
                 },
             )
             .unwrap();
         assert_eq!(calls, 1);
+        assert!(definitions.is_empty());
         assert_eq!(result, source);
     }
     #[test]
@@ -1688,13 +2021,14 @@ mod tests {
         .unwrap();
         let mut calls = 0;
         let mut complete_rows = false;
-        let root = source.collect_with_map(
-            Some(&mut |_, _| { complete_rows = true; Ok(()) }),
+        let (root, definitions) = source.collect_with_map(
+            Some(&mut |_, _, _| { complete_rows = true; Ok(()) }),
+            &[],
             |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
-            |mut selected, _| {
+            |mut selected, _, _| {
                 calls += 1;
                 selected.proofs.frontier = super::super::simplification::ReductionStatus::Capped;
-                Ok(selected)
+                Ok((selected, Vec::new()))
             },
         ).unwrap();
         assert_eq!(calls, 1);
@@ -1703,7 +2037,7 @@ mod tests {
             root.proofs.frontier,
             super::super::simplification::ReductionStatus::Capped
         );
-        let result = root;
+        let result = root.with_aliases(definitions).unwrap().resolved().unwrap();
         assert_eq!(result.expression.expand(), source.expression.expand());
         assert_eq!(result.structure(), source.structure());
     }
@@ -1859,7 +2193,7 @@ mod planning_tests {
         SHALLOW_VIEWS.with(|count| count.set(0));
         SELECTED_OPENS.with(|count| count.set(0));
         let collected = source.collect(TensorCollectFilter::<0>::Metrics).unwrap();
-        assert_eq!(collected.expression, expression);
+        assert_eq!(collected.resolved().unwrap().expression, expression);
         assert_eq!(SHALLOW_VIEWS.with(|count| count.get()), 1);
         assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
         let graph = source.shallow_graph().unwrap();

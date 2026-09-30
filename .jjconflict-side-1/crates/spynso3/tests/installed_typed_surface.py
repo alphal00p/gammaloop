@@ -149,10 +149,11 @@ class TypedSurfaceTests(unittest.TestCase):
         self.assertEqual((opened**3).rank, 1)
         self.assertEqual(((0 * opened) ** 3).structure.slots, opened.structure.slots)
 
-    def test_explicit_evaluator_uses_symbolic_payloads(self):
+    def test_explicit_evaluator_uses_bare_and_aliased_symbolic_payloads(self):
         source = sp.TensorExpression((self.x + 1) ** 3 + self.y)
+        aliased = sp.AliasedTensorExpression.from_expression(source)
         points = [[2.0, 5.0], [-1.0, 7.0]]
-        for value in (source, source.simplify_algebra()):
+        for value in (source, aliased):
             evaluator = value.evaluator([self.x, self.y], iterations=1, n_cores=1)
             self.assertEqual(evaluator.evaluate(points).tolist(), [[32.0], [7.0]])
         self.assertEqual(source.to_expression(), (self.x + 1) ** 3 + self.y)

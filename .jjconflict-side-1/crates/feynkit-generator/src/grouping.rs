@@ -411,6 +411,7 @@ pub(crate) fn group_diagrams(
                     ..Default::default()
                 })
             })
+            .and_then(|tensor| tensor.resolved())
             .map_err(|error| GroupingError::ColorSimplification {
                 diagram: diagram.name().to_owned(),
                 message: error.to_string(),

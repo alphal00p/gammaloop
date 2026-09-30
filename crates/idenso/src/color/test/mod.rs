@@ -47,6 +47,8 @@ fn assert_color_zero(expr: Atom) {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
             .is_zero()
     );
@@ -129,6 +131,8 @@ fn test_color_simplification() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression()
         .replace(dimension.to_pattern())
@@ -389,6 +393,8 @@ fn cof_dimension_simplification_preserves_factorized_spectators() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         invariants
     );
@@ -410,6 +416,8 @@ fn cof_dimension_simplification_preserves_factorized_spectators() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression();
     // Exact Atom equality checks that the spectator's sums and power stay intact.
     assert_eq!(simplified, (Atom::num(3) / Atom::num(2)) * spectator);
@@ -426,6 +434,8 @@ fn cof_dimension_simplification_preserves_factorized_spectators() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         simplified
@@ -468,6 +478,8 @@ fn color_collection_preserves_powered_noncolor_trace_sums() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             traces
         );
@@ -484,6 +496,8 @@ fn color_collection_preserves_powered_noncolor_trace_sums() {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             Atom::num(24) * &traces
@@ -521,6 +535,8 @@ fn color_collection_closes_generic_chains_after_metric_reduction() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         expected
     );
@@ -537,6 +553,8 @@ fn color_collection_closes_generic_chains_after_metric_reduction() {
                 collect_traces: true,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         expected
@@ -571,6 +589,8 @@ fn color_collection_preserves_generic_chain_normalization() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         spectator * expected
     );
@@ -590,6 +610,8 @@ fn color_collection_preserves_generic_chain_normalization() {
                 collect_traces: true,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         parse_lit!(g(mink(4, i), mink(4, j)), default_namespace = "spenso")
@@ -633,6 +655,8 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             expected
         );
@@ -654,6 +678,8 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         parse_lit!(
@@ -692,6 +718,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     assert_eq!(simplified, Atom::num(24) * spectator);
     assert_eq!(
@@ -703,6 +731,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         simplified
     );
@@ -710,6 +740,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
             .unwrap()
             .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
@@ -726,6 +758,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
     );
 
@@ -741,6 +775,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
                 color: Some(settings),
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         mixed
@@ -762,6 +798,8 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
                 color: Some(settings),
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         parse_lit!(
@@ -813,6 +851,8 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression(),
             expected
         );
@@ -827,6 +867,8 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression(),
         crate::tensor::SymbolicTensor::infer((ordered).as_atom_view().to_owned())
             .unwrap()
@@ -834,6 +876,8 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
                 color: Some(settings),
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
     );
@@ -861,6 +905,8 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         Atom::num(24)
     );
@@ -883,6 +929,8 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     assert_eq!(simplified, expected);
     assert_eq!(
@@ -898,6 +946,8 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         simplified
@@ -923,6 +973,8 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         Atom::num(4)
@@ -950,6 +1002,8 @@ fn cof_dimension_simplification_preserves_unsupported_invariants() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         expression
@@ -991,6 +1045,8 @@ fn cof_dimension_simplification_respects_disabled_trace_evaluation() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
     assert_eq!(simplified, expected);
     assert_eq!(
@@ -1006,6 +1062,8 @@ fn cof_dimension_simplification_respects_disabled_trace_evaluation() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         simplified
@@ -1048,6 +1106,8 @@ fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
         ..Default::default()
     })
     .unwrap()
+    .resolved()
+    .unwrap()
     .into_expression();
     assert_eq!(simplified, chains / Atom::num(2));
     assert_eq!(
@@ -1064,6 +1124,8 @@ fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         simplified
@@ -1094,7 +1156,7 @@ fn permuted_structure_constant_square_simplifies_with_sign() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((atom).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-8*cas(2,coad(8))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((atom).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-8*cas(2,coad(8))");
 }
 
 #[test]
@@ -1195,6 +1257,8 @@ fn three_loop_pole_part_color() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
             .collect_reps([
                 ColorAdjoint {}.into(),
@@ -1253,6 +1317,8 @@ fn three_loop_pole_part_color() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
             .collect_reps([
@@ -1354,6 +1420,8 @@ fn kaapo_gl34_color_input_simplifies_to_zero() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression()
         .collect_reps([
@@ -1480,7 +1548,7 @@ fn antisymmetric_two_generator_trace_vanishes() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b)))
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"0");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
 }
 
 #[test]
@@ -1496,7 +1564,7 @@ fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
         )
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -1509,7 +1577,7 @@ fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -1522,7 +1590,7 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -1537,7 +1605,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { contract: crate::tensor::AlgebraContraction::None, color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { contract: crate::tensor::AlgebraContraction::None, color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
 }
 
 #[test]
@@ -1569,6 +1637,8 @@ fn cyclic_trace_structure_product_scans_nonleading_pairs() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
     let simplified = simplified.to_bare_ordered_string();
@@ -1672,6 +1742,8 @@ fn color_simplify_defaults_match_simplify_color() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
             .unwrap()
@@ -1685,6 +1757,8 @@ fn color_simplify_defaults_match_simplify_color() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
     );
@@ -1720,6 +1794,8 @@ fn color_trace_evaluation_can_be_disabled() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         expected,
     );
@@ -1752,6 +1828,8 @@ fn color_cross_chain_fierz_can_be_disabled() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         expr,
@@ -1813,6 +1891,8 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression())
             .as_atom_view()
             .to_owned()
@@ -1820,10 +1900,14 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression(),
         crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
             .unwrap()
             .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
     );
@@ -1850,7 +1934,7 @@ fn symmetric_trace_d33_partial_contraction() {
         )
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d))*gram(3,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d))*gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -1876,7 +1960,7 @@ fn symmetric_trace_d44_partial_contraction() {
         )
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,d),coad(dA,e))*gram(4,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,d),coad(dA,e))*gram(4,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -1902,7 +1986,7 @@ fn symmetric_trace_d44_full_contraction() {
         )
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
 }
 
 mod feyncalc_reference;
@@ -2011,6 +2095,8 @@ fn t_structure() {
     let _ = crate::tensor::SymbolicTensor::infer((Atom::Zero).as_atom_view().to_owned())
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
 }
@@ -2234,6 +2320,8 @@ fn test_val() {
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     println!(
         "Simplify_metrics: {}",
@@ -2267,10 +2355,14 @@ fn test_val() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression();
     let contracted = crate::tensor::SymbolicTensor::infer(simplified)
         .unwrap()
         .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
         .unwrap()
         .into_expression();
     println!(
@@ -2323,6 +2415,8 @@ fn ratio_simplify() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
 
     assert_snapshot!(simplified.collect_with_map(|a| {
@@ -2362,7 +2456,7 @@ fn structure_pair_with_closed_generator_chain_matches_form() {
         expr
     );
     assert_snapshot!(
-        crate::tensor::SymbolicTensor::infer(admitted).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().replace(dimension.to_pattern()).with(dimension_value.to_pattern()).to_bare_ordered_string(),
+        crate::tensor::SymbolicTensor::infer(admitted).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().replace(dimension.to_pattern()).with(dimension_value.to_pattern()).to_bare_ordered_string(),
         @"(-1+Nc^2)*-1*cas(2,coad(-1+Nc^2))*idx(2,cof(Nc))"
     );
 }
@@ -2432,6 +2526,8 @@ fn minus_sign() {
             .unwrap()
             .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
@@ -2442,6 +2538,8 @@ fn minus_sign() {
         crate::tensor::SymbolicTensor::infer(expr2.cook_indices())
             .unwrap()
             .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
             .cook_indices()
@@ -2462,6 +2560,8 @@ fn minus_sign() {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression()
             + crate::tensor::SymbolicTensor::infer(expr2.cook_indices())
                 .unwrap()
@@ -2476,6 +2576,8 @@ fn minus_sign() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression())
         .expand())
         .as_atom_view()
@@ -2483,6 +2585,8 @@ fn minus_sign() {
     )
     .unwrap()
     .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression()
     .cook_indices();
@@ -2498,6 +2602,8 @@ fn minus_sign() {
     )
     .unwrap()
     .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
+    .unwrap()
+    .resolved()
     .unwrap()
     .into_expression()
     .expand();
@@ -2574,6 +2680,8 @@ mod failing {
             .unwrap()
             .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
             .unwrap()
+            .resolved()
+            .unwrap()
             .simplify_algebra(&crate::tensor::AlgebraSettings {
                 contract: crate::tensor::AlgebraContraction::None,
                 color: Some(crate::color::ColorSimplifySettings::default()),
@@ -2585,6 +2693,8 @@ mod failing {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
             .replace(adjoint_dimension.to_pattern())
@@ -2724,7 +2834,10 @@ mod failing {
                 ..Default::default()
             })
             .unwrap();
-        println!("Color-simplified amplitude squared:\n{}", color.expression);
+        println!(
+            "Color-simplified amplitude squared:\n{}",
+            color.resolved().unwrap().expression
+        );
         let gamma = color
             .simplify_algebra(&crate::tensor::AlgebraSettings {
                 contract: crate::tensor::AlgebraContraction::None,
@@ -2738,6 +2851,8 @@ mod failing {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression();
         let mut simplified_amp_squared = cooking
@@ -2871,6 +2986,8 @@ fn color_trace_metric_closures_reduce_before_terminal_invariants() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression()
         .to_cof_dimension_invariants()
         .replace(parse!("Na", default_namespace = "spenso"))
@@ -2900,6 +3017,8 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression()
         .to_cof_dimension_invariants()
         .replace(parse!("Na", default_namespace = "spenso"))
@@ -2922,6 +3041,8 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression())
             .as_atom_view()
             .to_owned()
@@ -2938,6 +3059,8 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
             ..Default::default()
         })
         .unwrap()
+        .resolved()
+        .unwrap()
         .into_expression(),
         crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
             .unwrap()
@@ -2951,6 +3074,8 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression()
     );
@@ -2994,6 +3119,8 @@ fn cooked_dimensions_preserve_color_invariants_and_zero() {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap();
     assert!(result.expression().is_zero());
     assert_eq!(cooking.uncook(result.expression().as_view()), Atom::Zero);
@@ -3033,6 +3160,8 @@ fn cooked_compound_dimension_color_contraction_matches_raw_invariant_identity() 
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap();
     let decoded = cooking.uncook(result.expression().as_view());
     assert_eq!((decoded - expected).together().cancel(), Atom::Zero);
@@ -3049,6 +3178,8 @@ fn cooked_compound_dimension_color_contraction_matches_raw_invariant_identity() 
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap(),
         result
     );
@@ -3076,6 +3207,8 @@ fn scalar_invariant_prefactor_preserves_closed_color_trace_collection() {
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap();
         assert_eq!(
             result.into_expression(),

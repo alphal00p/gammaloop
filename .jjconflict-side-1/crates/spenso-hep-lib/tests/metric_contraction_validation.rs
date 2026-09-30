@@ -234,6 +234,8 @@ impl MetricEvaluation {
             .unwrap()
             .contract(*settings)
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
         if must_change {
             assert_ne!(
@@ -246,6 +248,8 @@ impl MetricEvaluation {
             SymbolicTensor::infer(simplified.clone())
                 .unwrap()
                 .contract(*settings)
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             simplified,
@@ -354,6 +358,8 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
                     .unwrap()
                     .contract(settings)
                     .unwrap()
+                    .resolved()
+                    .unwrap()
                     .into_expression();
                 assert_ne!(expression, simplified);
                 let spectator = evaluation.vector(0, target) * evaluation.vector(1, &nu);
@@ -373,6 +379,8 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
         let simplified = SymbolicTensor::infer(expression.clone())
             .unwrap()
             .contract(settings)
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression();
         assert_ne!(expression, simplified);
@@ -411,18 +419,11 @@ fn metric_rewrites_preserve_sum_and_power_scopes() {
                 false,
             ),
             ((&scalar + 1).pow(2), true),
+            (evaluation.vector(0, &mu).pow(2), true),
             (spenso::g!(&mu, &nu).pow(2), true),
         ] {
             let _ = evaluation.assert_rewrite(expression, &settings, must_change);
         }
-        let square = evaluation.vector(0, &mu).pow(2);
-        let untouched = SymbolicTensor::infer(square.clone())
-            .unwrap()
-            .contract(settings)
-            .unwrap()
-            .into_expression();
-        assert_eq!(untouched, square, "rank-one contraction is disabled");
-        let _ = evaluation.assert_rewrite(square, &ContractSettings::default(), true);
     }
 }
 
@@ -439,6 +440,8 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
         let metric_result = SymbolicTensor::infer(metric_input.clone())
             .unwrap()
             .contract(ContractSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression();
         assert_ne!(metric_input, metric_result);
@@ -462,6 +465,8 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
             .unwrap()
             .contract(ContractSettings::default())
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression();
         assert_ne!(expression, simplified);
         let closing = evaluation.vector(0, &sigma) * evaluation.vector(3, &rho);
@@ -479,6 +484,8 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
             let simplified = SymbolicTensor::infer(expression.clone())
                 .unwrap()
                 .contract(ContractSettings::default())
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression();
             assert_ne!(expression, simplified);
@@ -617,6 +624,8 @@ fn constructed_metric_traces_are_scalar_before_taking_powers() {
                 .unwrap()
                 .contract(ContractSettings::default().without_rank_one_tensors())
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .to_dots()
                 .unwrap()
                 .into_expression(),
@@ -651,6 +660,8 @@ fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
                 SymbolicTensor::infer(constructed.clone())
                     .unwrap()
                     .contract(ContractSettings::default().without_rank_one_tensors())
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .to_dots()
                     .unwrap()
@@ -690,6 +701,8 @@ fn compact_metric_and_tagged_vector_substitutions_agree() {
                 .unwrap()
                 .contract(settings)
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression();
             assert_ne!(expression, simplified);
             assert!(!simplified.has_repeated_explicit_indices());
@@ -704,6 +717,8 @@ fn compact_metric_and_tagged_vector_substitutions_agree() {
             SymbolicTensor::infer(explicit.clone())
                 .unwrap()
                 .contract(ContractSettings::default().without_rank_one_tensors())
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             explicit,
@@ -730,6 +745,8 @@ fn tagged_vectors_and_compact_metrics_preserve_epsilon_orientation() {
             let simplified = SymbolicTensor::infer(expression.clone())
                 .unwrap()
                 .contract(ContractSettings::default())
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression();
             assert_ne!(expression, simplified);
@@ -807,11 +824,13 @@ fn compact_epsilon_powers_simplify_without_repeated_explicit_indices() {
                 ..Default::default()
             };
             let reduced = source.simplify_algebra(&settings).unwrap();
-            let simplified = reduced.expression().clone();
+            let simplified = reduced.resolved().unwrap().into_expression();
             assert_ne!(expression, simplified);
             assert_eq!(
                 reduced
                     .simplify_algebra(&settings)
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .into_expression(),
                 simplified
@@ -841,11 +860,13 @@ fn disjoint_epsilon_pairs_simplify_before_closing_their_indices() {
             ..Default::default()
         };
         let reduced = source.simplify_algebra(&settings).unwrap();
-        let simplified = reduced.expression().clone();
+        let simplified = reduced.resolved().unwrap().into_expression();
         assert_ne!(expression, simplified);
         assert_eq!(
             reduced
                 .simplify_algebra(&settings)
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression(),
             simplified
@@ -876,6 +897,8 @@ fn metric_induced_epsilon_zero_preserves_an_unaffected_summand() {
                 epsilon: true,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression();
         assert_eq!(simplified, unaffected);

@@ -26,7 +26,10 @@ use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::chain::Chain,
-    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor, inference::TensorInferenceError},
+    tensor::{
+        SymbolicNetExt, SymbolicNetParse, SymbolicTensor, aliases::Definition,
+        inference::TensorInferenceError,
+    },
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
@@ -46,41 +49,60 @@ pub(crate) struct ColorAlgebraSimplifier {
 impl SymbolicTensor<PartialStructure> {
     pub(crate) fn simplify_color_parts(
         &self,
+        registry: &[Definition],
         settings: ColorSimplifySettings,
         settled: &mut crate::tensor::simplification::observation::SettledRegions,
-    ) -> Result<Self, TensorInferenceError> {
+    ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::ColorKernel,
         );
         let simplifier = ColorAlgebraSimplifier { settings };
-        self.collect_with_map(None, atom_contains_color_node, |selected, complete| {
-            settled.run(selected, complete, |selected| {
-                let expression = simplifier.step(selected.expression.as_view(), complete);
-                let mut network = expression
-                    .as_view()
-                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
-                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
-                let expression = if network.remove_antisymmetric_zero_terms() {
-                    network
-                        .simple_execute::<()>()
-                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
-                } else {
-                    expression
-                };
-                let expression = restore_explicit_su_n_generator_chains(expression);
-                let rewritten = selected.with_rewritten_expression(expression)?;
-                // Every structural request is limited to this selected colour
-                // monomial and uses the shared contraction implementation.
-                let mut contracted = rewritten.contract_parts(crate::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?;
-                contracted.root.proofs.frontier = contracted.status;
-                Ok(contracted.root)
-            })
-        })
+        self.collect_with_map(
+            None,
+            registry,
+            atom_contains_color_node,
+            |selected, registry, complete| {
+                settled.run(selected, complete, |selected| {
+                    let expression = simplifier.step(selected.expression.as_view(), complete);
+                    let mut network = expression
+                        .as_view()
+                        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                    let expression = if network.remove_antisymmetric_zero_terms() {
+                        network
+                            .simple_execute::<()>()
+                            .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+                    } else {
+                        expression
+                    };
+                    let expression = restore_explicit_su_n_generator_chains(expression);
+                    let rewritten = selected.with_rewritten_expression(expression)?;
+                    // Every structural request is limited to this selected colour
+                    // monomial and uses the shared contraction implementation.
+                    let mut contracted =
+                        rewritten.contract_parts(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?;
+                    let inherited = registry
+                        .iter()
+                        .cloned()
+                        .map(|pair| (pair.0.expression.clone(), pair))
+                        .collect();
+                    let mut registry = std::collections::HashMap::new();
+                    SymbolicTensor::<
+                        crate::tensor::aliases::AliasInterfaces,
+                        symbolica::atom::AliasedAtom,
+                    >::retain_contracted_definitions(
+                        &contracted, &inherited, &mut registry
+                    )?;
+                    contracted.root.proofs.frontier = contracted.status;
+                    Ok((contracted.root, registry.into_values().collect()))
+                })
+            },
+        )
     }
 }
 

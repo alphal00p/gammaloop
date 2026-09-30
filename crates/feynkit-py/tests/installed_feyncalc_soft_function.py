@@ -54,6 +54,7 @@ def simplify(expression):
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_dots()
         )
         .to_expression()
@@ -163,6 +164,7 @@ for outgoing in (["b", "b~"], ["b", "b~", "g"]):
                 TensorExpression(denominator)
                 .expand()
                 .contract(collect_chains=False, collect_traces=False)
+                .to_expression()
                 .to_dots()
             )
             .to_expression()
@@ -217,16 +219,16 @@ for tensor in (color_born, color_real):
         TensorExpression(
             tensor.to_expression() * tensor.dirac_adjoint().to_expression()
         )
-        .simplify_algebra(gamma=False, color=True)
+        .simplify_algebra(color=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_expression()
     )
     colors.append(
         TensorExpression(norm.replace(dA, Nc**2 - 1))
-        .simplify_algebra(
-            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
-        )
+        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_expression()
     )
 assert colors == [Nc, (Nc**2 - 1) / 2]

@@ -1,0 +1,521 @@
+{
+  "date": "2026-09-30",
+  "case": "matched quark scalar prefactor, four bound labels renamed in both modes",
+  "settings": {
+    "gamma": true,
+    "color": false,
+    "epsilon": false,
+    "contract": "dots",
+    "max_steps_per_domain": 128
+  },
+  "profiler": {
+    "binary": "/nix/store/7ccpnz8xkn5qsyw8nkz998vjmb6jpl49-perf-linux-6.19.6/bin/perf",
+    "event": "cpu-clock:u",
+    "requested_frequency_hz": 499,
+    "dwarf_stack_bytes": 65528,
+    "max_unwind_frames": 1024,
+    "control": "FIFO enable/disable around fresh reductions only",
+    "lost_samples": 0,
+    "attribution": "nearest matching category from sampled leaf toward caller; disjoint buckets",
+    "estimates": "mean unprofiled wall time multiplied by weighted CPU sample fraction, not exact phase clocks"
+  },
+  "unprofiled_run_order": [
+    "aliases",
+    "no-aliases",
+    "no-aliases",
+    "aliases"
+  ],
+  "results": {
+    "aliases": {
+      "unprofiled_runs": [
+        {
+          "mode": "aliases",
+          "iterations": 20,
+          "wall": 1.96463554026559,
+          "cpu": 1.9396924050000002,
+          "seconds_per_reduction": [
+            0.09488161001354456,
+            0.0969158080406487,
+            0.09693350829184055,
+            0.09761017002165318,
+            0.09700174769386649,
+            0.09723399812355638,
+            0.09687550691887736,
+            0.09697399800643325,
+            0.098237712867558,
+            0.09854767331853509,
+            0.09707078896462917,
+            0.09577831393107772,
+            0.09682215796783566,
+            0.09743690909817815,
+            0.09754013083875179,
+            0.09758936008438468,
+            0.09731300920248032,
+            0.1140743400901556,
+            0.10260565811768174,
+            0.09709138795733452
+          ],
+          "median": 0.09716269304044545,
+          "mean": 0.09822668947745114,
+          "aliases": [
+            576
+          ],
+          "complete": true,
+          "exact_last_comparison": true,
+          "extension": "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+          "extension_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+          "profiled": false
+        },
+        {
+          "mode": "aliases",
+          "iterations": 20,
+          "wall": 1.9682938382029533,
+          "cpu": 1.946969054,
+          "seconds_per_reduction": [
+            0.09521285211667418,
+            0.10128435399383307,
+            0.09971201792359352,
+            0.09767279075458646,
+            0.09820466209203005,
+            0.09968466777354479,
+            0.0976448911242187,
+            0.09811930218711495,
+            0.09747627004981041,
+            0.09797592181712389,
+            0.09816179284825921,
+            0.09721906902268529,
+            0.10185728594660759,
+            0.09727703919634223,
+            0.09886043472215533,
+            0.09930962603539228,
+            0.09762582136318088,
+            0.09855285380035639,
+            0.09657690580934286,
+            0.09975766809657216
+          ],
+          "median": 0.09814054751768708,
+          "mean": 0.09840931133367121,
+          "aliases": [
+            576
+          ],
+          "complete": true,
+          "exact_last_comparison": true,
+          "extension": "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+          "extension_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+          "profiled": false
+        }
+      ],
+      "mean_seconds": 0.09831800040556118,
+      "median_seconds": 0.09759976505301893,
+      "iterations": 40,
+      "profile_run": {
+        "mode": "aliases",
+        "iterations": 100,
+        "wall": 10.178091920912266,
+        "cpu": 10.020797076000001,
+        "seconds_per_reduction": [
+          0.0982940811663866,
+          0.1013132119551301,
+          0.1005375487729907,
+          0.10213596513494849,
+          0.10088657028973103,
+          0.10021606786176562,
+          0.10025950893759727,
+          0.10178059386089444,
+          0.10048027895390987,
+          0.10130722215399146,
+          0.1018908740952611,
+          0.10156513331457973,
+          0.09982713684439659,
+          0.10048459889367223,
+          0.10015143686905503,
+          0.09978958684951067,
+          0.10165700316429138,
+          0.10168756265193224,
+          0.10175757436081767,
+          0.10283381817862391,
+          0.10171836381778121,
+          0.10202283412218094,
+          0.10253007709980011,
+          0.10212243534624577,
+          0.10136226331815124,
+          0.10262520704418421,
+          0.10230681486427784,
+          0.1090867999009788,
+          0.1028149570338428,
+          0.10198699496686459,
+          0.10150619223713875,
+          0.10218929499387741,
+          0.101602703332901,
+          0.1019119150005281,
+          0.10957185178995132,
+          0.10237123491242528,
+          0.10209308518096805,
+          0.10162022290751338,
+          0.1009720410220325,
+          0.10030850861221552,
+          0.10047651035711169,
+          0.10075765987858176,
+          0.10136586194857955,
+          0.1010872907936573,
+          0.10074563976377249,
+          0.09973998600617051,
+          0.10021273791790009,
+          0.10011023841798306,
+          0.10063072899356484,
+          0.10721884295344353,
+          0.10007801838219166,
+          0.10040370933711529,
+          0.10038536787033081,
+          0.10079715074971318,
+          0.1008684909902513,
+          0.10041122883558273,
+          0.10013355826959014,
+          0.10281698778271675,
+          0.10075053991749883,
+          0.09982716618105769,
+          0.09919945523142815,
+          0.09821210009977221,
+          0.09920146409422159,
+          0.09961771639063954,
+          0.09983939677476883,
+          0.09907266404479742,
+          0.09833463095128536,
+          0.09989775670692325,
+          0.1001716279424727,
+          0.10066189896315336,
+          0.10045555792748928,
+          0.10017389804124832,
+          0.10140466317534447,
+          0.10221865493804216,
+          0.10191647429019213,
+          0.10120847215875983,
+          0.10207263426855206,
+          0.10165739292278886,
+          0.10282001690939069,
+          0.10222686501219869,
+          0.10221745492890477,
+          0.1023761359974742,
+          0.10240479605272412,
+          0.10168475424870849,
+          0.10562459705397487,
+          0.12009949889034033,
+          0.10117998206987977,
+          0.1029573567211628,
+          0.10139207215979695,
+          0.1020538848824799,
+          0.1046706847846508,
+          0.1168835568241775,
+          0.10170991392806172,
+          0.10101102013140917,
+          0.10098448116332293,
+          0.10145656298846006,
+          0.10157709335908294,
+          0.10203356482088566,
+          0.10205105505883694,
+          0.10195644432678819
+        ],
+        "median": 0.10139836766757071,
+        "mean": 0.10177085538394749,
+        "aliases": [
+          576
+        ],
+        "complete": true,
+        "exact_last_comparison": true,
+        "extension": "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+        "extension_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+        "profiled": true
+      },
+      "profile_summary": {
+        "path": "/tmp/alias-ladder/profiles/aliases.stacks",
+        "size_bytes": 23762312,
+        "method": "Leaf-to-root nearest marker; same-frame tie alphabetical; observations only DomainObservations/RegionObservation; trace kernel exact namespace; dots normalize_dots namespace or ::to_dots; residual other.",
+        "samples": 3057,
+        "total_period": 6126252456,
+        "buckets": {
+          "dot_notation": {
+            "samples": 503,
+            "period": 1008016024,
+            "percent": 16.454039908406934
+          },
+          "observations": {
+            "samples": 1788,
+            "period": 3583166304,
+            "percent": 58.48871442590775
+          },
+          "other": {
+            "samples": 498,
+            "period": 997995984,
+            "percent": 16.290480863591757
+          },
+          "trace_kernel": {
+            "samples": 268,
+            "period": 537074144,
+            "percent": 8.766764802093556
+          }
+        },
+        "inclusive": {
+          "dot_notation": {
+            "samples": 1440,
+            "period": 2885771520,
+            "percent": 47.10500490677134
+          },
+          "observations": {
+            "samples": 1788,
+            "period": 3583166304,
+            "percent": 58.48871442590775
+          },
+          "trace_kernel": {
+            "samples": 268,
+            "period": 537074144,
+            "percent": 8.766764802093556
+          }
+        },
+        "reached": {
+          "planner": {
+            "samples": 3047,
+            "period": 6106212376,
+            "percent": 99.67288191036964
+          },
+          "python_binding": {
+            "samples": 3042,
+            "period": 6096192336,
+            "percent": 99.50932286555447
+          },
+          "settled_regions_wrapper": {
+            "samples": 274,
+            "period": 549098192,
+            "percent": 8.963035655871769
+          }
+        },
+        "overlaps": {
+          "trace_kernel": 268,
+          "observations": 851,
+          "": 498,
+          "dot_notation": 503,
+          "dot_notation,observations": 937
+        },
+        "period_distribution": {
+          "2004008": 3057
+        },
+        "depth": {
+          "min": 2,
+          "max": 47,
+          "mean": 28.7909715407262
+        }
+      },
+      "estimated_seconds_by_category": {
+        "dot_notation": 0.01617728302387873,
+        "observations": 0.05750493448647151,
+        "other": 0.01601647504153401,
+        "trace_kernel": 0.008619307853676938
+      },
+      "raw_perf_data": "/tmp/alias-ladder/profiles/aliases.data",
+      "raw_perf_sha256": "ec5418bb548a00d6d1e2e12b58fe5cde29b2806a7cfb9cf76e98491a2da0bd24",
+      "full_attribution": "/tmp/alias-ladder/profiles/aliases.exclusive-independent.json"
+    },
+    "no-aliases": {
+      "unprofiled_runs": [
+        {
+          "mode": "no-aliases",
+          "iterations": 12,
+          "wall": 9.761781497858465,
+          "cpu": 9.669388102,
+          "seconds_per_reduction": [
+            0.8116215928457677,
+            0.8098041256889701,
+            0.8199312929064035,
+            0.8106649699620903,
+            0.8092780150473118,
+            0.8082580701448023,
+            0.8107164306566119,
+            0.8118855939246714,
+            0.8230017037130892,
+            0.8147815749980509,
+            0.81302241794765,
+            0.8187417392618954
+          ],
+          "median": 0.8117535933852196,
+          "mean": 0.8134756272581095,
+          "aliases": [
+            0
+          ],
+          "complete": true,
+          "exact_last_comparison": true,
+          "extension": "/tmp/alias-ladder/no-alias-python/symbolica/core.abi3.so",
+          "extension_sha256": "6637ebe0a934a90bf836fba5b3b41237e330d92508d90023fc937eef096bf71e",
+          "profiled": false
+        },
+        {
+          "mode": "no-aliases",
+          "iterations": 12,
+          "wall": 9.481514289975166,
+          "cpu": 9.376330282,
+          "seconds_per_reduction": [
+            0.7965066800825298,
+            0.7773359999991953,
+            0.7833352219313383,
+            0.788830092176795,
+            0.7910500187426805,
+            0.7889684219844639,
+            0.8177529559470713,
+            0.8075091689825058,
+            0.7750313533470035,
+            0.7790072271600366,
+            0.7880311589688063,
+            0.788093380164355
+          ],
+          "median": 0.788461736170575,
+          "mean": 0.7901209732905651,
+          "aliases": [
+            0
+          ],
+          "complete": true,
+          "exact_last_comparison": true,
+          "extension": "/tmp/alias-ladder/no-alias-python/symbolica/core.abi3.so",
+          "extension_sha256": "6637ebe0a934a90bf836fba5b3b41237e330d92508d90023fc937eef096bf71e",
+          "profiled": false
+        }
+      ],
+      "mean_seconds": 0.8017983002743373,
+      "median_seconds": 0.8087680425960571,
+      "iterations": 24,
+      "profile_run": {
+        "mode": "no-aliases",
+        "iterations": 24,
+        "wall": 20.63122783927247,
+        "cpu": 20.309093508000004,
+        "seconds_per_reduction": [
+          0.8428216469474137,
+          0.9163107802160084,
+          0.8363439738750458,
+          0.9119334439747036,
+          0.8920153831131756,
+          0.8398488173261285,
+          0.8471343228593469,
+          0.8428758773952723,
+          0.8388686734251678,
+          0.842832556925714,
+          0.8619868359528482,
+          0.8608991331420839,
+          0.8640040629543364,
+          0.8600578801706433,
+          0.8626778088510036,
+          0.8639944633468986,
+          0.854924782179296,
+          0.8364549949765205,
+          0.8577522621490061,
+          0.8641361240297556,
+          0.8741545807570219,
+          0.8649767469614744,
+          0.8590665371157229,
+          0.8348455498926342
+        ],
+        "median": 0.8595622086431831,
+        "mean": 0.8596215516057176,
+        "aliases": [
+          0
+        ],
+        "complete": true,
+        "exact_last_comparison": true,
+        "extension": "/tmp/alias-ladder/no-alias-python/symbolica/core.abi3.so",
+        "extension_sha256": "6637ebe0a934a90bf836fba5b3b41237e330d92508d90023fc937eef096bf71e",
+        "profiled": true
+      },
+      "profile_summary": {
+        "path": "/tmp/alias-ladder/profiles/no-aliases-deep.stacks",
+        "size_bytes": 153194450,
+        "method": "Leaf-to-root nearest marker; same-frame tie alphabetical; observations only DomainObservations/RegionObservation; trace kernel exact namespace; dots normalize_dots namespace or ::to_dots; residual other.",
+        "samples": 6519,
+        "total_period": 13064128152,
+        "buckets": {
+          "dot_notation": {
+            "samples": 957,
+            "period": 1917835656,
+            "percent": 14.680165669581225
+          },
+          "observations": {
+            "samples": 5308,
+            "period": 10637274464,
+            "percent": 81.42353121644425
+          },
+          "other": {
+            "samples": 191,
+            "period": 382765528,
+            "percent": 2.9298972235005367
+          },
+          "trace_kernel": {
+            "samples": 63,
+            "period": 126252504,
+            "percent": 0.966405890473999
+          }
+        },
+        "inclusive": {
+          "dot_notation": {
+            "samples": 2669,
+            "period": 5348697352,
+            "percent": 40.94186224881117
+          },
+          "observations": {
+            "samples": 5308,
+            "period": 10637274464,
+            "percent": 81.42353121644425
+          },
+          "trace_kernel": {
+            "samples": 63,
+            "period": 126252504,
+            "percent": 0.966405890473999
+          }
+        },
+        "reached": {
+          "planner": {
+            "samples": 6386,
+            "period": 12797595088,
+            "percent": 97.95980978677711
+          },
+          "python_binding": {
+            "samples": 6302,
+            "period": 12629258416,
+            "percent": 96.67126859947845
+          },
+          "settled_regions_wrapper": {
+            "samples": 1970,
+            "period": 3947895760,
+            "percent": 30.219358797361558
+          }
+        },
+        "overlaps": {
+          "trace_kernel": 63,
+          "observations": 3596,
+          "dot_notation": 957,
+          "": 191,
+          "dot_notation,observations": 1712
+        },
+        "period_distribution": {
+          "2004008": 6519
+        },
+        "depth": {
+          "min": 2,
+          "max": 60,
+          "mean": 38.23715293756711
+        }
+      },
+      "estimated_seconds_by_category": {
+        "dot_notation": 0.11770531881615903,
+        "observations": 0.6528524893167943,
+        "other": 0.023491866137812303,
+        "trace_kernel": 0.0077486260035715985
+      },
+      "raw_perf_data": "/tmp/alias-ladder/profiles/no-aliases-deep.data",
+      "raw_perf_sha256": "7412d19bc42e609216fb8111626b418547a72f659ef24ee64372c87b4c6e248b",
+      "full_attribution": "/tmp/alias-ladder/profiles/no-aliases-deep.exclusive-independent.json"
+    }
+  },
+  "mean_slowdown": 8.155152637023983,
+  "additional_time_share_by_category": {
+    "dot_notation": 0.14432250030486832,
+    "observations": 0.8462888796479107,
+    "other": 0.010626297705383812,
+    "trace_kernel": -0.0012376776581629254
+  }
+}

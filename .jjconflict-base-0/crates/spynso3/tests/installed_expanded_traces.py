@@ -1,4 +1,4 @@
-"""Explicit expansion after gamma identities in the installed extension."""
+"""Explicit materialization after shared gamma identities in the installed extension."""
 
 import unittest
 
@@ -21,15 +21,15 @@ class ExpandedTraceTests(unittest.TestCase):
         )
 
     def test_settings_preserve_defaults_and_disabled_evaluation(self):
-        defaults = {
-            "gamma": True,
-            "gamma_output": "reduced",
-            "gamma_ordering": "repeated_pairs",
-            "gamma_evaluate_traces": True,
-            "gamma0": False,
-            "gamma_conjugate": False,
-            "gamma_expand_three_gamma_epsilon": False,
-        }
+        defaults = dict(
+            gamma=True,
+            gamma_output="reduced",
+            gamma_ordering="repeated_pairs",
+            gamma_evaluate_traces=True,
+            gamma0=False,
+            gamma_conjugate=False,
+            gamma_expand_three_gamma_epsilon=False,
+        )
         with self.assertRaises(TypeError):
             self.trace_word(4, ["a", "b"]).simplify_algebra(
                 gamma=True, gamma_expand_traces=True
@@ -46,11 +46,11 @@ class ExpandedTraceTests(unittest.TestCase):
         inert = trace.simplify_algebra(
             gamma=True, gamma_evaluate_traces=False, epsilon=True
         ).contract(collect_chains=False, collect_traces=False)
-        self.assertEqual(inert, trace)
-        self.assertEqual(inert.structure.slots, trace.structure.slots)
+        self.assertEqual(inert.to_expression(), trace)
+        self.assertEqual(inert.root.structure.slots, trace.structure.slots)
 
     def test_chain_output_is_distinct_from_disabled_trace_evaluation(self):
-        chains = {"gamma": True, "gamma_output": "chains"}
+        chains = dict(gamma=True, gamma_output="chains")
         with self.assertRaises(ValueError):
             self.trace_word(4, ["a", "b"]).simplify_algebra(
                 gamma=True, gamma_output="expanded"
@@ -64,7 +64,7 @@ class ExpandedTraceTests(unittest.TestCase):
             gamma=True, gamma_evaluate_traces=False, epsilon=True
         ).contract(collect_chains=False, collect_traces=False)
         self.assertNotEqual(joined.to_expression(), reduced.to_expression())
-        self.assertEqual(joined.structure.slots, source.structure.slots)
+        self.assertEqual(joined.root.structure.slots, source.structure.slots)
         self.assertEqual(
             joined.simplify_algebra(**chains).to_expression(), joined.to_expression()
         )
@@ -96,8 +96,8 @@ class ExpandedTraceTests(unittest.TestCase):
                 result = source.simplify_algebra(gamma=True, epsilon=True).contract(
                     collect_chains=False, collect_traces=False
                 )
-                self.assertIsInstance(result, sp.TensorExpression)
-                self.assertEqual(result.structure.slots, source.structure.slots)
+                self.assertIsInstance(result, sp.AliasedTensorExpression)
+                self.assertEqual(result.root.structure.slots, source.structure.slots)
                 expanded = result.expand()
                 self.assertEqual(
                     expanded.to_expression(), (self.scalar * body).expand()
@@ -110,11 +110,11 @@ class ExpandedTraceTests(unittest.TestCase):
                 )
                 self.assertEqual(expanded.structure.slots, source.structure.slots)
                 self.assertEqual(
-                    result.to_expression().expand(),
+                    result.to_expression().to_expression().expand(),
                     expanded.to_expression(),
                 )
 
-    def test_independent_traces_reduce_without_expanding_spectators(self):
+    def test_independent_traces_materialize_through_the_same_alias_owner(self):
         left = self.trace_word(self.dimension, [f"left{i}" for i in range(6)])
         right = self.trace_word(self.dimension, [f"right{i}" for i in range(6)])
         expected = (
@@ -139,19 +139,19 @@ class ExpandedTraceTests(unittest.TestCase):
             .expand(),
             result.expand(),
         )
-        self.assertEqual(result.structure.slots, source.structure.slots)
+        self.assertEqual(result.root.structure.slots, source.structure.slots)
 
-    def test_pipeline_preserves_factorization_and_requires_explicit_expansion(self):
+    def test_pipeline_shares_alias_result_and_requires_explicit_expansion(self):
         trace = self.trace_word(self.dimension, [f"pipeline{i}" for i in range(6)])
         source = self.scalar * trace
-        pipeline = {"gamma": True}
+        pipeline = dict(gamma=True)
         with self.assertRaises(TypeError):
             source.simplify_algebra(expand=True)
         capped = source.simplify_algebra(gamma=True, max_steps_per_domain=0)
         self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
-        self.assertEqual(capped, source)
+        self.assertEqual(capped.to_expression(), source)
         result = source.simplify_algebra(**pipeline)
-        self.assertIsInstance(result, sp.TensorExpression)
+        self.assertIsInstance(result, sp.AliasedTensorExpression)
         self.assertEqual(
             result.expand(),
             source.simplify_algebra(gamma=True, epsilon=True)

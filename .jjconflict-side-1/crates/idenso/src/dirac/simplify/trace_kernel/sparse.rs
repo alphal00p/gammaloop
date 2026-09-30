@@ -65,7 +65,9 @@ impl SparseOutput {
             }
             return self
                 .recipe
-                .evaluate(value, &factors, Atom::num(unit).as_view())
+                .evaluate(value, &factors, Atom::num(unit).as_view(), &mut |value| {
+                    value
+                })
                 .expand();
         };
         if count == 0 {

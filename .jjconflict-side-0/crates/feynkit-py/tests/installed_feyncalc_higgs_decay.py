@@ -97,6 +97,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
         )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
+        .to_expression()
     )
     for real in (charge, sw, cw, mh, mw, mz, mass):
         adjoint = adjoint.replace(conjugate(real), real)
@@ -148,6 +149,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
         )
         .simplify_algebra(gamma=True, epsilon=True, color=True)
         .contract(collect_chains=False, collect_traces=False)
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar

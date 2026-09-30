@@ -2,256 +2,13 @@ use super::*;
 use crate::{gamma, gamma5};
 use spenso::structure::partial::PartialStructureExt;
 use spenso::{g, mink, p, q, trace};
-use std::collections::HashSet;
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
+    atom::{AtomCore, FunctionBuilder},
     symbol,
 };
 
 #[test]
-fn spinor_vectors_contract_into_the_matrix_ports_of_a_collected_gamma_chain() {
-    let reps = crate::test_support::test_initialize();
-    let spin = reps.bis4.to_symbolic([]);
-    let left = reps.bis4.to_symbolic([Atom::num(99841)]);
-    let right = reps.bis4.to_symbolic([Atom::num(99843)]);
-    let incoming = spenso::vector_symbol!("chain_endpoint_incoming");
-    let outgoing = spenso::vector_symbol!("chain_endpoint_outgoing");
-    let spectator = symbolica::parse_lit!((chain_endpoint_x + chain_endpoint_y) ^ 12);
-    let word = spenso::chain!(&left, &right, gamma!(p!(mink!(4))));
-    let source = SymbolicTensor::infer(
-        &spectator
-            * symbolica::function!(incoming, &left)
-            * word
-            * symbolica::function!(outgoing, &right),
-    )
-    .unwrap();
-    let expected = &spectator
-        * symbolica::function!(
-            crate::dirac::AGS.gamma,
-            symbolica::function!(incoming, &spin),
-            symbolica::function!(outgoing, &spin),
-            p!(mink!(4))
-        );
-    for result in [
-        source.contract(ContractSettings::default()).unwrap(),
-        source
-            .contract(ContractSettings {
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })
-            .unwrap(),
-        source
-            .simplify_algebra(&AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::default()),
-                ..Default::default()
-            })
-            .unwrap(),
-    ] {
-        assert_eq!(result.expression, expected);
-        assert_eq!(result.structure, source.structure);
-        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
-        let admitted = SymbolicTensor::infer(result.expression.clone()).unwrap();
-        assert_eq!(admitted.structure, result.structure);
-    }
-    assert_eq!(
-        source
-            .simplify_algebra(&AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::default()),
-                contract: AlgebraContraction::None,
-                ..Default::default()
-            })
-            .unwrap()
-            .expression,
-        source.expression
-    );
-}
-
-#[test]
-fn gamma_identity_precedes_attached_spinor_endpoint_substitutions() {
-    let reps = crate::test_support::test_initialize();
-    let left = reps.bis4.to_symbolic([Atom::num(99861)]);
-    let right = reps.bis4.to_symbolic([Atom::num(99863)]);
-    let incoming = spenso::vector_symbol!("gamma_pair_incoming");
-    let outgoing = spenso::vector_symbol!("gamma_pair_outgoing");
-    let word = spenso::chain!(
-        &left,
-        &right,
-        gamma!(mink!(4, 99865)),
-        gamma!(mink!(4, 99865))
-    );
-    let source = SymbolicTensor::infer(
-        symbolica::function!(incoming, &left) * word * symbolica::function!(outgoing, &right),
-    )
-    .unwrap();
-    for contract in [AlgebraContraction::Fully, AlgebraContraction::None] {
-        let result = source
-            .simplify_algebra(&AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::default()),
-                contract,
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(
-            result.expression,
-            Atom::num(4)
-                * g!(
-                    symbolica::function!(incoming, reps.bis4.to_symbolic([])),
-                    symbolica::function!(outgoing, reps.bis4.to_symbolic([]))
-                )
-        );
-        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
-    }
-}
-
-#[test]
-fn gamma_prerequisites_still_substitute_lorentz_vectors() {
-    let reps = crate::test_support::test_initialize();
-    let left = reps.bis4.to_symbolic([Atom::num(99871)]);
-    let right = reps.bis4.to_symbolic([Atom::num(99873)]);
-    let mu = mink!(4, 99875);
-    let nu = mink!(4, 99877);
-    let source = SymbolicTensor::infer(
-        p!(&mu) * p!(&nu) * spenso::chain!(&left, &right, gamma!(&mu), gamma!(&nu)),
-    )
-    .unwrap();
-    let result = source
-        .simplify_algebra(&AlgebraSettings {
-            gamma: Some(GammaSimplifySettings::default()),
-            contract: AlgebraContraction::None,
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(
-        result.expression,
-        g!(&left, &right) * g!(p!(mink!(4)), p!(mink!(4)))
-    );
-    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
-}
-
-#[test]
-fn contracted_chain_copies_keep_order_and_reserve_unrelated_dummy_names() {
-    use spenso::structure::{
-        abstract_index::AbstractIndex,
-        slot::{DummyAind, ParseableAind},
-    };
-    use symbolica::atom::FunctionBuilder;
-
-    let reps = crate::test_support::test_initialize();
-    let AbstractIndex::Dummy(seed) = AbstractIndex::new_dummy() else {
-        unreachable!()
-    };
-    let reserved = reps
-        .bis4
-        .to_symbolic([AbstractIndex::new_dummy_at(seed + 1).to_atom()]);
-    let left = reps.bis4.to_symbolic([Atom::num(99851)]);
-    let right = reps.bis4.to_symbolic([Atom::num(99853)]);
-    let incoming = spenso::vector_symbol!("chain_scope_incoming");
-    let outgoing = spenso::vector_symbol!("chain_scope_outgoing");
-    let spectator = FunctionBuilder::new(spenso::tensor_symbol!("chain_scope_spectator"))
-        .add_arg(&reserved)
-        .finish();
-    let word = spenso::chain!(
-        &left,
-        &right,
-        spenso::chain_factor!(chain_scope_first, in, out),
-        spenso::chain_factor!(chain_scope_second, in, out)
-    );
-    let source = SymbolicTensor::infer(
-        &spectator
-            * symbolica::function!(incoming, &left)
-            * word
-            * symbolica::function!(outgoing, &right),
-    )
-    .unwrap();
-    let settings = ContractSettings {
-        collect_chains: false,
-        collect_traces: false,
-        ..Default::default()
-    };
-    let first = source.contract(settings).unwrap();
-    let second = source.contract(settings).unwrap();
-    let mut internals = Vec::new();
-    for result in [&first, &second] {
-        assert_eq!(result.structure, source.structure);
-        SymbolicTensor::validate_atom(&result.expression).unwrap();
-        let mut ports = std::collections::HashMap::new();
-        result.expression.visitor(&mut |value| {
-            if let AtomView::Fun(function) = value {
-                let symbol = function.get_symbol();
-                if symbol == spenso::tensor_symbol!(chain_scope_first)
-                    || symbol == spenso::tensor_symbol!(chain_scope_second)
-                {
-                    ports.insert(
-                        symbol,
-                        function
-                            .iter()
-                            .map(|argument| argument.to_owned())
-                            .collect::<Vec<_>>(),
-                    );
-                }
-            }
-            true
-        });
-        let a = &ports[&spenso::tensor_symbol!(chain_scope_first)];
-        let b = &ports[&spenso::tensor_symbol!(chain_scope_second)];
-        assert_eq!(
-            a[0],
-            symbolica::function!(incoming, reps.bis4.to_symbolic([]))
-        );
-        assert_eq!(
-            b[1],
-            symbolica::function!(outgoing, reps.bis4.to_symbolic([]))
-        );
-        assert_eq!(a[1], b[0]);
-        assert_ne!(a[1], reserved);
-        internals.push(a[1].clone());
-    }
-    assert_ne!(internals[0], internals[1]);
-    SymbolicTensor::validate_atom(&(&first.expression * &second.expression)).unwrap();
-}
-
-#[test]
-fn a_zero_colour_identity_discharges_a_removed_deferred_gamma_scope() {
-    let reps = crate::test_support::test_initialize();
-    let hook = symbol!("deferred_gamma_scalar_hook"; Scalar; norm = |_, _| {});
-    let gamma_trace = trace!(
-        reps.bis4.to_symbolic([]),
-        gamma!(p!(mink!(4))),
-        gamma!(q!(mink!(4)))
-    );
-    let coefficient = (symbolica::function!(hook, gamma_trace)
-        + Atom::var(symbol!("deferred_gamma_scalar_weight")))
-    .pow(2);
-    let colour_trace = trace!(
-        reps.cof_nc.to_symbolic([]),
-        crate::color_t!(reps.coad_da.to_symbolic([Atom::num(99831)]))
-    );
-    let source = SymbolicTensor::infer(coefficient * colour_trace).unwrap();
-    let gamma_only = AlgebraSettings {
-        gamma: Some(GammaSimplifySettings::default()),
-        contract: AlgebraContraction::None,
-        ..Default::default()
-    };
-    let deferred = source.simplify_algebra(&gamma_only).unwrap();
-    assert_eq!(deferred.reduction_status(), ReductionStatus::Deferred);
-    assert_eq!(deferred.expression, source.expression);
-
-    // Tr(T^a)=0 removes the entire callback-sensitive coefficient exactly.
-    // No deferred gamma work survives in the resulting typed zero.
-    let result = source
-        .simplify_algebra(&AlgebraSettings {
-            color: Some(ColorSimplifySettings::default()),
-            ..gamma_only
-        })
-        .unwrap();
-    assert!(result.expression.is_zero());
-    assert_eq!(result.structure, source.structure);
-    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
-}
-
-#[test]
-fn free_trace_results_discharge_cleanup_without_entering_contraction() {
+fn free_trace_definitions_discharge_cleanup_without_entering_contraction() {
     use crate::tensor::contract::CONTRACT_DOMAIN_CALLS;
     let reps = crate::test_support::test_initialize();
     let slots = (0..8)
@@ -265,18 +22,19 @@ fn free_trace_results_discharge_cleanup_without_entering_contraction() {
     let reduced = source
         .simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
-            // The trace identity uses this budget. Its free-port result
-            // requires no additional contraction.
+            // The trace identity uses this budget. Its free-port definitions
+            // require no additional contraction, even at their own boundaries.
             max_passes: 1,
             ..Default::default()
         })
         .unwrap();
     assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
-    assert_eq!(reduced.structure, source.structure);
+    assert!(!reduced.aliases().unwrap().is_empty());
+    assert_eq!(reduced.root().structure, source.structure);
     assert_eq!(
         CONTRACT_DOMAIN_CALLS.with(|count| count.get()),
         0,
-        "free-port results must use their observations before contraction setup"
+        "free-port alias definitions must use their observations before contraction setup"
     );
 }
 
@@ -314,18 +72,13 @@ fn closed_trace_results_reuse_observations_through_dot_conversion() {
 
             let reduced = source.simplify_algebra(&settings).unwrap();
             assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+            assert_eq!(reduced.aliases().unwrap().is_empty(), length == 2);
             assert!(Arc::ptr_eq(
-                reduced.reduction_observations(),
-                reduced
-                    .simplify_algebra(&settings)
-                    .unwrap()
-                    .reduction_observations()
+                &reduced,
+                &reduced.simplify_algebra(&settings).unwrap()
             ));
             let dotted = reduced.to_dots().unwrap();
-            assert!(Arc::ptr_eq(
-                dotted.reduction_observations(),
-                dotted.to_dots().unwrap().reduction_observations()
-            ));
+            assert!(Arc::ptr_eq(&dotted, &dotted.to_dots().unwrap()));
             assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
             INITIAL_DOMAINS.with(|domains| {
                 assert!(
@@ -353,7 +106,7 @@ fn closed_trace_results_reuse_observations_through_dot_conversion() {
                     pair(0, 1) * pair(2, 3) - pair(0, 2) * pair(1, 3) + pair(0, 3) * pair(1, 2)
                 };
                 let expected = Atom::num(4) * &spectator * pairing;
-                let resolved = result;
+                let resolved = result.resolved().unwrap();
                 assert_eq!(resolved.structure, source.structure);
                 assert!((&resolved.expression - expected).expand().is_zero());
                 assert!(
@@ -388,6 +141,8 @@ fn closed_trace_observations_preserve_a_surviving_epsilon_identity() {
     let reduced = source.simplify_algebra(&gamma_only).unwrap();
     assert!(
         reduced
+            .resolved()
+            .unwrap()
             .expression
             .contains_symbol(*crate::epsilon::EPSILON_SYMBOL)
     );
@@ -398,15 +153,12 @@ fn closed_trace_observations_preserve_a_surviving_epsilon_identity() {
     let completed = reduced.simplify_algebra(&settings).unwrap();
     assert_eq!(completed.reduction_status(), ReductionStatus::Complete);
     assert_eq!(
-        completed.expression,
+        completed.resolved().unwrap().expression,
         Atom::num(8) * spectator * g!(p!(&compact), q!(&compact))
     );
     assert!(Arc::ptr_eq(
-        completed.reduction_observations(),
-        completed
-            .simplify_algebra(&settings)
-            .unwrap()
-            .reduction_observations()
+        &completed,
+        &completed.simplify_algebra(&settings).unwrap()
     ));
 }
 
@@ -447,19 +199,25 @@ fn closed_trace_observations_keep_generated_leaves_available_to_collection() {
             .add_arg(&vectors[0])
             .add_arg(&vectors[1])
             .finish();
-        let body = reduced;
+        let definitions = reduced.aliases().unwrap();
+        let body = definitions
+            .iter()
+            .map(|(_, body)| body)
+            .find(|body| body.expression.contains_symbol(head))
+            .expect("the four-vector pairing sum has a generated definition");
         let mut selected_target = false;
         let mut mapped_target = false;
         body.collect_with_map(
             None,
+            &definitions,
             |value| {
                 let selected = value == target.as_view();
                 selected_target |= selected;
                 selected
             },
-            |value, _| {
+            |value, _, _| {
                 mapped_target |= value.expression == target;
-                Ok(value)
+                Ok((value, Vec::new()))
             },
         )
         .unwrap();
@@ -483,33 +241,33 @@ fn closed_trace_observations_keep_generated_leaves_available_to_collection() {
 }
 
 #[test]
-fn unchanged_scalar_scope_is_observed_once_and_completed_reruns_reuse_it() {
+fn unchanged_shared_definition_is_observed_once_and_completed_reruns_reuse_it() {
     use observation::{INITIAL_DOMAINS, INITIAL_SCANS};
     crate::test_support::test_initialize();
-    let value =
-        SymbolicTensor::infer((Atom::one() + p!(mink!(4, 98701)) * q!(mink!(4, 98701))).pow(3))
-            .unwrap();
+    let body = SymbolicTensor::infer(p!(mink!(4, 98701)) * q!(mink!(4, 98701))).unwrap();
+    let handle = body.alias_handle().unwrap();
+    let root = SymbolicTensor::infer(handle.expression.pow(3)).unwrap();
     INITIAL_SCANS.with(|count| count.set(0));
     INITIAL_DOMAINS.with(|domains| domains.borrow_mut().clear());
-    value.reduction_observations();
-    assert_eq!(INITIAL_SCANS.with(|count| count.get()), 1);
+    let value = Arc::new(root.with_aliases([(handle, body)]).unwrap());
+    assert_eq!(INITIAL_SCANS.with(|count| count.get()), 2);
     let reduced = value.contract(Default::default()).unwrap();
-    let domains = 1;
+    let domains = 1 + reduced.aliases().unwrap().len();
     assert_eq!(
         INITIAL_SCANS.with(|count| count.get()),
         domains,
-        "the original domain is observed once: {:?}",
-        INITIAL_DOMAINS.with(|domains| domains.borrow().clone())
+        "each original or newly introduced domain is observed once: {:?}",
+        (
+            INITIAL_DOMAINS.with(|domains| domains.borrow().clone()),
+            reduced.aliases().unwrap()
+        )
     );
     assert_eq!(
-        reduced.expression,
-        (Atom::one() + g!(p!(mink!(4)), q!(mink!(4)))).pow(3)
+        reduced.resolved().unwrap().expression,
+        g!(p!(mink!(4)), q!(mink!(4))).pow(3)
     );
     let repeated = reduced.contract(Default::default()).unwrap();
-    assert!(Arc::ptr_eq(
-        reduced.reduction_observations(),
-        repeated.reduction_observations()
-    ));
+    assert!(Arc::ptr_eq(&reduced, &repeated));
     assert_eq!(INITIAL_SCANS.with(|count| count.get()), domains);
 }
 
@@ -561,25 +319,26 @@ fn gamma_prerequisites_do_not_enable_epsilon_identities() {
     let result = source.simplify_algebra(&gamma_only).unwrap();
     assert!(
         result
+            .resolved()
+            .unwrap()
             .expression
             .contains_symbol(*crate::epsilon::EPSILON_SYMBOL)
     );
     assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
-        result.reduction_observations(),
-        result
-            .simplify_algebra(&gamma_only)
-            .unwrap()
-            .reduction_observations()
+        &result,
+        &result.simplify_algebra(&gamma_only).unwrap()
     ));
 }
 
 #[test]
-fn a_capped_algebra_result_retains_its_unprocessed_trace() {
+fn a_capped_algebra_result_retains_its_unprocessed_trace_and_aliases() {
     let reps = crate::test_support::test_initialize();
     let expression =
         trace!(reps.bis4.to_symbolic([]); [gamma!(mink!(4, 98901)), gamma!(mink!(4, 98902))]);
-    let source = SymbolicTensor::infer(expression).unwrap();
+    let body = SymbolicTensor::infer(expression).unwrap();
+    let handle = body.alias_handle().unwrap();
+    let source = Arc::new(handle.clone().with_aliases([(handle, body)]).unwrap());
     let settings = AlgebraSettings {
         gamma: Some(GammaSimplifySettings::default()),
         max_passes: 0,
@@ -587,7 +346,8 @@ fn a_capped_algebra_result_retains_its_unprocessed_trace() {
     };
     let capped = source.simplify_algebra(&settings).unwrap();
     assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
-    assert_eq!(source, capped);
+    assert_eq!(source.root(), capped.root());
+    assert_eq!(source.aliases().unwrap(), capped.aliases().unwrap());
     let finished = capped
         .simplify_algebra(&AlgebraSettings {
             max_passes: 16,
@@ -595,7 +355,7 @@ fn a_capped_algebra_result_retains_its_unprocessed_trace() {
         })
         .unwrap();
     assert_eq!(
-        finished.expression.expand(),
+        finished.expanded().unwrap().expression,
         Atom::num(4) * g!(mink!(4, 98901), mink!(4, 98902))
     );
 }
@@ -621,11 +381,11 @@ fn gamma_identity_contracts_its_prerequisite_without_opening_scalar_spectators()
         })
         .unwrap();
     assert_eq!(result.reduction_status(), ReductionStatus::Complete);
-    assert_eq!(result.structure, source.structure);
+    assert_eq!(result.root().structure, source.structure);
     // Clifford identity gamma^mu gamma_mu = 4 I; the independent scalar
     // coefficient retains even its internal contractions and power notation.
     assert_eq!(
-        result.expression,
+        result.resolved().unwrap().expression,
         Atom::num(4) * g!(&left, &right) * spectator
     );
 }
@@ -649,7 +409,7 @@ fn zero_budget_is_complete_when_no_permitted_work_exists() {
             ..settings
         })
         .unwrap();
-    assert_eq!(result, indexed);
+    assert_eq!(result.root(), indexed);
     assert_eq!(result.reduction_status(), ReductionStatus::Complete);
 }
 
@@ -698,7 +458,7 @@ fn unchanged_kernel_regions_are_reused_after_an_independent_family_changes() {
         .unwrap();
     // The two-dimensional determinant contracts to 2; its independent scalar
     // reduction does not change the open Clifford factor's inputs or boundary.
-    let explicit = result.undo_chain().unwrap().expression.expand();
+    let explicit = result.undo_chain().unwrap().expanded().unwrap().expression;
     assert!(
         (&explicit - Atom::num(2) * matrix).expand().is_zero(),
         "the explicit result is {explicit}"

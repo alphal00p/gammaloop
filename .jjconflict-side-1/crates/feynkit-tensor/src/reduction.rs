@@ -481,6 +481,7 @@ impl TensorReducer {
                 collect_traces: false,
                 ..Default::default()
             })
+            .and_then(|value| value.resolved())
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
         let normalized = normalized
             .to_dots()

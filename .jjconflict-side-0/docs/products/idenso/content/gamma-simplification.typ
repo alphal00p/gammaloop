@@ -26,13 +26,14 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
-`simplify_algebra(gamma=True)` returns a `TensorExpression`: both ordinary and axial
-trace identities retain factored sums. `to_expression()` exposes the ordinary Symbolica
-expression, while `expand()` explicitly materializes the full polynomial.
-Rust uses the same shared tensor result and explicit `expanded(...)` operation.
+`simplify_algebra(gamma=True)` returns an `AliasedTensorExpression`: both ordinary and axial
+trace identities retain factored definitions. `to_expression()` resolves the
+literal aliases, while `expand()` explicitly materializes the full polynomial.
+Rust uses the same shared result through `resolved()` and `expanded()`.
 Trace evaluation and chain output are settings of the gamma pass; expansion is
 an operation on its result. Scalar spectators and independent trace boundaries
-remain factorized during simplification. The trace-specific sparse emitter is
+remain factorized during simplification. The current production implementation
+uses the common alias materializer; the older trace-specific sparse emitter is
 retained only as a test oracle.
 
 See #product-link("idenso", page: "reference/form-color-dirac/", label: "Shipped color and Dirac rules")
@@ -45,7 +46,7 @@ The measurements and implementation notes below record the revisions named in
 each cohort. Their former API spellings and expansion strategies describe those
 executables; they are not instructions for the current tensor API. In particular,
 `expand_traces`, `expand_contracted_sums`, and `replace_tensor` are historical.
-The current notebook uses explicit polynomial expansion and certified
+The current notebook uses explicit aliased-result materialization and certified
 `TensorRule` replacement. Final consolidation measurements are recorded only
 after the combined implementation passes its functional gates.
 

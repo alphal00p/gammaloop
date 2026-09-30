@@ -66,6 +66,7 @@ use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
+pub mod aliases;
 pub mod broadcast;
 mod data;
 pub mod display;
@@ -276,6 +277,7 @@ impl SymbolicaCommunityModule for SpensoModule {
 define_spenso_python_surface! {
     registered_classes: [
         tensor_rule::PyTensorRule,
+        aliases::AliasedTensorExpression,
         SpensoNet,
         network::ExecutionMode,
         network::execution::ExecutionStatus,

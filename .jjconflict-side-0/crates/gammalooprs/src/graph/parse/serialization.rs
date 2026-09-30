@@ -62,12 +62,12 @@ impl Graph {
             if settings.do_gamma_algebra {
                 crate::debug_tags!(#generation, #graph, #inspect, #dump;
                     stage = "graph_serialization_after_simplify_gamma",
-                    log.after_gamma = num.expression(),
+                    log.after_gamma = num.expression().get_root(),
                     "Graph serialization after gamma simplification"
                 );
             }
 
-            let num = cooking.uncook(num.expression().as_view());
+            let num = cooking.uncook(num.resolved()?.expression().as_view());
             dotgraph.global_data.statements.insert(
                 "full_num".into(),
                 num.printer(SpensoPrintSettings::typst_options())

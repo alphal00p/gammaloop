@@ -386,6 +386,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression()
                 .expand()
                 .is_zero()
@@ -407,6 +409,8 @@ mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .into_expression()
                     .expand(),
@@ -435,6 +439,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .into_expression()
                 .expand()
@@ -603,6 +609,8 @@ mod tests {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .to_dots()
             .unwrap()
             .into_expression()
@@ -621,6 +629,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .to_dots()
                 .unwrap()
                 .into_expression()
@@ -634,6 +644,8 @@ mod tests {
                     collect_traces: false,
                     ..Default::default()
                 })
+                .unwrap()
+                .resolved()
                 .unwrap()
                 .to_dots()
                 .unwrap()
@@ -683,6 +695,8 @@ mod tests {
                                 ..Default::default()
                             })
                             .unwrap()
+                            .resolved()
+                            .unwrap()
                             .to_dots()
                             .unwrap()
                             .into_expression()
@@ -705,6 +719,8 @@ mod tests {
                         ..Default::default()
                     })
                     .unwrap()
+                    .resolved()
+                    .unwrap()
                     .to_dots()
                     .unwrap()
                     .into_expression()
@@ -723,6 +739,8 @@ mod tests {
                             collect_traces: false,
                             ..Default::default()
                         })
+                        .unwrap()
+                        .resolved()
                         .unwrap()
                         .to_dots()
                         .unwrap()
@@ -794,6 +812,8 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
+                .resolved()
+                .unwrap()
                 .into_expression()
                 .expand(),
             4 * tau.symbolic_mass(&model)
@@ -827,6 +847,8 @@ mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })
+                    .unwrap()
+                    .resolved()
                     .unwrap()
                     .into_expression()
                     .expand(),

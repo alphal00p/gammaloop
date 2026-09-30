@@ -26,6 +26,8 @@ fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
     let contracted = source
         .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
+        .resolved()
+        .unwrap()
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
             epsilon: true,
@@ -37,6 +39,8 @@ fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
             collect_traces: false,
             ..Default::default()
         })
+        .unwrap()
+        .resolved()
         .unwrap();
     let canonical = contracted
         .expression()

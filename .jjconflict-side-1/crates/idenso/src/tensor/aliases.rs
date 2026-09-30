@@ -1,0 +1,759 @@
+//! Typed interfaces for Symbolica's literal alias registry.
+//!
+//! Definitions live only in `AliasedAtom`. The accompanying structure records
+//! logical layouts, which cannot in general be reconstructed from stored syntax.
+
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+use spenso::{
+    network::tags::SPENSO_TAG,
+    structure::{
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+        slot::IsAbstractSlot,
+    },
+};
+use symbolica::{
+    atom::{AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder},
+    evaluate::EvaluatorBuilder,
+};
+
+use super::{
+    SymbolicTensor, TensorProofs,
+    inference::{InterfaceInference, LeafInference, TensorInferenceError},
+    simplification::observation::DomainObservations,
+};
+
+mod components;
+mod exposure;
+mod materialization;
+mod transformation;
+
+spenso::symbolica_init_lazy_static! {
+    /// Shared opaque tensor-alias head, initialized once for all rewrite owners.
+    pub(crate) static TENSOR_ALIAS_SYMBOL, TENSOR_ALIAS_SYMBOL_INNER: symbolica::atom::Symbol =
+        || spenso::tensor_symbol!("idenso::tensor_alias");
+}
+
+type Result<T> = std::result::Result<T, TensorInferenceError>;
+
+/// One checked literal handle and its typed definition.
+pub(crate) type Definition = (
+    SymbolicTensor<PartialStructure>,
+    SymbolicTensor<PartialStructure>,
+);
+
+/// Logical layouts accompanying one alias registry. Keys include port labelling.
+#[derive(Clone, Debug)]
+pub struct AliasInterfaces {
+    root: PartialStructure,
+    definitions: HashMap<Atom, (PartialStructure, PartialStructure)>,
+    // Facts travel with the exact stored handle/body, not just their layouts.
+    definition_proofs: HashMap<Atom, (TensorProofs, TensorProofs)>,
+}
+
+impl AliasInterfaces {
+    pub fn root(&self) -> &PartialStructure {
+        &self.root
+    }
+
+    pub fn definitions(&self) -> &HashMap<Atom, (PartialStructure, PartialStructure)> {
+        &self.definitions
+    }
+}
+
+impl SymbolicTensor<PartialStructure> {
+    /// Create an opaque handle with this tensor's physical ports and logical order.
+    /// Each use with different labels needs its own literal alias definition.
+    pub fn alias_handle(&self) -> Result<Self> {
+        let certified = self.proofs.validated.get() == Some(&true);
+        let owner = AbstractIndex::fresh_open_owner();
+        let interface = if self.expression.is_zero()
+            || (certified && self.structure.open_positions().is_empty())
+        {
+            self.structure.clone()
+        } else {
+            InterfaceInference::replacement_interface(self.expression.as_view())?
+        };
+        let slots = interface.logical_slots();
+        let scalar = self.is_scalar();
+        let closed_scalar = scalar && slots.is_empty();
+        let head = if scalar {
+            symbolica::symbol!("idenso::scalar_alias"; Scalar)
+        } else {
+            *TENSOR_ALIAS_SYMBOL
+        };
+        let expression = FunctionBuilder::new(head)
+            .add_arg(Atom::num(owner))
+            .add_args(slots.into_iter().map(super::composition::port_atom))
+            .finish();
+        let handle = if certified {
+            Self::from_validated_parts(expression, self.structure.clone())
+        } else {
+            Self::from_normalized_parts(expression, self.structure.clone())
+        };
+        if closed_scalar {
+            let _ = handle.proofs.intrinsic.set(true);
+            let _ = handle
+                .proofs
+                .observations
+                .set(Arc::new(DomainObservations::closed_scalar(false)));
+        }
+        Ok(handle)
+    }
+
+    /// Attach checked literal definitions without resolving or expanding them.
+    pub fn with_aliases(
+        self,
+        definitions: impl IntoIterator<Item = (Self, Self)>,
+    ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
+        self.attach_aliases(definitions, None)
+    }
+
+    /// Reuse admitted literal associations after a typed domain operation.
+    /// New or unchecked definitions still enter through ordinary admission.
+    pub(super) fn attach_aliases(
+        self,
+        definitions: impl IntoIterator<Item = (Self, Self)>,
+        admitted: Option<&SymbolicTensor<AliasInterfaces, AliasedAtom>>,
+    ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
+        // Registry dependency admission shares the planner's one initial scan.
+        // Reattaching unchanged domains reuses these immutable observations.
+        self.reduction_observations();
+        let mut expression = AliasedAtom::from(self.expression);
+        let mut interfaces = HashMap::new();
+        let mut definition_proofs = HashMap::new();
+        for (handle, body) in definitions {
+            body.reduction_observations();
+            let valid_handle = match handle.expression.as_view() {
+                AtomView::Var(variable) => {
+                    variable.get_symbol().get_wildcard_level() == 0
+                        && !variable.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                }
+                AtomView::Fun(function) => {
+                    function.get_symbol() == *TENSOR_ALIAS_SYMBOL
+                        || function.get_symbol()
+                            == symbolica::symbol!("idenso::scalar_alias"; Scalar)
+                        || function.get_symbol() == SPENSO_TAG.scalar
+                }
+                _ => false,
+            };
+            if !valid_handle {
+                return Err(TensorInferenceError::invalid(
+                    "tensor aliases require an opaque alias handle or a scalar variable",
+                ));
+            }
+            if !InterfaceInference::additive_interfaces_match(&handle.structure, &body.structure) {
+                return Err(TensorInferenceError::invalid(
+                    "alias handle and body have different logical interfaces",
+                ));
+            }
+            let retained = admitted.is_some_and(|registry| {
+                registry
+                    .structure
+                    .definitions
+                    .get(&handle.expression)
+                    .is_some_and(|(old_handle, old_body)| {
+                        old_handle == &handle.structure
+                            && old_body == &body.structure
+                            && body.proofs.validated.get() == Some(&true)
+                    })
+            });
+            if !retained {
+                // The handle is a small literal. A certified explicit body
+                // already carries its complete physical boundary; unresolved
+                // ports still need the encoded owner/axis association check.
+                let encoded = if handle.proofs.validated.get() == Some(&true)
+                    && handle.structure.open_positions().is_empty()
+                {
+                    handle.structure.clone()
+                } else {
+                    InterfaceInference::replacement_interface(handle.expression.as_view())?
+                };
+                if body.proofs.validated.get() == Some(&true)
+                    && body.structure.open_positions().is_empty()
+                {
+                    if !body.expression.is_zero()
+                        && !InterfaceInference::additive_interfaces_match(&encoded, &body.structure)
+                    {
+                        return Err(TensorInferenceError::invalid(
+                            "alias handle and body have different physical interfaces",
+                        ));
+                    }
+                } else {
+                    let (_, occurrences) = Self::validate_observed_interface(
+                        &body.expression,
+                        &encoded,
+                        LeafInference::ObserveEncoded,
+                    )?;
+                    if let Some(occurrences) = occurrences {
+                        occurrences.validate()?;
+                    }
+                    let _ = body.proofs.validated.set(true);
+                }
+            }
+            handle.ensure_validated()?;
+            if let Some(previous) = expression.get_aliases().get(&handle.expression) {
+                if previous != &body.expression
+                    || interfaces.get(&handle.expression)
+                        != Some(&(handle.structure.clone(), body.structure.clone()))
+                {
+                    return Err(TensorInferenceError::invalid(
+                        "conflicting alias definitions",
+                    ));
+                }
+                continue;
+            }
+            definition_proofs.insert(handle.expression.clone(), (handle.proofs, body.proofs));
+            interfaces.insert(
+                handle.expression.clone(),
+                (handle.structure, body.structure),
+            );
+            expression.register_alias(handle.expression, body.expression);
+        }
+        // Interface/algebra facts describe the unresolved root. Contraction
+        // completion instead describes the whole DAG and must be re-established.
+        let mut proofs = self.proofs;
+        proofs.contracted = false;
+        proofs.reduction = None;
+        let value = SymbolicTensor {
+            proofs,
+            expression,
+            structure: AliasInterfaces {
+                root: self.structure,
+                definitions: interfaces,
+                definition_proofs,
+            },
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+        };
+        value.dependency_order()?;
+        Ok(value)
+    }
+}
+
+impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    /// Whether the current value is certified complete for the default
+    /// metric/vector contractor. This does not promise to evaluate arbitrary
+    /// tensor components or remove repeated indices owned by other domains.
+    /// False includes a budget-limited frontier and a value not yet certified.
+    pub fn contraction_complete(&self) -> bool {
+        self.proofs.contracted
+    }
+
+    /// The unresolved root, with its established public port order.
+    pub fn root(&self) -> SymbolicTensor<PartialStructure> {
+        let mut proofs = self.proofs.clone();
+        proofs.contracted = false;
+        proofs.reduction = None;
+        SymbolicTensor {
+            proofs,
+            expression: self.expression.get_root().clone(),
+            structure: self.structure.root.clone(),
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+        }
+    }
+
+    /// Typed definitions in dependency order. No body is expanded or re-inferred.
+    pub fn aliases(
+        &self,
+    ) -> Result<
+        Vec<(
+            SymbolicTensor<PartialStructure>,
+            SymbolicTensor<PartialStructure>,
+        )>,
+    > {
+        self.dependency_order()?
+            .into_iter()
+            .map(|handle| {
+                let (interface, body_interface) =
+                    self.structure.definitions.get(handle).ok_or_else(|| {
+                        TensorInferenceError::invalid("alias registry has no logical interface")
+                    })?;
+                let (handle_proofs, body_proofs) = &self.structure.definition_proofs[handle];
+                let mut typed_handle =
+                    SymbolicTensor::from_normalized_parts(handle.clone(), interface.clone());
+                typed_handle.proofs = handle_proofs.clone();
+                let mut body = SymbolicTensor::from_normalized_parts(
+                    self.expression.get_aliases()[handle].clone(),
+                    body_interface.clone(),
+                );
+                body.proofs = body_proofs.clone();
+                Ok((typed_handle, body))
+            })
+            .collect()
+    }
+
+    /// Resolve literal aliases, retaining factorization and checking callback results.
+    pub fn resolved(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Materialization,
+        );
+        self.dependency_order()?;
+        self.root()
+            .with_checked_expression(self.expression.clone().into_inner())
+    }
+
+    /// Explicit materialization. Contraction and alias construction never call this.
+    pub fn expanded(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Materialization,
+        );
+        if self.expression.get_aliases().is_empty() {
+            return self.root().expanded(None, false);
+        }
+        if let Some(expression) = self.polynomial_materialization()? {
+            self.root().with_algebra_result(expression)
+        } else {
+            self.resolved()?.expanded(None, true)
+        }
+    }
+
+    /// Apply a typed operation once to each definition; handles remain opaque.
+    pub fn map_aliases(
+        &self,
+        mut map: impl FnMut(
+            &SymbolicTensor<PartialStructure>,
+            SymbolicTensor<PartialStructure>,
+        ) -> Result<SymbolicTensor<PartialStructure>>,
+    ) -> Result<Self> {
+        let aliases = self
+            .aliases()?
+            .into_iter()
+            .map(|(handle, body)| {
+                let body = map(&handle, body)?;
+                Ok((handle, body))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.root().with_aliases(aliases)
+    }
+
+    /// Compile the DAG directly using Symbolica's existing evaluator builder.
+    pub fn evaluator<P: AtomCore>(&self, parameters: &[P]) -> Result<EvaluatorBuilder<'_>> {
+        self.dependency_order()?;
+        AliasedAtom::evaluator_multiple(std::slice::from_ref(&self.expression), parameters)
+            .map_err(|error| TensorInferenceError::invalid(error.to_string()))
+    }
+
+    /// Literal definitions reachable from the current root, with handles opaque.
+    pub(super) fn reachable_definitions(&self) -> HashSet<&Atom> {
+        let definitions = self.expression.get_aliases();
+        let mut reachable = HashSet::new();
+        let mut pending = self
+            .proofs
+            .observations
+            .get()
+            .unwrap()
+            .literals(self.expression.as_atom_view())
+            .iter()
+            .collect::<Vec<_>>();
+        while let Some(literal) = pending.pop() {
+            if let Some((handle, body)) = definitions.get_key_value(literal)
+                && reachable.insert(handle)
+            {
+                pending.extend(
+                    self.structure.definition_proofs[handle]
+                        .1
+                        .observations
+                        .get()
+                        .unwrap()
+                        .literals(body.as_view())
+                        .iter(),
+                );
+            }
+        }
+        reachable
+    }
+
+    // Pinned Symbolica register_alias does not reject cycles. Check literal
+    // dependencies before resolution/evaluation, including disconnected definitions.
+    fn dependency_order(&self) -> Result<Vec<&Atom>> {
+        let definitions = self.expression.get_aliases();
+        if definitions.len() != self.structure.definitions.len()
+            || definitions.len() != self.structure.definition_proofs.len()
+            || definitions.keys().any(|key| {
+                !self.structure.definitions.contains_key(key)
+                    || !self.structure.definition_proofs.contains_key(key)
+            })
+        {
+            return Err(TensorInferenceError::invalid(
+                "alias registry and interfaces disagree",
+            ));
+        }
+        let dependencies = |observed: &DomainObservations,
+                            expression: AtomView<'_>|
+         -> Result<HashSet<&Atom>> {
+            let mut found = HashSet::new();
+            for literal in observed.literals(expression) {
+                if let Some((handle, _)) = definitions.get_key_value(literal) {
+                    found.insert(handle);
+                } else if matches!(literal.as_view(), AtomView::Fun(function)
+                    if function.get_symbol() == *TENSOR_ALIAS_SYMBOL
+                    || function.get_symbol() == symbolica::symbol!("idenso::scalar_alias"; Scalar))
+                {
+                    return Err(TensorInferenceError::invalid(
+                        "unregistered tensor alias use; each literal port labelling needs a definition",
+                    ));
+                }
+            }
+            Ok(found)
+        };
+        dependencies(
+            self.proofs.observations.get().unwrap(),
+            self.expression.as_atom_view(),
+        )?;
+        let mut keys = definitions.keys().collect::<Vec<_>>();
+        keys.sort_unstable_by(|a, b| AtomView::cmp(&a.as_view(), &b.as_view()));
+        let mut remaining = HashMap::new();
+        let mut dependents: HashMap<&Atom, Vec<&Atom>> = HashMap::new();
+        for &key in &keys {
+            let dependencies = dependencies(
+                self.structure.definition_proofs[key]
+                    .1
+                    .observations
+                    .get()
+                    .unwrap(),
+                definitions[key].as_view(),
+            )?;
+            remaining.insert(key, dependencies.len());
+            for dependency in dependencies {
+                dependents.entry(dependency).or_default().push(key);
+            }
+        }
+        let mut order = keys
+            .into_iter()
+            .filter(|key| remaining[key] == 0)
+            .collect::<Vec<_>>();
+        let mut position = 0;
+        while position < order.len() {
+            if let Some(dependents) = dependents.get(order[position]) {
+                for &dependent in dependents {
+                    let count = remaining.get_mut(dependent).unwrap();
+                    *count -= 1;
+                    if *count == 0 {
+                        order.push(dependent);
+                    }
+                }
+            }
+            position += 1;
+        }
+        if order.len() != definitions.len() {
+            return Err(TensorInferenceError::invalid(
+                "cyclic tensor alias definitions",
+            ));
+        }
+        Ok(order)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    use symbolica::symbol;
+
+    fn tensor() -> SymbolicTensor<PartialStructure> {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        SymbolicTensor::infer(
+            FunctionBuilder::new(spenso::tensor_symbol!("alias_test::tensor"))
+                .add_args([91001, 91003].map(|index| {
+                    rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                        .to_atom()
+                }))
+                .finish(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn literal_aliases_preserve_each_logical_layout_and_typed_zero() {
+        let body = tensor();
+        let mut handle = body.alias_handle().unwrap();
+        handle.structure = PartialStructure::from_logical_slots(
+            handle.structure.logical_slots().into_iter().rev(),
+        );
+        let root = handle.clone();
+        let value = root
+            .clone()
+            .with_aliases([(handle.clone(), body.clone())])
+            .unwrap();
+        let pairs = value.aliases().unwrap();
+        assert_eq!(pairs[0].0.structure, handle.structure);
+        assert_eq!(pairs[0].1.structure, body.structure);
+        assert_eq!(value.root(), root);
+        let resolved = value.resolved().unwrap();
+        assert_eq!(resolved.expression, body.expression);
+        assert_eq!(resolved.structure, handle.structure);
+        let zero = body.with_checked_expression(Atom::Zero).unwrap();
+        let value = root.with_aliases([(handle, zero)]).unwrap();
+        assert!(value.resolved().unwrap().expression.is_zero());
+        assert_eq!(value.resolved().unwrap().structure, value.root().structure);
+    }
+
+    #[test]
+    fn nested_aliases_resolve_without_expansion_and_map_once() {
+        let scalar =
+            |a| SymbolicTensor::checked_parts(a, PartialStructure::from_logical_slots([])).unwrap();
+        let x = Atom::var(symbol!("alias_test::x"));
+        let first = scalar(Atom::var(symbol!("alias_test::first")));
+        let second = scalar(Atom::var(symbol!("alias_test::second")));
+        let body = scalar((&x + 1).pow(3));
+        let generated = body.alias_handle().unwrap();
+        let scalar_alias = generated
+            .clone()
+            .with_aliases([(generated, body.clone())])
+            .unwrap();
+        assert_eq!(scalar_alias.resolved().unwrap(), body);
+        let value = second
+            .clone()
+            .with_aliases([
+                (second, scalar((&first.expression + 2).pow(2))),
+                (first, body.clone()),
+            ])
+            .unwrap();
+        assert_eq!(
+            value.resolved().unwrap().expression,
+            (&body.expression + 2).pow(2)
+        );
+        assert_eq!(
+            value.expanded().unwrap().expression,
+            (&body.expression + 2).pow(2).expand()
+        );
+        let mut calls = 0;
+        let mapped = value
+            .map_aliases(|_, body| {
+                calls += 1;
+                Ok(body)
+            })
+            .unwrap();
+        assert_eq!(calls, 2);
+        assert_eq!(mapped.resolved().unwrap(), value.resolved().unwrap());
+        assert!(value.evaluator(&[x]).unwrap().build().is_ok());
+    }
+
+    #[test]
+    fn alias_registry_rejects_cycles_conflicts_and_wrong_labels() {
+        let scalar =
+            |a| SymbolicTensor::checked_parts(a, PartialStructure::from_logical_slots([])).unwrap();
+        let a = scalar(Atom::var(symbol!("alias_test::a")));
+        let b = scalar(Atom::var(symbol!("alias_test::b")));
+        assert!(a.clone().with_aliases([(a.clone(), a.clone())]).is_err());
+        assert!(
+            a.clone()
+                .with_aliases([(a.clone(), b.clone()), (b.clone(), a.clone())])
+                .is_err()
+        );
+        assert!(
+            a.clone()
+                .with_aliases([(a.clone(), scalar(Atom::one())), (a, scalar(Atom::num(2)))])
+                .is_err()
+        );
+        let body = tensor();
+        let handle = body.alias_handle().unwrap();
+        let wrong = SymbolicTensor::infer(
+            body.expression
+                .replace(Atom::num(91001))
+                .with(Atom::num(91005)),
+        )
+        .unwrap();
+        assert!(
+            handle
+                .clone()
+                .with_aliases([(handle.clone(), wrong)])
+                .is_err()
+        );
+        let scalar_body = scalar(Atom::one());
+        assert!(
+            handle
+                .clone()
+                .with_aliases([(handle, scalar_body)])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn alias_resolution_retains_encoded_open_ports() {
+        crate::test_support::test_initialize();
+        let body = SymbolicTensor::<PartialStructure>::from_signature(
+            &crate::dirac::AGS.gamma_strct::<AbstractIndex>(4),
+        )
+        .unwrap();
+        let handle = body.alias_handle().unwrap();
+        let value = handle
+            .clone()
+            .with_aliases([(handle, body.clone())])
+            .unwrap();
+        assert_eq!(value.resolved().unwrap().expression, body.expression);
+        assert_eq!(value.root().structure, body.structure);
+
+        let relabeled = body
+            .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(91201))]))
+            .unwrap();
+        let relabeled_handle = relabeled.alias_handle().unwrap();
+        let uses = relabeled_handle
+            .clone()
+            .with_aliases([(value.root(), body), (relabeled_handle, relabeled.clone())])
+            .unwrap();
+        assert_eq!(uses.aliases().unwrap().len(), 2);
+        assert_eq!(uses.resolved().unwrap(), relabeled);
+    }
+
+    #[test]
+    fn alias_definitions_check_individual_branches_and_callback_rank_loss() {
+        use crate::shorthands::schoonschip::Schoonschip;
+        use spenso::network::library::symbolic::ETS;
+
+        let body = tensor();
+        let handle = body.alias_handle().unwrap();
+        let wrong_branch = body
+            .expression
+            .replace(Atom::num(91001))
+            .with(Atom::num(91005));
+        let invalid = SymbolicTensor::from_normalized_parts(
+            &body.expression + wrong_branch,
+            body.structure.clone(),
+        );
+        assert!(handle.clone().with_aliases([(handle, invalid)]).is_err());
+
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let [a, b] = [91301, 91303].map(|index| {
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let target = b.clone();
+        let head = spenso::tensor_symbol!(
+            "alias_test::callback_rank_loss",
+            norm = move |node, out| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|argument| argument == target.as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let metric = FunctionBuilder::new(ETS.metric)
+            .add_arg(&a)
+            .add_arg(&b)
+            .finish();
+        let leaf = FunctionBuilder::new(head).add_arg(&a).finish();
+        let body = SymbolicTensor::<PartialStructure>::infer(metric * leaf).unwrap();
+        let handle = body.alias_handle().unwrap();
+        let value = handle.clone().with_aliases([(handle, body)]).unwrap();
+        assert!(
+            value
+                .map_aliases(|_, body| {
+                    body.with_rewritten_expression(body.expression.schoonschip())
+                })
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn borrowed_storage_keeps_the_original_payload_and_structure() {
+        let body = tensor();
+        let borrowed = SymbolicTensor {
+            proofs: Default::default(),
+            expression: body.expression.as_view(),
+            structure: body.structure.clone(),
+            is_metric: body.is_metric,
+            is_composite: body.is_composite,
+        };
+        assert_eq!(
+            borrowed.expression.get_data().as_ptr(),
+            body.expression.as_view().get_data().as_ptr()
+        );
+        assert_eq!(borrowed.structure, body.structure);
+    }
+
+    #[test]
+    fn only_completed_contraction_reuses_the_sealed_shared_carrier() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let slot = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(91401))
+            .to_atom();
+        let vector = |head| FunctionBuilder::new(head).add_arg(&slot).finish();
+        let p = vector(spenso::vector_symbol!("carried_contract_p"));
+        let q = vector(spenso::vector_symbol!("carried_contract_q"));
+        let r = vector(spenso::vector_symbol!("carried_contract_r"));
+        let source = SymbolicTensor::infer((p + q) * r).unwrap();
+        let value = Arc::new(source.contract(Default::default()).unwrap());
+        assert!(value.proofs.contracted);
+        let repeated = value.contract(Default::default()).unwrap();
+        assert!(Arc::ptr_eq(&value, &repeated));
+        let different = value
+            .contract(super::super::ContractSettings::default().without_rank_one_tensors())
+            .unwrap();
+        assert!(!Arc::ptr_eq(&value, &different));
+        let mapped = Arc::new(value.map_aliases(|_, body| Ok(body)).unwrap());
+        assert_eq!(
+            mapped.reduction_status(),
+            super::super::ReductionStatus::Deferred
+        );
+        assert_eq!(mapped.resolved().unwrap(), value.resolved().unwrap());
+
+        let slots = (0..12)
+            .map(|index| {
+                rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(91411 + index))
+                    .to_atom()
+            })
+            .collect::<Vec<_>>();
+        let tensor = FunctionBuilder::new(spenso::tensor_symbol!("carried_budget_tensor"))
+            .add_args(&slots)
+            .finish();
+        let x = Atom::var(symbol!("carried_budget_x"));
+        let y = Atom::var(symbol!("carried_budget_y"));
+        let factors = slots.iter().map(|slot| {
+            &x * FunctionBuilder::new(spenso::vector_symbol!("carried_budget_p"))
+                .add_arg(slot)
+                .finish()
+                + &y * FunctionBuilder::new(spenso::vector_symbol!("carried_budget_q"))
+                    .add_arg(slot)
+                    .finish()
+        });
+        let source = SymbolicTensor::infer(tensor * Atom::mul_many(factors)).unwrap();
+        let incomplete = Arc::new(source.contract(Default::default()).unwrap());
+        assert!(!incomplete.proofs.contracted);
+        assert_ne!(
+            incomplete.reduction_status(),
+            super::super::ReductionStatus::Complete
+        );
+        use spenso::network::parsing::AtomStructureExt;
+        assert!(
+            incomplete
+                .expression
+                .get_root()
+                .has_repeated_explicit_indices()
+        );
+    }
+
+    #[test]
+    fn reserved_alias_uses_require_exact_registered_labellings() {
+        let body = tensor();
+        let handle = body.alias_handle().unwrap();
+        assert!(handle.clone().with_aliases([]).is_err());
+        let relabeled = handle
+            .reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(91499))]))
+            .unwrap();
+        assert!(
+            relabeled
+                .with_aliases([(handle.clone(), body.clone())])
+                .is_err()
+        );
+        let outer = handle.alias_handle().unwrap();
+        assert!(
+            outer
+                .with_aliases([(handle.alias_handle().unwrap(), handle.clone())])
+                .is_err()
+        );
+        let value = handle.clone().with_aliases([(handle, body)]).unwrap();
+        assert!(!value.proofs.contracted);
+    }
+}

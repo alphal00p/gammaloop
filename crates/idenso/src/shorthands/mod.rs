@@ -3,11 +3,18 @@ use spenso::{
     network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
     structure::slot::{AbsInd, DummyAind, ParseableAind},
 };
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use std::sync::Arc;
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    id::AliasedAtom,
+};
 
 use crate::{
     NetworkToolingError,
-    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor, inference::TensorInferenceError},
+    tensor::{
+        SymbolicNetExt, SymbolicNetParse, SymbolicTensor, aliases::AliasInterfaces,
+        inference::TensorInferenceError,
+    },
 };
 
 pub(crate) mod bracket;
@@ -48,6 +55,28 @@ impl SymbolicTensor<PartialStructure> {
     /// Replace trace notation with a closed chain, without evaluating it.
     pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
         self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?, None)
+    }
+}
+
+impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    /// Normalize scalar-product notation in the root and reachable definitions.
+    pub fn to_dots(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.to_dots()?, Vec::new())))
+    }
+
+    /// Open dots in the root and reachable definitions without resolving aliases.
+    pub fn undo_dots(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.undo_dots()?, Vec::new())))
+    }
+
+    /// Expose chain factors in reachable definitions while retaining alias ownership.
+    pub fn undo_chain(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.undo_chain()?, Vec::new())))
+    }
+
+    /// Open trace notation in reachable definitions, retaining the alias DAG.
+    pub fn undo_trace(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.undo_trace()?, Vec::new())))
     }
 }
 
@@ -440,6 +469,7 @@ mod tests {
                         (
                             plan.root,
                             plan.status == crate::tensor::ReductionStatus::Complete,
+                            plan.aliases,
                         )
                     });
                 assert_eq!(
@@ -492,10 +522,10 @@ mod typed_dot_tests {
     use super::*;
     use crate::tensor::SymbolicTensor;
     use spenso::{
-        chain, chain_factor, dot, g, mink,
+        dot, g, mink,
         network::tags::SPENSO_TAG,
         structure::partial::{PartialStructure, PartialStructureExt},
-        tensor, trace, vector,
+        tensor, vector,
     };
     use std::sync::{
         Arc,
@@ -519,7 +549,11 @@ mod typed_dot_tests {
         let indexed = SymbolicTensor::infer(explicit.clone()).unwrap();
         assert_eq!(indexed.to_dots().unwrap().expression(), &explicit);
         assert_eq!(indexed.expression(), &explicit);
-        let contracted = indexed.contract(Default::default()).unwrap();
+        let contracted = indexed
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
         assert_eq!(contracted.to_dots().unwrap().expression(), &expected);
     }
 
@@ -589,6 +623,58 @@ mod typed_dot_tests {
     }
 
     #[test]
+    fn typed_dot_aliases_keep_registry_and_reuse_identity() {
+        crate::test_support::test_initialize();
+        let body = SymbolicTensor::infer(g!(
+            vector!(typed_alias_p, mink!(4)),
+            vector!(typed_alias_q, mink!(4))
+        ))
+        .unwrap();
+        let disconnected = SymbolicTensor::infer(g!(
+            vector!(typed_unused_p, mink!(4)),
+            vector!(typed_unused_q, mink!(4))
+        ))
+        .unwrap();
+        let handle = body.alias_handle().unwrap();
+        let unused = disconnected.alias_handle().unwrap();
+        let source = Arc::new(
+            handle
+                .clone()
+                .with_aliases([
+                    (handle.clone(), body.clone()),
+                    (unused.clone(), disconnected.clone()),
+                ])
+                .unwrap(),
+        );
+        let formatted = source.to_dots().unwrap();
+        assert_eq!(formatted.root(), source.root());
+        assert_eq!(formatted.aliases().unwrap().len(), 2);
+        let definitions = formatted.aliases().unwrap();
+        assert!(definitions.contains(&(unused, disconnected)));
+        assert!(Arc::ptr_eq(&formatted, &formatted.to_dots().unwrap()));
+        let opened = formatted.undo_dots().unwrap();
+        assert_eq!(opened.root(), source.root());
+        assert_eq!(opened.aliases().unwrap().len(), 2);
+        assert_eq!(
+            source
+                .aliases()
+                .unwrap()
+                .iter()
+                .find(|(h, _)| h == &handle)
+                .unwrap()
+                .1,
+            body
+        );
+    }
+}
+
+#[cfg(test)]
+mod explicit_notation_tests {
+    use super::*;
+    use spenso::{chain, chain_factor, mink, network::tags::SPENSO_TAG, trace, vector};
+    use symbolica::atom::AtomCore;
+
+    #[test]
     fn trace_unfolding_preserves_order_and_does_not_evaluate() {
         crate::test_support::test_initialize();
         let trace = trace!(
@@ -610,7 +696,11 @@ mod typed_dot_tests {
         let explicit = opened.undo_chain().unwrap();
         assert!(!explicit.expression().contains_symbol(SPENSO_TAG.chain));
         SymbolicTensor::validate_atom(explicit.expression()).unwrap();
-        let joined = opened.contract(Default::default()).unwrap();
+        let joined = opened
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
         assert_eq!(joined.expression(), source.expression());
         let empty = SymbolicTensor::infer(trace!(mink!(4)))
             .unwrap()
@@ -675,6 +765,8 @@ mod typed_dot_tests {
         let contracted = SymbolicTensor::infer(product)
             .unwrap()
             .contract(Default::default())
+            .unwrap()
+            .resolved()
             .unwrap()
             .to_dots()
             .unwrap();

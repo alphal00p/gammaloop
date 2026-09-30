@@ -93,7 +93,7 @@ class GluonLadder:
             "vertex_order": self.order,
             "form_vertex_order": ORDERS[self.form_order],
             "local": "compiled factorized tensor rule",
-            "ambient": "shared graph contraction with factored scalar coefficients",
+            "ambient": "shared graph contraction with retained aliases",
             "final": "typed expand then scalar notation",
             "trace_instruction": None,
         }

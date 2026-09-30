@@ -266,7 +266,8 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 ..Default::default()
             }),
             ..Default::default()
-        })?;
+        })?
+        .resolved()?;
     let numerator = cooking.uncook(numerator.expression().as_view());
     let scope = DirectResidueBranches::numerator_scope();
     let numerator_tag = scope.1.clone();

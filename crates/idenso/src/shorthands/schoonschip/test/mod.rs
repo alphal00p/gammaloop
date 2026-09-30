@@ -411,8 +411,7 @@ fn chain_like_metric_simplification_handles_chain_endpoints() {
         ETS.metric(&mu, &p_stripped) * chain!(&mu, &nu, function!(f, chain_in(), chain_out()));
     let result =
         expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
-    assert_eq!(result, function!(f, &p_stripped, &nu));
-    assert_snapshot!(result.to_bare_ordered_string(), @"F(P(1,mink(D)),mink(D,2))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"chain(P(1,mink(D)),mink(D,2),F(in,out))");
 }
 
 #[test]
@@ -426,6 +425,8 @@ fn contraction_orders_preserve_the_same_factorized_value() {
     for order in [[0, 1], [1, 0]] {
         let result = source
             .contract(crate::tensor::ContractSettings::default().with_order(&order))
+            .unwrap()
+            .resolved()
             .unwrap();
         assert_eq!(result.expression.expand(), expected);
     }

@@ -329,7 +329,13 @@ impl FactoredTrace {
         compiler.finish(root)
     }
 
-    pub(super) fn evaluate(&self, root: usize, factors: &[Atom], unit: AtomView<'_>) -> Atom {
+    pub(super) fn evaluate(
+        &self,
+        root: usize,
+        factors: &[Atom],
+        unit: AtomView<'_>,
+        retain: &mut impl FnMut(Atom) -> Atom,
+    ) -> Atom {
         let mut values: Vec<Atom> = Vec::with_capacity(root + 1);
         for node in &self.nodes[..=root] {
             let value = match node {
@@ -350,7 +356,7 @@ impl FactoredTrace {
                     Atom::add_many(children.iter().map(|&child| values[child].as_view()))
                 }
             };
-            values.push(value);
+            values.push(retain(value));
         }
         Atom::mul_many([unit, values[root].as_view()])
     }
@@ -446,7 +452,7 @@ mod tests {
                         )
                     }));
                 assert_eq!(
-                    factored.evaluate(factored.root, &factors, unit.as_view()),
+                    factored.evaluate(factored.root, &factors, unit.as_view(), &mut |value| value),
                     expected
                 );
             }

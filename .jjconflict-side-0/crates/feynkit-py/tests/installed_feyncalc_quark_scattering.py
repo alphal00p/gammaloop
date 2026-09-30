@@ -124,23 +124,26 @@ for name, pdgs in [
         )
         colored = (
             TensorExpression(generic, intern="flattened")
-            .simplify_algebra(gamma=False, color=True)
+            .simplify_algebra(color=True)
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_expression()
             .replace(dA, Nc**2 - 1)
         )
         colored = (
             TensorExpression(colored)
             .simplify_algebra(
-                gamma=False, color=True, color_substitute_cof_dimension_invariants=True
+                color=True, color_substitute_cof_dimension_invariants=True
             )
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_expression()
         )
         scalar = (
             TensorExpression(colored * spins, intern="flattened")
-            .simplify_algebra(color=False, gamma=True, epsilon=True)
+            .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_dots()
         )
         assert scalar.is_scalar

@@ -9,7 +9,8 @@ arguments and wrap the shared result.
 == One symbolic carrier
 
 `SymbolicTensor` carries an expression together with its logical interface.
-Reduction and collection retain a plain Symbolica Atom in that same abstraction;
+Its aliased form uses Symbolica's existing `AliasedAtom`, with interfaces for
+the root and each literal definition. It is the same tensor abstraction;
 there is no separate Python composition tensor or contraction-specific tensor.
 
 General composition, index substitution, contraction, and interface checks live
@@ -41,14 +42,14 @@ budget-capped work without discarding the exact remaining expression.
 The contraction frontier chooses an incident factor, visits its alternatives,
 and carries index overrides to adjacent leaves. Equivalent remaining states
 merge before emitting an expression. A distinct relabeled tensor is constructed
-once; generated scalar sums remain factorized. Neither rule application
+once; generated scalar sums become alias definitions. Neither rule application
 nor contraction materializes the complete distributed numerator.
 
 A powered scalar subexpression owns its internal dummy pairs. Contract that
 scope before applying its power; copies must not accidentally identify their
 dummies. Open powers retain the existing cross-copy contraction semantics.
 
-`contract(...)` returns a `TensorExpression` in Python.
+`contract(settings=None)` returns the typed alias result.
 Order and rank-one handling are
 policies of this operation, not separate contraction engines. Metric-only
 callers retain explicit vector contractions until their chosen later stage.
@@ -72,10 +73,10 @@ Logical port identities and their order matter independently of a multiset of
 representations; unresolved ports, metadata, and typed zero interfaces remain
 part of the shared invariant.
 
-A completed certified result can reuse its observations on a default rerun.
-Changed regions and callback-sensitive results invalidate the relevant proofs.
-Unselected factors retain their callbacks without being evaluated as a side
-effect of unrelated contraction.
+A completed certified aliased result can reuse its sealed allocation on a
+default rerun. Changed definitions and callback-sensitive results invalidate
+the relevant proofs. Disconnected definitions retain their callbacks without
+being evaluated as a side effect of root contraction.
 
 == Dots and concrete components
 
@@ -96,9 +97,11 @@ keeps its dummy scope and its own unsupported-input outcome.
 
 == Explicit materialization and validation
 
-`to_expression()` exposes the ordinary Symbolica expression in Python.
-`expand()` explicitly materializes its polynomial. Neither conversion runs
-implicitly during tensor inference or contraction.
+`resolved` substitutes literal definitions while retaining factorization.
+`expanded` explicitly materializes their polynomial; `evaluator` consumes the
+alias DAG through Symbolica's evaluator builder. Polynomial variables belong
+to the definitions that use them, and the final sum is constructed in bulk.
+These operations do not run implicitly during tensor inference or contraction.
 
 Validation covers logical ordering, unresolved ports, callback-induced rank
 changes, copied dummy scopes, and identity/genuine index substitutions. FORM

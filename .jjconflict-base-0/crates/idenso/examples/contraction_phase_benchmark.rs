@@ -14,7 +14,7 @@
 //! Three additional factored generic-tensor controls exercise a selected bispinor
 //! representation and both orientations of an unrelated dual representation.
 //!
-//! Typed gamma methods include admission in each call.
+//! Typed gamma methods include admission and alias resolution in each call.
 //! Public operations call the linked production API. `Chainify` isolates the
 //! internal notation primitive through the `reference-cases` feature. Compare
 //! output snapshots across builds; term counts alone do not establish equivalence.
@@ -30,23 +30,23 @@ enum Method {
     Clone,
     RepeatedIndices,
     NotationToDots,
-    MetricContract,
-    Contract,
+    MetricContractResolve,
+    ContractResolve,
     Epsilon,
     Chainify,
-    TypedGammaChains,
-    TypedGamma,
+    TypedGammaChainsResolve,
+    TypedGammaResolve,
 }
 const METHODS: [Method; 9] = [
     Method::Clone,
     Method::RepeatedIndices,
     Method::NotationToDots,
-    Method::MetricContract,
-    Method::Contract,
+    Method::MetricContractResolve,
+    Method::ContractResolve,
     Method::Epsilon,
     Method::Chainify,
-    Method::TypedGammaChains,
-    Method::TypedGamma,
+    Method::TypedGammaChainsResolve,
+    Method::TypedGammaResolve,
 ];
 
 enum Outcome {
@@ -74,7 +74,7 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
             .to_dots()
             .unwrap()
             .into_expression(),
-        MetricContract => SymbolicTensor::infer(view.to_owned())
+        MetricContractResolve => SymbolicTensor::infer(view.to_owned())
             .unwrap()
             .contract(ContractSettings {
                 rank_one: false,
@@ -83,14 +83,18 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
-        Contract => SymbolicTensor::infer(view.to_owned())
+        ContractResolve => SymbolicTensor::infer(view.to_owned())
             .unwrap()
             .contract(idenso::tensor::ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
             })
+            .unwrap()
+            .resolved()
             .unwrap()
             .into_expression(),
         Epsilon => SymbolicTensor::infer(view.to_owned())
@@ -106,35 +110,45 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
                 ..Default::default()
             })
             .unwrap()
+            .resolved()
+            .unwrap()
             .into_expression(),
         Chainify => idenso::reference_cases::chain_notation_phase(view),
-        TypedGammaChains => idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
-            .unwrap()
-            .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                gamma: Some(idenso::dirac::GammaSimplifySettings {
-                    output: idenso::dirac::GammaOutput::Chains,
+        TypedGammaChainsResolve => {
+            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings {
+                        output: idenso::dirac::GammaOutput::Chains,
+                        ..Default::default()
+                    }),
+                    epsilon: false,
                     ..Default::default()
-                }),
-                epsilon: false,
-                ..Default::default()
-            })
-            .unwrap()
-            .into_expression(),
-        TypedGamma => idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
-            .unwrap()
-            .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
-                epsilon: true,
-                ..Default::default()
-            })
-            .unwrap()
-            .contract(idenso::tensor::ContractSettings {
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })
-            .unwrap()
-            .into_expression(),
+                })
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+        }
+        TypedGammaResolve => {
+            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+        }
         RepeatedIndices => unreachable!(),
     })
 }
@@ -225,11 +239,11 @@ fn main() {
         )
         .unwrap();
         for method in METHODS {
-            if matches!(method, Method::TypedGamma) && !has_gamma {
+            if matches!(method, Method::TypedGammaResolve) && !has_gamma {
                 continue;
             }
             let output = run(method, input.as_view()).atom();
-            if matches!(method, Method::TypedGamma) && variant == "gamma_terminal" {
+            if matches!(method, Method::TypedGammaResolve) && variant == "gamma_terminal" {
                 assert_eq!(output, input, "{case}: terminal gamma expression changed");
             }
             let changed = output != input;

@@ -82,6 +82,7 @@ for label, pdgs, masses, ckm_name in [
         )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
+        .to_expression()
     )
     for real in (charge, sw, mw, me, mc, mb, mt, Vr, Vi):
         adjoint = adjoint.replace(conjugate(real), real)
@@ -194,6 +195,7 @@ for label, pdgs, masses, ckm_name in [
             )
             .simplify_algebra(gamma=True, epsilon=True, color=True)
             .contract(collect_chains=False, collect_traces=False)
+            .to_expression()
             .to_dots()
         )
         assert contracted.is_scalar
