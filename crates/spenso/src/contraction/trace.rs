@@ -17,12 +17,15 @@ where
     /// Contract the tensor with itself, i.e. trace over all matching indices.
     fn internal_contract(&self) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
-        for trace in self.traces() {
-            let mut new_structure = self.structure.clone();
+        // Trace positions refer to the structure being traced, so each pair is
+        // located only after the previous trace has been applied.
+        while let Some(&trace) = result.traces().first() {
+            let mut new_structure = result.structure.clone();
             new_structure.trace(trace[0], trace[1]);
 
-            let mut new_result = DenseTensor::from_storage_data_coerced(&self.data, new_structure)
-                .unwrap_or_else(|_| unreachable!());
+            let mut new_result =
+                DenseTensor::from_storage_data_coerced(&result.data, new_structure)
+                    .unwrap_or_else(|_| unreachable!());
             for (idx, t) in result.iter_trace(trace) {
                 new_result.set(&idx, t).unwrap_or_else(|_| unreachable!());
             }
@@ -79,5 +82,41 @@ where
             DataTensor::Dense(d) => DataTensor::Dense(d.internal_contract()),
             DataTensor::Sparse(s) => DataTensor::Sparse(s.internal_contract()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        contraction::Trace,
+        structure::{
+            Canonicalized, HasStructure, OrderedStructure,
+            representation::{Euclidean, LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    #[test]
+    fn dense_trace_contracts_every_pair() {
+        // Pairs of different dimensions make each trace depend on the structure
+        // left behind by the previous one.
+        let euclidean = Euclidean {}.new_slot(2, 0).to_lib();
+        let lorentz = Lorentz {}.new_slot(3, 1).to_lib();
+        let structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([euclidean, euclidean, lorentz, lorentz.dual()])
+                .into_canonical();
+        let tensor =
+            DenseTensor::from_storage_data((1..=36).map(f64::from).collect(), structure).unwrap();
+
+        // The row-major diagonal components T[e, e, l, l] are 1 + 27 e + 4 l.
+        let expected = (0..2)
+            .flat_map(|e| (0..3).map(move |l| f64::from(1 + 27 * e + 4 * l)))
+            .sum::<f64>();
+        assert_eq!(tensor.internal_contract().scalar(), Some(expected));
+        assert_eq!(
+            tensor.to_sparse().internal_contract().scalar(),
+            Some(expected)
+        );
     }
 }
