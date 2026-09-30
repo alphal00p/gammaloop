@@ -266,6 +266,58 @@ impl SlotContraction {
         }
     }
 
+    /// Pass a compact vector through the unique open port of a dot operand.
+    /// The operand can contain matrix connections hidden by its scalar dot scope.
+    /// Reuse the positional interface rewriter: no dummy indices or distribution
+    /// are needed, and callbacks/alias bindings retain their normal handling.
+    pub(crate) fn contract_inner_products(
+        &self,
+        source: AtomView<'_>,
+        literal_relabellings: &mut Vec<(Atom, Atom)>,
+    ) -> Atom {
+        use crate::tensor::{
+            SymbolicTensor, composition::rewrite_interface_ports, inference::InterfaceInference,
+        };
+        use spenso::structure::{
+            partial::{PartialIndex, PartialStructureExt},
+            slot::IsAbstractSlot,
+        };
+        let mut slots = SlotMatcher::default();
+        source.replace_map(|value, _, output| {
+            let AtomView::Fun(dot) = value else { return };
+            if dot.get_symbol() != self.tags.dot || dot.get_nargs() != 2 { return }
+            let arguments = dot.iter().collect::<Vec<_>>();
+            for (vector, operand) in [(arguments[0], arguments[1]), (arguments[1], arguments[0])] {
+                let AtomView::Fun(vector_function) = vector else { continue };
+                if !vector_function.get_symbol().has_tag(&self.tags.rank1)
+                    || matches!(operand, AtomView::Fun(f) if f.get_symbol().has_tag(&self.tags.rank1))
+                { continue }
+                let Some(port) = slots.vector_argument(vector_function) else { continue };
+                let Ok(representation) = slots.parse_representation::<LibraryRep>(port) else { continue };
+                if !self.permits(representation.rep) { continue }
+                let Ok(interface) = InterfaceInference::replacement_interface(operand) else { continue };
+                let ports = interface.logical_slots();
+                let [target] = ports.as_slice() else { continue };
+                if matches!(target.aind, PartialIndex::Explicit(_)) || !target.rep().matches(&representation) { continue }
+                let operand = SymbolicTensor::from_normalized_parts(operand.to_owned(), interface);
+                let mut relabellings = Vec::new();
+                if let Ok(result) = rewrite_interface_ports(
+                    &operand,
+                    &std::collections::HashMap::from([(0, vector.to_owned())]),
+                    &mut |source, result| {
+                        if matches!(source, AtomView::Fun(f) if f.get_symbol() == spenso::tensor_symbol!("idenso::tensor_alias")) {
+                            relabellings.push((source.to_owned(), result.clone()));
+                        }
+                    },
+                ) {
+                    literal_relabellings.extend(relabellings);
+                    **output = result;
+                    return;
+                }
+            }
+        })
+    }
+
     fn find_contraction<'a>(
         &self,
         factors: impl Iterator<Item = AtomView<'a>> + Clone,

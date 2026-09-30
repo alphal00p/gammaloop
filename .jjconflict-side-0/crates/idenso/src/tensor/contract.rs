@@ -579,6 +579,15 @@ impl SymbolicTensor<PartialStructure> {
             crate::reference_cases::timing::Phase::Contraction,
         );
         let mut result = self.contract_kernel(settings, observed)?;
+        if settings.rank_one && observed.dots {
+            let expression =
+                SlotContraction::configured(settings.metrics, settings.representations)
+                    .contract_inner_products(
+                        result.root.expression.as_view(),
+                        &mut result.literal_relabellings,
+                    );
+            result.root = result.root.with_identity_result(expression)?;
+        }
         if settings.collect_chains || settings.collect_traces {
             result.root.observe_replacement(self);
             let mut representations = self
@@ -830,6 +839,90 @@ pub mod test {
     use crate::shorthands::schoonschip::Schoonschip;
     use crate::test_support::test_initialize;
     use spenso::{g, mink, p};
+
+    #[test]
+    fn compact_vector_dot_exposes_closed_spinor_connection() {
+        use crate::{bis, gamma, tensor::AlgebraSettings};
+        use spenso::{dot, q, trace};
+        use symbolica::atom::AtomCore;
+        let reps = test_initialize();
+        let p = p!(mink!(4));
+        let q = q!(mink!(4));
+        // Multiplying a rank-one composite by a vector already constructs this
+        // dot, before contract is called. Its spinor connection remains internal.
+        let source = SymbolicTensor::infer(dot!(
+            gamma!(bis!(4, 831), bis!(4, 832), mink!(4, 833))
+                * p!(mink!(4, 833))
+                * gamma!(bis!(4, 832), bis!(4, 831), mink!(4)),
+            &q
+        ))
+        .unwrap();
+        let expected = trace!(bis!(4), gamma!(&p), gamma!(&q));
+        let result = Arc::new(source.contract(Default::default()).unwrap());
+        assert_eq!(result.resolved().unwrap().expression, expected);
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert!(Arc::ptr_eq(
+            &result,
+            &result.contract(Default::default()).unwrap()
+        ));
+        assert_eq!(
+            source
+                .simplify_algebra(&AlgebraSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            expected
+        );
+        let no_trace = source
+            .contract(ContractSettings {
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert!(
+            !no_trace
+                .expression
+                .contains_symbol(spenso::network::tags::SPENSO_TAG.trace)
+        );
+        assert!(
+            no_trace
+                .expression
+                .contains_symbol(spenso::network::tags::SPENSO_TAG.chain)
+        );
+        let filtered = source
+            .contract(ContractSettings {
+                representations: Some(&[reps.mink4.rep.into()]),
+                ..Default::default()
+            })
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert!(
+            !filtered
+                .expression
+                .contains_symbol(spenso::network::tags::SPENSO_TAG.trace)
+        );
+        assert!(
+            !filtered
+                .expression
+                .contains_symbol(spenso::network::tags::SPENSO_TAG.dot)
+        );
+        assert_eq!(
+            source
+                .contract(ContractSettings {
+                    representations: Some(&[]),
+                    ..Default::default()
+                })
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .expression,
+            source.expression
+        );
+    }
 
     #[test]
     fn schoonschip_simplifies_metrics() {

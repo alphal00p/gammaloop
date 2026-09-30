@@ -64,6 +64,54 @@ class FactorizedContractionTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             source.contract(left=0, right=0)
 
+    def test_vector_dot_preserves_closed_spinor_connections(self):
+        from itertools import permutations
+
+        lorentz = sp.Representation.mink(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        p = sp.TensorName.vector("closed_spinor_dot::p")(lorentz)
+        q = sp.TensorName.vector("closed_spinor_dot::q")(lorentz)
+        factors = [gamma("a", "b", "mu"), p("mu"), gamma("b", "a", "nu"), q("nu")]
+        expected = sp.TensorExpression(
+            E(
+                "spenso::trace(spenso::bis(4),spenso::cyclic("
+                "spenso::gamma(spenso::in,spenso::out,closed_spinor_dot::p(spenso::mink(4))),"
+                "spenso::gamma(spenso::in,spenso::out,closed_spinor_dot::q(spenso::mink(4)))))"
+            )
+        )
+        # Build the component oracle from explicitly indexed scalar atoms, so
+        # intake cannot share the rank-one tensor multiplication that made the dot.
+        indexed = factors[0].to_expression()
+        for factor in factors[1:]:
+            indexed = indexed * factor.to_expression()
+        oracle = sp.TensorExpression(indexed).components()
+        for order in permutations(range(4)):
+            with self.subTest(order=order):
+                source = factors[order[0]]
+                for position in order[1:]:
+                    source = source * factors[position]
+                for value in (
+                    source,
+                    sp.AliasedTensorExpression.from_expression(source),
+                ):
+                    result = value.contract()
+                    self.assertEqual(result.to_expression(), expected)
+                    self.assertEqual(result.to_expression().components(), oracle)
+                    self.assertEqual(
+                        result.reduction_status, sp.ReductionStatus.Complete
+                    )
+                    self.assertEqual(result.contract().to_expression(), expected)
+                    self.assertEqual(value.simplify_algebra().to_expression(), expected)
+                    capped = value.contract(max_steps_per_domain=0)
+                    self.assertEqual(capped.to_expression(), source)
+                    self.assertEqual(capped.contract().to_expression(), expected)
+                uncollected = source.contract(collect_traces=False).to_expression()
+                self.assertNotIn("trace", uncollected.to_expression().format_plain())
+                self.assertEqual(uncollected.contract().to_expression(), expected)
+                self.assertEqual(
+                    source.contract(representations=[]).to_expression(), source
+                )
+
     def test_independent_reduction_settings_and_notation(self):
         spin = sp.Representation.bis(4)
         lorentz = sp.Representation.mink(4)
