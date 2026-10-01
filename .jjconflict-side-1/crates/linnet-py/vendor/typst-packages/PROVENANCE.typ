@@ -41,6 +41,10 @@ segments while constructing the path, avoiding a second traversal.
 Path normalization filters zero-length lines in one pass. Drawable tag helpers
 avoid recursive dispatch for individual drawables, and the canvas inlines cubic
 coordinate transforms while retaining their arithmetic order.
+After bounds and anchors have been computed, the canvas omits paths whose stroke
+and fill are both `none`. These paths cannot paint, so skipping their final bounds
+queries and curve construction removes redundant SVG elements. Content drawables,
+including transparent inspection links and their hit rectangles, remain unchanged.
 
 CeTZ core batches each path's cubic extrema and AABB reduction in one plugin
 call. The scalar extrema and AABB routines are unchanged. Finite paths reuse

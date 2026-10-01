@@ -64,3 +64,31 @@
 }
 
 ]
+
+// These no-ink paths still own bounds and named anchors. Only their final
+// painting can be omitted; content links and visible custom paint remain.
+#let no-ink-scene = context {
+  for debug in (false, true) {
+    let scene = cetz.canvas(length: 1cm, padding: 0, debug: debug, {
+      cetz.draw.line((-3, -2), (5, 4), name: "ghost", stroke: none)
+      cetz.draw.get-ctx(ctx => {
+        let (_, point) = cetz.coordinate.resolve(ctx, "ghost.end")
+        assert.eq(point, (5, 4, 0), message: "unpainted named path retains its endpoint anchor")
+        ()
+      })
+      cetz.draw.line("ghost.end", (6, 4), stroke: rgb("#8732a8") + 0.5pt)
+      cetz.draw.rect((0, 0), (2, 1), stroke: none,
+        fill: gradient.linear(rgb("#08a17b"), rgb("#e98224")))
+      cetz.draw.line((0, 2), (2, 2), stroke: rgb("#137c45") + 0.7pt)
+      cetz.draw.content((1, 3), link("https://example.com/cetz-no-ink",
+        box(width: 8pt, height: 8pt)), padding: 0)
+    })
+    let size = measure(scene)
+    assert(calc.abs(size.width - 9cm) < 1e-8pt,
+      message: "unpainted path retains the canvas width")
+    assert(calc.abs(size.height - 6cm) < 1e-8pt,
+      message: "unpainted path retains the canvas height")
+    scene
+  }
+}
+#no-ink-scene

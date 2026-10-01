@@ -86,6 +86,9 @@
 
   // Filter hidden drawables
   drawables = drawable.filter-tagged(drawables, drawable.TAG.hidden)
+  // Bounds and anchors are already computed. Paths without paint need no
+  // canvas output; content, including transparent link targets, remains.
+  drawables = drawables.filter(d => d.type != "path" or d.stroke != none or d.fill != none)
 
   // Order draw commands by z-index
   drawables = drawables.sorted(key: (cmd) => {

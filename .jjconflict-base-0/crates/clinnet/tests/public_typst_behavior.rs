@@ -257,6 +257,32 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     )
     .unwrap();
 
+    let no_ink_fixture = base.path().join(".clinnet/templates/no-ink-behavior.typ");
+    fs::write(
+        &no_ink_fixture,
+        "#import \"cetz-bounds-behavior.typ\": no-ink-scene\n\
+         #set page(width: auto, height: auto, margin: 0pt)\n\
+         #no-ink-scene\n",
+    )
+    .unwrap();
+    let no_ink_svg = base.path().join("no-ink-behavior.svg");
+    renderer
+        .compile_template(&no_ink_fixture, &no_ink_svg, &[])
+        .unwrap();
+    if probe_svg {
+        let no_ink_svg = fs::read_to_string(no_ink_svg).unwrap();
+        assert_eq!(
+            no_ink_svg
+                .matches(" href=\"https://example.com/cetz-no-ink\"")
+                .count(),
+            2
+        );
+        assert_eq!(paths_with_attr(&no_ink_svg, "stroke", "#8732a8").len(), 2);
+        assert_eq!(paths_with_attr(&no_ink_svg, "stroke", "#137c45").len(), 2);
+        assert!(no_ink_svg.contains("#08a17b") && no_ink_svg.contains("#e98224"));
+        assert!(!paths_with_attr(&no_ink_svg, "stroke", "#ff0000").is_empty());
+    }
+
     fs::write(
         base.path()
             .join(".clinnet/templates/marker-geometry-behavior.typ"),
