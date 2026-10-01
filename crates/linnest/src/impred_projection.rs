@@ -1132,7 +1132,7 @@ impl ProjectionSession {
     /// immutable references used by projection and adaptive route ownership.
     pub fn impred_layout(&self) -> Result<linnet::half_edge::layout::impred::ImpredLayout> {
         use linnet::half_edge::layout::impred::{
-            ExternalFlow, ImpredLayout,
+            EdgeLabel, ExternalFlow, ImpredLayout,
             movement::{AxisConstraint, PointRecord},
         };
         let keys: Vec<_> = self.initial.keys().cloned().collect();
@@ -1220,6 +1220,27 @@ impl ProjectionSession {
                 }
             })
             .collect();
+        // `graph.style` measures each label box before layout, in graph units.
+        let labels = (0..graph.n_edges())
+            .map(|edge| {
+                let statements = &graph[EdgeIndex(edge)].statements;
+                let size = |key: &str| {
+                    statements
+                        .get(key)
+                        .and_then(|value| value.trim().parse::<f64>().ok())
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                };
+                match (size("label-width"), size("label-height")) {
+                    (Some(width), Some(height)) if external[edge].is_none() => Some(EdgeLabel {
+                        extents: [width / 2.0, height / 2.0],
+                        center: None,
+                        pinned: false,
+                        pin: None,
+                    }),
+                    _ => None,
+                }
+            })
+            .collect();
         Ok(ImpredLayout {
             positions: keys
                 .iter()
@@ -1239,6 +1260,7 @@ impl ProjectionSession {
             pull_scales,
             samples: keys.iter().map(|key| key.starts_with("b:")).collect(),
             nodes_fixed: graph.layout_config.layout_nodes.nodes_are_fixed(),
+            labels,
         })
     }
 
@@ -1339,16 +1361,21 @@ impl ProjectionSession {
                 }
             }
         }
-        // ImPrEd relaxes no label positions, so every label layout falls back
-        // to carrier-following paired labels: drawing widens this zero gap to
-        // clear the painted line, and the annotation search places the labels.
+        // In every label layout, paired labels follow their carriers: drawing
+        // widens this zero gap to clear the painted line, and the annotation
+        // search places the labels. ImPrEd's label point, beside the carrier,
+        // becomes the label position whose side the search prefers.
         for edge in 0..graph.n_edges() {
             let paired = matches!(graph[&EdgeIndex(edge)].1, HedgePair::Paired { .. });
-            let statements = &mut graph.graph[EdgeIndex(edge)].statements;
+            let center = layout.labels.get(edge).copied().flatten().and_then(|label| label.center);
+            let data = &mut graph.graph[EdgeIndex(edge)];
             if paired {
-                statements.insert("layout-label-gap".into(), "0".into());
+                data.statements.insert("layout-label-gap".into(), "0".into());
             } else {
-                statements.remove("layout-label-gap");
+                data.statements.remove("layout-label-gap");
+            }
+            if let Some([x, y]) = center {
+                data.label_pos = Some(Point2::new(x, y));
             }
         }
         graph.project_coordinates(CoordinateProjection::Proposal)?;

@@ -29,6 +29,14 @@ pub struct ImpredConfig {
     pub contract_chord_ratio: f64,
     pub edge_clearance: f64,
     pub node_edge_strength: f64,
+    /// Lay out measured labels as tethered points beside their carriers. Off
+    /// by default; label-aware rendering opts in.
+    #[serde(default = "ImpredConfig::default_labels")]
+    pub labels: bool,
+    /// Cooling progress to resume from, in `[0, 1)`: a warm pass refines an
+    /// already relaxed layout without reheating it.
+    #[serde(default)]
+    pub warm_start: f64,
     /// Rotate the drawing to its external-pull optimum at every refinement
     /// checkpoint. Overdamped forces turn a whole drawing only very slowly.
     pub level: bool,
@@ -50,12 +58,18 @@ impl Default for ImpredConfig {
             contract_chord_ratio: 1.25,
             edge_clearance: 0.4,
             node_edge_strength: 4.0,
+            labels: Self::default_labels(),
+            warm_start: 0.0,
             level: true,
         }
     }
 }
 
 impl ImpredConfig {
+    fn default_labels() -> bool {
+        false
+    }
+
     fn validate(self) -> Result<(), String> {
         if self.step_scale == 0 {
             return Err("ImPrEd step scale must be positive".into());
@@ -85,6 +99,9 @@ impl ImpredConfig {
             || self.contract_chord_ratio >= self.split_length_ratio
         {
             return Err("ImPrEd refinement requires 0 < contraction < subdivision".into());
+        }
+        if !(0.0..1.0).contains(&self.warm_start) {
+            return Err("ImPrEd warm start must lie in [0, 1)".into());
         }
         if self.external_max_points > 3 {
             return Err("External routes support at most three intermediate points".into());
@@ -127,6 +144,47 @@ impl ExternalFlow {
     }
 }
 
+/// A measured label box beside an internal carrier. ImPrEd moves it as a free
+/// point tethered to its edge's anchor. It never joins routes or the crossing
+/// certificate, so it may cross its own carrier to change sides.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub struct EdgeLabel {
+    /// Half-width and half-height of the label box.
+    pub extents: [f64; 2],
+    /// Box center; seeded beside the carrier when absent.
+    #[serde(default)]
+    pub center: Option<[f64; 2]>,
+    /// Hold a drawn label where it was placed: at its arc fraction and signed
+    /// normal offset on its own carrier, without sliding or changing sides.
+    #[serde(default)]
+    pub pinned: bool,
+    /// The pinned placement, `[arc fraction, normal offset]`, taken from
+    /// `center` when solving starts.
+    #[serde(default)]
+    pub pin: Option<[f64; 2]>,
+}
+
+/// Fractions of the spacing: the clear gap between a carrier and its label's
+/// tether rest, and the contact distance a label keeps from other geometry.
+const LABEL_GAP: f64 = 0.25;
+const LABEL_CONTACT: f64 = 0.1;
+/// Label tethers and contacts relative to the edge attraction and repulsion.
+const LABEL_STIFFNESS: f64 = 3.0;
+
+/// A label's position relative to its own carrier polyline.
+struct LabelFrame {
+    foot: Vector2<f64>,
+    tangent: Vector2<f64>,
+    normal: Vector2<f64>,
+    arc: f64,
+    length: f64,
+}
+
+/// Extent of a box with half-extents `[x, y]` along a unit direction.
+fn box_support([x, y]: [f64; 2], direction: Vector2<f64>) -> f64 {
+    x * direction.x.abs() + y * direction.y.abs()
+}
+
 /// A dense, portable view of existing native layout coordinates.
 ///
 /// Routes follow physical source-to-target orientation. Internal anchors occur
@@ -144,6 +202,9 @@ pub struct ImpredLayout {
     pub pull_scales: Vec<f64>,
     pub samples: Vec<bool>,
     pub nodes_fixed: bool,
+    /// Per-edge labels, empty without labels. External edges carry none.
+    #[serde(default)]
+    pub labels: Vec<Option<EdgeLabel>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -209,6 +270,8 @@ struct Model {
     segments: Vec<Segment>,
     pair_weights: Vec<Vec<f64>>,
     attraction_weights: Vec<f64>,
+    /// Points on each edge's route; a label never contacts its own carrier.
+    route_points: Vec<BTreeSet<usize>>,
 }
 
 impl ImpredLayout {
@@ -225,6 +288,18 @@ impl ImpredLayout {
             || self.routes.len() != self.pull_scales.len()
         {
             return Err("ImPrEd coordinate and physical ownership arrays disagree".into());
+        }
+        if !self.labels.is_empty() && self.labels.len() != self.routes.len() {
+            return Err("ImPrEd labels must cover every edge".into());
+        }
+        for (edge, label) in self.labels.iter().enumerate() {
+            let Some(label) = label else { continue };
+            if self.external[edge].is_some()
+                || label.extents.iter().any(|x| !x.is_finite() || *x < 0.0)
+                || label.center.is_some_and(|c| c.iter().any(|x| !x.is_finite()))
+            {
+                return Err("ImPrEd labels need finite boxes on internal edges".into());
+            }
         }
         if self.positions.iter().flatten().any(|x| !x.is_finite()) {
             return Err("ImPrEd positions must be finite".into());
@@ -432,6 +507,11 @@ impl ImpredLayout {
             segments,
             pair_weights,
             attraction_weights,
+            route_points: self
+                .routes
+                .iter()
+                .map(|route| route.iter().copied().collect())
+                .collect(),
         }
     }
 
@@ -690,6 +770,309 @@ impl ImpredLayout {
         rows
     }
 
+    /// Unit normal of an internal carrier at its anchor, left of the route.
+    fn carrier_normal(&self, edge: usize) -> Option<Vector2<f64>> {
+        let route = &self.routes[edge];
+        let slot = route.iter().position(|&p| p == self.anchor_points[edge])?;
+        let tangent = self.point(route[(slot + 1).min(route.len() - 1)])
+            - self.point(route[slot.saturating_sub(1)]);
+        let length = tangent.magnitude();
+        (length > 0.0).then(|| Vector2::new(-tangent.y, tangent.x) / length)
+    }
+
+    /// The tether rest of a label: beside its anchor, on `side` of the carrier.
+    fn label_rest(
+        &self,
+        edge: usize,
+        label: &EdgeLabel,
+        normal: Vector2<f64>,
+        side: f64,
+        config: ImpredConfig,
+    ) -> Vector2<f64> {
+        let offset = box_support(label.extents, normal) + LABEL_GAP * config.target;
+        self.point(self.anchor_points[edge]) + side * offset * normal
+    }
+
+    /// Seat every label at its tether rest, keeping its side of the carrier.
+    /// New labels face away from the vertex centroid.
+    fn seat_labels(&mut self, config: ImpredConfig) {
+        let center = self.node_center();
+        for edge in 0..self.labels.len() {
+            let (Some(label), Some(normal)) = (self.labels[edge], self.carrier_normal(edge)) else {
+                continue;
+            };
+            if label.pinned && label.center.is_some() {
+                continue;
+            }
+            let anchor = self.point(self.anchor_points[edge]);
+            let away = label.center.map_or(anchor - center, |c| Vector2::from(c) - anchor);
+            let side = if away.dot(normal) < 0.0 { -1.0 } else { 1.0 };
+            let rest = self.label_rest(edge, &label, normal, side, config);
+            self.labels[edge] = Some(EdgeLabel {
+                center: Some(rest.into()),
+                ..label
+            });
+        }
+    }
+
+    /// The nearest point on an edge's own carrier polyline to `center`, with
+    /// the route's unit tangent, left normal, arc position and total length.
+    fn label_frame(&self, edge: usize, center: Vector2<f64>) -> Option<LabelFrame> {
+        let mut arc = 0.0;
+        let mut best: Option<(f64, LabelFrame)> = None;
+        for pair in self.routes[edge].windows(2) {
+            let a = self.point(pair[0]);
+            let ab = self.point(pair[1]) - a;
+            let length = ab.magnitude();
+            if length > 0.0 {
+                let t = ((center - a).dot(ab) / (length * length)).clamp(0.0, 1.0);
+                let foot = a + t * ab;
+                let distance = (center - foot).magnitude();
+                if best.as_ref().is_none_or(|(nearest, _)| distance < *nearest) {
+                    let tangent = ab / length;
+                    best = Some((
+                        distance,
+                        LabelFrame {
+                            foot,
+                            tangent,
+                            normal: Vector2::new(-tangent.y, tangent.x),
+                            arc: arc + t * length,
+                            length: 0.0,
+                        },
+                    ));
+                }
+            }
+            arc += length;
+        }
+        best.map(|(_, frame)| LabelFrame {
+            length: arc,
+            ..frame
+        })
+    }
+
+    /// The point, unit tangent and left normal at an arc distance along an
+    /// edge's route polyline.
+    fn route_point_at(&self, edge: usize, arc: f64) -> Option<(Vector2<f64>, Vector2<f64>, Vector2<f64>)> {
+        let mut remaining = arc.max(0.0);
+        let mut last = None;
+        for pair in self.routes[edge].windows(2) {
+            let a = self.point(pair[0]);
+            let ab = self.point(pair[1]) - a;
+            let length = ab.magnitude();
+            if length <= 0.0 {
+                continue;
+            }
+            let tangent = ab / length;
+            let normal = Vector2::new(-tangent.y, tangent.x);
+            if remaining <= length {
+                return Some((a + remaining * tangent, tangent, normal));
+            }
+            remaining -= length;
+            last = Some((a + ab, tangent, normal));
+        }
+        last
+    }
+
+    /// Record each pinned label's placement relative to its carrier.
+    fn pin_labels(&mut self) {
+        for edge in 0..self.labels.len() {
+            let Some(label) = self.labels[edge] else { continue };
+            let (true, Some(center)) = (label.pinned, label.center.map(Vector2::from)) else {
+                continue;
+            };
+            let Some(frame) = self.label_frame(edge, center) else { continue };
+            let pin = [frame.arc / frame.length.max(1e-300), (center - frame.foot).dot(frame.normal)];
+            self.labels[edge] = Some(EdgeLabel { pin: Some(pin), ..label });
+        }
+    }
+
+    /// Total overlap depth of a label box at `center` with other geometry:
+    /// other edges' points and segments, and other labels.
+    fn label_overlap(
+        &self,
+        model: &Model,
+        edge: usize,
+        label: &EdgeLabel,
+        center: Vector2<f64>,
+        config: ImpredConfig,
+    ) -> f64 {
+        let contact = LABEL_CONTACT * config.target;
+        let route = &model.route_points[edge];
+        let depth = |difference: Vector2<f64>, extra: f64| {
+            let distance = difference.magnitude();
+            let unit = if distance > 0.0 {
+                difference / distance
+            } else {
+                Vector2::new(1.0, 0.0)
+            };
+            (box_support(label.extents, unit) + extra + contact - distance).max(0.0)
+        };
+        let mut total = 0.0;
+        for point in (0..self.positions.len()).filter(|point| !route.contains(point)) {
+            total += depth(center - self.point(point), 0.0);
+        }
+        for segment in model.segments.iter().filter(|segment| segment.edge != edge) {
+            let a = self.point(segment.a);
+            let ab = self.point(segment.b) - a;
+            let t = ((center - a).dot(ab) / ab.magnitude2().max(1e-20)).clamp(0.0, 1.0);
+            total += depth(center - (a + t * ab), 0.0);
+        }
+        for (other, label) in self.labels.iter().enumerate() {
+            if let Some(EdgeLabel {
+                extents,
+                center: Some(c),
+                ..
+            }) = label.filter(|_| other != edge)
+            {
+                let difference = center - Vector2::from(c);
+                let unit = difference / difference.magnitude().max(1e-300);
+                total += depth(difference, box_support(extents, unit));
+            }
+        }
+        total
+    }
+
+    /// At refinement checkpoints, move each label to its carrier's other side
+    /// when its rest there overlaps less than half as much, as the label
+    /// search would choose.
+    fn flip_labels(&mut self, model: &Model, config: ImpredConfig) {
+        for edge in 0..self.labels.len() {
+            let Some(label) = self.labels[edge].filter(|label| !label.pinned) else { continue };
+            let Some(center) = label.center.map(Vector2::from) else { continue };
+            let Some(frame) = self.label_frame(edge, center) else { continue };
+            let side = if (center - frame.foot).dot(frame.normal) < 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            let offset = box_support(label.extents, frame.normal) + LABEL_GAP * config.target;
+            let here = frame.foot + side * offset * frame.normal;
+            let there = frame.foot - side * offset * frame.normal;
+            if self.label_overlap(model, edge, &label, there, config)
+                < 0.5 * self.label_overlap(model, edge, &label, here, config)
+            {
+                self.labels[edge] = Some(EdgeLabel {
+                    center: Some(there.into()),
+                    ..label
+                });
+            }
+        }
+    }
+
+    /// Forces on each label, with their reactions added to `force`. A label
+    /// rides a rail beside its own carrier: held at its gap across the carrier
+    /// but free to slide along it within the label search's central range,
+    /// so only contact that sliding cannot relieve reaches the carrier.
+    /// Contact with other edges' points and segments and with other labels
+    /// follows the point repulsion law in excess of its value at the reach.
+    /// The tether's reaction spreads over the anchor and endpoints, so the
+    /// carrier moves aside rather than bowing.
+    fn label_forces(
+        &self,
+        model: &Model,
+        config: ImpredConfig,
+        rep_exponent: f64,
+        force: &mut [Vector2<f64>],
+    ) -> Vec<Vector2<f64>> {
+        let mut result = vec![Vector2::zero(); self.labels.len()];
+        let labelled: Vec<_> = self
+            .labels
+            .iter()
+            .enumerate()
+            .filter_map(|(edge, label)| {
+                let label = (*label)?;
+                Some((edge, label, Vector2::from(label.center?)))
+            })
+            .collect();
+        if labelled.is_empty() {
+            return result;
+        }
+        let contact = LABEL_CONTACT * config.target;
+        let floor = config.target * 0.02;
+        let excess = |reach: f64, distance: f64| {
+            LABEL_STIFFNESS
+                * config.repulsion
+                * ((reach / distance.max(floor)).powf(rep_exponent) - 1.0).max(0.0)
+                * distance.max(floor)
+        };
+        let direction = |difference: Vector2<f64>| {
+            let distance = difference.magnitude();
+            let unit = if distance > 0.0 {
+                difference / distance
+            } else {
+                Vector2::new(1.0, 0.0)
+            };
+            (distance, unit)
+        };
+        for &(edge, label, center) in &labelled {
+            let route = &self.routes[edge];
+            let own = &model.route_points[edge];
+            let pinned = label.pin.and_then(|[fraction, offset]| {
+                let length = self.label_frame(edge, center)?.length;
+                let (point, _, normal) = self.route_point_at(edge, fraction * length)?;
+                Some(point + offset * normal)
+            });
+            if let Some(rest) = pinned {
+                let tether = LABEL_STIFFNESS * 2.0 * config.attraction * (rest - center);
+                result[edge] += tether;
+                force[self.anchor_points[edge]] -= 0.5 * tether;
+                force[route[0]] -= 0.25 * tether;
+                force[*route.last().unwrap()] -= 0.25 * tether;
+            } else if let Some(frame) = self.label_frame(edge, center) {
+                let side = if (center - frame.foot).dot(frame.normal) < 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let offset =
+                    box_support(label.extents, frame.normal) + LABEL_GAP * config.target;
+                let rest = frame.foot + side * offset * frame.normal;
+                let across = (rest - center).dot(frame.normal) * frame.normal;
+                let range = (frame.length * 3.0 / 32.0, frame.length * 29.0 / 32.0);
+                let along = (frame.arc.clamp(range.0, range.1) - frame.arc) * frame.tangent;
+                let tether = LABEL_STIFFNESS * 2.0 * config.attraction * (across + along);
+                result[edge] += tether;
+                force[self.anchor_points[edge]] -= 0.5 * tether;
+                force[route[0]] -= 0.25 * tether;
+                force[*route.last().unwrap()] -= 0.25 * tether;
+            }
+            for point in (0..self.positions.len()).filter(|point| !own.contains(point)) {
+                let (distance, unit) = direction(center - self.point(point));
+                let reach = box_support(label.extents, unit) + contact;
+                if distance < reach {
+                    let push = excess(reach, distance) * unit;
+                    result[edge] += push;
+                    force[point] -= push;
+                }
+            }
+            for segment in model.segments.iter().filter(|segment| segment.edge != edge) {
+                let a = self.point(segment.a);
+                let ab = self.point(segment.b) - a;
+                let t = ((center - a).dot(ab) / ab.magnitude2().max(1e-20)).clamp(0.0, 1.0);
+                let (distance, unit) = direction(center - (a + t * ab));
+                let reach = box_support(label.extents, unit) + contact;
+                if distance < reach {
+                    let push = excess(reach, distance) * unit;
+                    result[edge] += push;
+                    force[segment.a] -= (1.0 - t) * push;
+                    force[segment.b] -= t * push;
+                }
+            }
+        }
+        for (i, &(first, a, ca)) in labelled.iter().enumerate() {
+            for &(second, b, cb) in &labelled[i + 1..] {
+                let (distance, unit) = direction(ca - cb);
+                let reach = box_support(a.extents, unit) + box_support(b.extents, unit) + contact;
+                if distance < reach {
+                    let push = excess(reach, distance) * unit;
+                    result[first] += push;
+                    result[second] -= push;
+                }
+            }
+        }
+        result
+    }
+
     fn mixed_flow(&self) -> bool {
         self.external.contains(&Some(ExternalFlow::Incoming))
             && self.external.contains(&Some(ExternalFlow::Outgoing))
@@ -748,14 +1131,17 @@ impl ImpredLayout {
         let original = self.positions.clone();
         for halving in 0..12 {
             let (sin, cos) = (angle * 0.5_f64.powi(halving)).sin_cos();
-            for (point, &start) in self.positions.iter_mut().zip(&original) {
-                let offset = Vector2::from(start) - center;
-                *point = (center
+            let rotate = |point: [f64; 2]| -> [f64; 2] {
+                let offset = Vector2::from(point) - center;
+                (center
                     + Vector2::new(
                         cos * offset.x - sin * offset.y,
                         sin * offset.x + cos * offset.y,
                     ))
-                .into();
+                .into()
+            };
+            for (point, &start) in self.positions.iter_mut().zip(&original) {
+                *point = rotate(start);
             }
             if dofs.validate(&self.positions).is_ok()
                 && dofs
@@ -764,6 +1150,10 @@ impl ImpredLayout {
                     .all(|row| row.bound >= 0.0)
                 && self.geometry().certify(initial).is_ok()
             {
+                // Labels turn with the drawing they annotate.
+                for label in self.labels.iter_mut().flatten() {
+                    label.center = label.center.map(rotate);
+                }
                 return;
             }
         }
@@ -988,6 +1378,11 @@ impl ImpredLayout {
         }
         let mut dofs = MovementDofs::new(&self.constraints, self.nodes_fixed)?;
         dofs.validate(&self.positions)?;
+        if !config.labels {
+            self.labels.clear();
+        }
+        self.seat_labels(config);
+        self.pin_labels();
         let mut model = self.model(&flexible, config.parallel_attraction_balance);
         if model.segments.is_empty() {
             return Ok(report);
@@ -1000,10 +1395,12 @@ impl ImpredLayout {
         let mut epoch = 0;
         while epoch < config.steps {
             let stride = config.integration_stride(epoch);
-            let u = epoch as f64 / config.steps.saturating_sub(1).max(1) as f64;
+            let u = config.warm_start
+                + (1.0 - config.warm_start) * epoch as f64 / config.steps.saturating_sub(1).max(1) as f64;
             let pairs = self.point_segments(&model);
-            let proposal: Vec<[f64; 2]> = self
-                .forces(&model, &pairs, config, u, &pull)
+            let mut forces = self.forces(&model, &pairs, config, u, &pull);
+            let label_forces = self.label_forces(&model, config, 2.0 + 2.0 * u, &mut forces);
+            let proposal: Vec<[f64; 2]> = forces
                 .into_iter()
                 .map(|force| (force * (0.045 * stride as f64)).into())
                 .collect();
@@ -1057,6 +1454,15 @@ impl ImpredLayout {
                 point[0] += delta[0];
                 point[1] += delta[1];
             }
+            // Labels move freely under the same cap; they certify nothing.
+            for (label, force) in self.labels.iter_mut().zip(label_forces) {
+                if let Some(center) = label.as_mut().and_then(|label| label.center.as_mut()) {
+                    let delta = force * (0.045 * stride as f64);
+                    let delta = delta * (cap / delta.magnitude().max(cap));
+                    center[0] += delta.x;
+                    center[1] += delta.y;
+                }
+            }
             dofs.validate(&self.positions)?;
             report.iterations += 1;
             if epoch % 25 == 0 || epoch + 1 == config.steps {
@@ -1064,6 +1470,7 @@ impl ImpredLayout {
                 if config.level && self.levelable() {
                     self.level(&pull, &dofs, &initial);
                 }
+                self.flip_labels(&model, config);
                 self.geometry().certify(&initial)?;
                 report.geometry_checks += 1;
                 if epoch % 100 == 0 || epoch + 1 == config.steps {
@@ -1466,6 +1873,7 @@ mod tests {
                 .map(|i| i > 0 && i + 1 < points.len())
                 .collect(),
             nodes_fixed: false,
+            labels: Vec::new(),
         }
     }
 

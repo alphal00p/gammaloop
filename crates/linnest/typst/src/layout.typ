@@ -561,6 +561,10 @@
   impred-edge-clearance: 0.4,
   /// ImPrEd point-to-segment repulsion multiplier. -> float
   impred-node-edge-strength: 4.0,
+  /// Opt-in label-aware layout: lay out each measured internal label as a
+  /// point tethered beside its carrier, so the drawing makes room for it; the
+  /// annotation search then prefers that side. Off by default. -> bool
+  impred-labels: false,
   // Normalize the same options without moving geometry.
   _snapshot: false,
 ) = {
@@ -727,6 +731,7 @@
       impred-contract-chord-ratio: impred-contract-chord-ratio,
       impred-edge-clearance: impred-edge-clearance,
       impred-node-edge-strength: impred-node-edge-strength,
+      impred-labels: impred-labels,
     )
     let result = cbor(_plugin.graph_impred_layout(
       snapshot,

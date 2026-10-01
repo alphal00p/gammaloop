@@ -582,72 +582,99 @@ pub fn graph_impred_layout_bytes(
     seed: &[u8],
     options: &[u8],
 ) -> Result<Vec<u8>, String> {
-    use crate::impred_projection::ProjectionSession;
-    use linnet::half_edge::layout::impred::ImpredConfig;
+    ImpredRun::start(snapshot, seed, options)?.result_bytes()
+}
 
-    let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
-    let mut graph = TypstGraph::from_layout_snapshot(&snapshot)?;
-    let options: serde_json::Value = decode_cbor(options, "ImPrEd layout options")?;
-    let mut settings =
-        serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
-    for (option, field) in [
-        ("steps", "steps"),
-        ("step-scale", "step_scale"),
-        ("spacing", "target"),
-        ("repulsion", "repulsion"),
-        ("attraction", "attraction"),
-        ("parallel-balance", "parallel_attraction_balance"),
-        ("pull", "pull"),
-        ("pull-balance", "pull_balance"),
-        ("external-max-points", "external_max_points"),
-        ("split-length-ratio", "split_length_ratio"),
-        ("contract-chord-ratio", "contract_chord_ratio"),
-        ("edge-clearance", "edge_clearance"),
-        ("node-edge-strength", "node_edge_strength"),
-        ("level", "level"),
-    ] {
-        if let Some(value) = options.get(format!("impred-{option}")) {
-            settings[field] = value.clone();
+/// A native ImPrEd layout kept with its session, so a host can refine it in
+/// warm passes, for example around measured label boxes.
+pub struct ImpredRun {
+    pub session: crate::impred_projection::ProjectionSession,
+    pub layout: linnet::half_edge::layout::impred::ImpredLayout,
+    pub config: linnet::half_edge::layout::impred::ImpredConfig,
+}
+
+impl ImpredRun {
+    /// Project the snapshot onto the EC seed and solve with the Typst options.
+    pub fn start(snapshot: &[u8], seed: &[u8], options: &[u8]) -> Result<Self, String> {
+        use crate::impred_projection::ProjectionSession;
+        use linnet::half_edge::layout::impred::ImpredConfig;
+
+        let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
+        let mut graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+        let options: serde_json::Value = decode_cbor(options, "ImPrEd layout options")?;
+        let mut settings =
+            serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
+        for (option, field) in [
+            ("steps", "steps"),
+            ("step-scale", "step_scale"),
+            ("spacing", "target"),
+            ("repulsion", "repulsion"),
+            ("attraction", "attraction"),
+            ("parallel-balance", "parallel_attraction_balance"),
+            ("pull", "pull"),
+            ("pull-balance", "pull_balance"),
+            ("external-max-points", "external_max_points"),
+            ("split-length-ratio", "split_length_ratio"),
+            ("contract-chord-ratio", "contract_chord_ratio"),
+            ("edge-clearance", "edge_clearance"),
+            ("node-edge-strength", "node_edge_strength"),
+            ("labels", "labels"),
+            ("level", "level"),
+        ] {
+            if let Some(value) = options.get(format!("impred-{option}")) {
+                settings[field] = value.clone();
+            }
         }
+        let config: ImpredConfig = serde_json::from_value(settings)
+            .map_err(|error| format!("Invalid ImPrEd options: {error}"))?;
+        let attachment = match options.get("impred-pull-attachment") {
+            Some(value) => value
+                .as_f64()
+                .ok_or("ImPrEd attachment pull must be numeric")?,
+            None => 4.0,
+        };
+        if !attachment.is_finite() || attachment < 0.0 {
+            return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
+        }
+        graph.layout_config.spring.external_pull_attachment = attachment;
+        let seed = serde_json::from_slice(seed)
+            .map_err(|error| format!("Invalid EC layout seed: {error}"))?;
+        let (session, _) =
+            ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
+        let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
+        layout.solve(config)?;
+        Ok(Self {
+            session,
+            layout,
+            config,
+        })
     }
-    let config: ImpredConfig = serde_json::from_value(settings)
-        .map_err(|error| format!("Invalid ImPrEd options: {error}"))?;
-    let attachment = match options.get("impred-pull-attachment") {
-        Some(value) => value
-            .as_f64()
-            .ok_or("ImPrEd attachment pull must be numeric")?,
-        None => 4.0,
-    };
-    if !attachment.is_finite() || attachment < 0.0 {
-        return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
+
+    /// The layout graph and complete carriers, as `graph_impred_layout` returns.
+    pub fn result_bytes(&self) -> Result<Vec<u8>, String> {
+        let graph = self
+            .session
+            .apply_impred_layout(&self.layout)
+            .map_err(|error| error.to_string())?;
+        let carriers: Vec<Vec<_>> = self
+            .layout
+            .routes
+            .iter()
+            .map(|route| route.iter().map(|&point| self.layout.positions[point]).collect())
+            .collect();
+        #[derive(Serialize)]
+        struct ResultGeometry {
+            graph: Vec<u8>,
+            carriers: Vec<Vec<[f64; 2]>>,
+        }
+        let result = ResultGeometry {
+            graph: encode_typst_graph(&graph)?,
+            carriers,
+        };
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&result, &mut bytes).map_err(|error| error.to_string())?;
+        Ok(bytes)
     }
-    graph.layout_config.spring.external_pull_attachment = attachment;
-    let seed =
-        serde_json::from_slice(seed).map_err(|error| format!("Invalid EC layout seed: {error}"))?;
-    let (session, _) =
-        ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
-    let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
-    layout.solve(config)?;
-    let graph = session
-        .apply_impred_layout(&layout)
-        .map_err(|error| error.to_string())?;
-    let carriers: Vec<Vec<_>> = layout
-        .routes
-        .iter()
-        .map(|route| route.iter().map(|&point| layout.positions[point]).collect())
-        .collect();
-    #[derive(Serialize)]
-    struct ResultGeometry {
-        graph: Vec<u8>,
-        carriers: Vec<Vec<[f64; 2]>>,
-    }
-    let result = ResultGeometry {
-        graph: encode_typst_graph(&graph)?,
-        carriers,
-    };
-    let mut bytes = Vec::new();
-    ciborium::into_writer(&result, &mut bytes).map_err(|error| error.to_string())?;
-    Ok(bytes)
 }
 
 fn typst_graph_from_dot(dot: DotGraph) -> TypstGraph {
