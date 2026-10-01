@@ -1,7 +1,8 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = [
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
+#     "symbolica==3.0.1",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -12,282 +13,112 @@
 import marimo
 
 __generated_with = "0.24.0"
-app = marimo.App(width="medium")
+app = marimo.App(width="medium", app_title="FeynKit DOT rendering")
 
 
 @app.cell
 def _():
-    import base64
-    import io
-    import json
-    import os
-    import tempfile
-    import zipfile
-    from dataclasses import dataclass
-    from pathlib import Path
+    import html
 
-    import linnet_py as lp
+    import linnet as lp
     import marimo as mo
-    import typst
+    import symbolica.community.feynkit as fk
 
-    @dataclass(eq=False)
-    class DotInteraction:
-        """Arbitrary application data reconstructed from one DOT vertex."""
-
-        name: str | None
-        index: int | None
-        payload: list[int] | None
-        attributes: dict[str, str]
-
-    @dataclass(eq=False)
-    class Propagator:
-        """Particle data inspected in the parsed-edge table."""
-
-        edge_id: int | None
-        particle: str
-        payload: list[int] | None
-        attributes: dict[str, str]
-        local_attributes: dict[str, str]
-
-    @dataclass(eq=False)
-    class DotPort:
-        """Arbitrary application data reconstructed from one DOT endpoint."""
-
-        index: int | None
-        statement: str | None
-        payload: list[int] | None
-        port_label: str | None
-        compass: str | None
-
-    @dataclass(frozen=True)
-    class ForceSimulation:
-        """Typed controls for the notebook's force-layout pass."""
-
-        steps: int
-        seed: int
-        directional_force: float
-        spring_strength: float
-        beta: float
-        dangling_repulsion: float
-        dangling_centroid_repulsion: float
-        edge_edge_repulsion: float
-        label_steps: int
-
-    def physics_dot_codec() -> lp.DotCodec:
-        """Map ordinary physics DOT attributes to arbitrary Python payloads."""
-
-        def encode_node(value: lp.NodeValue) -> lp.DotVertexData:
-            record = value.data
-            return lp.DotVertexData(
-                name=record.name,
-                index=record.index,
-                payload=record.payload,
-                statements=record.attributes,
-            )
-
-        def decode_node(value: lp.DotVertexData) -> lp.NodeValue:
-            return lp.NodeValue(
-                data=DotInteraction(
-                    value.name,
-                    value.index,
-                    value.payload,
-                    dict(value.statements),
-                )
-            )
-
-        def encode_edge(value: lp.EdgeValue) -> lp.DotEdgeData:
-            record = value.data
-            attributes = dict(record.attributes)
-            attributes["particle"] = record.particle
-            return lp.DotEdgeData(
-                edge_id=record.edge_id,
-                payload=record.payload,
-                statements=attributes,
-                local_statements=record.local_attributes,
-            )
-
-        def decode_edge(value: lp.DotEdgeData) -> lp.EdgeValue:
-            attributes = dict(value.statements)
-            return lp.EdgeValue(
-                data=Propagator(
-                    value.edge_id,
-                    attributes.get("particle", "fermion"),
-                    value.payload,
-                    attributes,
-                    dict(value.local_statements),
-                ),
-            )
-
-        def encode_half_edge(value: lp.HalfEdgeValue) -> lp.DotHalfEdgeData:
-            record = value.data
-            return lp.DotHalfEdgeData(
-                statement=record.statement,
-                index=record.index,
-                payload=record.payload,
-                port_label=record.port_label,
-                compass=record.compass,
-            )
-
-        def decode_half_edge(value: lp.DotHalfEdgeData) -> lp.HalfEdgeValue:
-            return lp.HalfEdgeValue(
-                data=DotPort(
-                    value.index,
-                    value.statement,
-                    value.payload,
-                    value.port_label,
-                    value.compass,
-                )
-            )
-
-        return lp.DotCodec(
-            encode_node=encode_node,
-            decode_node=decode_node,
-            encode_edge=encode_edge,
-            decode_edge=decode_edge,
-            encode_half_edge=encode_half_edge,
-            decode_half_edge=decode_half_edge,
-        )
-
-    def diagram_render_settings(
-        layout_algorithm: str,
-        *,
-        force_simulation: ForceSimulation,
-        custom_forces: bool,
-        mode: str,
-        show_half_edge_ids: bool,
-        show_momenta: bool,
-        show_momentum_labels: bool,
-    ) -> dict[str, object]:
-        """Supply native options to GammaLoop's existing Typst figure template."""
-
-        layout = {
-            "steps": force_simulation.steps,
-            "seed": force_simulation.seed,
-            "layout-algo": layout_algorithm,
-        }
-        if custom_forces:
-            layout.update(
-                {
-                    "directional-force": force_simulation.directional_force,
-                    "k-spring": force_simulation.spring_strength,
-                    "beta": force_simulation.beta,
-                    "gamma-dangling": force_simulation.dangling_repulsion,
-                    "gamma-dangling-centroid": force_simulation.dangling_centroid_repulsion,
-                    "gamma-ee": force_simulation.edge_edge_repulsion,
-                    "label-steps": force_simulation.label_steps,
-                }
-            )
-        # GammaLoop lightens sink halves by 45%; the shared Typst callbacks own
-        # this and all other particle, label, arrow, and placement conventions.
-        return {
-            "layouts": [layout],
-            "options": {
-                "mode": mode,
-                "momentum-arrows": show_momenta,
-                "show-momentum": show_momentum_labels,
-                "debug": show_half_edge_ids,
-            },
-        }
-
-    default_dot = r"""digraph GL05 {
-      ext [style=invis];
-      ext -> 3 [dir=none, particle="a"];
-      ext -> 2 [dir=none, particle="a"];
-      // Order the outgoing legs along the outer cycle to avoid a crossing.
-      5:12 -> ext [dir=none, particle="a"];
-      4:15 -> ext [dir=none, particle="a"];
-
-      0 -> 1 [particle="t"];
-      0 -> 1 [dir=none, particle="g"];
-      5 -> 0 [particle="t"];
-      1 -> 4 [particle="t"];
-      3 -> 2 [particle="t"];
-      2 -> 5 [particle="t"];
-      4 -> 3 [particle="t"];
-    }"""
-    return (
-        ForceSimulation,
-        Path,
-        base64,
-        default_dot,
-        diagram_render_settings,
-        io,
-        json,
-        lp,
-        mo,
-        os,
-        physics_dot_codec,
-        tempfile,
-        typst,
-        zipfile,
-    )
+    # The Standard Model is embedded, so native and browser runs need no model file.
+    # Native sessions and browser exports load identical model definitions.
+    model = fk.Model.standard_model()
+    return fk, html, lp, mo, model
 
 
-@app.cell
-def _(Path, base64, io, os, tempfile, zipfile):
-    # The exporter embeds a deterministic archive from GammaLoop's save-dot
-    # command. Native runs can reuse its public ZIP through this environment path.
-    drawing_bundle = None
-    if drawing_bundle is None:
-        _bundle_path = os.environ.get("GAMMALOOP_DRAWING_BUNDLE")
-        if _bundle_path is None:
-            raise RuntimeError(
-                "Set GAMMALOOP_DRAWING_BUNDLE to the exported "
-                "public/gammaloop-drawing.zip when running this notebook locally."
-            )
-        _archive = Path(_bundle_path).read_bytes()
-    else:
-        _archive = base64.b64decode(drawing_bundle)
-    drawing_workspace = tempfile.TemporaryDirectory(prefix="gammaloop-notebook-")
-    drawing_root = Path(drawing_workspace.name)
-    with zipfile.ZipFile(io.BytesIO(_archive)) as _zip:
-        _zip.extractall(drawing_root)
-    return drawing_root, drawing_workspace
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # GammaLoop DOT drawing
+    # FeynKit DOT rendering
 
-    This notebook uses the same Typst templates and Standard Model particle map
-    as `save dot` followed by `just draw`. Python supplies the edited DOT and
-    control values; GammaLoop styles the particles and orders external legs,
-    and Linnest measures, lays out, and draws the graph.
+    Edit compact physics DOT. FeynKit resolves `particle` names or `pdg` codes
+    against the Standard Model, infers interaction slots, and renders the parsed
+    diagram with Linnet/Linnest. The preview and table inspect the same object.
+    Annotated DOT from `FeynmanDiagram.to_dot()` is also accepted.
 
-    **Automatic** placement recognizes amplitude legs and cross-section cut
-    pairs. Existing X/Y positions are preserved, and external depth is pinned
-    to zero. Particle labels face outward; optional momentum labels use `qₑ`
-    with the original edge ID. Debug mode adds node and half-edge IDs.
+    The amplitude is a photon-scattering diagram with a top loop and gluon
+    exchange. The cross-section describes photon-mediated electron–positron
+    annihilation into muons. Its `is_cut` tags pair initial-state legs;
+    `final_state="mu-,mu+"` selects physical cuts with those particles.
+    Use `int_id` when particles alone do not identify an interaction uniquely.
+    Numerators default to one; compact import does not generate Feynman rules.
 
-    Open **Layout settings** for the sliders. GammaLoop's mode-specific presets
+    **Automatic** placement uses momentum flow to pull incoming legs left and
+    outgoing legs right with a constant force. The graph can stretch with its
+    chain of interactions. All-incoming or all-outgoing diagrams spread radially.
+    Repulsion grows once from a compact start to its final strength.
+    Cross-sections open initial-state connections into left/right legs by default;
+    matching pairs share movable rows. Disable **Split initial state** to draw
+    the sewn graph. Internal labels keep a uniform gap to their text bounds,
+    sliding along their curves or switching sides to avoid overlaps.
+    Momentum labels use the diagram's stored loop momentum basis. Arrows and
+    their labels slide together at a fixed offset; automatic sides can flip
+    to avoid collisions. **Momentum settings** controls their offset, requested
+    length, maximum fraction of the edge, label gap, and preferred position.
+    Disable **Automatic momentum placement** to pin the pair. **Debug IDs** adds node and half-edge IDs.
+    **Collision boxes** shows padded label boxes: dashed purple for label–label
+    clearance, cyan for label–edge/node clearance, and orange for edge/node
+    obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
+    Labels ignore their own edge's boxes, except for self-loops; their fixed
+    offset already controls clearance from the carrier.
+    **Extra label collision padding** enlarges both label boxes by that amount
+    on every side, in canvas units; zero restores their base sizes.
+
+    Hover for physics information; click to inspect an edge or vertex.
+    Shift-click toggles selection. The outer quarters of an internal edge
+    select its half-edges; the middle selects the whole edge. The transparent
+    SVG follows the documentation's light or dark theme.
+
+    Open **Layout settings** for the sliders. FeynKit's mode-specific presets
     stay active unless you enable custom force parameters. Edits render after
     typing pauses; slider changes render on release.
     """)
     return
 
 
-@app.cell
-def _(default_dot, mo):
-    example = mo.ui.dropdown(
-        options={
-            "Amplitude": default_dot,
-            "Cross-section": r"""digraph Cut {
+@app.cell(hide_code=True)
+def _():
+    examples = {
+        "Amplitude": r"""digraph GL05 {
   ext [style=invis];
-  ext -> a [particle="e-", is_cut=0];
-  ext -> b [particle="e+", is_cut=1];
-  c -> ext [particle="e+", is_cut=1];
-  d -> ext [particle="e-", is_cut=0];
-  a -> b [particle="t"];
-  b -> c [particle="t"];
-  c -> d [particle="t"];
-  d -> a [particle="t"];
-  a -> c [particle="g", dir=none];
+  ext -> 3 [dir=none, particle="a"];
+  ext -> 2 [dir=none, particle="a"];
+  // Order the outgoing legs along the outer cycle to avoid a crossing.
+  5:12 -> ext [dir=none, particle="a"];
+  4:15 -> ext [dir=none, particle="a"];
+
+  0 -> 1 [particle="t"];
+  0 -> 1 [dir=none, particle="g"];
+  5 -> 0 [particle="t"];
+  1 -> 4 [particle="t"];
+  3 -> 2 [particle="t"];
+  2 -> 5 [particle="t"];
+  4 -> 3 [particle="t"];
 }""",
-        },
-        value="Amplitude",
-        label="Example",
-    )
+        "Cross-section": r"""digraph MuonPair {
+  graph [final_state="mu-,mu+"];
+  ext [style=invis];
+  ext -> eL [particle="e-", is_cut=0];
+  ext -> eL [particle="e+", is_cut=1];
+  eR -> ext [particle="e-", is_cut=0];
+  eR -> ext [particle="e+", is_cut=1];
+
+  eL -> muL [particle="a"];
+  muR -> eR [particle="a"];
+  muL -> muR [particle="mu-", lmb_id=0];
+  muR -> muL [particle="mu-"];
+}""",
+    }
+    return (examples,)
+
+
+@app.cell(hide_code=True)
+def _(examples, mo):
+    example = mo.ui.dropdown(options=examples, value="Amplitude", label="Example")
     mode = mo.ui.dropdown(
         options={
             "Automatic": "auto",
@@ -298,19 +129,48 @@ def _(default_dot, mo):
         value="Automatic",
         label="External placement",
     )
+    split_initial_state = mo.ui.checkbox(value=True, label="Split initial state")
     show_momenta = mo.ui.checkbox(value=False, label="Momentum arrows")
-    show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels qₑ")
+    show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels")
     show_half_edge_ids = mo.ui.checkbox(value=False, label="Debug IDs")
+    show_collision_boxes = mo.ui.checkbox(value=False, label="Collision boxes")
+    label_collision_padding = mo.ui.slider(
+        0,
+        0.6,
+        0.05,
+        0.6,
+        debounce=True,
+        show_value=True,
+        label="Extra label collision padding",
+    )
     mo.hstack(
-        [example, mode, show_momenta, show_momentum_labels, show_half_edge_ids],
+        [
+            example,
+            mode,
+            split_initial_state,
+            show_momenta,
+            show_momentum_labels,
+            show_half_edge_ids,
+            show_collision_boxes,
+            label_collision_padding,
+        ],
         justify="start",
         wrap=True,
         gap=1.5,
     )
-    return example, mode, show_half_edge_ids, show_momentum_labels, show_momenta
+    return (
+        example,
+        label_collision_padding,
+        mode,
+        show_collision_boxes,
+        show_half_edge_ids,
+        show_momentum_labels,
+        show_momenta,
+        split_initial_state,
+    )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(example, mo):
     dot_source = mo.ui.code_editor(
         value=example.value,
@@ -318,30 +178,31 @@ def _(example, mo):
         min_height=280,
         max_height=520,
         debounce=400,
-        label="Editable DOT",
+        label="Editable FeynKit DOT",
     )
     dot_source
     return (dot_source,)
 
 
-@app.cell
-def _(mo):
+@app.cell(hide_code=True)
+def _(lp, mo):
     layout_algorithm = mo.ui.dropdown(
-        options={"Force": "force", "Stable layered": "stable-layered"},
+        options={
+            "Force": lp.LayoutAlgorithm.Force,
+            "Stable layered": lp.LayoutAlgorithm.StableLayered,
+        },
         value="Force",
         label="Layout algorithm",
     )
-    custom_forces = mo.ui.checkbox(
-        value=False, label="Override GammaLoop force presets"
-    )
+    custom_forces = mo.ui.checkbox(value=False, label="Override FeynKit force presets")
     force_steps = mo.ui.slider(
         0,
         2400,
         100,
-        1200,
+        100,
         debounce=True,
         show_value=True,
-        label="Force iterations",
+        label="Steps per epoch (30 epochs)",
     )
     force_seed = mo.ui.slider(
         0,
@@ -365,10 +226,55 @@ def _(mo):
         1,
         100,
         1,
-        11,
+        9,
         debounce=True,
         show_value=True,
         label="Spring strength",
+    )
+    spring_length_scale = mo.ui.slider(
+        0.25,
+        2,
+        0.05,
+        0.75,
+        debounce=True,
+        show_value=True,
+        label="Spring rest-length multiplier",
+    )
+    external_pull = mo.ui.slider(
+        0,
+        3,
+        0.05,
+        1,
+        debounce=True,
+        show_value=True,
+        label="Constant external pull",
+    )
+    external_pull_balance = mo.ui.slider(
+        0,
+        3,
+        0.05,
+        1,
+        debounce=True,
+        show_value=True,
+        label="Pull balancing",
+    )
+    initial_repulsion = mo.ui.slider(
+        0,
+        1,
+        0.05,
+        0.15,
+        debounce=True,
+        show_value=True,
+        label="Initial repulsion fraction",
+    )
+    repulsion_growth = mo.ui.slider(
+        0,
+        1,
+        0.05,
+        0.7,
+        debounce=True,
+        show_value=True,
+        label="Fraction of run used to grow repulsion",
     )
     beta = mo.ui.slider(
         0,
@@ -425,11 +331,20 @@ def _(mo):
                     custom_forces,
                     mo.md(
                         "The remaining sliders apply only when force overrides are enabled. "
-                        "Otherwise the renderer chooses GammaLoop's amplitude or cross-section presets."
+                        "Otherwise the renderer chooses FeynKit's amplitude or cross-section presets."
                     ),
                     directional_force,
                     spring_strength,
+                    spring_length_scale,
+                    external_pull,
+                    external_pull_balance,
+                    mo.md(
+                        "Pull balancing: 0 keeps uniform pull; 1 balances spring loads; "
+                        "values above 1 strengthen the balancing."
+                    ),
                     beta,
+                    initial_repulsion,
+                    repulsion_growth,
                     dangling_repulsion,
                     dangling_centroid_repulsion,
                     edge_edge_repulsion,
@@ -451,102 +366,183 @@ def _(mo):
         force_steps,
         label_steps,
         spring_strength,
+        spring_length_scale,
+        external_pull,
+        external_pull_balance,
+        initial_repulsion,
+        repulsion_growth,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    auto_momentum_placement = mo.ui.checkbox(
+        value=True, label="Automatic momentum placement"
+    )
+    momentum_side = mo.ui.dropdown(
+        options={"Automatic": "auto", "Left": "left", "Right": "right"},
+        value="Automatic",
+        label="Momentum side",
+    )
+    momentum_offset = mo.ui.slider(
+        0, 1, 0.05, 0.5, debounce=True, show_value=True, label="Arrow offset"
+    )
+    momentum_length = mo.ui.slider(
+        0.2, 2, 0.1, 1.4, debounce=True, show_value=True, label="Requested arrow length"
+    )
+    momentum_ratio = mo.ui.slider(
+        0.1,
+        1,
+        0.05,
+        0.5,
+        debounce=True,
+        show_value=True,
+        label="Maximum arrow fraction of edge",
+    )
+    momentum_gap = mo.ui.slider(
+        0, 0.8, 0.05, 0.2, debounce=True, show_value=True, label="Momentum label gap"
+    )
+    momentum_shift = mo.ui.slider(
+        -2, 2, 0.1, 0, debounce=True, show_value=True, label="Preferred momentum shift"
+    )
+    mo.accordion(
+        {
+            "Momentum settings": mo.vstack(
+                [
+                    auto_momentum_placement,
+                    momentum_side,
+                    momentum_offset,
+                    momentum_length,
+                    momentum_ratio,
+                    momentum_gap,
+                    momentum_shift,
+                ],
+                gap=0.75,
+            )
+        }
+    )
+    return (
+        auto_momentum_placement,
+        momentum_side,
+        momentum_offset,
+        momentum_length,
+        momentum_ratio,
+        momentum_gap,
+        momentum_shift,
     )
 
 
 @app.cell
+def _(dot_source, fk, model):
+    try:
+        diagram = fk.FeynmanDiagram.from_dot(model, dot_source.value)
+        parse_error = None
+    except (fk.DiagramError, RuntimeError, TypeError, ValueError) as error:
+        diagram = None
+        parse_error = f"{type(error).__name__}: {error}"
+    return diagram, parse_error
+
+
+@app.cell
 def _(
-    ForceSimulation,
+    auto_momentum_placement,
+    momentum_side,
+    momentum_offset,
+    momentum_length,
+    momentum_ratio,
+    momentum_gap,
+    momentum_shift,
     beta,
-    dangling_repulsion,
+    custom_forces,
     dangling_centroid_repulsion,
+    dangling_repulsion,
     directional_force,
     edge_edge_repulsion,
     force_seed,
     force_steps,
     label_steps,
-    spring_strength,
-):
-    force_simulation = ForceSimulation(
-        steps=force_steps.value,
-        seed=force_seed.value,
-        directional_force=directional_force.value,
-        spring_strength=spring_strength.value,
-        beta=beta.value,
-        dangling_repulsion=dangling_repulsion.value,
-        dangling_centroid_repulsion=dangling_centroid_repulsion.value,
-        edge_edge_repulsion=edge_edge_repulsion.value,
-        label_steps=label_steps.value,
-    )
-    return force_simulation
-
-
-@app.cell
-def _(dot_source, lp, physics_dot_codec):
-    try:
-        graph = lp.Graph.from_dot(dot_source.value, physics_dot_codec())
-        parse_error = None
-    except (RuntimeError, TypeError, ValueError) as error:
-        graph = None
-        parse_error = f"{type(error).__name__}: {error}"
-    return graph, parse_error
-
-
-@app.cell
-def _(
-    custom_forces,
-    diagram_render_settings,
-    dot_source,
-    drawing_root,
-    force_simulation,
-    json,
+    label_collision_padding,
     layout_algorithm,
+    lp,
     mode,
+    show_collision_boxes,
     show_half_edge_ids,
     show_momentum_labels,
     show_momenta,
-    typst,
+    spring_strength,
+    spring_length_scale,
+    external_pull,
+    external_pull_balance,
+    initial_repulsion,
+    repulsion_growth,
+    split_initial_state,
 ):
-    try:
-        _config = diagram_render_settings(
-            layout_algorithm.value,
-            force_simulation=force_simulation,
-            custom_forces=custom_forces.value,
-            mode=mode.value,
-            show_half_edge_ids=show_half_edge_ids.value,
-            show_momentum_labels=show_momentum_labels.value,
-            show_momenta=show_momenta.value,
-        )
-        _config_json = json.dumps(
-            json.dumps(_config, ensure_ascii=False), ensure_ascii=False
-        )
-        typst_source = (
-            '#import "drawings/templates/figure.typ": render\n\n'
-            f'#render(json(bytes({_config_json})) + (data-path: "/graph.dot",))\n'
-        )
-        (drawing_root / "graph.dot").write_text(dot_source.value, encoding="utf-8")
-        (drawing_root / "main.typ").write_text(typst_source, encoding="utf-8")
-        _svg = typst.compile(
-            str(drawing_root / "main.typ"),
-            root=str(drawing_root),
-            format="svg",
-            package_path=str(drawing_root / "typst-packages"),
-            package_cache_path=str(drawing_root / "typst-packages"),
-        )
-        if isinstance(_svg, list):
-            rendered_svg = "".join(_page.decode("utf-8") for _page in _svg)
-        else:
-            rendered_svg = _svg.decode("utf-8")
-        render_error = None
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        render_error = f"{type(error).__name__}: {error}"
-        rendered_svg = None
-        typst_source = None
-    return render_error, rendered_svg, typst_source
+    _forces = {}
+    if custom_forces.value:
+        _forces = {
+            "directional_force": directional_force.value,
+            "spring_strength": spring_strength.value,
+            "spring_length_scale": spring_length_scale.value,
+            "external_pull": external_pull.value,
+            "external_pull_balance": external_pull_balance.value,
+            "initial_repulsion": initial_repulsion.value,
+            "repulsion_growth": repulsion_growth.value,
+            "beta": beta.value,
+            "dangling_repulsion": dangling_repulsion.value,
+            "dangling_centroid_repulsion": dangling_centroid_repulsion.value,
+            "edge_edge_repulsion": edge_edge_repulsion.value,
+            "label_steps": label_steps.value,
+        }
+    # The shared physics template lightens sink halves by 45% and owns the
+    # particle, label, arrow, and placement conventions.
+    render_config = lp.RenderConfig(
+        drawing=lp.DrawOptions(
+            debug_label_collisions=show_collision_boxes.value,
+            label_collision_padding=label_collision_padding.value,
+        ),
+        layouts=lp.LayoutOptions(
+            algorithm=layout_algorithm.value,
+            steps=force_steps.value,
+            seed=force_seed.value,
+            **_forces,
+        ),
+        template_options={
+            "mode": mode.value,
+            "split-initial-state": split_initial_state.value,
+            "momentum-arrows": show_momenta.value,
+            "show-momentum": show_momentum_labels.value,
+            "momentum-label-slide": auto_momentum_placement.value,
+            "momentum-arrow-side": momentum_side.value,
+            "momentum-arrow-offset": momentum_offset.value,
+            "momentum-arrow-length": momentum_length.value,
+            "momentum-arrow-ratio": momentum_ratio.value,
+            "momentum-label-gap": momentum_gap.value,
+            "momentum-arrow-shift": momentum_shift.value,
+            "debug": show_half_edge_ids.value,
+        },
+    )
+    route_momenta = show_momenta.value or show_momentum_labels.value
+    return render_config, route_momenta
 
 
 @app.cell
-def _(mo, parse_error, render_error, rendered_svg):
+def _(diagram, fk, render_config, route_momenta):
+    rendered_html = None
+    typst_source = None
+    render_error = None
+    if diagram is not None:
+        try:
+            rendered_html = diagram.to_html(config=render_config, momenta=route_momenta)
+            typst_source = diagram.to_linnest(
+                config=render_config, momenta=route_momenta
+            )
+        except (fk.DiagramError, OSError, RuntimeError, TypeError, ValueError) as error:
+            render_error = f"{type(error).__name__}: {error}"
+    return render_error, rendered_html, typst_source
+
+
+@app.cell(hide_code=True)
+def _(html, mo, parse_error, render_error, rendered_html):
     if parse_error is not None:
         _output = mo.callout(
             mo.md(f"`{parse_error}`"),
@@ -557,87 +553,86 @@ def _(mo, parse_error, render_error, rendered_svg):
         _output = mo.callout(
             mo.md(f"`{render_error}`"),
             kind="danger",
-            title="Typst rendering failed",
+            title="FeynKit rendering failed",
         )
     else:
+        # The SVG manages iframe height; Marimo islands do not provide
+        # mo.iframe's global resize callback.
         _output = mo.Html(
-            f'<div data-linnet-render-ready="physics">{rendered_svg}</div>'
+            '<div data-notebook-ready="physics_render_settings">'
+            '<iframe title="Interactive FeynKit diagram" '
+            'sandbox="allow-scripts allow-same-origin" '
+            'style="width:100%;height:500px;border:0" '
+            f'srcdoc="{html.escape(rendered_html, quote=True)}"></iframe></div>'
         )
     _output
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo, typst_source):
     if typst_source is None:
         _source_panel = mo.md(
             "Fix the DOT or rendering error to inspect the generated Typst."
         )
     else:
-        _source_panel = mo.vstack(
-            [
-                mo.md(r"""
-                ## Live generated Typst
-
-                This is the exact staged entrypoint used for the SVG above.
-                It updates with the DOT and rendering controls.
-                """),
-                mo.ui.code_editor(
-                    value=typst_source,
-                    language="text",
-                    disabled=True,
-                    min_height=320,
-                    max_height=700,
-                    label="Generated Typst (read-only)",
+        _source_panel = mo.accordion(
+            {
+                "Live generated Typst": mo.vstack(
+                    [
+                        mo.md(
+                            "FeynKit's Typst source for the diagram and rendering "
+                            "controls above. The SVG's hover and selection behavior "
+                            "is added after Typst rendering."
+                        ),
+                        mo.ui.code_editor(
+                            value=typst_source,
+                            language="text",
+                            disabled=True,
+                            min_height=320,
+                            max_height=700,
+                            label="Generated Typst (read-only)",
+                        ),
+                    ]
                 ),
-            ]
+            }
         )
     _source_panel
     return
 
 
-@app.cell
-def _(graph, mo):
-    if graph is None:
-        _details = mo.md("Fix the DOT input to inspect its parsed records.")
+@app.cell(hide_code=True)
+def _(diagram, mo):
+    if diagram is None:
+        _details = mo.md("Fix the DOT input to inspect the parsed diagram.")
     else:
-        _rows = []
-        for _edge in graph.edges():
-            _source = (
-                (_edge.source.node.name or f"n{_edge.source.node.index}")
-                if _edge.source is not None
-                else "external"
-            )
-            _sink = (
-                (_edge.sink.node.name or f"n{_edge.sink.node.index}")
-                if _edge.sink is not None
-                else "external"
-            )
-            _rows.append(
-                {
-                    "Edge ID": _edge.index,
-                    "source": _source,
-                    "sink": _sink,
-                    "particle": _edge.data.particle,
-                    "orientation": str(_edge.orientation)
-                    .removeprefix("Orientation.")
-                    .lower(),
-                }
-            )
         _details = mo.vstack(
             [
                 mo.md(f"""
-                ## Parsed native graph
+                ## Parsed FeynKit diagram
 
-                **{graph.n_nodes} nodes**, **{graph.n_edges} edges**,
-                **{graph.n_half_edges} half-edges**, and
-                **{graph.external_half_edges().n_half_edges} external legs**.
-                This table uses Linnet's Python DOT parser for inspection.
-                The drawing receives the original DOT directly, so its styling
-                and external placement come entirely from GammaLoop's Typst renderer.
+                **{len(diagram.vertices)} vertices**, **{len(diagram.edges)} edges**,
+                **{diagram.loop_count} loops**, and **{len(diagram.cuts)} physical cuts**.
+                This table reads the same `FeynmanDiagram` that produced the preview.
                 """),
                 mo.ui.table(
-                    _rows,
+                    [
+                        {
+                            "Edge ID": edge.id,
+                            "source": edge.source
+                            if edge.source is not None
+                            else "external",
+                            "target": edge.target
+                            if edge.target is not None
+                            else "external",
+                            "particle": edge.particle_name,
+                            "PDG": edge.particle_pdg,
+                            "external state": edge.external_state
+                            if edge.is_external
+                            else "internal",
+                        }
+                        for edge in diagram.edges
+                    ],
                     pagination=False,
                     selection=None,
                     show_download=False,
