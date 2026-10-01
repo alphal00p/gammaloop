@@ -1,6 +1,7 @@
 use crate::{
     debug_tags,
     graph::{Graph, LoopMomentumBasis},
+    model::Model,
     uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
@@ -28,7 +29,12 @@ pub struct CutWoods {
 
 impl CutWoods {
     #[debug_instrument(graph = %graph.log_display())]
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(
+        cuts: CutStructure,
+        graph: &Graph,
+        model: &Model,
+        settings: &UVgenerationSettings,
+    ) -> Self {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
         for cut in cuts.cuts.iter() {
@@ -37,7 +43,7 @@ impl CutWoods {
             subgraph.subtract_with(&cut.union);
 
             let spinneys =
-                graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
+                graph.classified_spinneys(&subgraph, model, settings, &graph.loop_momentum_basis);
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;

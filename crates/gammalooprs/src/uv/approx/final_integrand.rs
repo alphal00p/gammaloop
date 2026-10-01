@@ -23,8 +23,9 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
@@ -172,12 +173,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
-            })
-            * global_num;
+            },
+        )?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
@@ -249,12 +257,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
-            })
-            * global_num;
+            },
+        )?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -277,9 +292,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // contracts its loop-energy dependence.  The exact DDx GL0 UV ray
         // verifies that this is the full production tree, including the
         // carrier shared with the factorized self-energy coefficient.
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
         let allowed_zero: Integrands = localizer
             .cutset
             .residue_selector
@@ -525,7 +542,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(W_.prop_);
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
-            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            atom = atom.replace(GS.dim).with(4);
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
@@ -533,15 +550,21 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 file.atom = %atom.to_canonical_string(),
                 "Mapped factorized integrand before final color simplification"
             );
-            atom = atom
-                .simplify_color_with(
-                    ColorSimplifySettings {
-                        simplify_non_color: false,
-                        ..Default::default()
-                    }
-                    .with_cof_dimension_invariants(),
-                )
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .expand_dots()?;
+            atom = cooking.uncook(reduced.as_view());
 
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement
@@ -564,8 +587,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::esurface::RaisedEsurfaceGroup,
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{cuts::CutSet, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         uv::{
@@ -583,7 +606,7 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph factorized_final {
+        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -856,7 +879,7 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph projected_zero {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -921,7 +944,7 @@ mod tests {
         };
         let zero_local = uv_limit(
             &zero_prefix,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &current,

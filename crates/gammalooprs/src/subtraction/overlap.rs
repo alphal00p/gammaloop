@@ -1,12 +1,10 @@
 use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
-use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
-use crate::cff::esurface::RaisedEsurfaceData;
-use crate::cff::esurface::RaisedEsurfaceId;
 use crate::cff::esurface::{esurface_value_is_strictly_inside, get_representative};
+use crate::cff::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceId};
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::integrands::process::GenericEvaluator;
@@ -1097,7 +1095,7 @@ mod tests {
                     max_occurence: 1,
                 })
                 .collect(),
-            pass_two_evaluator: None,
+            ..Default::default()
         }
     }
 

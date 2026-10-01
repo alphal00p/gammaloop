@@ -227,7 +227,7 @@ impl<T> SmartSerde for BTreeMap<String, (T, T)> where
 {
 }
 
-impl SmartSerde for SerializableModel {}
+impl SmartSerde for Model {}
 // impl SmartSerde for Schema {}
 
 impl SmartSerde for GlobalSettings {
@@ -276,7 +276,7 @@ pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
 }
 
 use crate::{
-    model::SerializableModel,
+    model::Model,
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
@@ -543,7 +543,6 @@ mod tests {
         fn convert_models() {
             let name = "scalars";
             load_generic_model(name)
-                .to_serializable()
                 .to_file(
                     output_dir().join(format!("gammaloop_models/{name}.json")),
                     true,
