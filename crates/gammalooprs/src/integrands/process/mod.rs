@@ -1395,6 +1395,7 @@ pub(crate) fn evaluate_profile_momentum_point<I: ProcessIntegrandImpl>(
     graph_id: usize,
     orientation: Option<usize>,
     loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    candidate_lmb: Option<&LoopMomentumBasis>,
     use_arb_prec: bool,
 ) -> Result<EvaluationResult> {
     let input = MomentumSpaceEvaluationInput {
@@ -1405,10 +1406,13 @@ pub(crate) fn evaluate_profile_momentum_point<I: ProcessIntegrandImpl>(
         orientation,
         channel_id: None,
     };
-    evaluate_momentum_configuration(
+    evaluate_from_source(
         integrand,
         model,
-        &input,
+        EvaluationSource::Momentum {
+            input: &input,
+            candidate_lmb,
+        },
         F(1.0),
         use_arb_prec,
         Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
@@ -1421,6 +1425,7 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
     graph_id: usize,
     orientation: Option<usize>,
     loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    candidate_lmb: Option<&LoopMomentumBasis>,
     use_arb_prec: bool,
 ) -> Result<PreciseEvaluationResult> {
     let input = MomentumSpaceEvaluationInput {
@@ -1431,10 +1436,13 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
         orientation,
         channel_id: None,
     };
-    evaluate_momentum_configuration_precise(
+    evaluate_from_source_precise(
         integrand,
-        model,
-        &input,
+        EvaluationTarget::Physical(model),
+        EvaluationSource::Momentum {
+            input: &input,
+            candidate_lmb,
+        },
         F(1.0),
         use_arb_prec,
         Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
@@ -4834,7 +4842,10 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
 #[derive(Clone, Copy)]
 enum EvaluationSource<'a> {
     XSpace(&'a Sample<F<f64>>),
-    Momentum(&'a MomentumSpaceEvaluationInput),
+    Momentum {
+        input: &'a MomentumSpaceEvaluationInput,
+        candidate_lmb: Option<&'a LoopMomentumBasis>,
+    },
     /// Borrowed from the one original-source preparation outside the physical
     /// retry stack. Retain source kind for reporting, not for native remapping.
     Prepared {
@@ -4854,7 +4865,7 @@ impl<'a> EvaluationSource<'a> {
     fn is_x_space(&self) -> bool {
         match self {
             Self::XSpace(_) => true,
-            Self::Momentum(_) => false,
+            Self::Momentum { .. } => false,
             Self::Prepared { original, .. } => original.is_x_space(),
         }
     }
@@ -4875,7 +4886,7 @@ impl<'a> EvaluationSource<'a> {
         metadata.sampling_proposal_policies.begin_collection();
         let result = (|| {
             let precision = if integrand.get_settings().sampling.uses_sampling_channels()
-                && !matches!(self, Self::Momentum(input) if input.channel_id.is_none())
+                && !matches!(self, Self::Momentum { input, .. } if input.channel_id.is_none())
             {
                 integrand
                     .get_graph(0)
@@ -4894,13 +4905,24 @@ impl<'a> EvaluationSource<'a> {
                         integrand.get_dependent_momenta_constructor(),
                     )
                 }
-                (Self::Momentum(input), SamplingPrecision::Quad) => {
+                (
+                    Self::Momentum {
+                        input,
+                        candidate_lmb,
+                    },
+                    SamplingPrecision::Quad,
+                ) => {
                     integrand.prepare_sampling_precision::<f128>()?;
-                    build_direct_gamma_sample::<f128, I>(integrand, input, metadata)?
-                        .into_canonical(
-                            &integrand.get_settings().kinematics.externals,
-                            integrand.get_dependent_momenta_constructor(),
-                        )
+                    build_direct_gamma_sample::<f128, I>(
+                        integrand,
+                        input,
+                        *candidate_lmb,
+                        metadata,
+                    )?
+                    .into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )
                 }
                 (Self::XSpace(sample), SamplingPrecision::Fixed256) => {
                     parameterize::<SamplingFloat, I>(sample, integrand, metadata)?.into_canonical(
@@ -4908,22 +4930,44 @@ impl<'a> EvaluationSource<'a> {
                         integrand.get_dependent_momenta_constructor(),
                     )
                 }
-                (Self::Momentum(input), SamplingPrecision::Fixed256) => {
+                (
+                    Self::Momentum {
+                        input,
+                        candidate_lmb,
+                    },
+                    SamplingPrecision::Fixed256,
+                ) => {
                     integrand.prepare_sampling_precision::<SamplingFloat>()?;
-                    build_direct_gamma_sample::<SamplingFloat, I>(integrand, input, metadata)?
-                        .into_canonical(
-                            &integrand.get_settings().kinematics.externals,
-                            integrand.get_dependent_momenta_constructor(),
-                        )
+                    build_direct_gamma_sample::<SamplingFloat, I>(
+                        integrand,
+                        input,
+                        *candidate_lmb,
+                        metadata,
+                    )?
+                    .into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )
                 }
                 (Self::XSpace(sample), SamplingPrecision::Arb) => {
                     parameterize::<ArbPrec, I>(sample, integrand, metadata)
                 }
-                (Self::Momentum(input), SamplingPrecision::Arb) => {
+                (
+                    Self::Momentum {
+                        input,
+                        candidate_lmb,
+                    },
+                    SamplingPrecision::Arb,
+                ) => {
                     if input.channel_id.is_some() {
                         integrand.prepare_sampling_precision::<ArbPrec>()?;
                     }
-                    build_direct_gamma_sample::<ArbPrec, I>(integrand, input, metadata)
+                    build_direct_gamma_sample::<ArbPrec, I>(
+                        integrand,
+                        input,
+                        *candidate_lmb,
+                        metadata,
+                    )
                 }
                 _ => unreachable!("prepared sources and Double source policies are excluded"),
             }
@@ -4988,7 +5032,7 @@ impl<'a> EvaluationSource<'a> {
         integrand: &mut I,
         metadata: &mut EvaluationMetaData,
     ) -> Result<F<f64>> {
-        if let Self::Momentum(input) = self {
+        if let Self::Momentum { input, .. } = self {
             return Ok(sum_loop_norms(input.loop_momenta.iter()));
         }
         // Inspect only canonical momenta: a norm prepass must not reject an
@@ -5036,6 +5080,7 @@ fn sum_loop_norms<'a>(loop_momenta: impl Iterator<Item = &'a ThreeMomentum<F<f64
 fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
+    candidate_lmb: Option<&LoopMomentumBasis>,
     metadata: &mut EvaluationMetaData,
 ) -> Result<GammaLoopSample<T>> {
     if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
@@ -5110,6 +5155,19 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                 "Explicit graph selection is mutually exclusive with discrete graph/channel selections in momentum-space evaluation."
             ));
         }
+        // Profile rays use a candidate basis. Convert only after the exact
+        // input tokens have reached the fixed source precision, and target this
+        // graph rather than its group master. The canonical row then owns the
+        // completed point for every native materialization and stability rotation.
+        let sample = if let Some(from) = candidate_lmb {
+            let to = &integrand
+                .get_graph(graph_id)
+                .get_graph()
+                .loop_momentum_basis;
+            sample.lmb_transform(from, to)
+        } else {
+            sample
+        };
         return Ok(GammaLoopSample {
             groups: vec![(
                 None,
@@ -5123,6 +5181,12 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                 }],
             )],
         });
+    }
+
+    if candidate_lmb.is_some() {
+        return Err(eyre!(
+            "Candidate LMB evaluation requires explicit graph selection."
+        ));
     }
 
     match &integrand.get_settings().sampling {
@@ -5785,7 +5849,10 @@ fn evaluate_momentum_configuration<I: ProcessIntegrandImpl>(
     evaluate_from_source(
         integrand,
         model,
-        EvaluationSource::Momentum(input),
+        EvaluationSource::Momentum {
+            input,
+            candidate_lmb: None,
+        },
         wgt,
         use_arb_prec,
         max_eval,
@@ -5803,7 +5870,10 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
     evaluate_from_source_precise(
         integrand,
         EvaluationTarget::Physical(model),
-        EvaluationSource::Momentum(input),
+        EvaluationSource::Momentum {
+            input,
+            candidate_lmb: None,
+        },
         wgt,
         use_arb_prec,
         max_eval,
@@ -6032,7 +6102,10 @@ pub(crate) mod tests {
                         ..Default::default()
                     });
                 integrand.warm_up(model)?;
-                let raw_source = EvaluationSource::Momentum(&direct);
+                let raw_source = EvaluationSource::Momentum {
+                    input: &direct,
+                    candidate_lmb: None,
+                };
                 let raw = raw_source.prepare_draw(integrand, &mut metadata)?.unwrap();
                 let prepared_raw = EvaluationSource::Prepared {
                     sample: &raw,
@@ -6412,9 +6485,12 @@ pub(crate) mod tests {
                 orientation: None,
                 channel_id: None,
             };
-            let raw = EvaluationSource::Momentum(&input)
-                .prepare_draw(integrand, &mut metadata)?
-                .unwrap();
+            let raw = EvaluationSource::Momentum {
+                input: &input,
+                candidate_lmb: None,
+            }
+            .prepare_draw(integrand, &mut metadata)?
+            .unwrap();
             assert_eq!(
                 raw.get_default_sample().loop_moms().0[0].px,
                 F(0.1).to_arb_exact()?
@@ -6424,9 +6500,12 @@ pub(crate) mod tests {
                 ..input
             };
             assert!(
-                EvaluationSource::Momentum(&selected_input)
-                    .prepare_draw(integrand, &mut metadata)
-                    .is_err()
+                EvaluationSource::Momentum {
+                    input: &selected_input,
+                    candidate_lmb: None
+                }
+                .prepare_draw(integrand, &mut metadata)
+                .is_err()
             );
         }
         runtime.get_mut_settings().sampling = original_sampling;
@@ -6868,7 +6947,10 @@ pub(crate) mod tests {
             channel_id: None,
             orientation: None,
         };
-        let raw_source = EvaluationSource::Momentum(&direct);
+        let raw_source = EvaluationSource::Momentum {
+            input: &direct,
+            candidate_lmb: None,
+        };
         let mut raw_anchor = raw_source.prepare_draw(integrand, &mut metadata)?.unwrap();
         raw_anchor.prepare_physical_overlaps(integrand, model, &mut metadata)?;
         assert!(
@@ -6898,6 +6980,76 @@ pub(crate) mod tests {
                 .flat_map(|(_, rows)| rows)
                 .all(|row| row.channel_id.is_none() && row.prepared_lu_hosts.is_empty())
         );
+        // The UV/IR profile path enters through this same source owner. Large
+        // exact input tokens make affine shifts smaller than binary64 spacing;
+        // compare every physical edge after the production canonical routing.
+        let selected_graph = integrand.get_graph(graph_id).get_graph().clone();
+        let profile_input = super::MomentumSpaceEvaluationInput {
+            loop_momenta: direct
+                .loop_momenta
+                .iter()
+                .map(|_| {
+                    ThreeMomentum::new(F(2_f64.powi(80)), F(-2_f64.powi(81)), F(2_f64.powi(82)))
+                })
+                .collect(),
+            ..direct
+        };
+        let unrouted_source = EvaluationSource::Momentum {
+            input: &profile_input,
+            candidate_lmb: None,
+        };
+        let unrouted = unrouted_source
+            .prepare_draw(integrand, &mut metadata)?
+            .unwrap();
+        let input_sample = unrouted.get_default_sample();
+        let external_spatial = input_sample
+            .sample
+            .external_moms
+            .iter()
+            .map(|momentum| momentum.spatial.clone())
+            .collect::<crate::momentum::sample::ExternalThreeMomenta<_>>();
+        // Cross-section preprocessing promotes initial-state cut loops to
+        // external momenta. Reuse its physical basis catalogue: a fresh spanning
+        // tree enumeration would reintroduce those external loops.
+        let setup = integrand.get_graph(graph_id).sampling_setup();
+        assert_eq!(
+            setup.graph.loop_momentum_basis,
+            selected_graph.loop_momentum_basis
+        );
+        let candidates = setup.all_bases.clone();
+        assert!(!candidates.is_empty());
+        assert!(candidates.iter().any(|candidate| {
+            candidate.loop_edges != selected_graph.loop_momentum_basis.loop_edges
+        }));
+        for candidate in &candidates {
+            assert_eq!(candidate.loop_edges.len(), profile_input.loop_momenta.len());
+            let profile_source = EvaluationSource::Momentum {
+                input: &profile_input,
+                candidate_lmb: Some(candidate),
+            };
+            let canonical = profile_source
+                .prepare_draw(integrand, &mut metadata)?
+                .unwrap();
+            assert_eq!(canonical.groups[0].1[0].graph_id, graph_id);
+            let prepared = EvaluationSource::Prepared {
+                sample: &canonical,
+                original: &profile_source,
+            };
+            let native =
+                prepared.build_gamma_sample::<super::ArbPrec, _>(integrand, &mut metadata)?;
+            let routed = native.get_default_sample();
+            for (_, edge_id, _) in selected_graph.underlying.iter_edges() {
+                let expected: ThreeMomentum<F<super::ArbPrec>> = candidate.edge_signatures[edge_id]
+                    .compute_momentum(input_sample.loop_moms(), &external_spatial);
+                let actual: ThreeMomentum<F<super::ArbPrec>> =
+                    selected_graph.loop_momentum_basis.edge_signatures[edge_id]
+                        .compute_momentum(routed.loop_moms(), &external_spatial);
+                assert_eq!(
+                    actual, expected,
+                    "canonical profile source changed edge {edge_id:?}"
+                );
+            }
+        }
         Ok(())
     }
 

@@ -1,0 +1,68 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "set model MT=173.0 WT=0.0",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/gamma_star_ddbar_top_bubble.dot -p gamma_star_ddbar_top_bubble -i bare",
+  "generate existing -p gamma_star_ddbar_top_bubble -i bare",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p gamma_star_ddbar_top_bubble -i bare --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
+[[command_blocks]]
+name = "profile_soft"
+commands = [
+  "profile bulk -p gamma_star_ddbar_top_bubble -i bare --select 'top_bubble_vertex S(e6)' --min-scaling=-2 --max-scaling=-5 --n-points 25 --seed 1337",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+# Both fermions are outgoing, so the dependent incoming photon is (300,0,0,0).
+momenta = [
+  [150.0, 0.0, 0.0, 150.0],
+  [150.0, 0.0, 0.0, -150.0],
+  "dependent",
+]
+helicities = [1, -1, -1]
+
+[default_runtime_settings.general]
+m_uv = 20.0
+mu_r = 20.0
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "off"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[cli_settings.global.generation.uv.renormalization_prescription]
+log_divergent = "Unsubtracted"
+massive_power_divergent = "Unsubtracted"
+massless_power_divergent = "Unsubtracted"
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false

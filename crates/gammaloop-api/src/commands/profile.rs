@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 
 use crate::{
     commands::CliArgumentMetadataExt,
@@ -437,7 +437,7 @@ impl Profile {
                 min_scale_exponent,
                 max_scale_exponent,
                 seed,
-                output_file: _,
+                output_file,
                 select,
                 per_orientation,
                 show_per_cut_info,
@@ -500,6 +500,56 @@ impl Profile {
                 };
 
                 info!("\n{}", profile_result);
+                if let Some(file) = output_file {
+                    global_cli_settings
+                        .ensure_write_target_outside_active_state(file, "write profile output")?;
+                    if let Some(parent) = file
+                        .parent()
+                        .filter(|parent| !parent.as_os_str().is_empty())
+                    {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    let graphs = profile_result
+                        .results_per_graph
+                        .iter()
+                        .map(|graph| {
+                            let reports = graph
+                                .single_limit_reports
+                                .iter()
+                                .map(|report| {
+                                    serde_json::json!({
+                                        "limit_name": report.limit_name,
+                                        "orientation_label": report.orientation_label,
+                                        "ray_fingerprint": report.ray_fingerprint,
+                                        "passed": report.passed,
+                                        "scaling": report.scaling,
+                                        "r_squared": report.power_law_fit.r_squared(),
+                                    })
+                                })
+                                .collect::<Vec<_>>();
+                            serde_json::json!({
+                                "graph_name": graph.graph_name,
+                                "all_limits_passed": graph.all_limits_passed,
+                                "single_limit_reports": reports,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    serde_json::to_writer_pretty(
+                        File::create(file)?,
+                        &serde_json::json!({
+                            "settings": {
+                                "n_points": n_points,
+                                "min_scale_exponent": min_scale_exponent,
+                                "max_scale_exponent": max_scale_exponent,
+                                "seed": seed.unwrap_or(420),
+                                "select": select,
+                                "per_orientation": per_orientation,
+                            },
+                            "all_passed": profile_result.all_passed,
+                            "graphs": graphs,
+                        }),
+                    )?;
+                }
                 Ok(ProfileResult::InfraRed(profile_result))
             }
         }
