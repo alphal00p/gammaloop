@@ -1042,10 +1042,10 @@ mod tests {
         assert_eq!(imported[crate::NodeIndex(0)].pos, Point2::new(2.0, 0.0));
         assert_eq!(imported[crate::NodeIndex(1)].pos, Point2::new(8.0, -1.0));
         assert_eq!(imported[EdgeIndex(0)].pos, Point2::new(5.0, 0.0));
-        assert_eq!(
-            imported[EdgeIndex(0)].statements,
-            graph[EdgeIndex(0)].statements
-        );
+        // Authored statements survive; the paired label gains its carrier gap.
+        let mut statements = graph[EdgeIndex(0)].statements.clone();
+        statements.insert("layout-label-gap".into(), "0".into());
+        assert_eq!(imported[EdgeIndex(0)].statements, statements);
         assert_eq!(imported.n_nodes(), graph.n_nodes());
         assert_eq!(imported.n_edges(), graph.n_edges());
         layout.positions[layout.node_points[0]][0] += 1.0;
@@ -1082,6 +1082,48 @@ mod tests {
             imported.graph[linnet::half_edge::involution::Hedge(1)].route_points,
             vec![Point2::new(7.0, 1.0)]
         );
+    }
+
+    #[test]
+    fn impred_labels_follow_paired_carriers_in_every_label_layout() {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+                ext [style=invis]
+                a [id=0]
+                b [id=1]
+                ext -> a:0 [id=0 "layout-label-gap"="0.7"]
+                a:1 -> b:2 [id=1 "layout-label-gap"="0.7"]
+            }"#,
+        )
+        .unwrap();
+        let seed = json!({
+            "positions":{"v:0":[0.0,0.0],"v:1":[4.0,0.0],"x:0":[-3.0,0.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["x:0","v:0"],"1":["v:0","v:1"]},
+            "external_ids":{"0":"x:0"},"incoming_ids":["x:0"],"outgoing_ids":[],"report":{}
+        });
+        for label_layout in [
+            crate::LabelLayout::Normal,
+            crate::LabelLayout::DanglingTangent,
+            crate::LabelLayout::FixedLength,
+            crate::LabelLayout::FixedGap,
+        ] {
+            graph.layout_config.label_layout = label_layout;
+            let (session, _) = ProjectionSession::initialize(graph.clone(), seed.clone()).unwrap();
+            let imported = session
+                .apply_impred_layout(&session.impred_layout().unwrap())
+                .unwrap();
+            let gaps: Vec<_> = (0..2)
+                .map(|edge| {
+                    imported[EdgeIndex(edge)]
+                        .statements
+                        .get("layout-label-gap")
+                        .cloned()
+                })
+                .collect();
+            // Dangling gaps from an earlier force layout never survive ImPrEd.
+            assert_eq!(gaps, [None, Some("0".to_owned())]);
+        }
     }
 }
 
@@ -1295,6 +1337,18 @@ impl ProjectionSession {
                 HedgePair::Split { .. } => {
                     return Err("split edges must be separated before ImPrEd layout".into());
                 }
+            }
+        }
+        // ImPrEd relaxes no label positions, so every label layout falls back
+        // to carrier-following paired labels: drawing widens this zero gap to
+        // clear the painted line, and the annotation search places the labels.
+        for edge in 0..graph.n_edges() {
+            let paired = matches!(graph[&EdgeIndex(edge)].1, HedgePair::Paired { .. });
+            let statements = &mut graph.graph[EdgeIndex(edge)].statements;
+            if paired {
+                statements.insert("layout-label-gap".into(), "0".into());
+            } else {
+                statements.remove("layout-label-gap");
             }
         }
         graph.project_coordinates(CoordinateProjection::Proposal)?;

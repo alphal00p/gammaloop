@@ -1035,6 +1035,13 @@
   and graph annealing are not additional default passes. Hobby smoothing and
   decorative coils do not themselves carry the polyline crossing certificate.
 
+  ImPrEd relaxes no labels itself, so in every `label-layout` its internal
+  particle labels follow their carriers: the shared label annealing step
+  slides each along its edge and chooses a side. Their clearance is at least
+  the edge's `label-gap` (default `0.15`) and clears a coil or wave band,
+  `0.06` plus its amplitude. The `label-layout` relaxation models apply only
+  to the force and anneal layouts.
+
   `impred-steps` sets the nominal cooling budget. The first 20% uses fine
   integration steps; afterward `impred-step-scale` permits a larger stride,
   scaling both the force displacement and movement cap. Strides stop at the

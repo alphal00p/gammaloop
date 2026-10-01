@@ -443,7 +443,9 @@
   /// segment rotate. `"fixed-gap"` keeps internal labels at a uniform clearance
   /// from their measured text box, sliding along the rendered curve to avoid
   /// overlaps without changing that gap;
-  /// dangling labels retain outward tangent relaxation. -> string
+  /// dangling labels retain outward tangent relaxation. ImPrEd relaxes no
+  /// labels: in every mode the drawing's annotation search places its
+  /// internal labels, clearing coil and wave bands. -> string
   label-layout: "normal",
   /// Label relaxation step size. Applies after both modes. -> float
   label-step: 0.15,

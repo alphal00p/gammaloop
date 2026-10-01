@@ -4057,6 +4057,13 @@
 
           if ev-label != none {
             let gap = _statement-number(edge, "layout-label-gap")
+            if gap != none {
+              // Carrier-following labels clear the painted band, and plain
+              // lines by at least their label gap.
+              gap = calc.max(gap, radius, ..(source-style-layers + sink-style-layers).map(
+                style => _style-value(style, "label-gap"),
+              ))
+            }
             let carrier = crossing-paths.ids.at(str(edge.edge), default: none)
             let follows-path = gap != none and carrier != none
             let endpoint-direction = none
