@@ -134,6 +134,35 @@ fn simple_dot() {
 }
 
 #[test]
+fn contracted_vector_sum_keeps_spectator_factors() {
+    test_initialize();
+    let dim = symbol!("D");
+    let mink: Representation<_> = Minkowski {}.new_rep(dim);
+    let mu = slot!(mink, 0);
+    let nu = slot!(mink, 1);
+    let p = p!(0, mu);
+    let q = q!(0, mu);
+    let tensor = spenso::tensor_symbol!(vector_sum_target);
+    let a = Atom::var(symbol!("vector_sum_a"));
+    let b = Atom::var(symbol!("vector_sum_b"));
+    let c = Atom::var(symbol!("vector_sum_c"));
+    let d = Atom::var(symbol!("vector_sum_d"));
+    let spectator = (&a + &b) * (&c + &d);
+    let input = &spectator * (&a * &p + &b * &q) * function!(tensor, mu.to_atom(), nu.to_atom());
+    let expected = &spectator
+        * (&a * function!(tensor, p!(0, mink.to_symbolic([])), nu.to_atom())
+            + &b * function!(tensor, q!(0, mink.to_symbolic([])), nu.to_atom()));
+
+    let result = input.schoonschip_with_net_full::<AbstractIndex>().unwrap();
+    assert_eq!(result, expected);
+    assert_eq!(
+        result.schoonschip_with_net_full::<AbstractIndex>().unwrap(),
+        result,
+        "finite contraction must reach a fixed point without distributing spectators"
+    );
+}
+
+#[test]
 fn vakint_rank1_input_simplifies_to_dots() {
     test_initialize();
     let dim = symbol!("D");

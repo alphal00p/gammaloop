@@ -107,7 +107,7 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
 }
 
 #[test]
@@ -398,7 +398,7 @@ fn mixed_trace_structure_contraction() {
         slot!(r.coad_da, c),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))+1𝑖/2*f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's
