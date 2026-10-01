@@ -55,7 +55,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Write},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 pub use feynkit_kinematics::MomentumSignature;
@@ -596,6 +596,8 @@ pub struct FeynmanDiagram {
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+    // Structural, routing, or numerator edits must invalidate this certificate.
+    validation: OnceLock<()>,
 }
 
 impl Serialize for FeynmanDiagram {
@@ -643,6 +645,46 @@ impl FeynmanDiagram {
 
     pub fn numerator(&self) -> &Atom {
         &self.numerator
+    }
+
+    fn fragment_numerator(graph: &HedgeGraph<DiagramEdge, DiagramVertex>) -> Atom {
+        Atom::mul_many(
+            graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
+        )
+    }
+
+    /// Replace local numerator fragments in the finalized index frame and
+    /// rebuild their product. Fragment edits preserve topology and routing.
+    pub fn with_numerator_fragments(
+        mut self,
+        vertices: impl IntoIterator<Item = (VertexId, Atom)>,
+        edges: impl IntoIterator<Item = (EdgeId, Atom)>,
+    ) -> Result<Self, DiagramError> {
+        self.validation.take();
+        for (vertex, numerator) in vertices {
+            if vertex.0 >= self.graph.n_nodes() {
+                return Err(DiagramError::UnknownVertex {
+                    vertex: vertex.0,
+                    vertices: self.graph.n_nodes(),
+                });
+            }
+            self.graph[NodeIndex(vertex.0)].numerator = numerator;
+        }
+        for (edge, numerator) in edges {
+            if edge.0 >= self.graph.n_edges() {
+                return Err(DiagramError::UnknownEdge {
+                    edge: edge.0,
+                    edges: self.graph.n_edges(),
+                });
+            }
+            self.graph[EdgeIndex(edge.0)].numerator = numerator;
+        }
+        self.numerator = Self::fragment_numerator(&self.graph);
+        self.validate()?;
+        Ok(self)
     }
 
     /// Product of internal quadratic propagators in GammaLoop's tagged form.
@@ -756,6 +798,7 @@ impl FeynmanDiagram {
         E: FnMut(EdgeId, EdgeEndpoints, &DiagramEdge) -> DiagramEdge,
     {
         let mut diagram = self.clone();
+        diagram.validation.take();
         let endpoints = self
             .edges()
             .map(|(id, endpoints, _)| (id, endpoints))
@@ -1104,26 +1147,24 @@ impl FeynmanDiagram {
             .map(|(id, _)| id)
             .next()
             .ok_or(DiagramError::MissingNumeratorAnchor)?;
-        let anchor_numerator = numerator.clone();
-        let mut replaced = self.map_data(
-            |id, vertex| {
-                let mut vertex = vertex.clone();
-                vertex.numerator = if id == anchor {
-                    anchor_numerator.clone()
-                } else {
-                    Atom::one()
-                };
-                vertex
-            },
-            |_, _, edge| {
-                let mut edge = edge.clone();
-                edge.numerator = Atom::one();
-                edge
-            },
-        )?;
-        replaced.numerator = numerator;
-        replaced.validate()?;
-        Ok(replaced)
+        let vertices = self
+            .vertices()
+            .map(|(id, _)| {
+                (
+                    id,
+                    if id == anchor {
+                        numerator.clone()
+                    } else {
+                        Atom::one()
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let edges = self
+            .edges()
+            .map(|(id, _, _)| (id, Atom::one()))
+            .collect::<Vec<_>>();
+        self.with_numerator_fragments(vertices, edges)
     }
 
     /// Return this diagram with a replacement external-state projector.
@@ -1148,6 +1189,7 @@ impl FeynmanDiagram {
         cuts.sort_by_cached_key(|cut| self.cut_order_key(&cut.cut));
         cuts.dedup();
         self.cuts = cuts;
+        self.validation.take();
         self.validate()?;
         self.id = DiagramId::from_key(self.model.fingerprint(), &self.structural_key()?)?;
         Ok(self)
@@ -1180,6 +1222,7 @@ impl FeynmanDiagram {
         candidates.sort_by_cached_key(|candidate| self.cut_order_key(&candidate.cut));
         candidates.dedup();
         self.topology_threshold_candidates = candidates;
+        self.validation.take();
         self.validate()?;
         self.id = DiagramId::from_key(self.model.fingerprint(), &self.structural_key()?)?;
         Ok(self)
@@ -1439,6 +1482,7 @@ impl FeynmanDiagram {
 
     /// Select a spanning-forest routing by its ordered independent edges.
     pub fn with_loop_momentum_edges(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
+        self.validation.take();
         let requested_set: BTreeSet<_> = requested.iter().copied().collect();
         let internal = self.internal_subgraph();
         let tree_edges = self
@@ -1463,8 +1507,32 @@ impl FeynmanDiagram {
         mut self,
         requested: &[EdgeId],
     ) -> Result<Self, DiagramError> {
+        self.validation.take();
         self.loop_momentum_basis = self.basis_from_tree(requested)?;
         Ok(self)
+    }
+
+    /// Select the first spanning-forest routing in the canonical topology
+    /// order historically used by GammaLoop's `sorted_g` graphs.
+    ///
+    /// Stable FeynKit edge IDs remain the momentum labels. Only the ordering
+    /// used to choose the default tree is changed, so the coordinate convention
+    /// is fixed before downstream transport.
+    pub fn with_canonical_loop_momentum_basis(self) -> Result<Self, DiagramError> {
+        let mut ordered_internal_edges = self
+            .edges()
+            .filter(|(_, _, edge)| edge.external.is_none() && !edge.is_dummy)
+            .map(|(edge_id, endpoints, edge)| {
+                edge.canonical_order_key(&self.model, edge_id, endpoints)
+                    .map(|key| (key, edge_id))
+            })
+            .collect::<Result<Vec<_>, DiagramError>>()?;
+        ordered_internal_edges.sort_by_key(|(key, _)| *key);
+        let ordered_internal_edges = ordered_internal_edges
+            .into_iter()
+            .map(|(_, edge)| edge)
+            .collect::<Vec<_>>();
+        self.with_first_loop_momentum_basis_in_edge_order(&ordered_internal_edges)
     }
 
     /// Select the first depth-first basis for an explicit internal-edge order.
@@ -1579,8 +1647,10 @@ impl FeynmanDiagram {
     /// Check model references and the structural invariants expected of a
     /// generated Feynman diagram.
     pub fn validate(&self) -> Result<(), DiagramError> {
+        if self.validation.get().is_some() {
+            return Ok(());
+        }
         let mut degrees = vec![0_usize; self.graph.n_nodes()];
-        let mut fragment_numerator = Atom::one();
         let mut external_indices = BTreeSet::new();
         let mut external_connections = BTreeSet::new();
         let mut paired_external_edges = BTreeSet::new();
@@ -1639,7 +1709,6 @@ impl FeynmanDiagram {
                     }
                 }
             }
-            fragment_numerator *= &edge.numerator;
         }
         for (vertex_id, vertex) in self.vertices() {
             let actual = vertex_slots[vertex_id.0]
@@ -1654,7 +1723,6 @@ impl FeynmanDiagram {
                     expected,
                 });
             }
-            fragment_numerator *= &vertex.numerator;
             if let Some(interaction) = vertex.interaction {
                 let rule = self.model.vertex_rule_by_id(interaction)?;
                 let mut actual = vec![None; degrees[vertex_id.0]];
@@ -1801,12 +1869,14 @@ impl FeynmanDiagram {
                 });
             }
         }
+        let fragment_numerator = Self::fragment_numerator(&self.graph);
         if fragment_numerator != self.numerator
             && fragment_numerator.expand() != self.numerator.expand()
         {
             return Err(DiagramError::NumeratorFragmentMismatch);
         }
         self.loop_momentum_basis.validate(self)?;
+        let _ = self.validation.set(());
         Ok(())
     }
 
@@ -2521,10 +2591,11 @@ pub struct FeynmanDiagramBuilder {
     edge_orientations: Option<Vec<Orientation>>,
     symmetry_factor: u64,
     overall_factor: Atom,
-    numerator: Atom,
+    numerator: Option<Atom>,
     numerator_prefactor: Atom,
     projector: Atom,
     loop_momentum_basis: Option<LoopMomentumBasis>,
+    canonical_loop_momentum_basis: bool,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
@@ -2541,10 +2612,11 @@ impl FeynmanDiagramBuilder {
             edge_orientations: None,
             symmetry_factor: 1,
             overall_factor: Atom::one(),
-            numerator: Atom::one(),
+            numerator: None,
             numerator_prefactor: Atom::one(),
             projector: Atom::one(),
             loop_momentum_basis: None,
+            canonical_loop_momentum_basis: false,
             cuts: Vec::new(),
             topology_threshold_candidates: Vec::new(),
         }
@@ -2563,8 +2635,10 @@ impl FeynmanDiagramBuilder {
         self
     }
 
+    /// Supply an explicit aggregate numerator. By default, the builder multiplies
+    /// the local vertex and edge fragments after finalizing their indices.
     pub fn numerator(mut self, numerator: Atom) -> Self {
-        self.numerator = numerator;
+        self.numerator = Some(numerator);
         self
     }
 
@@ -2575,6 +2649,12 @@ impl FeynmanDiagramBuilder {
 
     pub fn projector(mut self, projector: Atom) -> Self {
         self.projector = projector;
+        self
+    }
+
+    /// Choose canonical topology order when no explicit basis is supplied.
+    pub fn canonical_loop_momentum_basis(mut self) -> Self {
+        self.canonical_loop_momentum_basis = true;
         self
     }
 
@@ -3113,7 +3193,7 @@ mod tests {
 
     #[test]
     fn finalization_transports_signed_momentum_sums_once() {
-        for coefficient in [1, 2] {
+        for (coefficient, explicit) in [(1, false), (1, true), (2, false), (2, true)] {
             let model = scalar_model();
             let particle = model.particle_id("phi").unwrap();
             let rule = model.vertex_rule_id("V_1").unwrap();
@@ -3142,7 +3222,11 @@ mod tests {
                 ParseSettings::default(),
             )
             .unwrap();
-            let diagram = builder.numerator(numerator).build().unwrap();
+            builder.vertices[vertex.0].numerator = numerator.clone();
+            if explicit {
+                builder = builder.numerator(numerator);
+            }
+            let diagram = builder.build().unwrap();
             let expected = Atom::parse(
                 format!(
                     "{coefficient}*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))\
@@ -3621,13 +3705,57 @@ mod tests {
             Atom::parse("(x+y)*(x-y)", "validation_test", ParseSettings::default()).unwrap();
         let mut diagram = one_loop().with_numerator(factored.clone()).unwrap();
         diagram.validate().unwrap();
+        diagram.validation.take();
         diagram.numerator = factored.expand();
         diagram.validate().unwrap();
+        diagram.validation.take();
         diagram.numerator += Atom::one();
         assert!(matches!(
             diagram.validate(),
             Err(DiagramError::NumeratorFragmentMismatch)
         ));
+    }
+
+    #[test]
+    fn fragment_updates_preserve_routing_and_invalidate_validation() {
+        let original = one_loop();
+        original.validate().unwrap();
+        let vertex = original.vertices().next().unwrap().0;
+        let edge = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap()
+            .0;
+        let updated = original
+            .clone()
+            .with_numerator_fragments([(vertex, Atom::num(2))], [(edge, Atom::num(3))])
+            .unwrap();
+        assert_eq!(updated.numerator(), &Atom::num(6));
+        assert_eq!(updated.id(), original.id());
+        assert_eq!(
+            updated.loop_momentum_basis(),
+            original.loop_momentum_basis()
+        );
+        updated.validate().unwrap();
+
+        let inconsistent = updated
+            .map_data(
+                |_, data| data.clone(),
+                |id, _, data| {
+                    let mut data = data.clone();
+                    if id == edge {
+                        data.numerator = Atom::num(5);
+                    }
+                    data
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            inconsistent.validate(),
+            Err(DiagramError::NumeratorFragmentMismatch)
+        ));
+        updated.validate().unwrap();
+        original.validate().unwrap();
     }
 
     #[test]

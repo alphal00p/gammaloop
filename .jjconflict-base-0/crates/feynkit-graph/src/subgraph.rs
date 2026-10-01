@@ -256,6 +256,7 @@ impl FeynmanDiagram {
             });
             failure.map_or(Ok(result), |message| Err(error(message)))
         };
+        diagram.validation.take();
         diagram.graph = diagram.graph.map_result(
             |_, id, mut vertex| {
                 vertex.numerator = translate(&vertex.numerator, Some(original_vertices[id.0]))?;
@@ -423,6 +424,7 @@ mod tests {
         let old_hedge = parent.graph.iter_crown(NodeIndex(1)).last().unwrap();
         let old_edge = parent.graph[&old_hedge].0;
         let old_loop = parent.loop_momentum_basis.loop_edges[0].0;
+        parent.validation.take();
         parent.graph[NodeIndex(1)].numerator = function!(symbols::hedge_index(), old_hedge.0, 1)
             * function!(symbols::vertex_index(), 1, 2)
             * function!(symbols::edge_index(), old_edge, 3)

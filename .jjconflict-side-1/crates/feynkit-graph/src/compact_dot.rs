@@ -27,7 +27,6 @@ impl FeynmanDiagram {
                     .cloned()
                     .unwrap_or_else(|| "1".into()),
             )?;
-            builder.numerator *= &numerator;
             nodes.insert(
                 node,
                 builder.add_vertex(DiagramVertex {
@@ -113,7 +112,6 @@ impl FeynmanDiagram {
                 "edge numerator",
                 attributes.get("num").cloned().unwrap_or_else(|| "1".into()),
             )?;
-            builder.numerator *= &edge.numerator;
             let tag = attributes
                 .get("is_cut")
                 .map(|value| value.parse::<usize>().expect("validated cut tag"));
