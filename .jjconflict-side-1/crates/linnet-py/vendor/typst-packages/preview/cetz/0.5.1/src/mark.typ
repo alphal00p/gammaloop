@@ -14,9 +14,11 @@
 ).carriers
 
 // Measure finite carriers and their actual canonical marks in one numeric batch.
-#let footprints(spec) = path-util.bezier.call_wasm(
-  path-util.bezier.cetz-core.marker_footprints_func, spec,
-)
+#let footprints(spec, format: "value") = {
+  assert(format in ("value", "cbor"), message: "invalid footprint result format")
+  let result = path-util.bezier.cetz-core.marker_footprints_func(cbor.encode(spec))
+  if format == "cbor" { result } else { cbor(result) }
+}
 
 /// Checks if a mark should be drawn according to the current style.
 /// - style (style): The current style.

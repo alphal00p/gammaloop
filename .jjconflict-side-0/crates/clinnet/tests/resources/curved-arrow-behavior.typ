@@ -5,6 +5,46 @@
 #import "map-style.typ" as feynman
 #import "annotation-placement-behavior.typ": attachment-distance, edge-intersection
 
+// Candidate geometry is opaque in production. Decode it only for these
+// per-candidate assertions, retaining the original packet for search tests.
+#let inspect-layer-label-element(..args) = {
+  let placement = drawing._layer-label-element(..args)
+  if type(placement) != dictionary or not placement.keys().contains("candidates") {
+    return placement
+  }
+  let packet = placement.candidates
+  let footprints = if type(packet.footprints) == bytes { cbor(packet.footprints) }
+    else { packet.footprints }
+  let groups = ()
+  let index = 0
+  for batch in packet.batches {
+    let candidates = cbor(batch.candidates)
+    let records = ()
+    for (at, candidate) in batch.positions.zip(candidates) {
+      records.push((
+        position: candidate.position, at: at, side: batch.side,
+        path-index: batch.path-index, path-shift: candidate.path-shift,
+        corners: candidate.corners, bounds: candidate.bounds, cost: candidate.cost,
+        arrow-bounds: if footprints == none { () } else { footprints.at(index) },
+      ))
+      index += 1
+    }
+    groups.push(records)
+  }
+  let records = if packet.interleave {
+    groups.first().zip(groups.last()).flatten()
+  } else { groups.flatten() }
+  placement + (candidates: records, inspected-candidates: records, packed-candidates: packet)
+}
+
+#let relax-inspected-labels(placements, ..args) = drawing._relax-label-placements(
+  placements.map(label => if label.keys().contains("packed-candidates")
+    and cbor.encode(label.candidates) == cbor.encode(label.inspected-candidates) {
+    label + (candidates: label.packed-candidates)
+  } else { label }),
+  ..args,
+)
+
 // Scalar arithmetic retained only as an exact oracle for the native geometry boundary.
 #let scalar-label-path-lines(ctx, path, accuracy) = {
   let lines = ()
@@ -317,7 +357,7 @@
     (candidates: (candidate(10, 0.001), candidate(1.3495, 0))),
   )
   assert.eq(
-    cbor.encode(drawing._relax-label-placements(labels, (), label-padding: 0)),
+    cbor.encode(relax-inspected-labels(labels, (), label-padding: 0)),
     cbor.encode(labels.map(label => label.candidates.last())),
     message: "annealing crosses an energy barrier without changing candidate records",
   )
@@ -1434,8 +1474,7 @@
               .process
               .many(
                 native,
-                drawing
-                  ._layer-label-element(native, path, carrier, none, (:))
+                inspect-layer-label-element(native, path, carrier, none, (:))
                   .flatten(),
                 compute-bounds: false,
               )
@@ -1476,7 +1515,7 @@
               )
               let resized = cetz.process.many(
                 native,
-                drawing._layer-label-element(native, path, carrier, none, (:)).flatten(),
+                inspect-layer-label-element(native, path, carrier, none, (:)).flatten(),
                 compute-bounds: false,
               ).drawables
               if anchor in (auto, "auto") {
@@ -1555,7 +1594,7 @@
             origin,
           )
           let element = if paired == none {
-            drawing._layer-label-element(local, path, style, none, (:))
+            inspect-layer-label-element(local, path, style, none, (:))
           } else {
             drawing._paired-layer-label-element(
               local,
@@ -1612,13 +1651,13 @@
               label: (shift: -0.25, gap: 0.2),
             ),
           )).last()
-          let placement = drawing._layer-label-element(
+          let placement = inspect-layer-label-element(
             native, carrier, annotation, none, (eid: 7), placement: true,
           )
           assert.eq(placement.edge, 7, message: "momentum pair owns its physical edge")
           assert.eq(placement.paths.len(), if side == auto { 2 } else { 1 }, message: "only automatic momentum sides can flip")
-          let chosen = drawing._relax-label-placements((placement, placement), ())
-          assert.eq(chosen, drawing._relax-label-placements((placement, placement), ()), message: "deterministic momentum pair annealing")
+          let chosen = relax-inspected-labels((placement, placement), ())
+          assert.eq(chosen, relax-inspected-labels((placement, placement), ()), message: "deterministic momentum pair annealing")
           assert(chosen.any(candidate => (
             candidate.path-index != placement.candidates.first().path-index
               or candidate.path-shift != placement.candidates.first().path-shift
@@ -1660,12 +1699,12 @@
           if side == auto {
             let preferred = placement.candidates.first().side
             let obstacles = placement.candidates.filter(candidate => candidate.side == preferred).map(candidate => candidate.bounds)
-            let flipped = drawing._relax-label-placements((placement,), obstacles).first()
+            let flipped = relax-inspected-labels((placement,), obstacles).first()
             assert.eq(flipped.side, -preferred, message: "blocked momentum pair flips its arrow and label together")
-            assert.eq(flipped, drawing._relax-label-placements((placement,), obstacles).first(), message: "deterministic momentum side choice")
+            assert.eq(flipped, relax-inspected-labels((placement,), obstacles).first(), message: "deterministic momentum side choice")
           }
           for pinned-style in ((label-slide: false), (label-style: (anchor: "east"))) {
-            let pinned = drawing._layer-label-element(
+            let pinned = inspect-layer-label-element(
               native, carrier, annotation + pinned-style, none, (:), placement: true,
             )
             assert.eq(pinned.candidates.len(), 1, message: "manual momentum placement stays pinned")
@@ -1685,20 +1724,20 @@
         ),
       )
       let carrier = curve.line((0, 0), (8, 0))
-      let pair = drawing._layer-label-element(native, carrier, paired-style, none, (eid: 0), placement: true)
+      let pair = inspect-layer-label-element(native, carrier, paired-style, none, (eid: 0), placement: true)
       let first = pair.candidates.first()
       assert(first.arrow-bounds.len() >= 2, message: "shaft and arrowhead have separate collision bounds")
       let blocker = first.arrow-bounds.last()
       assert(first.bounds.bottom > blocker.top + 0.08, message: "arrow-only obstacle is clear of the text")
       let text-only = pair + (candidates: pair.candidates.map(c => c + (arrow-bounds: ())))
-      assert.eq(drawing._relax-label-placements((text-only,), (blocker,), label-padding: 0).first().path-shift, first.path-shift, message: "clear text alone would not move")
-      let shifted = drawing._relax-label-placements((pair,), (blocker,), label-padding: 0).first()
+      assert.eq(relax-inspected-labels((text-only,), (blocker,), label-padding: 0).first().path-shift, first.path-shift, message: "clear text alone would not move")
+      let shifted = relax-inspected-labels((pair,), (blocker,), label-padding: 0).first()
       assert.ne(shifted.path-shift, first.path-shift, message: "arrowhead collision moves the annotation")
       assert(calc.abs(shifted.position.at(0) - first.position.at(0) - shifted.path-shift + first.path-shift) < epsilon, message: "arrow and label have exactly the same tangential displacement")
       assert.eq(shifted.position.at(1), first.position.at(1), message: "shared movement keeps the normal gap")
       let middle = (first.bounds.bottom + calc.max(..first.arrow-bounds.map(b => b.top))) / 2
       let gap-obstacle = (left: 3.95, right: 4.05, bottom: middle - 0.05, top: middle + 0.05)
-      assert.eq(drawing._relax-label-placements((pair,), (gap-obstacle,), label-padding: 0).first().path-shift, first.path-shift, message: "unoccupied arrow/text gap is not one enclosing collision box")
+      assert.eq(relax-inspected-labels((pair,), (gap-obstacle,), label-padding: 0).first().path-shift, first.path-shift, message: "unoccupied arrow/text gap is not one enclosing collision box")
       // A fixed standalone arrow has the same clearance as a pinned paired
       // arrow, and its actual marker remains part of the obstacle footprint.
       let fixed-paint = drawing._derived-path-elements(
@@ -1735,25 +1774,25 @@
           message: "an earlier prepared candidate cannot alter a later candidate's geometry")
       }
 
-      let avoiding-fixed = drawing._relax-label-placements((pair,), (), label-padding: 0, fixed-arrows: fixed-bounds).first()
+      let avoiding-fixed = relax-inspected-labels((pair,), (), label-padding: 0, fixed-arrows: fixed-bounds).first()
       assert.ne(avoiding-fixed.path-shift, first.path-shift, message: "a fixed standalone arrow moves the paired annotation")
       let fixed-pair = (candidates: ((bounds: (left: 100, right: 101, bottom: 100, top: 101), arrow-bounds: fixed-bounds, cost: 0),))
       assert.eq(
         avoiding-fixed.position,
-        drawing._relax-label-placements((pair, fixed-pair), (), label-padding: 0).first().position,
+        relax-inspected-labels((pair, fixed-pair), (), label-padding: 0).first().position,
         message: "fixed and pinned annotation arrows have identical collision clearance",
       )
       assert.eq(drawing._annotation-bounds(native, (cetz.draw.hide(fixed-paint.flatten()),)).first(), (), message: "hidden arrow geometry is not an obstacle")
 
-      let blocker-label = drawing._layer-label-element(
+      let blocker-label = inspect-layer-label-element(
         native, carrier, (label: box(width: 2pt, height: 2pt, fill: black)), none, (eid: 1),
         fixed-position: (4, 0.5), placement: true,
       )
-      assert.ne(drawing._relax-label-placements((pair, blocker-label), (), label-padding: 0).first().path-shift, first.path-shift, message: "other labels repel the arrow even when both text boxes are clear")
-      let opposing = (-2, 2).map(shift => drawing._layer-label-element(
+      assert.ne(relax-inspected-labels((pair, blocker-label), (), label-padding: 0).first().path-shift, first.path-shift, message: "other labels repel the arrow even when both text boxes are clear")
+      let opposing = (-2, 2).map(shift => inspect-layer-label-element(
         native, carrier, paired-style + (label-shift: shift), none, (:), placement: true,
       ))
-      let separated = drawing._relax-label-placements(opposing, (), label-padding: 0)
+      let separated = relax-inspected-labels(opposing, (), label-padding: 0)
       assert(separated.zip(opposing).any(((choice, original)) => choice.path-shift != original.candidates.first().path-shift), message: "overlapping arrows separate even when their text is apart")
       for (length, expected) in ((8, 1.4), (2, 1), (0.8, 0.4)) {
         let capped = drawing._path-layer(curve.line((0, 0), (length, 0)), paired-style.label-path, 0, 0, none, auto)
@@ -1765,29 +1804,29 @@
       for carrier in (curve.line((0, 0), (8, 0)), path) {
         for side in ("left", "right") {
           let style = (label: [AB], label-gap: 0.3, label-side: side)
-          let label = drawing._layer-label-element(native, carrier, style, none, (eid: 0), placement: true)
+          let label = inspect-layer-label-element(native, carrier, style, none, (eid: 0), placement: true)
           assert.eq(label.edge, 0, message: "path labels retain carrier ownership")
           let total = curve.length(carrier, accuracy: 0.001)
-          let chosen = drawing._relax-label-placements((label, label), ())
-          assert.eq(chosen, drawing._relax-label-placements((label, label), ()), message: "deterministic label annealing")
+          let chosen = relax-inspected-labels((label, label), ())
+          assert.eq(chosen, relax-inspected-labels((label, label), ()), message: "deterministic label annealing")
           assert(chosen.any(candidate => candidate.position != label.candidates.first().position), message: "crowded labels slide")
           let (a, b) = chosen.map(candidate => candidate.bounds)
           assert(a.right <= b.left or b.right <= a.left or a.top <= b.bottom or b.top <= a.bottom, message: "sliding separates overlapping labels")
-          assert.eq(drawing._relax-label-placements((label,), ()).first().position, label.candidates.first().position, message: "uncrowded labels keep their preferred position")
+          assert.eq(relax-inspected-labels((label,), ()).first().position, label.candidates.first().position, message: "uncrowded labels keep their preferred position")
           let sign = if side == "left" { 1 } else { -1 }
           assert(label.candidates.all(candidate => candidate.side == sign), message: "explicit label sides stay fixed")
           let frame = drawing._path-mid-frame(carrier, 0.001)
           let tangent = cetz.vector.norm(frame.tangent)
           let preferred = cetz.vector.add(frame.point, cetz.vector.scale((-tangent.at(1), tangent.at(0)), sign))
-          let automatic = drawing._layer-label-element(
+          let automatic = inspect-layer-label-element(
             native, carrier, style + (label-side: auto), preferred,
             (edge: (pos: frame.point)), placement: true,
           )
-          assert.eq(drawing._relax-label-placements((automatic,), ()).first().side, sign, message: "uncrowded labels keep their preferred side")
+          assert.eq(relax-inspected-labels((automatic,), ()).first().side, sign, message: "uncrowded labels keep their preferred side")
           let obstacles = automatic.candidates.filter(candidate => candidate.side == sign).map(candidate => candidate.bounds)
-          let flipped = drawing._relax-label-placements((automatic,), obstacles).first()
+          let flipped = relax-inspected-labels((automatic,), obstacles).first()
           assert.eq(flipped.side, -sign, message: "labels flip when the preferred side is blocked")
-          assert.eq(flipped, drawing._relax-label-placements((automatic,), obstacles).first(), message: "deterministic side flipping")
+          assert.eq(flipped, relax-inspected-labels((automatic,), obstacles).first(), message: "deterministic side flipping")
           for candidate in (..chosen, flipped) {
             assert(candidate.at >= 0 and candidate.at <= total, message: "labels stay on the carrier")
             let frame = drawing._path-mid-frame(carrier, 0.001, shift: candidate.at - total / 2)
@@ -1801,10 +1840,10 @@
             let actual = attachment-distance(drawing._label-path-lines(native, carrier, 0.001), corners)
             assert(calc.abs(actual - 0.3) < 0.008, message: "sliding preserves actual clearance to the finite carrier")
           }
-          let blocked = drawing._relax-label-placements((label,), (label.candidates.first().bounds,))
+          let blocked = relax-inspected-labels((label,), (label.candidates.first().bounds,))
           assert.ne(blocked.first().position, label.candidates.first().position, message: "labels slide away from node obstacles")
           for pinned-style in ((label-slide: false, label-side: auto), (label-style: (anchor: "center"), label-side: auto)) {
-            let pinned = drawing._layer-label-element(native, carrier, style + pinned-style + (label-shift: 1000), none, (:), placement: true)
+            let pinned = inspect-layer-label-element(native, carrier, style + pinned-style + (label-shift: 1000), none, (:), placement: true)
             assert.eq(pinned.candidates.len(), 1, message: "explicit placements stay fixed")
             assert.eq(pinned.candidates.first().at, total, message: "explicit shifts clamp to the carrier endpoint")
           }
@@ -1816,33 +1855,33 @@
       let moved = (bounds: (left: -2, right: -1, bottom: 0, top: 1), arrow-bounds: (), cost: 0.001)
       let obstacle = (left: 1.2, right: 2.2, bottom: 0, top: 1)
       let movable = (candidates: (small, moved))
-      assert.eq(drawing._relax-label-placements((movable,), (obstacle,), label-padding: 0).first(), small, message: "zero padding keeps a clear label in place")
-      assert.eq(drawing._relax-label-placements((movable,), (obstacle,), label-padding: 0.3).first().bounds, moved.bounds, message: "padding repels labels from nearby obstacles")
+      assert.eq(relax-inspected-labels((movable,), (obstacle,), label-padding: 0).first(), small, message: "zero padding keeps a clear label in place")
+      assert.eq(relax-inspected-labels((movable,), (obstacle,), label-padding: 0.3).first().bounds, moved.bounds, message: "padding repels labels from nearby obstacles")
       // Inspect a fixed candidate too: the enclosing label must not enlarge the obstacle.
       let fixed = (candidates: (small,))
-      let scored = drawing._relax-label-placements((fixed, movable), ((left: 0.3, right: 0.7, bottom: 0.3, top: 0.7),), label-padding: 0.3)
+      let scored = relax-inspected-labels((fixed, movable), ((left: 0.3, right: 0.7, bottom: 0.3, top: 0.7),), label-padding: 0.3)
       assert(calc.abs(scored.first().cost - calc.pow(0.48, 2)) < epsilon, message: "collision cost matches the displayed contained obstacle box")
       // Padding must not move a label away from ordinary edge carriers.
       let owned = movable + (edge: 0)
       for padding in (0, 0.25, 0.6) {
         let own-edge = small.bounds + (edge: 0, self-loop: false)
         for carrier in (own-edge, own-edge + (edge: 1)) {
-          assert.eq(drawing._relax-label-placements((owned,), (carrier,), label-padding: padding).first(), small, message: "ordinary edges do not cause label drift")
+          assert.eq(relax-inspected-labels((owned,), (carrier,), label-padding: padding).first(), small, message: "ordinary edges do not cause label drift")
         }
         for blocking in (own-edge + (self-loop: true), small.bounds) {
-          assert.eq(drawing._relax-label-placements((owned,), (blocking,), label-padding: padding).first().bounds, moved.bounds, message: "self-loops and nodes still repel labels")
+          assert.eq(relax-inspected-labels((owned,), (blocking,), label-padding: padding).first().bounds, moved.bounds, message: "self-loops and nodes still repel labels")
         }
       }
-      let same-edge = drawing._relax-label-placements((owned, owned), (), label-padding: 0.25)
+      let same-edge = relax-inspected-labels((owned, owned), (), label-padding: 0.25)
       assert.ne(same-edge.first().bounds, same-edge.last().bounds, message: "labels on the same edge still repel each other")
       let neighbour = (candidates: ((bounds: obstacle, arrow-bounds: (), cost: 0),))
       // Separate the labels beyond the base pair padding, but inside added padding.
       neighbour.candidates.at(0).bounds.left = 1.5
       neighbour.candidates.at(0).bounds.right = 2.5
-      assert.eq(drawing._relax-label-placements((movable, neighbour), (), label-padding: 0).first(), small, message: "base pair clearance is preserved")
-      assert.eq(drawing._relax-label-placements((movable, neighbour), (), label-padding: 0.3).first().bounds, moved.bounds, message: "padding also repels labels from each other")
+      assert.eq(relax-inspected-labels((movable, neighbour), (), label-padding: 0).first(), small, message: "base pair clearance is preserved")
+      assert.eq(relax-inspected-labels((movable, neighbour), (), label-padding: 0.3).first().bounds, moved.bounds, message: "padding also repels labels from each other")
 
-      let offset-label = drawing._layer-label-element(
+      let offset-label = inspect-layer-label-element(
         native, curve.line((0, 0), (8, 0)),
         (label: [AB], offset: -0.2), (4, 0), (edge: (pos: (4, 0))), placement: true,
       )

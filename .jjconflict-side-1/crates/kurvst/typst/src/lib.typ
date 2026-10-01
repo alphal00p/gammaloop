@@ -52,8 +52,11 @@
 
 /// Sample points and tangent directions at arc distances, clamped to the path.
 /// Uses the same prefix trimming as trim; empty paths return none per sample.
-/// Tangents are not normalized. -> array
-#let frames(path, distances, accuracy: 0.001) = _impl-frames(path, distances, accuracy: accuracy)
+/// Tangents are not normalized. `format: "cbor"` retains the encoded records
+/// for transport to another native geometry operation. -> array | bytes
+#let frames(path, distances, accuracy: 0.001, format: "array") = _impl-frames(
+  path, distances, accuracy: accuracy, format: format,
+)
 
 /// Sample overlapping points in equal arc-length regions across cubic parts.
 /// Hidden parts contribute length but produce no points. Both endpoints of
@@ -529,7 +532,11 @@
 /// Build several shifted layers with one carrier preparation.
 /// Each result contains the normal layer `path` dictionary and its drawable
 /// cubic `segments`. Length resolution and offsetting match @layer.
-/// -> array
+/// `format: "cbor"` returns encoded native layers and footprint paths with
+/// count, nonzero, supported, all-single and shared offset metadata. Native
+/// layer paths omit the shared offset field. `unit` affects footprint geometry
+/// only: single-segment Beziers retain unit 1, matching the drawing owner.
+/// -> array | dictionary
 #let layers(
   /// Base Kurvst path dictionary. -> dictionary
   path,
@@ -553,11 +560,15 @@
   accuracy: 0.001,
   /// Optimize fitted parallel paths. -> bool
   optimize: true,
+  /// Return decoded layers or an opaque geometry packet. -> string
+  format: "array",
+  /// Numeric scale for multi-segment footprint paths. -> int | float
+  unit: 1,
 ) = _impl-layers(
   path, shifts, offset: offset, length: length, ratio: ratio,
   resolve-length: resolve-length, start-outset: start-outset,
   end-outset: end-outset, side-point: side-point, accuracy: accuracy,
-  optimize: optimize,
+  optimize: optimize, format: format, unit: unit,
 )
 
 /// Emit a Kurvst path as native Typst `curve` content.

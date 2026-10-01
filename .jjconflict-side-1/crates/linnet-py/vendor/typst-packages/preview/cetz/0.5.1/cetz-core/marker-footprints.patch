@@ -118,7 +118,7 @@ index 6efad3b..6771d32 100644
 +    marker::footprints(input)
 +}
 diff --git a/cetz-core/src/marker.rs b/cetz-core/src/marker.rs
-index a802352..6c691fe 100644
+index a802352..cc107d7 100644
 --- a/cetz-core/src/marker.rs
 +++ b/cetz-core/src/marker.rs
 @@ -1,22 +1,45 @@
@@ -225,7 +225,7 @@ index a802352..6c691fe 100644
  impl Command {
      fn end(&self) -> &Point {
          self.points.last().unwrap()
-@@ -511,6 +487,379 @@ pub(super) fn geometry(input: &[u8]) -> Result<Vec<u8>, String> {
+@@ -511,6 +487,446 @@ pub(super) fn geometry(input: &[u8]) -> Result<Vec<u8>, String> {
      })
  }
  
@@ -315,6 +315,7 @@ index a802352..6c691fe 100644
 +}
 +#[derive(Deserialize)]
 +struct FootprintBatch {
++    #[serde(default)]
 +    paths: Vec<FootprintPath>,
 +    #[serde(deserialize_with = "deserialize_matrix")]
 +    transform: Matrix,
@@ -324,6 +325,72 @@ index a802352..6c691fe 100644
 +    #[serde(deserialize_with = "deserialize_number")]
 +    shift: f64,
 +    marks: Vec<MarkTemplate>,
++}
++
++// The transport may retain Kurvst's canonical numeric paths as CBOR between
++// plugins. Resolve only their styles here, before entering the shared painter.
++#[derive(Deserialize)]
++#[serde(rename_all = "kebab-case")]
++struct FootprintInput {
++    paths: FootprintPaths,
++    shaft_styles: Option<[ShaftStyle; 2]>,
++    #[serde(flatten)]
++    batch: FootprintBatch,
++}
++#[derive(Deserialize)]
++#[serde(untagged)]
++enum FootprintPaths {
++    Resolved(Vec<FootprintPath>),
++    Packets(Vec<NumericPaths>),
++}
++#[derive(Deserialize)]
++#[serde(rename_all = "kebab-case")]
++struct ShaftStyle {
++    #[serde(deserialize_with = "deserialize_number")]
++    shaft_radius: f64,
++    shaft_visible: bool,
++}
++#[derive(Deserialize)]
++struct NumericPath {
++    #[serde(deserialize_with = "deserialize_path")]
++    segments: Path,
++    single: bool,
++}
++struct NumericPaths(Vec<NumericPath>);
++impl<'de> Deserialize<'de> for NumericPaths {
++    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        let Value::Bytes(bytes) = Value::deserialize(deserializer)? else {
++            return Err(D::Error::custom("expected a CBOR path packet"));
++        };
++        ciborium::from_reader(bytes.as_slice())
++            .map(Self)
++            .map_err(D::Error::custom)
++    }
++}
++impl FootprintInput {
++    fn resolve(mut self) -> Result<FootprintBatch, String> {
++        self.batch.paths = match self.paths {
++            FootprintPaths::Resolved(paths) => paths,
++            FootprintPaths::Packets(packets) => {
++                let styles = self
++                    .shaft_styles
++                    .ok_or("missing shaft styles for path packets")?;
++                packets
++                    .into_iter()
++                    .flat_map(|packet| packet.0)
++                    .map(|path| {
++                        let style = &styles[usize::from(!path.single)];
++                        FootprintPath {
++                            segments: path.segments,
++                            shaft_radius: style.shaft_radius,
++                            shaft_visible: style.shaft_visible,
++                        }
++                    })
++                    .collect()
++            }
++        };
++        Ok(self.batch)
++    }
 +}
 +#[derive(Debug, PartialEq, Serialize)]
 +struct Footprint {
@@ -599,13 +666,13 @@ index a802352..6c691fe 100644
 +    }
 +}
 +pub(super) fn footprints(input: &[u8]) -> Result<Vec<u8>, String> {
-+    handle_cbor(input, FootprintBatch::bounds)
++    handle_cbor(input, |input: FootprintInput| input.resolve()?.bounds())
 +}
 +
  #[cfg(test)]
  mod tests {
      use super::*;
-@@ -573,4 +922,164 @@ mod tests {
+@@ -573,4 +989,276 @@ mod tests {
          assert!(painted.segments.is_empty());
          assert_eq!(painted.marks[0].alignment[0][0], 0.5);
      }
@@ -769,4 +836,143 @@ index a802352..6c691fe 100644
 +        input.marks[0].side = 2;
 +        assert!(input.bounds().is_err());
 +    }
++
++    #[test]
++    fn footprint_path_packets_preserve_exact_bounds_and_styles() {
++        use ciborium::cbor;
++        let encode = |value: &Value| {
++            let mut bytes = Vec::new();
++            ciborium::into_writer(value, &mut bytes).unwrap();
++            bytes
++        };
++        let paths = [
++            cbor!([[[0, -0.0], false, [["c", [0, 0], [2, 1], [3, 1]]]]]).unwrap(),
++            cbor!([
++                [[0, 0, 0], false, [["l", [1, 0, 0], [2, 1, 0]]]],
++                [[3, 1, 0], true, [["l", [4, 1, 0]]]]
++            ])
++            .unwrap(),
++        ];
++        let styles = [(0.05, true), (0.02, false)];
++        let expanded = paths
++            .iter()
++            .zip(styles)
++            .map(|(path, (radius, visible))| {
++                cbor!({"segments" => path, "shaft-radius" => radius,
++                "shaft-visible" => visible})
++                .unwrap()
++            })
++            .collect::<Vec<_>>();
++        let packets = paths
++            .iter()
++            .enumerate()
++            .map(|(i, path)| {
++                Value::Bytes(encode(
++                    &cbor!([{"segments" => path, "single" => i == 0}]).unwrap(),
++                ))
++            })
++            .collect::<Vec<_>>();
++        let mut spec = cbor!({
++            "paths" => expanded,
++            "shaft-styles" => [{"shaft-radius" => 0.05, "shaft-visible" => true},
++                {"shaft-radius" => 0.02, "shaft-visible" => false}],
++            "transform" => IDENTITY, "flat" => false, "ratio" => 0.25, "shift" => 0,
++            "marks" => [{
++                "tip" => [0, 0], "back" => [0.2, 0], "length" => 0.2,
++                "side" => 1, "shorten" => true, "straight" => false,
++                "pos" => null, "offset" => {"value" => 0.1, "relative" => true}, "sep" => 0,
++                "drawables" => [{"type" => "content", "pos" => [0, 0],
++                    "width" => 0.4, "height" => 0.6, "radius" => 0.02, "visible" => true}],
++            }],
++        })
++        .unwrap();
++        let expected = footprints(&encode(&spec)).unwrap();
++        spec.as_map_mut()
++            .unwrap()
++            .iter_mut()
++            .find(|(k, _)| k.as_text() == Some("paths"))
++            .unwrap()
++            .1 = Value::Array(packets);
++        assert_eq!(footprints(&encode(&spec)).unwrap(), expected);
++        // Flatten packet order without introducing an extra candidate dimension.
++        let combined = cbor!([
++            {"segments" => paths[0], "single" => true},
++            {"segments" => paths[1], "single" => false},
++        ])
++        .unwrap();
++        spec.as_map_mut()
++            .unwrap()
++            .iter_mut()
++            .find(|(k, _)| k.as_text() == Some("paths"))
++            .unwrap()
++            .1 = Value::Array(vec![Value::Bytes(encode(&combined))]);
++        assert_eq!(footprints(&encode(&spec)).unwrap(), expected);
++    }
++
++    #[test]
++    fn footprint_path_packets_reject_invalid_transport_and_geometry() {
++        use ciborium::cbor;
++        let spec = |paths: Value, styles: Value| {
++            let input = cbor!({"paths" => paths, "shaft-styles" => styles,
++                "transform" => IDENTITY, "flat" => false, "ratio" => null,
++                "shift" => 0, "marks" => []})
++            .unwrap();
++            let mut bytes = Vec::new();
++            ciborium::into_writer(&input, &mut bytes).unwrap();
++            bytes
++        };
++        let styles = cbor!([{"shaft-radius" => 0.05, "shaft-visible" => true},
++            {"shaft-radius" => 0.02, "shaft-visible" => false}])
++        .unwrap();
++        let empty = Value::Array(vec![Value::Bytes(vec![0x80])]);
++        assert_eq!(
++            footprints(&spec(empty.clone(), styles.clone())).unwrap(),
++            vec![0x80]
++        );
++        assert!(footprints(&spec(empty, Value::Null)).is_err());
++        for bytes in [vec![], vec![0x81], vec![0xa0]] {
++            assert!(footprints(&spec(
++                Value::Array(vec![Value::Bytes(bytes)]),
++                styles.clone()
++            ))
++            .is_err());
++        }
++        for point in [cbor!([0]).unwrap(), cbor!([0, f64::NAN]).unwrap()] {
++            let packet = cbor!([{"segments" => [[point, false, []]], "single" => false}]).unwrap();
++            let mut bytes = Vec::new();
++            ciborium::into_writer(&packet, &mut bytes).unwrap();
++            assert!(footprints(&spec(
++                Value::Array(vec![Value::Bytes(bytes)]),
++                styles.clone()
++            ))
++            .is_err());
++        }
++    }
  }
+diff --git a/cetz-core/src/path_bool/op.rs b/cetz-core/src/path_bool/op.rs
+index 9fb34e5..f9d061d 100644
+--- a/cetz-core/src/path_bool/op.rs
++++ b/cetz-core/src/path_bool/op.rs
+@@ -112,14 +112,20 @@ mod tests {
+     #[test]
+     fn parse_op_all_valid() {
+         assert!(matches!(parse_op("union"), Ok(BinaryOp::Union)));
+-        assert!(matches!(parse_op("intersection"), Ok(BinaryOp::Intersection)));
++        assert!(matches!(
++            parse_op("intersection"),
++            Ok(BinaryOp::Intersection)
++        ));
+         assert!(matches!(parse_op("difference"), Ok(BinaryOp::Difference)));
+         assert!(matches!(parse_op("xor"), Ok(BinaryOp::Xor)));
+     }
+ 
+     #[test]
+     fn parse_op_invalid() {
+-        assert!(matches!(parse_op("subtract"), Err(PathBoolErr::InvalidOp(_))));
++        assert!(matches!(
++            parse_op("subtract"),
++            Err(PathBoolErr::InvalidOp(_))
++        ));
+         assert!(matches!(parse_op(""), Err(PathBoolErr::InvalidOp(_))));
+     }
+ 

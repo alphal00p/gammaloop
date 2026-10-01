@@ -5,7 +5,8 @@ pub mod impred_projection;
 mod label_placement;
 pub use label_placement::{
     attachment_offset_bytes as label_attachment_offset_bytes,
-    candidates_bytes as label_candidates_bytes, obstacle_boxes_bytes as label_obstacle_boxes_bytes,
+    candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
+    obstacle_boxes_bytes as label_obstacle_boxes_bytes,
     path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
 };
 mod pin;
@@ -100,6 +101,12 @@ pub fn label_path_lines(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn label_attachment_offset(arg: &[u8]) -> Result<Vec<u8>, String> {
     label_attachment_offset_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_first(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_first_bytes(arg)
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]

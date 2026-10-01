@@ -579,9 +579,13 @@
 
 #let length(path, accuracy: 0.001) = _length(path, accuracy: accuracy)
 
-#let frames(path, distances, accuracy: 0.001) = cbor(_plugin.curve_path_frames(cbor.encode((
-  path: _path-value(path), distances: distances, accuracy: accuracy,
-))))
+#let frames(path, distances, accuracy: 0.001, format: "array") = {
+  assert(format in ("array", "cbor"), message: "Unknown frame format: " + repr(format))
+  let encoded = _plugin.curve_path_frames(cbor.encode((
+    path: _path-value(path), distances: distances, accuracy: accuracy,
+  )))
+  if format == "cbor" { encoded } else { cbor(encoded) }
+}
 
 /// Find transverse crossings between two paths.
 ///
@@ -896,7 +900,10 @@
   side-point: none,
   accuracy: 0.001,
   optimize: true,
+  format: "array",
+  unit: 1,
 ) = {
+  assert(format in ("array", "cbor"), message: "Unknown layer format: " + repr(format))
   let distance = _offset-toward-side-point(path, offset, side-point)
   if distance != none and distance != 0 {
     path = parallel(
@@ -908,7 +915,13 @@
   }
   // Keep empty paths drawable; trim requires at least one segment.
   if segments(path).len() == 0 {
-    return shifts.map(_ => (path: (path: _path-value(path), offset: distance), segments: ()))
+    let slices = shifts.map(_ => (path: (path: _path-value(path)), segments: ()))
+    return if format == "cbor" {
+      (layers: cbor.encode(slices), footprints: cbor.encode(()), count: shifts.len(),
+        nonzero: false, supported: false, all-single: false, offset: distance)
+    } else {
+      slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+    }
   }
   let center-trim = center-outset(
     _length(path, accuracy: accuracy),
@@ -926,9 +939,11 @@
       end-outset: end-outset + center-trim - shift)
   })
   let slices = cbor(_plugin.curve_trim_paths(cbor.encode((
-    path: _path-value(path), outsets: outsets, accuracy: accuracy,
+    path: _path-value(path), outsets: outsets, accuracy: accuracy, format: format, unit: unit,
   ))))
-  slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+  if format == "cbor" { slices + (offset: distance) } else {
+    slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+  }
 }
 
 /// Build a derived visible path layer.

@@ -4,13 +4,23 @@
 //! measurement and candidate enumeration remain in Typst; this batches the
 //! per-candidate transforms, collision costs and search without changing positions,
 //! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
 use std::{cell::Cell, collections::BTreeMap};
 
 #[derive(Deserialize)]
 struct Frame {
     point: [f64; 2],
     tangent: [f64; 2],
+}
+impl Frame {
+    fn deserialize_batch<'de, D: Deserializer<'de>>(de: D) -> Result<Vec<Self>, D::Error> {
+        match ciborium::Value::deserialize(de)? {
+            ciborium::Value::Bytes(bytes) => {
+                ciborium::de::from_reader(bytes.as_slice()).map_err(D::Error::custom)
+            }
+            value => value.deserialized().map_err(D::Error::custom),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -147,6 +157,66 @@ impl PathLinesSpec {
 }
 
 impl Point {
+    // Keep returned records in their original dimensions; only collision math
+    // projects canvas corners into the 2D plane.
+    fn deserialize_quad<'de, D: Deserializer<'de>>(de: D) -> Result<Option<[Self; 4]>, D::Error> {
+        use serde::de::{IgnoredAny, MapAccess, SeqAccess, Visitor};
+
+        #[derive(Deserialize)]
+        struct Coordinate(#[serde(deserialize_with = "crate::deserialize_f64")] f64);
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            X,
+            Y,
+            #[serde(other)]
+            Other,
+        }
+        struct Corner(Point);
+        struct CornerVisitor;
+        impl<'de> Visitor<'de> for CornerVisitor {
+            type Value = Corner;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a corner array with at least two coordinates or an x/y map")
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Corner, A::Error> {
+                let x = seq.next_element::<Coordinate>()?.ok_or_else(|| {
+                    A::Error::custom("label corners require at least two coordinates")
+                })?;
+                let y = seq.next_element::<Coordinate>()?.ok_or_else(|| {
+                    A::Error::custom("label corners require at least two coordinates")
+                })?;
+                while seq.next_element::<IgnoredAny>()?.is_some() {}
+                Ok(Corner(Point(x.0, y.0)))
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Corner, A::Error> {
+                let (mut x, mut y) = (None, None);
+                while let Some(field) = map.next_key::<Field>()? {
+                    match field {
+                        Field::X => x = Some(map.next_value::<Coordinate>()?.0),
+                        Field::Y => y = Some(map.next_value::<Coordinate>()?.0),
+                        Field::Other => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(Corner(Point(
+                    x.ok_or_else(|| A::Error::missing_field("x"))?,
+                    y.ok_or_else(|| A::Error::missing_field("y"))?,
+                )))
+            }
+        }
+        impl<'de> Deserialize<'de> for Corner {
+            fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+                de.deserialize_any(CornerVisitor)
+            }
+        }
+        Ok(Option::<[Corner; 4]>::deserialize(de)?.map(|corners| corners.map(|corner| corner.0)))
+    }
+
     fn sub(self, other: Self) -> Self {
         Self(self.0 - other.0, self.1 - other.1)
     }
@@ -310,11 +380,7 @@ impl AttachmentSpec {
         }
         // Independent manual arrow/label shifts may put the finite arrow wholly
         // away from this ray; preserve the deliberate tangential placement.
-        if attached {
-            Some(reach / scale)
-        } else {
-            None
-        }
+        if attached { Some(reach / scale) } else { None }
     }
 }
 
@@ -413,6 +479,7 @@ struct CandidateSpec {
     attachment: Option<CandidateAttachment>,
     #[serde(default)]
     endpoint_direction: Option<Point>,
+    #[serde(deserialize_with = "Frame::deserialize_batch")]
     frames: Vec<Frame>,
     positions: Vec<f64>,
     transform: Transform,
@@ -433,7 +500,26 @@ struct CandidateSpec {
 #[derive(Deserialize)]
 struct CandidateAttachment {
     carrier: Vec<CubicSegment>,
+    #[serde(deserialize_with = "CandidateAttachment::deserialize_paths")]
     paths: Vec<Vec<CubicSegment>>,
+}
+impl CandidateAttachment {
+    fn deserialize_paths<'de, D: Deserializer<'de>>(
+        de: D,
+    ) -> Result<Vec<Vec<CubicSegment>>, D::Error> {
+        match ciborium::Value::deserialize(de)? {
+            ciborium::Value::Bytes(bytes) => {
+                #[derive(Deserialize)]
+                struct Layer {
+                    segments: Vec<CubicSegment>,
+                }
+                let layers: Vec<Layer> =
+                    ciborium::de::from_reader(bytes.as_slice()).map_err(D::Error::custom)?;
+                Ok(layers.into_iter().map(|layer| layer.segments).collect())
+            }
+            value => value.deserialized().map_err(D::Error::custom),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -480,7 +566,7 @@ impl Bounds {
 struct CollisionCandidate {
     bounds: Bounds,
     cost: ciborium::Value,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "Point::deserialize_quad")]
     corners: Option<[Point; 4]>,
     #[serde(default, rename = "arrow-bounds")]
     arrow_bounds: Vec<Bounds>,
@@ -549,10 +635,219 @@ impl CollisionCandidate {
     }
 }
 
+/// Native batches retain typed geometry until selection. Expanded custom
+/// records remain opaque so their extra fields and corner representations survive.
+enum CandidateRecords {
+    Expanded(Vec<ciborium::Value>),
+    Packed(Vec<PackedCandidate>),
+}
+
+struct PackedCandidate {
+    geometry: Candidate,
+    at: ciborium::Value,
+    side: ciborium::Value,
+    path_index: usize,
+    footprint: ciborium::Value,
+    arrow_bounds: Vec<Bounds>,
+}
+
 #[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct CandidateBatch {
+    candidates: ciborium::Value,
+    positions: Vec<ciborium::Value>,
+    side: ciborium::Value,
+    path_index: usize,
+}
+#[derive(Deserialize)]
+struct PackedCandidates {
+    batches: Vec<CandidateBatch>,
+    #[serde(default)]
+    footprints: Option<ciborium::Value>,
+    #[serde(default)]
+    interleave: bool,
+}
+impl CandidateRecords {
+    fn from_value(value: ciborium::Value) -> Result<Self, String> {
+        use ciborium::Value;
+        if let Value::Array(records) = value {
+            if records
+                .iter()
+                .any(|record| !matches!(record, Value::Map(_)))
+            {
+                return Err("label candidates must be dictionaries".to_owned());
+            }
+            return Ok(Self::Expanded(records));
+        }
+        let packed: PackedCandidates = value.deserialized().map_err(|e| e.to_string())?;
+        let footprints = match packed.footprints {
+            Some(Value::Bytes(bytes)) => Some(
+                ciborium::de::from_reader::<Value, _>(bytes.as_slice())
+                    .map_err(|e| format!("Invalid packed label footprints: {e}"))?,
+            ),
+            value => value,
+        };
+        let footprints = footprints
+            .map(|value| match value {
+                Value::Array(values) => Ok(values),
+                _ => Err("label footprints must be an array".to_owned()),
+            })
+            .transpose()?;
+        let expected: usize = packed
+            .batches
+            .iter()
+            .map(|batch| batch.positions.len())
+            .sum();
+        if footprints
+            .as_ref()
+            .is_some_and(|values| values.len() != expected)
+        {
+            return Err("label footprints and candidates must have equal lengths".to_owned());
+        }
+        let mut footprints = footprints.unwrap_or_default().into_iter();
+        let mut batches = Vec::with_capacity(packed.batches.len());
+        for batch in packed.batches {
+            let candidates: Vec<Candidate> = match batch.candidates {
+                Value::Bytes(bytes) => ciborium::de::from_reader(bytes.as_slice())
+                    .map_err(|e| format!("Invalid packed label candidates: {e}"))?,
+                value => value.deserialized().map_err(|e| e.to_string())?,
+            };
+            if candidates.len() != batch.positions.len() {
+                return Err(
+                    "label candidate batch and positions must have equal lengths".to_owned(),
+                );
+            }
+            Cost::from_value(&batch.side)?;
+            let records = candidates
+                .into_iter()
+                .zip(batch.positions)
+                .map(|(candidate, at)| {
+                    Cost::from_value(&at)?;
+                    let footprint = footprints
+                        .next()
+                        .unwrap_or_else(|| Value::Array(Vec::new()));
+                    // Validate while retaining the original footprint numeric types.
+                    let arrow_bounds = footprint
+                        .deserialized::<Vec<Bounds>>()
+                        .map_err(|e| e.to_string())?;
+                    Ok(PackedCandidate {
+                        geometry: candidate,
+                        at,
+                        side: batch.side.clone(),
+                        path_index: batch.path_index,
+                        footprint,
+                        arrow_bounds,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            batches.push(records);
+        }
+        let records = if packed.interleave {
+            if batches.len() != 2 || batches[0].len() != batches[1].len() {
+                return Err("interleaving requires two equally sized candidate batches".to_owned());
+            }
+            let right = batches.pop().unwrap();
+            let left = batches.pop().unwrap();
+            left.into_iter()
+                .zip(right)
+                .flat_map(|(a, b)| [a, b])
+                .collect()
+        } else {
+            batches.into_iter().flatten().collect()
+        };
+        Ok(Self::Packed(records))
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Expanded(records) => records.len(),
+            Self::Packed(records) => records.len(),
+        }
+    }
+
+    fn collision_candidates(&self) -> Result<Vec<CollisionCandidate>, String> {
+        match self {
+            Self::Expanded(records) => records
+                .iter()
+                .map(|record| {
+                    record
+                        .deserialized()
+                        .map_err(|error| format!("Invalid label collision candidate: {error}"))
+                })
+                .collect(),
+            Self::Packed(records) => Ok(records
+                .iter()
+                .map(|record| CollisionCandidate {
+                    bounds: record.geometry.bounds,
+                    cost: ciborium::Value::Float(record.geometry.cost),
+                    corners: Some(record.geometry.corners.map(|[x, y, _]| Point(x, y))),
+                    arrow_bounds: record.arrow_bounds.clone(),
+                })
+                .collect()),
+        }
+    }
+
+    fn selected(
+        &self,
+        index: usize,
+        cost: Option<&ciborium::Value>,
+    ) -> Result<ciborium::Value, String> {
+        let mut record = match self {
+            Self::Expanded(records) => records[index].clone(),
+            Self::Packed(records) => {
+                let record = &records[index];
+                record.geometry.record(
+                    record.at.clone(),
+                    record.side.clone(),
+                    record.path_index,
+                    record.footprint.clone(),
+                )?
+            }
+        };
+        if let Some(cost) = cost {
+            // A real search has already required the numeric cost field.
+            record
+                .as_map_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|(key, _)| key.as_text() == Some("cost"))
+                .unwrap()
+                .1 = cost.clone();
+        }
+        Ok(record)
+    }
+}
+impl<'de> Deserialize<'de> for CandidateRecords {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        Self::from_value(ciborium::Value::deserialize(de)?).map_err(D::Error::custom)
+    }
+}
+
 struct CollisionLabel {
     candidates: Vec<CollisionCandidate>,
+    records: CandidateRecords,
     edge: Option<ciborium::Value>,
+}
+impl<'de> Deserialize<'de> for CollisionLabel {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Input {
+            candidates: CandidateRecords,
+            edge: Option<ciborium::Value>,
+        }
+        let Input {
+            candidates: records,
+            edge,
+        } = Input::deserialize(de)?;
+        // The all-singleton helper returns records unchanged, even when no
+        // collision fields exist. Build the numeric view only for a real search.
+        let candidates = Vec::new();
+        Ok(Self {
+            candidates,
+            records,
+            edge,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -581,6 +876,8 @@ impl Obstacle {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct CollisionSpec {
+    #[serde(default)]
+    fixed: bool,
     #[serde(default)]
     edge_lines: Vec<StrokeLine>,
     placements: Vec<CollisionLabel>,
@@ -674,6 +971,7 @@ struct SearchResult {
     choices: Vec<usize>,
     costs: Vec<ciborium::Value>,
     missing: Vec<ExponentialCheck>,
+    selected: Vec<ciborium::Value>,
 }
 
 #[derive(Serialize)]
@@ -994,6 +1292,7 @@ impl CollisionGeometry {
                 .collect(),
             choices: best_choices,
             missing,
+            selected: Vec::new(),
         })
     }
 }
@@ -1138,7 +1437,7 @@ impl CollisionSpec {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Candidate {
     position: [f64; 2],
@@ -1152,6 +1451,44 @@ struct Candidate {
     path_shift: f64,
     bounds: Bounds,
     cost: f64,
+}
+
+impl Candidate {
+    fn record(
+        &self,
+        at: ciborium::Value,
+        side: ciborium::Value,
+        path_index: usize,
+        arrow_bounds: ciborium::Value,
+    ) -> Result<ciborium::Value, String> {
+        // This is the public annotation record, in the same field order as its
+        // Typst constructor. Candidate-only clearance intermediates stay native.
+        #[derive(Serialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Selection {
+            position: [f64; 2],
+            at: ciborium::Value,
+            side: ciborium::Value,
+            path_index: usize,
+            path_shift: f64,
+            corners: [[f64; 3]; 4],
+            bounds: Bounds,
+            cost: f64,
+            arrow_bounds: ciborium::Value,
+        }
+        ciborium::Value::serialized(&Selection {
+            position: self.position,
+            at,
+            side,
+            path_index,
+            path_shift: self.path_shift,
+            corners: self.corners,
+            bounds: self.bounds,
+            cost: self.cost,
+            arrow_bounds,
+        })
+        .map_err(|e| e.to_string())
+    }
 }
 
 impl CandidateSpec {
@@ -1283,12 +1620,63 @@ pub fn candidates_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::encode_cbor(&spec.candidates()?)
 }
 
+pub fn first_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let records: CandidateRecords = ciborium::de::from_reader(arg)
+        .map_err(|error| format!("Invalid label candidates: {error}"))?;
+    if records.len() == 0 {
+        return Err("labels must have at least one candidate".to_owned());
+    }
+    crate::graph_api::encode_cbor(&records.selected(0, None)?)
+}
+
 pub fn search_bytes(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: CollisionSpec = ciborium::de::from_reader(arg)
+    let mut spec: CollisionSpec = ciborium::de::from_reader(arg)
         .map_err(|error| format!("Invalid label collision geometry: {error}"))?;
     let math: SearchMath = ciborium::de::from_reader(math)
         .map_err(|error| format!("Invalid label search math: {error}"))?;
-    crate::graph_api::encode_cbor(&spec.geometry(math.pair_padding)?.search(&math)?)
+    let result = if spec.fixed {
+        if spec.placements.iter().any(|label| label.records.len() != 1) {
+            return Err(
+                "fixed label selection requires exactly one candidate per label".to_owned(),
+            );
+        }
+        let selected: Vec<_> = spec
+            .placements
+            .iter()
+            .map(|label| label.records.selected(0, None))
+            .collect::<Result<_, _>>()?;
+        SearchResult {
+            choices: vec![0; spec.placements.len()],
+            costs: selected
+                .iter()
+                .map(|record| {
+                    record
+                        .as_map()
+                        .unwrap()
+                        .iter()
+                        .find(|(key, _)| key.as_text() == Some("cost"))
+                        .map(|(_, value)| value.clone())
+                        .unwrap_or_else(|| ciborium::Value::Integer(0.into()))
+                })
+                .collect(),
+            missing: Vec::new(),
+            selected,
+        }
+    } else {
+        for label in &mut spec.placements {
+            label.candidates = label.records.collision_candidates()?;
+        }
+        let mut result = spec.geometry(math.pair_padding)?.search(&math)?;
+        result.selected = spec
+            .placements
+            .iter()
+            .zip(&result.choices)
+            .zip(&result.costs)
+            .map(|((label, &choice), cost)| label.records.selected(choice, Some(cost)))
+            .collect::<Result<_, _>>()?;
+        result
+    };
+    crate::graph_api::encode_cbor(&result)
 }
 
 pub fn obstacle_boxes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -1307,6 +1695,325 @@ pub fn path_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    fn wire_value(value: serde_json::Value) -> ciborium::Value {
+        ciborium::Value::serialized(&value).unwrap()
+    }
+    fn wire_field<'a>(value: &'a mut ciborium::Value, name: &str) -> &'a mut ciborium::Value {
+        &mut value
+            .as_map_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|(key, _)| key.as_text() == Some(name))
+            .unwrap()
+            .1
+    }
+    fn candidate_wire() -> ciborium::Value {
+        wire_value(serde_json::json!({
+            "frames": [{"point":[0.0,0.0],"tangent":[1.0,0.0]}, {"point":[1.0,0.0],"tangent":[1.0,0.0]}],
+            "positions": [0.0,1.0],
+            "transform": [[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]],
+            "origin": [0.0,0.0,0.0],
+            "corners": [[-0.2,0.1,0.7],[0.2,0.1,0.7],[-0.2,-0.1,0.7],[0.2,-0.1,0.7]],
+            "total":2.0,"preferred":1.0,"accuracy":0.01,"side":1.0,"preferred-side":1.0,
+            "path-index":0,"path-shift":0.0,"gap":0.2,"clear-box":true,"fixed":false,
+            "attachment":{"carrier":[],"paths":[[],[]]}
+        }))
+    }
+    fn packed_candidate_wire() -> ciborium::Value {
+        use ciborium::Value;
+        let bytes =
+            candidates_bytes(&crate::graph_api::encode_cbor(&candidate_wire()).unwrap()).unwrap();
+        Value::Map(vec![
+            (
+                "batches".into(),
+                Value::Array(
+                    (0..2)
+                        .map(|index| {
+                            Value::Map(vec![
+                                ("candidates".into(), Value::Bytes(bytes.clone())),
+                                (
+                                    "positions".into(),
+                                    Value::Array(vec![
+                                        Value::Integer(0.into()),
+                                        Value::Float(-0.0),
+                                    ]),
+                                ),
+                                (
+                                    "side".into(),
+                                    if index == 0 {
+                                        Value::Integer(1.into())
+                                    } else {
+                                        Value::Float(-1.0)
+                                    },
+                                ),
+                                ("path-index".into(), Value::Integer((index + 7).into())),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            ("footprints".into(), Value::Null),
+            ("interleave".into(), Value::Bool(true)),
+        ])
+    }
+    fn candidate_records(value: ciborium::Value) -> Vec<ciborium::Value> {
+        let records = CandidateRecords::from_value(value).unwrap();
+        (0..records.len())
+            .map(|index| records.selected(index, None).unwrap())
+            .collect()
+    }
+    fn collision_wire(candidates: ciborium::Value) -> ciborium::Value {
+        let mut value = wire_value(serde_json::json!({
+            "placements":[{"candidates":[],"edge":null}], "obstacles":[],
+            "label-padding":0.0,"obstacle-padding":0.0,"fixed-arrows":[],
+            "coordinated":true,"edge-lines":[],"fixed":false
+        }));
+        let placement = &mut wire_field(&mut value, "placements").as_array_mut().unwrap()[0];
+        *wire_field(placement, "candidates") = candidates;
+        value
+    }
+    #[test]
+    fn candidate_frames_and_attachment_layers_accept_opaque_packets() {
+        use ciborium::Value;
+        let mut structured = candidate_wire();
+        let segment = wire_value(serde_json::json!({
+            "start":[-1,0],"control-start":[0,0],"control-end":[1,0],"end":[2,0]
+        }));
+        let attachment = wire_field(&mut structured, "attachment");
+        *wire_field(attachment, "paths") =
+            Value::Array(vec![Value::Array(vec![segment]), Value::Array(Vec::new())]);
+        let encode = |value: &Value| crate::graph_api::encode_cbor(value).unwrap();
+        let expected = candidates_bytes(&encode(&structured)).unwrap();
+        let mut packed = structured;
+        let frames = wire_field(&mut packed, "frames");
+        *frames = Value::Bytes(encode(frames));
+        let paths = wire_field(wire_field(&mut packed, "attachment"), "paths");
+        let layers = Value::Array(
+            paths
+                .as_array()
+                .unwrap()
+                .iter()
+                .cloned()
+                .map(|segments| {
+                    Value::Map(vec![
+                        ("path".into(), Value::Null),
+                        ("segments".into(), segments),
+                    ])
+                })
+                .collect(),
+        );
+        *paths = Value::Bytes(encode(&layers));
+        assert_eq!(candidates_bytes(&encode(&packed)).unwrap(), expected);
+    }
+    #[test]
+    fn packed_records_preserve_numeric_types_footprints_and_interleaving() {
+        use ciborium::Value;
+        let mut packed = packed_candidate_wire();
+        let footprints = wire_value(serde_json::json!(
+            (0..4)
+                .map(|i| vec![serde_json::json!({
+                    "left":i,"right":i+1,"bottom":0,"top":1
+                })])
+                .collect::<Vec<_>>()
+        ));
+        *wire_field(&mut packed, "footprints") = footprints.clone();
+        let mut records = candidate_records(packed.clone());
+        let expected_sides = [
+            Value::Integer(1.into()),
+            Value::Float(-1.0),
+            Value::Integer(1.into()),
+            Value::Float(-1.0),
+        ];
+        for (i, record) in records.iter_mut().enumerate() {
+            assert_eq!(wire_field(record, "side"), &expected_sides[i]);
+            assert_eq!(
+                wire_field(record, "path-index"),
+                &Value::Integer((7 + i % 2).into())
+            );
+            assert_eq!(
+                wire_field(record, "arrow-bounds"),
+                &footprints.as_array().unwrap()[[0, 2, 1, 3][i]]
+            );
+            let at = wire_field(record, "at");
+            if i < 2 {
+                assert_eq!(at, &Value::Integer(0.into()));
+            } else {
+                assert_eq!(at.as_float().unwrap().to_bits(), (-0.0_f64).to_bits());
+            }
+            assert!(
+                wire_field(record, "corners")
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|p| p.as_array().unwrap().len() == 3)
+            );
+        }
+        let expected = crate::graph_api::encode_cbor(&records[0]).unwrap();
+        assert_eq!(
+            first_bytes(&crate::graph_api::encode_cbor(&packed).unwrap()).unwrap(),
+            expected
+        );
+        *wire_field(&mut packed, "footprints") =
+            Value::Bytes(crate::graph_api::encode_cbor(&footprints).unwrap());
+        assert_eq!(
+            crate::graph_api::encode_cbor(&candidate_records(packed)).unwrap(),
+            crate::graph_api::encode_cbor(&records).unwrap()
+        );
+    }
+    #[test]
+    fn packed_and_structured_search_keep_identical_selected_records() {
+        use ciborium::Value;
+        let packed = packed_candidate_wire();
+        let records = candidate_records(packed.clone());
+        let math = crate::graph_api::encode_cbor(&serde_json::json!({
+            "temperatures":(0..84).map(|s|0.15*0.9_f64.powi(s)).collect::<Vec<_>>(),
+            "exponentials":[],"pair-padding":0.35
+        }))
+        .unwrap();
+        let request =
+            |candidates| crate::graph_api::encode_cbor(&collision_wire(candidates)).unwrap();
+        let expected = search_bytes(&request(Value::Array(records.clone())), &math).unwrap();
+        assert_eq!(search_bytes(&request(packed), &math).unwrap(), expected);
+        let mut custom = records;
+        for record in &mut custom {
+            record.as_map_mut().unwrap().push((
+                "custom-key".into(),
+                Value::Integer(9007199254740993_i64.into()),
+            ));
+        }
+        let reply = search_bytes(&request(Value::Array(custom)), &math).unwrap();
+        let mut reply: Value = ciborium::de::from_reader(reply.as_slice()).unwrap();
+        let selected = &mut wire_field(&mut reply, "selected").as_array_mut().unwrap()[0];
+        assert_eq!(
+            wire_field(selected, "custom-key"),
+            &Value::Integer(9007199254740993_i64.into())
+        );
+        assert!(
+            wire_field(selected, "corners")
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|p| p.as_array().unwrap()[2] == Value::Float(0.7))
+        );
+    }
+    #[test]
+    fn ordinary_search_projects_corner_maps_and_extra_coordinates_without_rewriting_them() {
+        use ciborium::Value;
+        let mut reference = candidate_records(packed_candidate_wire());
+        for record in &mut reference {
+            for corner in wire_field(record, "corners").as_array_mut().unwrap() {
+                corner.as_array_mut().unwrap().truncate(2);
+            }
+        }
+        let math = crate::graph_api::encode_cbor(&serde_json::json!({
+            "temperatures":(0..84).map(|s|0.15*0.9_f64.powi(s)).collect::<Vec<_>>(),
+            "exponentials":[],"pair-padding":0.35
+        }))
+        .unwrap();
+        let request = |records| {
+            let mut geometry = collision_wire(Value::Array(records));
+            *wire_field(&mut geometry, "edge-lines") = wire_value(serde_json::json!([
+                {"start":[-1,0.2],"end":[2,0.2],"radius":0.015}
+            ]));
+            crate::graph_api::encode_cbor(&geometry).unwrap()
+        };
+        let expected = search_bytes(&request(reference.clone()), &math).unwrap();
+        let mut expected_value: Value = ciborium::de::from_reader(expected.as_slice()).unwrap();
+        let expected_corners = wire_field(
+            &mut wire_field(&mut expected_value, "selected")
+                .as_array_mut()
+                .unwrap()[0],
+            "corners",
+        )
+        .clone();
+        for map_corners in [false, true] {
+            let mut records = reference.clone();
+            for record in &mut records {
+                for corner in wire_field(record, "corners").as_array_mut().unwrap() {
+                    let coordinates = corner.as_array().unwrap();
+                    // Typst's _point only reads x/y, even when other components
+                    // are nonnumeric. Preserve those components in the result.
+                    *corner = if map_corners {
+                        Value::Map(vec![
+                            ("x".into(), coordinates[0].clone()),
+                            ("y".into(), coordinates[1].clone()),
+                            ("ignored".into(), Value::Text("kept".into())),
+                        ])
+                    } else {
+                        Value::Array(vec![
+                            coordinates[0].clone(),
+                            coordinates[1].clone(),
+                            Value::Float(0.7),
+                            Value::Text("kept".into()),
+                        ])
+                    };
+                }
+            }
+            let actual = search_bytes(&request(records.clone()), &math).unwrap();
+            let mut actual: Value = ciborium::de::from_reader(actual.as_slice()).unwrap();
+            let chosen = usize::try_from(
+                wire_field(&mut actual, "choices").as_array().unwrap()[0]
+                    .as_integer()
+                    .unwrap(),
+            )
+            .unwrap();
+            let selected = &mut wire_field(&mut actual, "selected").as_array_mut().unwrap()[0];
+            assert_eq!(
+                wire_field(selected, "corners"),
+                wire_field(&mut records[chosen], "corners")
+            );
+            *wire_field(selected, "corners") = expected_corners.clone();
+            assert_eq!(crate::graph_api::encode_cbor(&actual).unwrap(), expected);
+        }
+    }
+    #[test]
+    fn singleton_selection_preserves_arbitrary_records_without_scoring() {
+        use ciborium::Value;
+        for record in [
+            Value::Map(vec![("custom".into(), Value::Integer(7.into()))]),
+            Value::Map(vec![
+                ("cost".into(), Value::Float(-0.0)),
+                ("custom".into(), Value::Text("kept".into())),
+            ]),
+            Value::Map(vec![("cost".into(), Value::Float(f64::INFINITY))]),
+        ] {
+            let mut geometry = collision_wire(Value::Array(vec![record.clone()]));
+            *wire_field(&mut geometry, "fixed") = Value::Bool(true);
+            let geometry = crate::graph_api::encode_cbor(&geometry).unwrap();
+            let math = crate::graph_api::encode_cbor(
+                &serde_json::json!({"temperatures":[],"exponentials":[],"pair-padding":0.35}),
+            )
+            .unwrap();
+            let output = search_bytes(&geometry, &math).unwrap();
+            let mut output: Value = ciborium::de::from_reader(output.as_slice()).unwrap();
+            assert_eq!(
+                crate::graph_api::encode_cbor(wire_field(&mut output, "selected")).unwrap(),
+                crate::graph_api::encode_cbor(&Value::Array(vec![record])).unwrap()
+            );
+            assert_eq!(
+                wire_field(&mut output, "missing"),
+                &Value::Array(Vec::new())
+            );
+        }
+    }
+    #[test]
+    fn malformed_packed_candidate_counts_are_rejected() {
+        use ciborium::Value;
+        let mut packed = packed_candidate_wire();
+        *wire_field(&mut packed, "footprints") = Value::Array(Vec::new());
+        assert!(CandidateRecords::from_value(packed).is_err());
+        let mut packed = packed_candidate_wire();
+        wire_field(&mut packed, "batches")
+            .as_array_mut()
+            .unwrap()
+            .pop();
+        assert!(CandidateRecords::from_value(packed).is_err());
+        let mut packed = packed_candidate_wire();
+        let batch = &mut wire_field(&mut packed, "batches").as_array_mut().unwrap()[0];
+        wire_field(batch, "positions").as_array_mut().unwrap().pop();
+        assert!(CandidateRecords::from_value(packed).is_err());
+    }
+
     #[test]
     fn cached_pair_costs_preserve_ordered_bits_and_eviction() {
         let box_at = |x: f64, y: f64, width: f64, height: f64| Bounds {
@@ -1317,6 +2024,7 @@ mod tests {
         };
         for padding in [0.0, -0.0, 0.2, -0.1, f64::INFINITY, f64::NAN] {
             let spec = CollisionSpec {
+                fixed: false,
                 edge_lines: Vec::new(),
                 obstacles: Vec::new(),
                 fixed_arrows: Vec::new(),
@@ -1325,6 +2033,7 @@ mod tests {
                 coordinated: true,
                 placements: (0..4)
                     .map(|label| CollisionLabel {
+                        records: CandidateRecords::Expanded(Vec::new()),
                         edge: None,
                         candidates: (0..5)
                             .map(|choice| {
@@ -1408,8 +2117,10 @@ mod tests {
         ));
         candidate.corners = None;
         let mut spec = CollisionSpec {
+            fixed: false,
             edge_lines: lines,
             placements: vec![CollisionLabel {
+                records: CandidateRecords::Expanded(Vec::new()),
                 candidates: vec![candidate],
                 edge: None,
             }],
@@ -1514,13 +2225,16 @@ mod tests {
         };
         // Either single move raises the energy, but taking both lowers it.
         let geometry = CollisionSpec {
+            fixed: false,
             edge_lines: Vec::new(),
             placements: vec![
                 CollisionLabel {
+                    records: CandidateRecords::Expanded(Vec::new()),
                     candidates: vec![candidate(0.0, 0.001), candidate(10.9995, 0.0)],
                     edge: None,
                 },
                 CollisionLabel {
+                    records: CandidateRecords::Expanded(Vec::new()),
                     candidates: vec![candidate(10.0, 0.001), candidate(0.9995, 0.0)],
                     edge: None,
                 },
@@ -1579,10 +2293,12 @@ mod tests {
             top: 1.0,
         };
         let spec = CollisionSpec {
+            fixed: false,
             edge_lines: Vec::new(),
             placements: [(0.0, 4.0), (4.0, 0.0)]
                 .into_iter()
                 .map(|(text, arrow)| CollisionLabel {
+                    records: CandidateRecords::Expanded(Vec::new()),
                     candidates: vec![CollisionCandidate {
                         corners: None,
                         bounds: bounds(text),
@@ -1627,13 +2343,16 @@ mod tests {
             arrow_bounds: Vec::new(),
         };
         let spec = CollisionSpec {
+            fixed: false,
             edge_lines: Vec::new(),
             placements: vec![
                 CollisionLabel {
+                    records: CandidateRecords::Expanded(Vec::new()),
                     candidates: vec![candidate(0.0, 1.0), candidate(10.0, 0.0)],
                     edge: None,
                 },
                 CollisionLabel {
+                    records: CandidateRecords::Expanded(Vec::new()),
                     candidates: vec![candidate(10.0, 1.0), candidate(0.0, 0.0)],
                     edge: None,
                 },
@@ -1713,8 +2432,10 @@ mod tests {
         };
         let edge = Some(ciborium::Value::Integer(7.into()));
         let mut spec = CollisionSpec {
+            fixed: false,
             edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
+                records: CandidateRecords::Expanded(Vec::new()),
                 candidates: vec![CollisionCandidate {
                     corners: None,
                     bounds,
@@ -1774,8 +2495,10 @@ mod tests {
         };
         let cost = 9_007_199_254_740_992.0;
         let spec = CollisionSpec {
+            fixed: false,
             edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
+                records: CandidateRecords::Expanded(Vec::new()),
                 candidates: vec![CollisionCandidate {
                     corners: None,
                     bounds,

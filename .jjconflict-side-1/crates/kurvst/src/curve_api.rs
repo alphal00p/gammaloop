@@ -111,6 +111,22 @@ struct TrimPathsSpec {
         deserialize_with = "deserialize_f64"
     )]
     accuracy: f64,
+    #[serde(default)]
+    format: LayerFormat,
+    #[serde(default = "default_unit", deserialize_with = "deserialize_f64")]
+    unit: f64,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum LayerFormat {
+    #[default]
+    Array,
+    Cbor,
+}
+
+fn default_unit() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -732,7 +748,12 @@ pub fn curve_trim_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 pub fn curve_trim_paths_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: TrimPathsSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize path trim batch: {err}"))?;
-    encode_cbor(&trim_paths(spec)?)
+    let (format, unit) = (spec.format, spec.unit);
+    let layers = trim_paths(spec)?;
+    match format {
+        LayerFormat::Array => encode_cbor(&layers),
+        LayerFormat::Cbor => encode_cbor(&PackedPathLayers::new(&layers, unit)?),
+    }
 }
 
 pub fn curve_hobby_through_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -770,13 +791,13 @@ struct PatternCetzSpec {
 }
 
 #[derive(Serialize)]
-struct CetzSubpath([f64; 3], bool, Vec<CetzSegment>);
+struct CetzSubpath<P = [f64; 3]>(P, bool, Vec<CetzSegment<P>>);
 
 #[derive(Serialize)]
 #[serde(untagged)]
-enum CetzSegment {
-    Line((&'static str, [f64; 3])),
-    Cubic((&'static str, [f64; 3], [f64; 3], [f64; 3])),
+enum CetzSegment<P> {
+    Line((&'static str, P)),
+    Cubic((&'static str, P, P, P)),
 }
 
 #[derive(Serialize)]
@@ -786,16 +807,15 @@ enum PatternCetzOutput {
     Original(PatternPathOutput),
 }
 
-impl PatternCetzOutput {
+impl<P> CetzSubpath<P> {
     // Match Typst's _to-cetz-data numeric representation, including subpath
     // boundaries, quadratic promotion, and multiplication before float coercion.
-    fn from_pattern(output: PatternPathOutput, unit: f64) -> Self {
-        let point = |p: Point| [p.x * unit, p.y * unit, 0.0];
+    fn from_path(path: &BezPath, point: impl Fn(Point) -> P) -> Option<Vec<Self>> {
         let mut subpaths = Vec::new();
         let mut origin = None;
         let mut current = Point::ZERO;
         let mut segments = Vec::new();
-        for &element in output.path.elements() {
+        for &element in path.elements() {
             if let PathEl::MoveTo(start) = element {
                 if let Some(previous) = origin {
                     subpaths.push(CetzSubpath(
@@ -808,11 +828,9 @@ impl PatternCetzOutput {
                 current = start;
                 continue;
             }
-            if origin.is_none() {
-                // Typst synthesizes an integer (0, 0) origin here. Retain its
-                // number types and signed-zero behavior for coordinate hooks.
-                return Self::Original(output);
-            }
+            // Typst synthesizes an integer (0, 0) origin when absent. Retain
+            // those number types and signed-zero behavior for coordinate hooks.
+            origin?;
             match element {
                 PathEl::MoveTo(_) => unreachable!(),
                 PathEl::LineTo(end) => {
@@ -861,7 +879,88 @@ impl PatternCetzOutput {
         if let Some(start) = origin {
             subpaths.push(CetzSubpath(point(start), false, segments));
         }
-        Self::Data(subpaths)
+        Some(subpaths)
+    }
+}
+
+impl PatternCetzOutput {
+    fn from_pattern(output: PatternPathOutput, unit: f64) -> Self {
+        match CetzSubpath::from_path(&output.path, |p| [p.x * unit, p.y * unit, 0.0]) {
+            Some(subpaths) => Self::Data(subpaths),
+            None => Self::Original(output),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct FootprintPath {
+    segments: Vec<CetzSubpath<[f64; 2]>>,
+    single: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct PackedPathLayers {
+    #[serde(serialize_with = "PackedPathLayers::serialize_bytes")]
+    layers: Vec<u8>,
+    #[serde(serialize_with = "PackedPathLayers::serialize_bytes")]
+    footprints: Vec<u8>,
+    count: usize,
+    nonzero: bool,
+    supported: bool,
+    all_single: bool,
+}
+
+impl PackedPathLayers {
+    fn serialize_bytes<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bytes(bytes)
+    }
+
+    fn new(layers: &[PathLayerOutput], unit: f64) -> Result<Self, String> {
+        let mut supported = true;
+        let mut nonzero = false;
+        let mut all_single = !layers.is_empty();
+        let mut footprints = Vec::with_capacity(layers.len());
+        for layer in layers {
+            nonzero |= layer.segments.iter().any(|segment| {
+                segment.start != segment.control_start
+                    || segment.start != segment.control_end
+                    || segment.start != segment.end
+            });
+            let single = layer.segments.len() == 1;
+            all_single &= single;
+            // The drawing owner elevates one segment to a Bezier before unit
+            // conversion; longer carriers retain their original path commands.
+            let segments = if single {
+                let cubic = layer.segments[0];
+                let mut path = BezPath::new();
+                path.move_to(cubic.start);
+                path.curve_to(cubic.control_start, cubic.control_end, cubic.end);
+                CetzSubpath::from_path(&path, |p| [p.x * 1.0, p.y * 1.0])
+            } else if unit.is_finite() && unit != 0.0 {
+                CetzSubpath::from_path(&layer.path.path, |p| [p.x * unit, p.y * unit])
+            } else {
+                None
+            };
+            let segments = match segments {
+                Some(segments) => segments,
+                None => {
+                    supported = false;
+                    Vec::new()
+                }
+            };
+            // Move-only subpaths require Kurvst's primitive drawing semantics.
+            supported &= !segments.is_empty() && segments.iter().all(|path| !path.2.is_empty());
+            footprints.push(FootprintPath { segments, single });
+        }
+        Ok(Self {
+            layers: encode_cbor(&layers)?,
+            footprints: encode_cbor(&footprints)?,
+            count: layers.len(),
+            nonzero,
+            supported,
+            all_single,
+        })
     }
 }
 
@@ -2596,6 +2695,8 @@ mod tests {
                     })
                     .collect(),
                 accuracy: 1e-6,
+                format: LayerFormat::Array,
+                unit: 1.0,
             })
             .unwrap();
             for (actual, (start_outset, end_outset)) in batch.iter().zip(outsets) {
@@ -2640,6 +2741,8 @@ mod tests {
             path: straight_path(3.0),
             outsets,
             accuracy,
+            format: LayerFormat::Array,
+            unit: 1.0,
         };
         assert!(trim_paths(spec(vec![], 1e-6)).unwrap().is_empty());
         assert!(trim_paths(spec(vec![], 0.0)).is_err());
@@ -2655,6 +2758,61 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn packed_layers_keep_native_records_and_share_cetz_conversion() {
+        let mut path = straight_path(3.0);
+        path.line_to((4.0, 1.0));
+        let layers = trim_paths(TrimPathsSpec {
+            path,
+            outsets: vec![
+                PathOutsets {
+                    start_outset: 0.0,
+                    end_outset: 0.0,
+                },
+                PathOutsets {
+                    start_outset: 0.0,
+                    end_outset: 2.0,
+                },
+            ],
+            accuracy: 1e-6,
+            format: LayerFormat::Cbor,
+            unit: -2.0,
+        })
+        .unwrap();
+        let packet = PackedPathLayers::new(&layers, -2.0).unwrap();
+        assert_eq!(packet.layers, encode_cbor(&layers).unwrap());
+        assert_eq!(packet.count, 2);
+        assert!(packet.supported && packet.nonzero && !packet.all_single);
+        let value: ciborium::Value = ciborium::de::from_reader(&packet.footprints[..]).unwrap();
+        let ciborium::Value::Array(paths) = value else {
+            panic!("expected footprint paths")
+        };
+        let expected =
+            CetzSubpath::from_path(&layers[0].path.path, |p| [p.x * -2.0, p.y * -2.0]).unwrap();
+        assert_eq!(
+            encode_cbor(cbor_map_get(&paths[0], "segments")).unwrap(),
+            encode_cbor(&expected).unwrap()
+        );
+        assert_eq!(
+            cbor_map_get(&paths[0], "single"),
+            &ciborium::Value::Bool(false)
+        );
+        assert_eq!(
+            cbor_map_get(&paths[1], "single"),
+            &ciborium::Value::Bool(true)
+        );
+        let encoded = encode_cbor(&packet).unwrap();
+        let value: ciborium::Value = ciborium::de::from_reader(&encoded[..]).unwrap();
+        assert_eq!(
+            cbor_map_get(&value, "layers"),
+            &ciborium::Value::Bytes(packet.layers)
+        );
+        assert_eq!(
+            cbor_map_get(&value, "footprints"),
+            &ciborium::Value::Bytes(packet.footprints)
+        );
     }
 
     #[test]

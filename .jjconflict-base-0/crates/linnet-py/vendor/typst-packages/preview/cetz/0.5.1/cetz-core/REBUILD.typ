@@ -37,6 +37,9 @@ whole-path bound. Content keeps its original dimensions after position
 transforms. Integer and floating-point CBOR coordinates are both accepted;
 invalid dimensions, nonfinite values, and overflowing geometry are rejected.
 Style resolution and context-dependent custom shape evaluation remain in Typst.
+Canonical numeric carrier packets may remain encoded between plugins. The same
+footprint input owner expands them and selects the resolved single- or multi-segment
+shaft style before entering the shared painter; bounds can also remain encoded.
 
 The checked-in binary uses Rust 1.98.1 (`48a229cea`, LLVM 21.1.8), the patched
 `cetz-core/Cargo.lock`, and the upstream release profile with
@@ -66,7 +69,7 @@ cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm"
 ```
 
 The resulting binary's SHA-256 is
-`2b9b3f9fd7a1318c1f01b057ac9cff8e09fed12229e228c999d91b8bb4a61461`.
+`a84fde7399862dd8af3c503721532fb46107c2d5edf0daa9a5d55eeed570aaec`.
 The bounds behavior fixture compares batched results against the scalar CeTZ
 exports, including degenerate curves, mixed dimensions, signed zeros and
 nonfinite aggregation. It runs as part of the Clinnet public Typst fixture. The identity-target fixture
@@ -86,3 +89,5 @@ Candidate-footprint tests compare exact CBOR bounds with the ordinary painted
 owner across relative and repeated marks, curved and short carriers, custom
 content, hidden drawables, transforms, and per-path stroke styles. Native tests
 also cover trimming, relative stations, singular transforms, and invalid inputs.
+Packet tests require byte-identical bounds to expanded numeric input, preserve
+candidate order across packets, and reject invalid transport and geometry.

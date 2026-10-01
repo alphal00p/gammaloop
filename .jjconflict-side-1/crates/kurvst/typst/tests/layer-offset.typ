@@ -47,6 +47,31 @@
     let slices = kurvst.layers(carrier, shifts, ..options)
     assert.eq(slices.len(), shifts.len())
     assert.eq(kurvst.layers(carrier, (), ..options), ())
+    let packet = kurvst.layers(carrier, shifts, format: "cbor", unit: -2, ..options)
+    assert.eq(packet.count, shifts.len())
+    let restored = cbor(packet.layers).map(slice => (
+      path: slice.path + (offset: packet.offset), segments: slice.segments,
+    ))
+    assert.eq(cbor.encode(restored), cbor.encode(slices))
+    let footprints = slices.map(slice => {
+      let single = slice.segments.len() == 1
+      let path = if single { kurvst.from-cubic(slice.segments.first()) } else { slice.path }
+      (segments: kurvst.to-cetz-data(path, unit: if single { 1 } else { -2 }), single: single)
+    })
+    let nonzero = slices.any(slice => slice.segments.any(segment => (
+      segment.start != segment.control-start or segment.start != segment.control-end
+        or segment.start != segment.end
+    )))
+    assert.eq(packet.nonzero, nonzero)
+    assert.eq(packet.all-single, footprints.all(path => path.single))
+    if packet.supported {
+      assert.eq(packet.footprints, cbor.encode(footprints))
+    } else {
+      assert(footprints.all(path => path.segments.len() == 0
+        or path.segments.any(subpath => subpath.last().len() == 0)))
+    }
+    assert.eq(kurvst.frames(carrier, shifts, format: "cbor"),
+      cbor.encode(kurvst.frames(carrier, shifts)))
     for (shift, slice) in shifts.zip(slices) {
       let expected = (path: carrier.at("path", default: carrier), offset: 0)
       if kurvst.segments(carrier).len() > 0 {
@@ -74,3 +99,15 @@
     assert.eq(cbor.encode(slice.segments), cbor.encode(reference.segments))
   }
 }
+
+// The single Bezier drawing path ignores an attached multi-path unit.
+#let single = kurvst.layers(base, (0,), format: "cbor", unit: 0)
+#assert(single.supported and single.all-single)
+#let multi = kurvst.path(kurvst.move-to((0, 0)), kurvst.line-to((1, 2)), kurvst.line-to((3, 0)))
+#let collapsed = kurvst.layers(multi, (0,), format: "cbor", unit: 0)
+#assert(not collapsed.supported and not collapsed.all-single)
+#let empty-batch = kurvst.layers(base, (), format: "cbor")
+#assert.eq(empty-batch.count, 0)
+#assert.eq(cbor(empty-batch.layers), ())
+#assert.eq(cbor(empty-batch.footprints), ())
+#assert(not empty-batch.all-single and not empty-batch.nonzero)

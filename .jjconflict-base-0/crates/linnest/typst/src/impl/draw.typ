@@ -1749,7 +1749,7 @@
 
 // The native batch receives actual canonical geometry, not an approximate head
 // envelope. Context-dependent hooks and shapes retain their drawing semantics.
-#let _mark-carrier-footprint-spec(ctx, paths, style) = {
+#let _mark-carrier-footprint-spec(ctx, packets, style) = {
   if (not _has-mark(style) or _has-pattern(style) or ctx.debug
     or (type(ctx.resolve-coordinate) == array and ctx.resolve-coordinate.len() > 0)
     or cetz.mark.check-mark(cetz.styles.resolve(ctx.style, root: "line").mark)
@@ -1767,8 +1767,12 @@
   if (flat and transform.at(0).at(0) * transform.at(1).at(1)
       - transform.at(0).at(1) * transform.at(1).at(0) == 0) { return none }
   let mark-ctx = ctx + (resolve-coordinate: ())
-  let numeric-paths = ()
-  let any-nonzero = false
+  let unit = draw-style.at("unit", default: 1)
+  if packets.any(packet => not packet.supported or (
+    not packet.all-single and (type(unit) not in (int, float) or unit == 0)
+  )) { return none }
+  // Zero-length carriers never evaluate custom mark shapes when painted.
+  if not packets.any(packet => packet.nonzero) { return none }
   // A single cubic uses the Bezier root. Longer carriers use merge-path's
   // unrooted style, just as _mark-carrier-input does for painting.
   let shaft-styles = ()
@@ -1780,29 +1784,6 @@
       shaft-visible: shaft.stroke != none or shaft.fill != none,
     ))
   }
-  for path in paths {
-    let segments = curve-api.segments(path)
-    for segment in segments {
-      if (segment.start != segment.control-start or segment.start != segment.control-end
-        or segment.start != segment.end) { any-nonzero = true }
-    }
-    // Single lines/quadratics are elevated to cubics by the painted owner too.
-    let local = if segments.len() == 1 { curve-api.from-cubic(segments.first()) } else { path }
-    let unit = if segments.len() == 1 { 1 } else { draw-style.at("unit", default: 1) }
-    // Non-numeric units need coordinate resolution; a zero unit suppresses
-    // custom shape evaluation by collapsing the painted carrier.
-    if type(unit) not in (int, float) or unit == 0 { return none }
-    let subpaths = curve-api.to-cetz-data(local, unit: unit)
-    // Empty move-only subpaths use primitive processing in Kurvst; they do
-    // not contribute an origin or a connector to the painted carrier.
-    if subpaths.any(path => path.last().len() == 0) { return none }
-    numeric-paths.push((
-      segments: subpaths,
-      ..shaft-styles.at(if segments.len() == 1 { 0 } else { 1 }),
-    ))
-  }
-  // Zero-length carriers never evaluate custom mark shapes when painted.
-  if not any-nonzero { return none }
   let templates = _mark-templates(mark-ctx, resolved.mark, none)
   if templates == none { return none }
   let mark-ratio = _mark-ratio(style)
@@ -1842,7 +1823,8 @@
       ))
     }
   }
-  (paths: numeric-paths, transform: ctx.transform,
+  (paths: packets.map(packet => packet.footprints), shaft-styles: shaft-styles,
+    transform: ctx.transform,
     flat: flat,
     ratio: mark-ratio, shift: _style-value(style, "mark-shift"), marks: marks)
 }
@@ -2122,12 +2104,14 @@
 // One native request owns all candidate shaft/mark bounds for this label.
 // The general rendering owner remains the reference for geometry whose custom
 // callbacks depend on the individual carrier or on CeTZ's evolving context.
-#let _annotation-candidate-bounds(ctx, paths, style) = {
-  let spec = _mark-carrier-footprint-spec(ctx, paths, style)
+#let _annotation-candidate-bounds(ctx, packets, style) = {
+  let spec = _mark-carrier-footprint-spec(ctx, packets, style)
   if spec == none {
+    let paths = packets.map(packet => cbor(packet.layers).map(layer =>
+      layer.path + (offset: packet.offset))).flatten()
     _annotation-path-bounds(ctx, paths.map(path =>
       _derived-path(path, style, auto, true, true)))
-  } else { cetz.mark.footprints(spec) }
+  } else { cetz.mark.footprints(spec, format: "cbor") }
 }
 
 // Flatten only the finite attachment geometry. Affine transformation happens
@@ -2215,7 +2199,12 @@
       total: total, preferred: preferred, low: low, high: high,
     )
   })
-  let candidates = ()
+  let batches = ()
+  let packets = ()
+  let candidate-count = 0
+  let arrow-unit = if attached == none { 1 } else {
+    _draw-style(_positioned-mark-style(attached)).at("unit", default: 1)
+  }
   for (path-index, options) in path-options.enumerate() {
     let positions = (options.preferred,)
     if movable {
@@ -2225,17 +2214,16 @@
     }
     let candidate-path = paths.at(path-index)
     let candidate-side = sides.at(path-index)
-    // Batch prefix trims and coordinate transforms before attaching the finite
-    // arrow footprint and enforcing its shared clearance with the text.
-    let frames = if fixed-position != none { (frame,) } else {
-      curve-api.frames(candidate-path, positions.map(at => options.total / 2 + (at - options.total / 2)), accuracy: accuracy)
-    }
-    // Slice every shifted arrow together, retaining the exact per-candidate
-    // displacement. Only the chosen arrow is materialized through CeTZ.
-    let arrows = if attached == none { positions.map(_ => none) }
-    else if curve-api.elements(candidate-path).len() == 0 {
-      positions.map(_ => (path: candidate-path, segments: ()))
+    // Native stages exchange geometry as bytes. Typst retains only candidate
+    // enumeration and style decisions until the selected records return.
+    let frames = if fixed-position != none {
+      ((point: frame.point.map(float), tangent: frame.tangent.map(float)),)
     } else {
+      curve-api.frames(candidate-path,
+        positions.map(at => options.total / 2 + (at - options.total / 2)),
+        accuracy: accuracy, format: "cbor")
+    }
+    let arrows = if attached == none { none } else {
       let geometry = _edge-geometry(attached)
       let relative-shift = geometry.shift - shift
       curve-api.layers(candidate-path,
@@ -2243,10 +2231,11 @@
         offset: 0, length: geometry.length, ratio: geometry.ratio,
         resolve-length: geometry.resolve-length,
         accuracy: geometry.accuracy, optimize: geometry.optimize,
+        format: "cbor", unit: if type(arrow-unit) in (int, float) { arrow-unit } else { 1 },
       )
     }
-    let resolved = cbor(_plugin.label_candidates(cbor.encode((
-      frames: frames.map(frame => (point: frame.point.map(float), tangent: frame.tangent.map(float))),
+    let resolved = _plugin.label_candidates(cbor.encode((
+      frames: frames,
       positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),
       origin: origin.map(float), corners: corners.map(corner => corner.map(float)),
       total: float(options.total), preferred: float(options.preferred),
@@ -2256,38 +2245,31 @@
       gap: float(gap), clear-box: clear-box, fixed: fixed-position != none,
       endpoint-direction: if endpoint-direction == none { none } else { _point(endpoint-direction) },
       attachment: if attachment {
-        (carrier: carrier-segments, paths: arrows.map(arrow => if arrow == none { () } else { arrow.segments }))
+        (carrier: carrier-segments, paths: if arrows == none {
+          positions.map(_ => ())
+        } else { arrows.layers })
       } else { none },
-    ))))
-    for (at, candidate, arrow) in positions.zip(resolved, arrows) {
-      candidates.push((
-        position: candidate.position, at: at, side: candidate-side,
-        path-index: path-index, path-shift: candidate.path-shift,
-        annotation-path: if arrow == none { none } else { arrow.path },
-        corners: candidate.corners, bounds: candidate.bounds, cost: candidate.cost,
-      ))
-    }
+    )))
+    batches.push((candidates: resolved, positions: positions,
+      side: candidate-side, path-index: path-index))
+    candidate-count += positions.len()
+    if arrows != none { packets.push(arrows) }
   }
-  let footprints = if placement and attached != none {
-    _annotation-candidate-bounds(ctx, candidates.map(candidate => candidate.annotation-path), attached)
-  } else { candidates.map(_ => ()) }
-  for i in range(candidates.len()) {
-    let candidate = candidates.at(i)
-    let _ = candidate.remove("annotation-path")
-    candidate.arrow-bounds = footprints.at(i)
-    candidates.at(i) = candidate
-  }
-  if attached == none and sides.len() == 2 {
-    let count = calc.quo(candidates.len(), 2)
-    candidates = range(count).map(i => (candidates.at(i), candidates.at(i + count))).flatten()
-  }
+  let candidates = (
+    batches: batches, count: candidate-count,
+    footprints: if placement and attached != none {
+      _annotation-candidate-bounds(ctx, packets, attached)
+    } else { none },
+    interleave: attached == none and sides.len() == 2,
+  )
   if placement {
     (
       label: label, style: label-style, candidates: candidates,
       edge: data.at("eid", default: none), paths: paths, path-style: attached,
     )
   } else {
-    cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
+    let first = cbor(_plugin.label_first(cbor.encode(candidates)))
+    cetz.draw.content(first.position, label, padding: 0, ..label-style)
   }
 }
 
@@ -2348,12 +2330,16 @@
 // temporarily worse move; a short joint descent settles remaining collisions.
 #let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: ()) = {
   assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
-  if placements.all(label => label.candidates.len() == 1) {
-    return placements.map(label => label.candidates.first())
-  }
-  let coordinated = placements.any(label => label.candidates.any(candidate => (
-    candidate.keys().contains("arrow-bounds")
-  )))
+  if placements.len() == 0 { return () }
+  let fixed = placements.all(label => (
+    if type(label.candidates) == dictionary { label.candidates.count }
+    else { label.candidates.len() }
+  ) == 1)
+  let coordinated = placements.any(label => (
+    type(label.candidates) == dictionary or label.candidates.any(candidate => (
+      candidate.keys().contains("arrow-bounds")
+    ))
+  ))
   // Normal clearance handles ordinary carriers. Only actual text intersections,
   // vertices and self-loop bends contribute static annotation penalties.
   let obstacles = if coordinated { obstacles.filter(obstacle => (
@@ -2362,19 +2348,15 @@
   let geometry = cbor.encode((
     placements: placements.map(label => (
       edge: label.at("edge", default: none),
-      candidates: label.candidates.map(candidate => (
-        bounds: candidate.bounds,
-        cost: candidate.cost,
-        corners: if candidate.keys().contains("corners") { candidate.corners.map(_point) } else { none },
-        arrow-bounds: candidate.at("arrow-bounds", default: ()),
-      )),
+      candidates: label.candidates,
     )),
     obstacles: obstacles, label-padding: label-padding,
     fixed-arrows: fixed-arrows, coordinated: coordinated, edge-lines: edge-lines,
+    fixed: fixed,
     obstacle-padding: _label-collision-padding.obstacles,
   ))
   let math = (
-    temperatures: range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)),
+    temperatures: if fixed { () } else { range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)) },
     exponentials: (), pair-padding: _label-collision-padding.labels,
   )
   let result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
@@ -2394,9 +2376,7 @@
     if verified { break }
     result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
   }
-  placements.enumerate().map(((i, label)) => {
-    label.candidates.at(result.choices.at(i)) + (cost: result.costs.at(i))
-  })
+  result.selected
 }
 
 #let _paired-layer-label-element(
@@ -4170,7 +4150,7 @@
         // curves unless an annotation can actually move. Keep each layer's
         // original context and processing boundary when materializing its lines.
         let edge-lines = ()
-        if label-placements.any(label => label.candidates.len() > 1) {
+        if label-placements.any(label => label.candidates.count > 1) {
           for layer in edge-layers {
             edge-lines += _edge-collision-lines(layer.ctx, layer.elements)
           }
