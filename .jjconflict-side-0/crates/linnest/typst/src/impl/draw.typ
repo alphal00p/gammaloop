@@ -2230,19 +2230,21 @@
     let frames = if fixed-position != none { (frame,) } else {
       curve-api.frames(candidate-path, positions.map(at => options.total / 2 + (at - options.total / 2)), accuracy: accuracy)
     }
-    // Candidate arrows stay numeric. Only the selected arrow is materialized
-    // through CeTZ; the shared batch owns clearance against the finite path.
-    let arrows = positions.map(at => if attached == none { none } else {
-      let arrow-style = attached + (
-        offset: 0, offset-side: none,
-        shift: at - options.total / 2 + (_style-value(attached, "shift") - shift),
+    // Slice every shifted arrow together, retaining the exact per-candidate
+    // displacement. Only the chosen arrow is materialized through CeTZ.
+    let arrows = if attached == none { positions.map(_ => none) }
+    else if curve-api.elements(candidate-path).len() == 0 {
+      positions.map(_ => (path: candidate-path, segments: ()))
+    } else {
+      let geometry = _edge-geometry(attached)
+      let relative-shift = geometry.shift - shift
+      curve-api.layers(candidate-path,
+        positions.map(at => at - options.total / 2 + relative-shift),
+        offset: 0, length: geometry.length, ratio: geometry.ratio,
+        resolve-length: geometry.resolve-length,
+        accuracy: geometry.accuracy, optimize: geometry.optimize,
       )
-      let arrow-path = _path-layer(candidate-path, arrow-style, 0, 0, none, auto)
-      (
-        segments: if attachment { curve-api.segments(arrow-path) } else { () },
-        path: arrow-path,
-      )
-    })
+    }
     let resolved = cbor(_plugin.label_candidates(cbor.encode((
       frames: frames.map(frame => (point: frame.point.map(float), tangent: frame.tangent.map(float))),
       positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),

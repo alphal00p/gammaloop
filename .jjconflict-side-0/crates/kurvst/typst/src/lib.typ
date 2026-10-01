@@ -22,6 +22,7 @@
   hobby-through as _impl-hobby-through,
   intersections as _impl-intersections,
   layer as _impl-layer,
+  layers as _impl-layers,
   layer-defaults as _impl-layer-defaults,
   length as _impl-length,
   line as _impl-line,
@@ -522,6 +523,40 @@
   end-outset: end-outset,
   side-point: side-point,
   accuracy: accuracy,
+  optimize: optimize,
+)
+
+/// Build several shifted layers with one carrier preparation.
+/// Each result contains the normal layer `path` dictionary and its drawable
+/// cubic `segments`. Length resolution and offsetting match @layer.
+/// -> array
+#let layers(
+  /// Base Kurvst path dictionary. -> dictionary
+  path,
+  /// Arc-length displacements, clamped as in @layer. -> array
+  shifts,
+  /// Signed normal offset distance. -> int | float
+  offset: 0,
+  /// Fixed target visible length. -> none | int | float
+  length: none,
+  /// Relative target visible length. -> none | int | float
+  ratio: none,
+  /// Resolution strategy for fixed and relative targets. -> string | function
+  resolve-length: "min",
+  /// Arc length removed from the start. -> int | float
+  start-outset: 0,
+  /// Arc length removed from the end. -> int | float
+  end-outset: 0,
+  /// Optional point choosing the offset sign. -> none | array
+  side-point: none,
+  /// Geometry approximation accuracy. -> float
+  accuracy: 0.001,
+  /// Optimize fitted parallel paths. -> bool
+  optimize: true,
+) = _impl-layers(
+  path, shifts, offset: offset, length: length, ratio: ratio,
+  resolve-length: resolve-length, start-outset: start-outset,
+  end-outset: end-outset, side-point: side-point, accuracy: accuracy,
   optimize: optimize,
 )
 

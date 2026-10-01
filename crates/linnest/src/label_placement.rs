@@ -5,7 +5,7 @@
 //! per-candidate transforms, collision costs and search without changing positions,
 //! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{cell::Cell, collections::BTreeMap};
 
 #[derive(Deserialize)]
 struct Frame {
@@ -596,6 +596,10 @@ struct CollisionSpec {
 }
 
 struct CollisionGeometry {
+    pair_padding: f64,
+    pair_envelopes: Vec<Vec<Option<Bounds>>>,
+    pair_offsets: Vec<usize>,
+    pair_cost_cache: Vec<Cell<(usize, usize, usize, f64)>>,
     boxes: Vec<Vec<Bounds>>,
     areas: Vec<Vec<f64>>,
     extents: Vec<Bounds>,
@@ -704,6 +708,46 @@ impl ExponentialCheck {
 
 impl CollisionGeometry {
     fn pair_cost(&self, i: usize, choice: usize, j: usize, other: usize, padding: f64) -> f64 {
+        // Keep the most recent partner choice for each (candidate, label).
+        // Costs are directional: reversing the operands changes addition order.
+        // Colliding slots only evict work; all three indices certify a hit.
+        if padding.to_bits() != self.pair_padding.to_bits() {
+            return self.compute_pair_cost(i, choice, j, other, padding);
+        }
+        let candidate = self.pair_offsets[i] + choice;
+        let index = candidate.wrapping_mul(self.boxes.len()).wrapping_add(j)
+            & (self.pair_cost_cache.len() - 1);
+        let entry = &self.pair_cost_cache[index];
+        let cached = entry.get();
+        if (cached.0, cached.1, cached.2) == (candidate, j, other) {
+            return cached.3;
+        }
+        // Finite text/arrow envelopes can prove every overlap term is zero.
+        // local_cost still adds that zero, preserving numeric types and -0.0.
+        let separated = match (
+            self.pair_envelopes[i][choice],
+            self.pair_envelopes[j][other],
+        ) {
+            (Some(left), Some(right)) => left.overlap(right, padding) == 0.0,
+            _ => false,
+        };
+        let cost = if separated {
+            0.0
+        } else {
+            self.compute_pair_cost(i, choice, j, other, padding)
+        };
+        entry.set((candidate, j, other, cost));
+        cost
+    }
+
+    fn compute_pair_cost(
+        &self,
+        i: usize,
+        choice: usize,
+        j: usize,
+        other: usize,
+        padding: f64,
+    ) -> f64 {
         let bounds = self.boxes[i][choice];
         let other_bounds = self.boxes[j][other];
         let area = self.areas[i][choice];
@@ -957,6 +1001,10 @@ impl CollisionGeometry {
 impl CollisionSpec {
     fn geometry(&self, pair_padding: f64) -> Result<CollisionGeometry, String> {
         let mut geometry = CollisionGeometry {
+            pair_padding,
+            pair_envelopes: Vec::new(),
+            pair_offsets: Vec::new(),
+            pair_cost_cache: Vec::new(),
             boxes: Vec::with_capacity(self.placements.len()),
             areas: Vec::with_capacity(self.placements.len()),
             extents: Vec::with_capacity(self.placements.len()),
@@ -1038,6 +1086,54 @@ impl CollisionSpec {
             geometry.extents.push(extent);
             geometry.costs.push(costs);
         }
+        // Build envelopes only where the original area/division arithmetic is
+        // finite. Nonfinite geometry keeps the original per-piece evaluation.
+        geometry.pair_envelopes = geometry
+            .boxes
+            .iter()
+            .enumerate()
+            .map(|(i, boxes)| {
+                boxes
+                    .iter()
+                    .enumerate()
+                    .map(|(c, bounds)| {
+                        let finite = |b: &Bounds| {
+                            [b.left, b.right, b.bottom, b.top]
+                                .iter()
+                                .all(|v| v.is_finite())
+                                && ((b.right - b.left) * (b.top - b.bottom)).is_finite()
+                        };
+                        (finite(bounds)
+                            && geometry.areas[i][c].is_finite()
+                            && geometry.arrows[i][c].iter().all(finite))
+                        .then(|| {
+                            geometry.arrows[i][c]
+                                .iter()
+                                .fold(*bounds, |all, &arrow| all.union(arrow))
+                        })
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut candidates = 0;
+        geometry.pair_offsets = geometry
+            .boxes
+            .iter()
+            .map(|boxes| {
+                let offset = candidates;
+                candidates += boxes.len();
+                offset
+            })
+            .collect();
+        // Bound cache memory independently of graph/candidate counts. The
+        // wrapping slot calculation remains safe because hits compare full keys.
+        let capacity = candidates
+            .saturating_mul(geometry.boxes.len())
+            .clamp(1, 65_536)
+            .next_power_of_two();
+        geometry.pair_cost_cache = (0..capacity)
+            .map(|_| Cell::new((usize::MAX, usize::MAX, usize::MAX, 0.0)))
+            .collect();
         Ok(geometry)
     }
 }
@@ -1210,6 +1306,75 @@ pub fn path_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_pair_costs_preserve_ordered_bits_and_eviction() {
+        let box_at = |x: f64, y: f64, width: f64, height: f64| Bounds {
+            left: x,
+            right: x + width,
+            bottom: y,
+            top: y + height,
+        };
+        for padding in [0.0, -0.0, 0.2, -0.1, f64::INFINITY, f64::NAN] {
+            let spec = CollisionSpec {
+                edge_lines: Vec::new(),
+                obstacles: Vec::new(),
+                fixed_arrows: Vec::new(),
+                label_padding: 0.0,
+                obstacle_padding: 0.0,
+                coordinated: true,
+                placements: (0..4)
+                    .map(|label| CollisionLabel {
+                        edge: None,
+                        candidates: (0..5)
+                            .map(|choice| {
+                                let x = label as f64 * 0.3 + choice as f64 * 0.15;
+                                let y = label as f64 * 0.2 - choice as f64 * 0.25;
+                                CollisionCandidate {
+                                    bounds: if choice == 4 {
+                                        box_at(x, y, f64::INFINITY, f64::INFINITY)
+                                    } else {
+                                        box_at(x, y, 0.7, 0.3)
+                                    },
+                                    cost: ciborium::Value::Integer(0.into()),
+                                    corners: None,
+                                    arrow_bounds: vec![
+                                        box_at(x - 0.2, y, 0.8, 0.2),
+                                        box_at(x + 0.1, y - 0.1, 0.3, 0.8),
+                                    ],
+                                }
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            };
+            let mut geometry = spec.geometry(padding).unwrap();
+            for capacity in [geometry.pair_cost_cache.len(), 1] {
+                geometry.pair_cost_cache.truncate(capacity);
+                for i in 0..4 {
+                    for choice in 0..5 {
+                        for j in (0..4).rev() {
+                            for other in (0..5).rev() {
+                                let expected =
+                                    geometry.compute_pair_cost(i, choice, j, other, padding);
+                                for _ in 0..2 {
+                                    assert_eq!(
+                                        geometry.pair_cost(i, choice, j, other, padding).to_bits(),
+                                        expected.to_bits()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // A different padding must not reuse an entry from the prepared geometry.
+            assert_eq!(
+                geometry.pair_cost(0, 0, 1, 0, 0.7).to_bits(),
+                geometry.compute_pair_cost(0, 0, 1, 0, 0.7).to_bits()
+            );
+        }
+    }
 
     #[test]
     fn finite_edge_intersection_preserves_cost_types_and_search_addition() {

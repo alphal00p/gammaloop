@@ -7,7 +7,7 @@ use serde::{
     de::{self, SeqAccess, Visitor},
     ser::SerializeTuple,
 };
-use std::fmt;
+use std::{cell::OnceCell, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurvePoint {
@@ -79,9 +79,9 @@ impl<'de> Visitor<'de> for CurvePointVisitor {
 #[serde(rename_all = "kebab-case")]
 pub struct CubicBezierSpec {
     pub start: CurvePoint,
-    pub end: CurvePoint,
     pub control_start: CurvePoint,
     pub control_end: CurvePoint,
+    pub end: CurvePoint,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -98,6 +98,34 @@ pub struct TrimPathSpec {
         deserialize_with = "deserialize_f64"
     )]
     pub accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TrimPathsSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    path: BezPath,
+    outsets: Vec<PathOutsets>,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PathOutsets {
+    #[serde(deserialize_with = "deserialize_f64")]
+    start_outset: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    end_outset: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct PathLayerOutput {
+    path: CurvePathOutput,
+    segments: Vec<CubicBezierSpec>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -701,6 +729,12 @@ pub fn curve_trim_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+pub fn curve_trim_paths_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: TrimPathsSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path trim batch: {err}"))?;
+    encode_cbor(&trim_paths(spec)?)
+}
+
 pub fn curve_hobby_through_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: HobbyThroughSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize Hobby curve spec: {err}"))?;
@@ -934,6 +968,7 @@ impl PathFramesSpec {
             .iter()
             .map(|segment| segment.arclen(accuracy))
             .sum();
+        let trimmer = PathTrimmer::new(segments.iter().copied(), accuracy);
         self.distances
             .into_iter()
             .map(|distance| {
@@ -951,8 +986,7 @@ impl PathFramesSpec {
                 } else if total <= accuracy {
                     (*first, false)
                 } else {
-                    let prefix =
-                        trim_path_segments(segments.iter().copied(), 0.0, total - at, accuracy)?;
+                    let prefix = trimmer.trim(0.0, total - at)?;
                     (*prefix.last().unwrap_or(first), !prefix.is_empty())
                 };
                 Ok(Some(
@@ -980,8 +1014,28 @@ fn trim_path(spec: TrimPathSpec) -> Result<CurvePathOutput, String> {
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     let start_outset = validate_outset(spec.start_outset, "start")?;
     let end_outset = validate_outset(spec.end_outset, "end")?;
-    let segments = trim_path_segments(spec.path.segments(), start_outset, end_outset, accuracy)?;
+    let segments =
+        PathTrimmer::new(spec.path.segments(), accuracy).trim(start_outset, end_outset)?;
     curve_path_from_segments(segments)
+}
+
+fn trim_paths(spec: TrimPathsSpec) -> Result<Vec<PathLayerOutput>, String> {
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let trimmer = PathTrimmer::new(spec.path.segments(), accuracy);
+    spec.outsets
+        .into_iter()
+        .map(|outsets| {
+            let start = validate_outset(outsets.start_outset, "start")?;
+            let end = validate_outset(outsets.end_outset, "end")?;
+            let path = curve_path_from_segments(trimmer.trim(start, end)?)?;
+            let segments = path
+                .path
+                .segments()
+                .map(CubicBezierSpec::drawable)
+                .collect();
+            Ok(PathLayerOutput { path, segments })
+        })
+        .collect()
 }
 
 fn path_length(spec: PathLengthSpec) -> Result<f64, String> {
@@ -1357,7 +1411,7 @@ fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
         .segments()
         .flat_map(|segment| offset_path_segment(segment, distance, accuracy))
         .collect::<Vec<_>>();
-    let segments = trim_path_segments(offset_segments, start_outset, end_outset, accuracy)?;
+    let segments = PathTrimmer::new(offset_segments, accuracy).trim(start_outset, end_outset)?;
     curve_path_from_segments(segments)
 }
 
@@ -1674,67 +1728,83 @@ fn curve_path_from_segments(
     Ok(CurvePathOutput { path })
 }
 
-fn trim_path_segments(
-    segments: impl IntoIterator<Item = PathSeg>,
-    start_outset: f64,
-    end_outset: f64,
+// One measured carrier can serve many trim windows. Scalar trims use this
+// same owner; untouched paths still avoid arc-length measurement entirely.
+struct PathTrimmer {
+    segments: Vec<PathSeg>,
     accuracy: f64,
-) -> Result<Vec<PathSeg>, String> {
-    let segments: Vec<_> = segments.into_iter().collect();
-    if start_outset == 0.0 && end_outset == 0.0 {
-        return Ok(segments);
-    }
+    lengths: OnceCell<(Vec<f64>, f64)>,
+}
 
-    let lengths: Vec<_> = segments
-        .iter()
-        .map(|segment| segment.arclen(accuracy))
-        .collect();
-    let length: f64 = lengths.iter().sum();
-    if length <= f64::EPSILON {
-        return Ok(segments);
-    }
-
-    let (start_outset, end_outset) = fit_outsets_to_length(start_outset, end_outset, length);
-    let visible_start = start_outset;
-    let visible_end = length - end_outset;
-    if visible_end <= visible_start {
-        return Err("path trim distances leave no visible path".to_string());
-    }
-
-    let mut cursor = 0.0;
-    let mut trimmed = Vec::new();
-    for (segment, segment_length) in segments.into_iter().zip(lengths) {
-        let segment_start = cursor;
-        let segment_end = cursor + segment_length;
-        cursor = segment_end;
-
-        let keep_start = visible_start.max(segment_start);
-        let keep_end = visible_end.min(segment_end);
-        if keep_end <= keep_start {
-            continue;
-        }
-
-        let local_start = keep_start - segment_start;
-        let local_end = keep_end - segment_start;
-        let t0 = if local_start <= f64::EPSILON {
-            0.0
-        } else {
-            segment.inv_arclen(local_start, accuracy)
-        };
-        let t1 = if segment_length - local_end <= f64::EPSILON {
-            1.0
-        } else {
-            segment.inv_arclen(local_end, accuracy)
-        };
-        if t1 > t0 {
-            trimmed.push(segment.subsegment(t0..t1));
+impl PathTrimmer {
+    fn new(segments: impl IntoIterator<Item = PathSeg>, accuracy: f64) -> Self {
+        Self {
+            segments: segments.into_iter().collect(),
+            accuracy,
+            lengths: OnceCell::new(),
         }
     }
 
-    if trimmed.is_empty() {
-        return Err("path trimming produced no visible path".to_string());
+    fn trim(&self, start_outset: f64, end_outset: f64) -> Result<Vec<PathSeg>, String> {
+        if start_outset == 0.0 && end_outset == 0.0 {
+            return Ok(self.segments.clone());
+        }
+        let (lengths, length) = self.lengths.get_or_init(|| {
+            let lengths: Vec<_> = self
+                .segments
+                .iter()
+                .map(|segment| segment.arclen(self.accuracy))
+                .collect();
+            let length = lengths.iter().sum();
+            (lengths, length)
+        });
+        let length = *length;
+        if length <= f64::EPSILON {
+            return Ok(self.segments.clone());
+        }
+        let (start_outset, end_outset) = fit_outsets_to_length(start_outset, end_outset, length);
+        let visible_start = start_outset;
+        let visible_end = length - end_outset;
+        if visible_end <= visible_start {
+            return Err("path trim distances leave no visible path".to_string());
+        }
+
+        let mut cursor = 0.0;
+        let mut trimmed = Vec::new();
+        for (segment, segment_length) in self.segments.iter().copied().zip(lengths.iter().copied())
+        {
+            let segment_start = cursor;
+            let segment_end = cursor + segment_length;
+            cursor = segment_end;
+
+            let keep_start = visible_start.max(segment_start);
+            let keep_end = visible_end.min(segment_end);
+            if keep_end <= keep_start {
+                continue;
+            }
+
+            let local_start = keep_start - segment_start;
+            let local_end = keep_end - segment_start;
+            let t0 = if local_start <= f64::EPSILON {
+                0.0
+            } else {
+                segment.inv_arclen(local_start, self.accuracy)
+            };
+            let t1 = if segment_length - local_end <= f64::EPSILON {
+                1.0
+            } else {
+                segment.inv_arclen(local_end, self.accuracy)
+            };
+            if t1 > t0 {
+                trimmed.push(segment.subsegment(t0..t1));
+            }
+        }
+
+        if trimmed.is_empty() {
+            return Err("path trimming produced no visible path".to_string());
+        }
+        Ok(trimmed)
     }
-    Ok(trimmed)
 }
 
 fn fit_outsets_to_length(start_outset: f64, end_outset: f64, length: f64) -> (f64, f64) {
@@ -2497,6 +2567,94 @@ mod tests {
 
         assert_point_close(points[0], point(0.25, 0.0));
         assert_point_close(*points.last().unwrap(), point(2.5, 0.0));
+    }
+
+    #[test]
+    fn shifted_trim_batch_reuses_measurements_without_changing_windows() {
+        let mut disconnected = straight_path(3.0);
+        disconnected.move_to((5.0, 1.0));
+        disconnected.quad_to((6.0, 3.0), (8.0, 1.0));
+        disconnected.close_path();
+        let mut curved = BezPath::new();
+        curved.move_to((0.0, 0.0));
+        curved.curve_to((0.5, 2.0), (2.5, -1.0), (3.0, 0.0));
+        for path in [straight_path(3.0), curved, disconnected, straight_path(0.0)] {
+            let outsets = [
+                (0.0, -0.0),
+                (0.25, 0.5),
+                (1.25, 0.25),
+                (20.0, 30.0),
+                (0.0, 0.0),
+            ];
+            let batch = trim_paths(TrimPathsSpec {
+                path: path.clone(),
+                outsets: outsets
+                    .iter()
+                    .map(|&(start_outset, end_outset)| PathOutsets {
+                        start_outset,
+                        end_outset,
+                    })
+                    .collect(),
+                accuracy: 1e-6,
+            })
+            .unwrap();
+            for (actual, (start_outset, end_outset)) in batch.iter().zip(outsets) {
+                let expected = trim_path(TrimPathSpec {
+                    path: path.clone(),
+                    start_outset,
+                    end_outset,
+                    accuracy: 1e-6,
+                })
+                .unwrap();
+                assert_eq!(
+                    encode_cbor(&actual.path).unwrap(),
+                    encode_cbor(&expected).unwrap()
+                );
+                assert_eq!(
+                    actual.segments,
+                    expected
+                        .path
+                        .segments()
+                        .map(CubicBezierSpec::drawable)
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+
+        let path = straight_path(3.0);
+        let trimmer = PathTrimmer::new(path.segments(), 1e-6);
+        trimmer.trim(0.0, 0.0).unwrap();
+        assert!(trimmer.lengths.get().is_none());
+        let first = trimmer.trim(0.25, 0.5).unwrap();
+        assert!(trimmer.lengths.get().is_some());
+        assert_point_close(first[0].start().into(), point(0.25, 0.0));
+        assert_point_close(first.last().unwrap().end().into(), point(2.5, 0.0));
+        let second = trimmer.trim(1.0, 0.25).unwrap();
+        assert_point_close(second[0].start().into(), point(1.0, 0.0));
+        assert_point_close(second.last().unwrap().end().into(), point(2.75, 0.0));
+    }
+
+    #[test]
+    fn shifted_trim_batch_retains_validation_and_empty_batches() {
+        let spec = |outsets, accuracy| TrimPathsSpec {
+            path: straight_path(3.0),
+            outsets,
+            accuracy,
+        };
+        assert!(trim_paths(spec(vec![], 1e-6)).unwrap().is_empty());
+        assert!(trim_paths(spec(vec![], 0.0)).is_err());
+        for start_outset in [-1.0, f64::NAN, f64::INFINITY] {
+            assert!(
+                trim_paths(spec(
+                    vec![PathOutsets {
+                        start_outset,
+                        end_outset: 0.0,
+                    }],
+                    1e-6,
+                ))
+                .is_err()
+            );
+        }
     }
 
     #[test]

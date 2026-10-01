@@ -883,6 +883,54 @@
   ))))
 }
 
+// Prepare shifted windows together while retaining the scalar layer semantics.
+#let layers(
+  path,
+  shifts,
+  offset: 0,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  start-outset: 0,
+  end-outset: 0,
+  side-point: none,
+  accuracy: 0.001,
+  optimize: true,
+) = {
+  let distance = _offset-toward-side-point(path, offset, side-point)
+  if distance != none and distance != 0 {
+    path = parallel(
+      path,
+      distance: distance,
+      accuracy: accuracy,
+      optimize: optimize,
+    )
+  }
+  // Keep empty paths drawable; trim requires at least one segment.
+  if segments(path).len() == 0 {
+    return shifts.map(_ => (path: (path: _path-value(path), offset: distance), segments: ()))
+  }
+  let center-trim = center-outset(
+    _length(path, accuracy: accuracy),
+    length: length,
+    ratio: ratio,
+    resolve-length: resolve-length,
+    start-outset: start-outset,
+    end-outset: end-outset,
+  )
+  // Keep Typst's numeric types, signed zeros and left-to-right arithmetic.
+  // Only the shared geometric trimming and cubic conversion cross to native.
+  let outsets = shifts.map(shift => {
+    let shift = calc.max(-center-trim, calc.min(center-trim, shift))
+    (start-outset: start-outset + center-trim + shift,
+      end-outset: end-outset + center-trim - shift)
+  })
+  let slices = cbor(_plugin.curve_trim_paths(cbor.encode((
+    path: _path-value(path), outsets: outsets, accuracy: accuracy,
+  ))))
+  slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+}
+
 /// Build a derived visible path layer.
 ///
 /// `layer` combines the common operations needed by drawing packages:
@@ -929,36 +977,12 @@
   accuracy: 0.001,
   optimize: true,
 ) = {
-  let distance = _offset-toward-side-point(path, offset, side-point)
-  if distance != none and distance != 0 {
-    path = parallel(
-      path,
-      distance: distance,
-      accuracy: accuracy,
-      optimize: optimize,
-    )
-  }
-  // Keep empty paths drawable; trim requires at least one segment.
-  if segments(path).len() == 0 {
-    return (path: _path-value(path), offset: distance)
-  }
-  let center-trim = center-outset(
-    _length(path, accuracy: accuracy),
-    length: length,
-    ratio: ratio,
-    resolve-length: resolve-length,
-    start-outset: start-outset,
-    end-outset: end-outset,
-  )
-  let shift = calc.max(-center-trim, calc.min(center-trim, shift))
-  let start-outset = start-outset + center-trim + shift
-  let end-outset = end-outset + center-trim - shift
-  trim(
-    path,
-    start-outset: start-outset,
-    end-outset: end-outset,
-    accuracy: accuracy,
-  ) + (offset: distance)
+  layers(
+    path, (shift,), offset: offset, length: length, ratio: ratio,
+    resolve-length: resolve-length, start-outset: start-outset,
+    end-outset: end-outset, side-point: side-point, accuracy: accuracy,
+    optimize: optimize,
+  ).first().path
 }
 
 /// Emit a Kurvst path as native Typst `curve` content.
