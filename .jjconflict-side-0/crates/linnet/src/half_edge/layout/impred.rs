@@ -464,9 +464,20 @@ impl ImpredLayout {
             force[i] += diagonal * Vector2::zero();
             for j in i + 1..self.positions.len() {
                 let difference = self.point(i) - self.point(j);
-                let coefficient = model.pair_weights[i][j]
-                    * (config.target / difference.magnitude().max(config.target * 0.02))
-                        .powf(rep_exponent);
+                let weight = model.pair_weights[i][j];
+                // With a positive distance floor the ratio is bounded (at most
+                // 100 even when the floor is subnormal), and the exponent is
+                // between 2 and 4. A zero weight therefore has a zero coefficient.
+                // Retain the vector additions, including their signed zeros and
+                // overflow behavior; keep the original arithmetic if the floor
+                // itself underflows to zero.
+                let coefficient = if weight == 0.0 && config.target * 0.02 > 0.0 {
+                    weight
+                } else {
+                    weight
+                        * (config.target / difference.magnitude().max(config.target * 0.02))
+                            .powf(rep_exponent)
+                };
                 force[i] += config.repulsion * coefficient * difference;
                 // Recompute the reversed difference rather than negating:
                 // equal coordinates can carry different signed zeros.
@@ -536,7 +547,12 @@ impl ImpredLayout {
         force
     }
 
-    fn separators(&self, model: &Model, pairs: &[PointSegment]) -> Vec<Halfplane> {
+    // The movement certificate also bounds each component by 2*cap. If both
+    // normal components have magnitude at most one, their rounded dot product
+    // cannot exceed 4*cap. Such a distant separator has nonpositive residual
+    // and needs neither matrix storage nor the later residual scan. Infinite
+    // cap retains all separators for geometry inspection and reference checks.
+    fn separators(&self, model: &Model, pairs: &[PointSegment], cap: f64) -> Vec<Halfplane> {
         let mut lengths = Vec::with_capacity(model.segments.len());
         let perpendiculars: Vec<_> = model
             .segments
@@ -575,6 +591,15 @@ impl ImpredLayout {
                 pair.distance
             };
             let room = 0.45 * (distance - clearance).max(0.0);
+            // Both endpoint bounds are at least this shared room, so the
+            // same certificate omits all three rows before endpoint arithmetic.
+            if cap.is_finite()
+                && room >= 4.0 * cap
+                && normal.x.abs() <= 1.0
+                && normal.y.abs() <= 1.0
+            {
+                continue;
+            }
             rows.push(Halfplane {
                 point: pair.point,
                 normal: (-normal).into(),
@@ -599,10 +624,19 @@ impl ImpredLayout {
                 if i != j {
                     let difference = self.point(i) - self.point(j);
                     let distance = difference.magnitude();
+                    let normal = -difference / distance.max(1e-30);
+                    let bound = 0.45 * (distance - clearance).max(0.0);
+                    if cap.is_finite()
+                        && bound >= 4.0 * cap
+                        && normal.x.abs() <= 1.0
+                        && normal.y.abs() <= 1.0
+                    {
+                        continue;
+                    }
                     rows.push(Halfplane {
                         point: i,
-                        normal: (-difference / distance.max(1e-30)).into(),
-                        bound: 0.45 * (distance - clearance).max(0.0),
+                        normal: normal.into(),
+                        bound,
                     });
                 }
             }
@@ -846,7 +880,7 @@ impl ImpredLayout {
                 .map(|force| (force * 0.045).into())
                 .collect();
             let cap = config.target * (0.10 * (1.0 - u) + 0.002);
-            let separators = self.separators(&model, &pairs);
+            let separators = self.separators(&model, &pairs, cap);
             let mut rows: Vec<_> = separators
                 .iter()
                 .filter(|row| row.bound < cap * (1.0 + 1e-12))
@@ -872,9 +906,13 @@ impl ImpredLayout {
                 .iter()
                 .map(|&point| Vector2::from(point).magnitude() - cap)
                 .fold(0.0, f64::max);
-            if separator_error > 2e-9 * cap || cap_error > 2e-9 * cap {
+            // The Euclidean check is tighter for ordinary magnitudes. This
+            // component bound also certifies omitted far separators when squared
+            // lengths underflow, without relying on unit-normal roundoff bounds.
+            let component_error = step.iter().flatten().any(|value| value.abs() > 2.0 * cap);
+            if separator_error > 2e-9 * cap || cap_error > 2e-9 * cap || component_error {
                 return Err(format!(
-                    "ImPrEd movement geometry certificate failed: separators={separator_error},cap={cap_error}"
+                    "ImPrEd movement geometry certificate failed: separators={separator_error},cap={cap_error},component_limit_exceeded={component_error}"
                 ));
             }
             report.max_primal_residual =
@@ -1004,7 +1042,7 @@ mod tests {
                     );
                 }
             }
-            let actual = layout.separators(&model, &pairs);
+            let actual = layout.separators(&model, &pairs, f64::INFINITY);
             assert_eq!(actual.len(), fixture.separators.len(), "{name}");
             let mut used = vec![false; fixture.separators.len()];
             for row in actual {
@@ -1025,6 +1063,55 @@ mod tests {
                 };
                 used[index] = true;
             }
+        }
+    }
+
+    #[test]
+    fn infinite_diagnostic_cap_retains_even_infinite_bound_rows() {
+        let layout = dangling(&[[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [1e200, 0.0]]);
+        let model = layout.model(&[true], 1.0);
+        let pairs = layout.point_segments(&model);
+        let rows = layout.separators(&model, &pairs, f64::INFINITY);
+        assert!(rows.iter().any(|row| row.bound.is_infinite()));
+        assert_eq!(
+            rows.len(),
+            3 * pairs.len() + layout.positions.len() * (layout.positions.len() - 1)
+        );
+    }
+
+    #[test]
+    fn omitted_separators_are_satisfied_at_every_component_cap_corner() {
+        for (name, source) in FIXTURES {
+            let fixture: Fixture = serde_json::from_str(source).unwrap();
+            let layout = fixture.layout;
+            let model = layout.model(&vec![false; layout.routes.len()], 1.0);
+            let pairs = layout.point_segments(&model);
+            let full = layout.separators(&model, &pairs, f64::INFINITY);
+            let key =
+                |row: &Halfplane| (row.point, row.normal.map(f64::to_bits), row.bound.to_bits());
+            let mut omitted = 0;
+            for cap in [f64::from_bits(1), f64::MIN_POSITIVE, 0.001, 0.1, 1.0] {
+                let retained: BTreeSet<_> = layout
+                    .separators(&model, &pairs, cap)
+                    .iter()
+                    .map(key)
+                    .collect();
+                for row in full.iter().filter(|row| !retained.contains(&key(row))) {
+                    omitted += 1;
+                    // A linear separator attains its box maximum at a corner.
+                    // Test the actual floating-point evaluation, including caps
+                    // so small that the Euclidean norm would underflow.
+                    for x in [-2.0 * cap, 2.0 * cap] {
+                        for y in [-2.0 * cap, 2.0 * cap] {
+                            assert!(
+                                row.normal[0] * x + row.normal[1] * y <= row.bound,
+                                "{name}: omitted {row:?} rejects the certified corner {x},{y}"
+                            );
+                        }
+                    }
+                }
+            }
+            assert!(omitted > 0, "{name}: fixture must exercise far-row pruning");
         }
     }
 

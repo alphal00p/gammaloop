@@ -208,6 +208,21 @@ impl MovementDofs {
             .collect()
     }
 
+    /// A halfplane touches at most two independent native coordinates. Preserve
+    /// the axis order and zero additions when constructing its sparse row.
+    #[inline]
+    fn coefficients(&self, row: &Halfplane) -> [(usize, f64); 2] {
+        let mut coefficients = [(self.weights.len(), 0.0); 2];
+        for (axis, &normal) in row.normal.iter().enumerate() {
+            if let Some(column) = self.index[row.point][axis] {
+                let slot = if coefficients[0].0 == column { 0 } else { axis };
+                coefficients[slot].0 = column;
+                coefficients[slot].1 += normal;
+            }
+        }
+        coefficients
+    }
+
     pub fn project(
         &self,
         proposal: &[[f64; 2]],
@@ -222,58 +237,6 @@ impl MovementDofs {
             return Err("Nonfinite force or invalid movement scale".into());
         }
         let count = self.weights.len();
-        let mut matrix = Vec::with_capacity(rows.len());
-        let mut bounds = Vec::with_capacity(rows.len());
-        let mut components = Components::new(count);
-        let mut joined = vec![false; self.index.len()];
-        for row in rows {
-            if row.point >= self.index.len()
-                || !row.bound.is_finite()
-                || !row.normal.iter().all(|x| x.is_finite())
-            {
-                return Err("Nonfinite or invalid movement halfplane".into());
-            }
-            if row.bound < -1e-12 * scale {
-                return Err("Old drawing is outside a movement halfplane".into());
-            }
-            // A halfplane touches at most two independent coordinates. Keep it
-            // sparse until its connected component is known, rather than
-            // materializing and rescanning a global dense matrix.
-            let mut coefficients = [(count, 0.0); 2];
-            let mut first = None;
-            for (axis, &normal) in row.normal.iter().enumerate() {
-                if let Some(column) = self.index[row.point][axis] {
-                    let slot = if coefficients[0].0 == column { 0 } else { axis };
-                    coefficients[slot].0 = column;
-                    coefficients[slot].1 += normal;
-                    if normal != 0.0 {
-                        if let Some(first) = first {
-                            // Every row for this point couples the same two DOFs.
-                            // Repeated joins cannot change their component.
-                            if !joined[row.point] {
-                                components.join(first, column);
-                                joined[row.point] = true;
-                            }
-                        } else {
-                            first = Some(column);
-                        }
-                    }
-                }
-            }
-            if coefficients.iter().any(|(_, value)| *value != 0.0) {
-                matrix.push(coefficients);
-                bounds.push(row.bound.max(0.0) / scale);
-            }
-        }
-        let mut evidence = Certificate {
-            status: "independent convex movement components".into(),
-            rows: bounds.len(),
-            ..Certificate::default()
-        };
-        if count == 0 {
-            evidence.status = "all coordinates fixed".into();
-            return Ok((vec![[0.0; 2]; proposal.len()], evidence));
-        }
         let mut desired = vec![0.0; count];
         for (axes, movement) in self.index.iter().zip(proposal) {
             for axis in 0..2 {
@@ -285,23 +248,58 @@ impl MovementDofs {
         for (value, weight) in desired.iter_mut().zip(&self.weights) {
             *value /= weight * scale;
         }
-        if !desired.iter().chain(&bounds).all(|value| value.is_finite()) {
+        if !desired.iter().all(|value| value.is_finite()) {
             return Err("Nonfinite normalized movement problem".into());
         }
-        // If the grouped proposal satisfies every halfplane, no component
-        // matrix or polygon is needed. The sparse row has at most two entries;
-        // visit them in column order as in the dense dot product.
-        let feasible = matrix.iter().zip(&bounds).all(|(row, &bound)| {
-            let terms = row.map(|(column, coefficient)| {
-                coefficient * desired.get(column).copied().unwrap_or(0.0)
-            });
-            let values = if row[0].0 <= row[1].0 {
-                terms
-            } else {
-                [terms[1], terms[0]]
-            };
-            values.into_iter().sum::<f64>() <= bound
-        });
+        // Validate and test the grouped proposal before allocating sparse matrix
+        // storage. Most late-epoch proposals already satisfy every halfplane.
+        let mut components = Components::new(count);
+        let mut joined = vec![false; self.index.len()];
+        let mut feasible = true;
+        let mut evidence = Certificate {
+            status: "independent convex movement components".into(),
+            ..Certificate::default()
+        };
+        for row in rows {
+            if row.point >= self.index.len()
+                || !row.bound.is_finite()
+                || !row.normal.iter().all(|x| x.is_finite())
+            {
+                return Err("Nonfinite or invalid movement halfplane".into());
+            }
+            if row.bound < -1e-12 * scale {
+                return Err("Old drawing is outside a movement halfplane".into());
+            }
+            let coefficients = self.coefficients(row);
+            // Every row for this point couples the same two DOFs. Repeated joins
+            // cannot change their component; axis-aligned rows do not join them.
+            if !joined[row.point] && coefficients.iter().all(|(_, value)| *value != 0.0) {
+                components.join(coefficients[0].0, coefficients[1].0);
+                joined[row.point] = true;
+            }
+            if coefficients.iter().any(|(_, value)| *value != 0.0) {
+                let bound = row.bound.max(0.0) / scale;
+                if !bound.is_finite() {
+                    return Err("Nonfinite normalized movement problem".into());
+                }
+                evidence.rows += 1;
+                if feasible {
+                    let terms = coefficients.map(|(column, coefficient)| {
+                        coefficient * desired.get(column).copied().unwrap_or(0.0)
+                    });
+                    let values = if coefficients[0].0 <= coefficients[1].0 {
+                        terms
+                    } else {
+                        [terms[1], terms[0]]
+                    };
+                    feasible = values.into_iter().sum::<f64>() <= bound;
+                }
+            }
+        }
+        if count == 0 {
+            evidence.status = "all coordinates fixed".into();
+            return Ok((vec![[0.0; 2]; proposal.len()], evidence));
+        }
         if feasible {
             let mut roots = vec![false; count];
             for column in 0..count {
@@ -317,6 +315,17 @@ impl MovementDofs {
                     .collect(),
                 evidence,
             ));
+        }
+        // Only constrained proposals need an explicit matrix. These rows have
+        // already been validated in the feasibility pass above.
+        let mut matrix = Vec::with_capacity(evidence.rows);
+        let mut bounds = Vec::with_capacity(evidence.rows);
+        for row in rows {
+            let coefficients = self.coefficients(row);
+            if coefficients.iter().any(|(_, value)| *value != 0.0) {
+                matrix.push(coefficients);
+                bounds.push(row.bound.max(0.0) / scale);
+            }
         }
         let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for index in 0..count {

@@ -986,6 +986,26 @@
         }
       }
 
+      // One prepared carrier must still resolve each caller's marks, inherited
+      // stroke, and transform, without retaining a previous caller's context.
+      let reusable = drawing._mark-carrier-elements(
+        curved,
+        (mark: (end: head + (symbol: "straight"))),
+        paint: true,
+      ).flatten()
+      let reference = cetz.process.many(ctx, reusable, compute-bounds: false).drawables
+      let styled = cetz.draw.set-style(stroke: red + 1.2pt).first()(ctx).ctx
+      let transformed = ctx + (transform: cetz.matrix.transform-scale((2, 0.5, 1)))
+      for local in (custom, styled, transformed) {
+        let actual = cetz.process.many(local, reusable, compute-bounds: false).drawables
+        assert.ne(actual, reference, message: "carrier resolves the current context")
+        assert.eq(
+          cetz.process.many(ctx, reusable, compute-bounds: false).drawables,
+          reference,
+          message: "carrier evaluation does not retain another context",
+        )
+      }
+
       // Patterns and crossing gaps only change paint, never the single full-path mark.
       for position in ("end", "center") {
         for symbol in (">", "straight") {
