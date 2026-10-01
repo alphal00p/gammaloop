@@ -1,36 +1,10 @@
 """Factorized contraction route for the existing ladder benchmark fixtures."""
 
-from collections import Counter
 from math import prod
 from time import process_time_ns
 
 from symbolica import E
 from symbolica.community.tensor import TensorExpression
-
-
-def alias_levels(result):
-    """Count retained definitions/weight terms, outside every algebra clock."""
-    depth = {}
-    definitions = Counter()
-    terms = Counter()
-    for handle, body in result.aliases:
-        expression = body.to_expression()
-        pending = [expression]
-        parents = []
-        while pending:
-            node = pending.pop()
-            if node in depth:
-                parents.append(depth[node])
-            elif str(node.get_type()).rsplit(".", 1)[-1] in {"Add", "Mul", "Pow", "Fn"}:
-                pending.extend(node)
-        level = 1 + max(parents, default=0)
-        depth[handle.to_expression()] = level
-        definitions[level] += 1
-        terms[level] += len(list(expression.terms()))
-    return [
-        {"depth": level, "definitions": count, "stored_weight_terms": terms[level]}
-        for level, count in sorted(definitions.items())
-    ]
 
 
 def prepare(case):
@@ -96,9 +70,7 @@ def reduce(case, prepared, observer=None, *, order_policy="graph"):
             order_policy=order_policy,
             vertex_order=list(case.order) if order is not None else None,
             normalized_factor_order=order,
-            aliased_bytes=result.get_byte_size(),
-            definitions=len(result.aliases),
-            alias_levels=alias_levels(result),
+            factorized_bytes=result.get_byte_size(),
             final_terms=len(list(expanded.terms())),
         )
     return expanded

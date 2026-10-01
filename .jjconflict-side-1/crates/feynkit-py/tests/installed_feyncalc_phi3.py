@@ -217,7 +217,6 @@ for label, incoming, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
         numerator = (
             TensorExpression(numerator)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
             .to_expression()
         )

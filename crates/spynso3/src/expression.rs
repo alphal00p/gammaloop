@@ -40,17 +40,15 @@ use spenso::{
 };
 use symbolica::{
     api::python::{
-        ConvertibleToExpression, PythonExpression, PythonExpressionEvaluator, PythonFormattedOutput,
+        ConvertibleToExpression, ConvertibleToPatternRestriction, ConvertibleToReplaceWith,
+        FormattedOutputBackend, PythonExpression, PythonFormattedOutput, PythonReplacement,
+        PythonTransformer,
     },
-    atom::{Atom, AtomView, Symbol},
-    domains::float::Complex,
-    evaluate::{EvaluatorBuilder, OptimizationSettings},
+    atom::{Atom, AtomCore, AtomView, Symbol},
 };
 
 use crate::{
-    ModuleInit, SliceOrIntOrExpanded, Spensor,
-    aliases::AliasedTensorExpression,
-    display,
+    ModuleInit, SliceOrIntOrExpanded, Spensor, display,
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
@@ -67,6 +65,10 @@ use crate::{
 /// Use the exported singleton ``AUTO`` (also available as ``_``), rather than
 /// constructing this type. During index() or reindex(), AUTO leaves that axis
 /// unchanged. It is not a wildcard and not a component coordinate.
+/// Unresolved axes display as hollow squares. When several axes of a tensor
+/// are unresolved, their squares carry zero-based axis numbers, excluding
+/// scalar parameters. These local numbers do not imply contractions. Hover
+/// over a square in HTML output to see its axis and representation.
 ///
 /// Examples
 /// --------
@@ -111,8 +113,13 @@ impl AutoIndex {
 /// to choose a contraction, or ``compose`` to choose matrix channels.
 /// Arithmetic with Tensor or TensorNetwork operands returns a TensorNetwork.
 ///
-/// Simplification may retain shared subexpressions in an AliasedTensorExpression;
-/// its ``to_expression()`` returns a TensorExpression when materialization is needed.
+/// Reductions preserve this tensor type and keep unrelated sums factorized.
+/// Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
+/// ``factor()``, also returns a tensor expression with its ordered interface.
+/// This is a Symbolica ``Expression`` subclass: inspection, matching, evaluators,
+/// and other unoverridden methods are inherited directly. Inherited transformations
+/// return ordinary expressions; the tensor-aware overrides retain the interface.
+/// Use ``to_expression()`` to explicitly drop the tensor interface.
 ///
 /// Pass ``intern="indices"`` to reversibly encode compound index labels, or
 /// ``intern="flattened"`` to create readable names. Both modes operate only on
@@ -131,6 +138,7 @@ impl AutoIndex {
 #[pyclass(
     frozen,
     from_py_object,
+    extends = PythonExpression,
     name = "TensorExpression",
     module = "symbolica.community.tensor"
 )]
@@ -258,39 +266,19 @@ impl TensorExpression {
                 value,
                 name,
                 name_args,
-            },
+            }
+            .into_initializer(),
         )
     }
 
-    /// Both symbolic payload forms use Symbolica's evaluator state and options.
-    pub(crate) fn build_evaluator(
-        py: Python<'_>,
-        builder: EvaluatorBuilder<'_>,
-        iterations: usize,
-        n_cores: usize,
-    ) -> PyResult<PythonExpressionEvaluator> {
-        let settings = OptimizationSettings::new()
-            .horner_iterations(iterations)
-            .cores(n_cores);
-        let evaluator = py
-            .detach(|| builder.optimization_settings(settings).build())
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Ok(PythonExpressionEvaluator {
-            rational_constants: evaluator.get_constants().to_vec(),
-            eval_complex: evaluator.map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64())),
-            eval_real: None,
-            #[cfg(feature = "native")]
-            jit_real: None,
-            #[cfg(feature = "native")]
-            jit_complex: None,
-            eval_double_float: None,
-            eval_double_float_complex: None,
-            eval_arb_prec: None,
-            eval_arb_prec_complex: None,
-            jit_compile: false,
-            #[cfg(feature = "native")]
-            jit_settings: symbolica::evaluate::JITCompilationSettings::new(),
-        })
+    /// Initialize the inherited immutable expression from the shared tensor owner.
+    /// All typed results use this boundary, keeping inherited Symbolica methods
+    /// on exactly the same atom without re-inferring the tensor interface.
+    pub(crate) fn into_initializer(self) -> PyClassInitializer<Self> {
+        let expression = PythonExpression {
+            expr: self.atom().clone(),
+        };
+        (self, expression).into()
     }
 
     pub(crate) fn atom(&self) -> &Atom {
@@ -362,6 +350,23 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
+    /// Reuse the shared proof for algebra that treats tensor leaves as opaque.
+    fn from_algebra_atom(
+        self_: &PyRef<'_, Self>,
+        py: Python<'_>,
+        atom: Atom,
+    ) -> PyResult<Py<Self>> {
+        if atom == self_.atom() {
+            return Py::new(py, Self::clone(self_).into_initializer());
+        }
+        let value = self_
+            .value
+            .with_algebra_result(atom)
+            .map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
+    }
+
     pub(crate) fn from_structured(
         py: Python<'_>,
         value: SymbolicTensor<PartialStructure>,
@@ -371,7 +376,7 @@ impl TensorExpression {
 
     fn promoted_network(self_: &PyRef<'_, Self>, py: Python<'_>) -> PyResult<SpensoNet> {
         SpensoNet::from_arithmetic(
-            ArithmeticStructure::Tensor(Py::new(py, Self::clone(self_))?),
+            ArithmeticStructure::Tensor(Py::new(py, Self::clone(self_).into_initializer())?),
             None,
         )
     }
@@ -769,7 +774,7 @@ impl TensorExpression {
         expression: &Bound<'_, PyAny>,
         structure: Option<&crate::metadata::SpensoTensorStructure>,
         intern: Option<Intern>,
-    ) -> PyResult<Self> {
+    ) -> PyResult<PyClassInitializer<Self>> {
         if let Some(structure) = structure {
             let atom = if let Ok(value) = expression.extract::<PyRef<'_, Self>>() {
                 value.atom().clone()
@@ -790,7 +795,7 @@ impl TensorExpression {
                 atom
             };
             let checked = Self::from_atom_interface(py, atom, Some(structure.interface.clone()))?;
-            return Ok(checked.borrow(py).clone());
+            return Ok(checked.borrow(py).clone().into_initializer());
         }
         let tensor = if let Some(settings) = intern {
             if let Ok(expression) = expression.extract::<PyRef<'_, Self>>() {
@@ -812,7 +817,7 @@ impl TensorExpression {
             as_tensor(py, expression)?
         };
         let tensor = tensor.borrow(py);
-        Ok(tensor.clone())
+        Ok(tensor.clone().into_initializer())
     }
 
     /// Construct the metric pairing.
@@ -1350,8 +1355,8 @@ impl TensorExpression {
     /// >>> space = Representation.euc(3)
     /// >>> A = TensorName("A")(space, space)
     /// >>> name = A.name
-    #[getter]
-    fn name(&self) -> Option<SpensoName> {
+    #[getter(name)]
+    fn data_name(&self) -> Option<SpensoName> {
         self.name.map(|name| SpensoName { name })
     }
 
@@ -1444,8 +1449,9 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Keep the TensorExpression when using tensor operations. Conversion is
-    /// useful for raw Symbolica matching or algorithms that require an Expression.
+    /// TensorExpression already inherits Expression. Convert when deliberately
+    /// requesting ordinary Symbolica behavior, including replacements that change
+    /// the tensor interface, rather than its tensor-aware overrides.
     ///
     /// Examples
     /// --------
@@ -1453,55 +1459,321 @@ impl TensorExpression {
     /// >>> space = Representation.euc(2)
     /// >>> A = TensorName("M")(space, space)
     /// >>> raw = A.to_expression()
-    fn to_expression(self_: PyRef<'_, Self>) -> PythonExpression {
+    fn to_expression(&self) -> PythonExpression {
         PythonExpression {
-            expr: self_.atom().clone(),
+            expr: self.atom().clone(),
         }
     }
 
-    /// Apply one rule or an ordered list of whole-tensor replacement rules.
+    /// Test whether the expression is exactly zero, including zeros with nonzero tensor rank.
+    /// This does not perform algebraic simplification.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True for an exact symbolic zero, irrespective of rank.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (0 * A).is_zero()
+    /// >>> assert (0 * A).rank == 1
+    fn is_zero(&self) -> bool {
+        self.atom().is_zero()
+    }
+
+    /// Test whether the expression is exactly the scalar one.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True for scalar one; an identity tensor is not the scalar one.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> assert TensorExpression(1).is_one()
+    fn is_one(&self) -> bool {
+        self.atom().is_one()
+    }
+
+    /// Test whether products and powers are expanded, optionally with respect to var.
+    /// The expression and its tensor interface are unchanged.
     ///
     /// Parameters
     /// ----------
-    /// rules : TensorRule or list of TensorRule
-    ///     Rules in priority order. The first match at a source tensor is used;
-    ///     newly produced replacements are not matched again during this call.
+    /// var : Expression, optional
+    ///     Restrict the expansion check to this indeterminate.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if no further arithmetic distribution is needed for the requested scope.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> x = S("x")
+    /// >>> value = TensorExpression((x + 1)**2)
+    /// >>> assert not value.is_expanded()
+    /// >>> assert value.expand().is_expanded(x)
+    #[pyo3(signature = (var = None))]
+    fn is_expanded(&self, var: Option<ConvertibleToExpression>) -> bool {
+        self.atom()
+            .is_expanded(var.map(|value| value.to_expression().expr))
+    }
+
+    /// Count top-level additive terms without expanding the expression.
+    /// Unlike len(tensor), this counts symbolic terms rather than tensor components.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Number of terms in the outermost sum, or one for a non-sum.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> x = S("x")
+    /// >>> value = TensorExpression((x + 1)**2)
+    /// >>> assert value.nterms() == 1
+    /// >>> assert value.expand().nterms() == 3
+    fn nterms(&self) -> usize {
+        self.atom().nterms()
+    }
+
+    /// Replace symbolic patterns or apply whole-tensor replacement rules.
+    ///
+    /// Parameters
+    /// ----------
+    /// pattern : Expression, TensorRule, or list of TensorRule
+    ///     Symbolica pattern when rhs is supplied. Without rhs, apply prepared
+    ///     TensorRules in priority order, leaving scalar key arguments opaque.
+    /// rhs : Expression, HeldExpression, or callable, optional
+    ///     Symbolica replacement, including callbacks. The result must preserve
+    ///     the tensor's ordered interface. Use reindex() to change external labels.
+    /// cond : PatternRestriction or Condition, optional
+    ///     Restriction on a symbolic match.
+    /// non_greedy_wildcards : list of Expression, optional
+    ///     Wildcards whose matches should be selected non-greedily.
+    /// min_level, max_level : int, optional
+    ///     Inclusive traversal bounds, starting at zero.
+    /// level_is_tree_depth : bool, default False
+    ///     Count expression-tree levels rather than function nesting.
+    /// partial : bool, default True
+    ///     Allow matches inside larger expressions.
+    /// allow_new_wildcards_on_rhs : bool, default False
+    ///     Allow wildcard symbols that do not occur in the pattern.
+    /// rhs_cache_size : int, optional
+    ///     Cache repeated symbolic replacements; zero disables caching.
+    /// repeat, once, bottom_up, nested : bool, default False
+    ///     Symbolica's replacement traversal controls. Prepared TensorRules own
+    ///     their conditions and cache settings and do not accept these options.
     ///
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Rewritten value with a checked external interface.
-    ///
-    /// Notes
-    /// -----
-    /// The traversal follows tensor sums and products, leaving scalar key
-    /// arguments opaque. Matched tensors need explicit axes; unsupported tensor
-    /// powers and unresolved interfaces are rejected. Normalization/evaluation
-    /// callbacks remaining in a replacement are not supported. For scalar
-    /// component substitutions in a network, use TensorNetwork.replace instead.
+    ///     Rewritten value retaining its checked tensor interface and metadata.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(2)
-    /// >>> A = TensorName("M")(space, space)
-    /// >>> from symbolica.community.tensor import TensorRule
-    /// >>> indexed = A("i", "j")
-    /// >>> rule = TensorRule(indexed, 2 * indexed)
-    /// >>> replaced = indexed.replace(rule)
-    #[pyo3(signature = (rules))]
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorRule
+    /// >>> A = TensorName("M")(Representation.euc(2))("i")
+    /// >>> x, y = S("x", "y")
+    /// >>> assert (x * A).replace(x, y) == y * A
+    /// >>> assert A.replace(TensorRule(A, 2 * A)) == 2 * A
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (pattern, rhs=None, cond=None, non_greedy_wildcards=None, min_level=0, max_level=None, level_is_tree_depth=false, partial=true, allow_new_wildcards_on_rhs=false, rhs_cache_size=None, repeat=false, once=false, bottom_up=false, nested=false))]
     fn replace(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        rules: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Union[symbolica.core.Expression, int, float, complex, TensorRule, list[TensorRule]]"
+        ))]
+        pattern: &Bound<'_, PyAny>,
+        rhs: Option<ConvertibleToReplaceWith>,
+        cond: Option<ConvertibleToPatternRestriction>,
+        non_greedy_wildcards: Option<Vec<PythonExpression>>,
+        min_level: usize,
+        max_level: Option<usize>,
+        level_is_tree_depth: bool,
+        partial: bool,
+        allow_new_wildcards_on_rhs: bool,
+        rhs_cache_size: Option<usize>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
     ) -> PyResult<Py<Self>> {
-        let rules = crate::tensor_rule::PyTensorRule::extract_rules(rules)?;
+        if let Some(rhs) = rhs {
+            let result = self_.as_super().replace(
+                pattern.extract()?,
+                rhs,
+                cond,
+                non_greedy_wildcards,
+                min_level,
+                max_level,
+                level_is_tree_depth,
+                partial,
+                allow_new_wildcards_on_rhs,
+                rhs_cache_size,
+                repeat,
+                once,
+                bottom_up,
+                nested,
+            )?;
+            return Self::preserving_interface(&self_, py, result.expr);
+        }
+        if cond.is_some()
+            || non_greedy_wildcards.is_some()
+            || min_level != 0
+            || max_level.is_some()
+            || level_is_tree_depth
+            || !partial
+            || allow_new_wildcards_on_rhs
+            || rhs_cache_size.is_some()
+            || repeat
+            || once
+            || bottom_up
+            || nested
+        {
+            return Err(PyTypeError::new_err(
+                "TensorRules own their replacement settings; traversal options require a symbolic pattern and rhs",
+            ));
+        }
+        let rules = crate::tensor_rule::PyTensorRule::extract_rules(pattern)?;
         let value = self_
             .value
             .replace_rules(&rules)
             .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
         Self::from_shared(py, Arc::new(value), name, args)
+    }
+
+    /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
+    ///
+    /// Parameters
+    /// ----------
+    /// replacements : list of Replacement
+    ///     Symbolica replacements, including their conditions and callbacks.
+    /// repeat, once, bottom_up, nested : bool, default False
+    ///     Traversal controls with the same meaning as Expression.replace_multiple.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Rewritten value preserving ordered ports, metadata, and typed zeros.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, Replacement
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (x*A).replace_multiple([Replacement(x, y)]) == y*A
+    #[pyo3(signature = (replacements, repeat=false, once=false, bottom_up=false, nested=false))]
+    fn replace_multiple(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        replacements: Vec<PythonReplacement>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
+    ) -> PyResult<Py<Self>> {
+        let result =
+            self_
+                .as_super()
+                .replace_multiple(replacements, repeat, once, bottom_up, nested)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Apply a Symbolica Transformer and retain the validated tensor interface.
+    ///
+    /// Parameters
+    /// ----------
+    /// op : Transformer
+    ///     Transformations to apply, including user callbacks.
+    /// n_cores : int, optional
+    ///     Number of cores for Symbolica's term mapping.
+    /// stats_to_file : str, optional
+    ///     JSON output file for the transformer's statistics.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Transformed expression with its original ordered tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, T
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = ((x + 1)**2 * A).map(T().expand())
+    /// >>> assert result == ((x + 1)**2 * A).expand()
+    #[pyo3(signature = (op, n_cores=None, stats_to_file=None))]
+    fn map(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        op: PythonTransformer,
+        n_cores: Option<usize>,
+        stats_to_file: Option<String>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().map(op, py, n_cores, stats_to_file)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Differentiate scalar coefficients, preserving tensor zeros and ports.
+    /// Formal derivatives of unknown tensor functions are not supported by the
+    /// network executor. Differentiate their component expressions with
+    /// Tensor.map_components() instead, or supply a TensorName derivative callback.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : Expression
+    ///     Scalar differentiation variable.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Derivative with the same ordered external ports, even when zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (x**2 * A).derivative(x) == 2*x*A
+    /// >>> assert A.derivative(x).rank == A.rank
+    fn derivative(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        x: ConvertibleToExpression,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().derivative(x)?;
+        let mut formal_tensor_derivative = false;
+        result.expr.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value
+                && function.get_symbol() == Symbol::DERIVATIVE
+                && function.get_nargs() % 2 == 1
+                && matches!(function.iter().nth(function.get_nargs() / 2), Some(AtomView::Var(head)) if head.get_symbol().has_tag(&SPENSO_TAG.tensor))
+            {
+                formal_tensor_derivative = true;
+            }
+            !formal_tensor_derivative
+        });
+        if formal_tensor_derivative {
+            return Err(PyValueError::new_err(
+                "formal tensor derivatives are not supported; differentiate component expressions with Tensor.map_components()",
+            ));
+        }
+        Self::preserving_interface(&self_, py, result.expr)
     }
 
     /// Distribute scalar products and powers over sums.
@@ -1550,53 +1822,324 @@ impl TensorExpression {
             )
             .map_err(Self::inference_error)?;
         if value.expression() == self_.atom() {
-            return Py::new(py, self_.clone());
+            return Py::new(py, self_.clone().into_initializer());
         }
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Prepare numerical evaluation of the symbolic algebra without component expansion.
+    /// Factor scalar algebra while retaining ordered tensor ports and data metadata.
+    /// Tensor leaves are treated as symbolic indeterminates; no tensor identity is applied.
     ///
     /// Parameters
     /// ----------
-    /// params : sequence of Expression
-    ///     Symbolic leaves to treat as numerical inputs, in input-row order.
-    /// iterations : int, default 1
-    ///     Horner-optimization iterations.
-    /// n_cores : int, default 1
-    ///     Number of optimization cores.
+    /// complex : bool, default False
+    ///     Factor over the complex rationals rather than the rationals.
+    /// extension : list of Expression, optional
+    ///     Algebraic numbers defining the coefficient field, as in Expression.factor.
     ///
     /// Returns
     /// -------
-    /// symbolica.Evaluator
-    ///     Evaluator for the symbolic expression.
+    /// TensorExpression
+    ///     Factored expression with the original tensor interface, including typed zeros.
     ///
-    /// Notes
-    /// -----
-    /// This does not resolve tensor components from a TensorLibrary. To evaluate
-    /// component formulas, first use to_tensor() and then Tensor.evaluator().
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> factored = ((x**2 + 2*x + 1) * A).factor()
+    /// >>> assert factored == (x + 1)**2 * A
+    #[pyo3(signature = (complex = false, extension = None))]
+    fn factor(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        complex: bool,
+        extension: Option<Vec<ConvertibleToExpression>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().factor(complex, extension)?;
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Distribute numerical coefficients over sums without expanding symbolic products.
+    /// The result remains a TensorExpression with the same ordered ports and metadata.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Rewritten scalar algebra with the original tensor interface and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = (2 * (x + y) * A).expand_num()
+    /// >>> assert result == (2*x + 2*y) * A
+    fn expand_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().expand_num();
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Collect terms in variables or functions, retaining the tensor interface.
+    ///
+    /// Parameters
+    /// ----------
+    /// *x : Expression
+    ///     Variables or functions to collect in, with Expression.collect semantics.
+    /// key_map, coeff_map : callable, optional
+    ///     Map each collected key or coefficient. Callbacks receive and return ordinary
+    ///     Expressions. Their results must preserve this tensor's ordered external ports;
+    ///     otherwise the operation raises ValueError. Zero retains the original interface.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Collected expression with the original interface and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = (x*A + x*y*A).collect(x)
+    /// >>> assert result.expand() == (x*(1+y)*A).expand()
+    #[pyo3(signature = (*x, key_map = None, coeff_map = None))]
+    fn collect(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "symbolica.core.Expression"))] x: &Bound<'_, PyTuple>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]]"
+        ))]
+        key_map: Option<Py<PyAny>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]]"
+        ))]
+        coeff_map: Option<Py<PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        let has_callbacks = key_map.is_some() || coeff_map.is_some();
+        let result = self_.as_super().collect(x, key_map, coeff_map)?;
+        if has_callbacks {
+            Self::preserving_interface(&self_, py, result.expr)
+        } else {
+            Self::from_algebra_atom(&self_, py, result.expr)
+        }
+    }
+
+    /// Extract common numerical coefficients from sums, retaining ordered ports and metadata.
+    /// This reverses numerical distribution performed by expand_num().
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Expression with common numerical coefficients extracted.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert ((2*x + 4*y)*A).collect_num() == 2*(x + 2*y)*A
+    fn collect_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_num();
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Collect common factors from nested sums without applying tensor identities.
+    /// Ordered ports, unresolved axes, tensor zeros, and data metadata are retained.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Rewritten scalar algebra with the original tensor interface and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = (x*A + y*A).collect_factors()
+    /// >>> assert result == (x+y)*A
+    fn collect_factors(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_factors();
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Group terms with equal numerical coefficients, retaining ordered ports and metadata.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Expression grouped by numerical coefficient with the original tensor interface.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica import S
     /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x = S("x")
-    /// >>> expression = TensorExpression(x**2 + 1)
-    /// >>> evaluator = expression.evaluator([x])
-    #[pyo3(signature = (params, *, iterations=1, n_cores=1))]
-    fn evaluator(
-        &self,
+    /// >>> x, y = S("x", "y")
+    /// >>> result = TensorExpression(2*x + 2*y).collect_by_coefficient()
+    /// >>> assert result.to_expression() == 2*(x + y)
+    fn collect_by_coefficient(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_by_coefficient();
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Collect terms by powers of a variable or calls with the same function head.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : Expression
+    ///     Variable or function symbol to collect in.
+    /// key_map, coeff_map : callable, optional
+    ///     Map ordinary Expressions. As with collect(), the result is checked for
+    ///     preservation of the tensor's ordered external ports.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Collected expression with the original interface and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x, f = S("x", "f")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = (f(x)*A + 2*f(x)*A).collect_symbol(f)
+    /// >>> assert result.expand() == (3*f(x)*A).expand()
+    #[pyo3(signature = (x, key_map = None, coeff_map = None))]
+    fn collect_symbol(
+        self_: PyRef<'_, Self>,
         py: Python<'_>,
-        params: Vec<PythonExpression>,
-        iterations: usize,
-        n_cores: usize,
-    ) -> PyResult<PythonExpressionEvaluator> {
-        let params = params
-            .into_iter()
-            .map(|value| value.expr)
-            .collect::<Vec<_>>();
-        Self::build_evaluator(py, self.value.evaluator(&params), iterations, n_cores)
+        x: PythonExpression,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]]"
+        ))]
+        key_map: Option<Py<PyAny>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]]"
+        ))]
+        coeff_map: Option<Py<PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        let has_callbacks = key_map.is_some() || coeff_map.is_some();
+        let result = self_.as_super().collect_symbol(x, key_map, coeff_map)?;
+        if has_callbacks {
+            Self::preserving_interface(&self_, py, result.expr)
+        } else {
+            Self::from_algebra_atom(&self_, py, result.expr)
+        }
+    }
+
+    /// Rewrite polynomial algebra in Horner form, retaining ordered ports and metadata.
+    ///
+    /// Parameters
+    /// ----------
+    /// vars : list of Expression, optional
+    ///     Variable order. Omit it to use Symbolica's heuristic ordering.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Horner-form expression with the original tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> x, y = S("x", "y")
+    /// >>> result = TensorExpression(x**2 + x*y).collect_horner([x, y])
+    /// >>> assert result.to_expression() == x*(x + y)
+    #[pyo3(signature = (vars = None))]
+    fn collect_horner(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        vars: Option<Vec<PythonExpression>>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().collect_horner(vars)?;
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Combine scalar denominators into one fraction, retaining ordered ports and metadata.
+    /// This is ordinary rational algebra and performs no tensor contractions.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Single rational expression with the original tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> x, y = S("x", "y")
+    /// >>> assert TensorExpression(1/x + 1/y).together().to_expression() == (x + y)/(x*y)
+    fn together(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().together()?;
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Cancel common numerator and denominator factors, retaining ordered ports and metadata.
+    /// This is ordinary rational algebra and performs no tensor contractions.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Rational expression with common factors cancelled and the original tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert ((x**2 - 1)/(x - 1)*A).cancel() == (x + 1)*A
+    fn cancel(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = self_.as_super().cancel()?;
+        Self::from_algebra_atom(&self_, py, result.expr)
+    }
+
+    /// Decompose scalar denominators into partial fractions, retaining the tensor interface.
+    ///
+    /// Parameters
+    /// ----------
+    /// *variables : Expression
+    ///     Variables for partial fractioning. Omit them to use all indeterminates,
+    ///     as in Expression.apart().
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Partial fractions with the original ordered ports and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (A/(x*(x + 1))).apart(x) == A/x - A/(x + 1)
+    #[pyo3(signature = (*variables))]
+    fn apart(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "symbolica.core.Expression"))] variables: &Bound<
+            '_,
+            PyTuple,
+        >,
+    ) -> PyResult<Py<Self>> {
+        // Zero has no partial fractions; Symbolica's multivariate path cannot
+        // lift an empty numerator polynomial into its coefficient ring.
+        if self_.atom().is_zero() {
+            return Py::new(py, self_.clone().into_initializer());
+        }
+        let result = self_.as_super().apart(variables)?;
+        Self::from_algebra_atom(&self_, py, result.expr)
     }
 
     /// Copy the expression and its tensor metadata.
@@ -1615,7 +2158,52 @@ impl TensorExpression {
     /// >>> copy.copy(A).shape
     /// (2, 2)
     fn __copy__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        Py::new(py, self_.clone())
+        Py::new(py, self_.clone().into_initializer())
+    }
+
+    /// Copy the tensor's immutable expression, ordered axes, and data metadata.
+    ///
+    /// Parameters
+    /// ----------
+    /// memo : dict
+    ///     Copy bookkeeping maintained by Python's copy module.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Independent Python wrapper sharing the immutable tensor value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import copy
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> A = TensorName("A")(Representation.euc(3))
+    /// >>> zero = 0 * A
+    /// >>> assert copy.deepcopy(zero).structure == zero.structure
+    #[pyo3(signature = (memo))]
+    fn __deepcopy__(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        memo: &Bound<'_, PyDict>,
+    ) -> PyResult<Py<Self>> {
+        let pointer = self_.as_ptr() as usize;
+        let copied = Self::__copy__(self_, py)?;
+        memo.set_item(pointer, copied.bind(py))?;
+        Ok(copied)
+    }
+
+    /// Reject pickling that would silently discard the ordered tensor interface.
+    /// Use to_expression() when explicitly serializing only the symbolic algebra.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     Tensor metadata serialization is not supported.
+    #[gen_stub(override_return_type(type_repr = "typing.NoReturn"))]
+    fn __reduce__(&self) -> PyResult<()> {
+        Err(PyTypeError::new_err(
+            "TensorExpression pickling is not supported; use to_expression() to serialize only its symbolic algebra",
+        ))
     }
 
     /// Replace four-dimensional Minkowski index spaces by a supplied dimension.
@@ -1660,77 +2248,250 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Apply selected tensor identities while retaining shared subexpressions.
+    /// Reduce enabled tensor identities and their required index contractions.
+    ///
+    /// Gamma and color identities are enabled by default; epsilon identities are
+    /// opt-in. The default also completes supported structural contractions, so
+    /// a second contract() call is normally unnecessary. The input is unchanged.
     ///
     /// Parameters
     /// ----------
-    /// gamma, color, epsilon : bool, default False
-    ///     Enable only the selected identity families and their prerequisite contractions.
-    /// contract : {"fully", "dots", "selected", "none"}, default "fully"
-    ///     Additional structural work: all contractions, all plus dot notation,
-    ///     only selected representations, or only identity prerequisites.
-    ///     Collecting a trace does not evaluate it or enable another identity family.
+    /// gamma, color : bool, default True
+    ///     Enable Dirac/Clifford and color identities, respectively. Each family
+    ///     authorizes the structural contractions required to apply its identities.
+    ///     Set the other families to False when requesting only one family.
+    /// epsilon : bool, default False
+    ///     Enable supported Levi-Civita pair contractions and their prerequisites.
+    ///     These can generate determinant sums. Epsilon tensors emitted by gamma
+    ///     reduction do not implicitly enable this option. Intrinsic antisymmetry
+    ///     normalization during construction is independent of this setting.
+    /// contract : {"fully", "dots", "minimal", "selected", "none"}, default "fully"
+    ///     Structural work in addition to enabled identities and their prerequisites:
+    ///
+    ///     - "fully": contract compatible metrics/identities and vectors, collect
+    ///       matrix chains, and close compatible chains into trace notation.
+    ///     - "dots": the same work, plus canonical dot notation for scalar products.
+    ///     - "minimal": perform structural contractions that do not multiply out
+    ///       independent sum alternatives. Boundary substitutions through existing
+    ///       sums and contractions within their branches are allowed. Products of
+    ///       sums stay factored when contracting them would require distribution.
+    ///     - "selected": the same structural operations, restricted to connections
+    ///       in representations. This does not restrict identity prerequisites.
+    ///     - "none": no additional structural pass. Enabled identities still get
+    ///       their prerequisite contractions; this does not disable all contraction.
+    ///
+    ///     These modes do not enable identity families. In particular, collecting
+    ///     a trace does not evaluate it, and contracting a color delta does not
+    ///     apply a generator or Fierz identity. "minimal" restricts additional
+    ///     structural work; enabled algebra identities retain their prerequisites
+    ///     and can still introduce sums. It is not a global ban on expansion.
     /// representations : sequence of Representation or RepresentationName, optional
-    ///     Required only for contract="selected"; an empty sequence permits no
-    ///     additional connections. Filters do not suppress identity prerequisites
-    ///     or intrinsic normalization already performed during construction.
+    ///     Required with contract="selected" and rejected with the other modes.
+    ///     Select connecting representation families, including their duals, rather
+    ///     than whole tensor factors. For example, Representation.mink(4) selects
+    ///     the Minkowski family, including symbolic-D instances; it does not change
+    ///     dimensions. Each connection must still have compatible dimensions and
+    ///     orientation. [] permits no additional index contractions or trace closure.
+    ///     Identity prerequisites and existing constructor normalization are unaffected.
+    /// collect_coefficients : bool, default True
+    ///     Collect generated exact coefficients in contracted Dirac traces and
+    ///     their bound vector factors so equal terms combine and cancel. Includes
+    ///     Symbolica's expand_num() distribution of numerical factors over sums
+    ///     inside those generated coefficients. False retains their nested,
+    ///     factored output. Other family kernels retain their
+    ///     existing coefficient normalization. This is not global expansion:
+    ///     unrelated input sums and scalar prefactors remain factorized. It neither
+    ///     expands free Dirac traces nor reverses simplification already performed.
     /// gamma_output : {"reduced", "chains"}, optional
-    ///     Apply Clifford identities (default), or only collect Dirac chains.
+    ///     Defaults to "reduced": apply supported Clifford and trace identities.
+    ///     "chains" collects Dirac chains/traces without Clifford reduction or
+    ///     trace evaluation, even if gamma_evaluate_traces=True. Explicit gamma0
+    ///     and gamma_conjugate preparation still applies when requested.
     /// gamma_ordering : {"repeated_pairs", "canonical"}, optional
-    ///     Open-chain ordering; defaults to repeated-pair reduction.
+    ///     Ordering for reduced open Dirac chains. The default "repeated_pairs"
+    ///     brings repeated indices together without fully sorting unrelated
+    ///     matrices. "canonical" orders the chain and can introduce metric-term
+    ///     sums through anticommutation. It is inactive for gamma_output="chains".
     /// gamma_evaluate_traces : bool, optional
-    ///     Evaluate closed Dirac traces; defaults to True for reduced output.
+    ///     Evaluate supported closed Dirac traces with reduced output; defaults to
+    ///     True. False retains trace notation while other enabled identities remain
+    ///     available. Trace normalization follows the spinor representation dimension.
     /// gamma0 : bool, optional
-    ///     Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+    ///     Apply gamma-zero factoring before chain collection; defaults to False.
+    ///     This controls the preparation pass, not every gamma-zero identity already
+    ///     included in reduced Dirac algebra.
     /// gamma_conjugate : bool, optional
-    ///     Rewrite complex-conjugated Dirac matrices; defaults to False.
+    ///     Rewrite explicitly complex-conjugated Dirac matrices before collection;
+    ///     defaults to False. This does not conjugate the input tensor.
     /// gamma_expand_three_gamma_epsilon : bool, optional
-    ///     Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
-    ///     to False. This does not enable epsilon identities.
+    ///     With reduced output, expand three compatible four-dimensional gammas
+    ///     in a gamma5/epsilon basis; defaults to False. This can introduce sums
+    ///     and epsilon tensors, but does not enable epsilon identities.
     /// color_evaluate_traces : bool, optional
-    ///     Evaluate supported closed color traces; defaults to True.
+    ///     Evaluate supported closed color traces; defaults to True. False retains
+    ///     unevaluated traces, but enabled Fierz identities may still join or change
+    ///     them. It does not disable the rest of color algebra.
     /// color_expand_fierz : bool, optional
-    ///     Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+    ///     Apply fundamental Fierz identities between different open chains or
+    ///     traces; defaults to True. This may introduce sums. False disables these
+    ///     cross-chain expansions, not every color identity or source of sums.
     /// color_substitute_cof_dimension_invariants : bool, optional
-    ///     Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
-    /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations per root or alias definition; zero is allowed.
-    ///     Capped results retain exact unfinished work. Family-specific options require
-    ///     the corresponding family to be enabled. None selects its native default.
+    ///     Write supported color invariants in terms of the fundamental SU(N)
+    ///     dimension, with T_F=1/2; defaults to False, retaining symbolic invariants.
+    ///     In the supported fundamental/adjoint spaces this gives
+    ///     C_F=(N**2-1)/(2*N) and C_A=N. The dimension comes from the representation:
+    ///     this does not set every color space to SU(3) or reduce arbitrary groups.
+    /// max_steps_per_domain : int or None, default None
+    ///     Optional nonnegative limit on successful planner transformations in each
+    ///     active expression domain. None imposes no automatic work limit. This is
+    ///     not a bound on time, memory, terms, or work inside one kernel. Zero leaves
+    ///     eligible work untouched and reports Capped; an already completed request
+    ///     can still report Complete. Unfinished results remain exact.
     ///
     /// Returns
     /// -------
-    /// AliasedTensorExpression
-    ///     Exact reduced algebra with shared definitions and a reduction_status.
-    ///     to_expression() resolves definitions; expand() additionally distributes sums.
+    /// TensorExpression
+    ///     A typed result carrying its checked interface and reduction_status.
+    ///     No alias wrapper or separate materialization step is required.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     An option value is invalid, representations is missing or used with the
+    ///     wrong mode, a family-specific option is supplied for a disabled family,
+    ///     or a rewrite cannot produce a valid tensor interface.
     ///
     /// Notes
     /// -----
-    /// Enabled identities and permitted structural work reach a shared fixed point.
-    /// Closed color deltas produce their dimension even when color identities are off.
-    /// Each enabled family includes its necessary contractions, including with
-    /// contract="none". Unrelated sums stay factored. A capped result retains exact
-    /// unfinished work and can be simplified again.
+    /// Select the families together; the shared planner schedules identities and
+    /// contractions until no further permitted work is found. Under "fully" and
+    /// "dots", a closed color delta produces its dimension even with color=False.
+    /// Under "none", an unrelated Lorentz numerator can remain indexed and factored
+    /// after its color sector is reduced. Use contract() for structural work alone.
+    ///
+    /// This is not a global arithmetic expansion. Planning starts with a shallow
+    /// view of factor interfaces and opens selected regions when needed. Necessary
+    /// local distribution and identity-generated sums are allowed; unrelated sums
+    /// and scalar coefficients stay factored. Request expand() explicitly when the
+    /// final output must be a fully expanded polynomial.
+    ///
+    /// Dimensions belong to the tensor representations. Set them before reduction,
+    /// for example with with_lorentz_dimension(D). Ordinary Clifford contractions
+    /// support compatible symbolic Lorentz dimensions. Four-dimensional gamma5,
+    /// axial-trace and epsilon-basis rules are not a general D-dimensional gamma5
+    /// prescription; changing D after evaluation cannot recover lost dimension factors.
+    ///
+    /// Family-specific None values use the defaults documented above. Even an
+    /// explicitly supplied False option requires its family to be enabled. Reusable
+    /// configurations are ordinary dictionaries passed with **options.
+    ///
+    /// Inspect reduction_status on the returned reduction result. Complete means
+    /// no eligible work remains under these settings, not under disabled families
+    /// or other output requirements. Deferred retains exact work the current
+    /// implementation could not finish. Capped means an explicit limit stopped it.
+    /// Rerunning a Complete result with the same settings is stable. Capped or
+    /// Deferred results can be passed back for further work, without a guarantee
+    /// that an unsupported Deferred case will progress. contraction_complete is a
+    /// separate structural certificate and can be False for a Complete "none" result.
+    ///
+    /// See Also
+    /// --------
+    /// contract : Structural contractions without enabling identities.
+    /// to_dots : Change surviving scalar-product notation without contracting indices.
+    /// expand : Explicit arithmetic distribution.
+    /// undo_trace : Unfold an existing trace without evaluating it.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> gamma = TensorExpression.dirac_gamma(4)
-    /// >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-    /// >>> result = expression.simplify_algebra(gamma=True)
-    /// >>> result.to_expression().rank
-    /// 2
-    #[pyo3(signature=(*, gamma=false, color=false, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=16))]
+    /// A closed Dirac word evaluates to 4*D even with no additional structural
+    /// pass. The spinor dimension remains four while the Lorentz dimension is D.
+    ///
+    /// >>> from symbolica import E, S
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> D = S("algebra_docs::D")
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4).with_lorentz_dimension(D)
+    /// >>> word = gamma("a", "b", "mu") * gamma("b", "a", "mu")
+    /// >>> result = word.simplify_algebra(color=False, contract="none")
+    /// >>> assert result.to_expression() == 4 * D
+    /// >>> assert result.reduction_status == sp.ReductionStatus.Complete
+    ///
+    /// Retain nested identity output when that form is preferable. Both requests
+    /// represent the same tensor and leave unrelated scalar prefactors factored.
+    ///
+    /// >>> nested = word.simplify_algebra(color=False, collect_coefficients=False)
+    /// >>> assert (nested - result).expand().to_expression() == 0
+    ///
+    /// Color-only reduction with explicit SU(3) invariants gives T^a T^a = 4/3 I.
+    /// Omit the invariant-substitution option to retain symbolic Casimirs.
+    ///
+    /// >>> fundamental = sp.Representation.cof(3)
+    /// >>> identity = sp.TensorExpression.g(fundamental, fundamental.dual())
+    /// >>> T = sp.TensorExpression.color_t(8, 3)
+    /// >>> pair = T("a", "i", "j") * T("a", "j", "k")
+    /// >>> color_only = dict(gamma=False, color=True, contract="none",
+    /// ...                   color_substitute_cof_dimension_invariants=True)
+    /// >>> assert pair.simplify_algebra(**color_only) == E("4/3") * identity("i", "k")
+    ///
+    /// Structural color-delta contraction is independent of color identities.
+    /// With both identity families disabled, "none" preserves this product;
+    /// "fully" and a matching "selected" filter produce its dimension.
+    ///
+    /// >>> cycle = identity("i", "j") * identity("j", "i")
+    /// >>> structural = dict(gamma=False, color=False)
+    /// >>> assert cycle.simplify_algebra(**structural, contract="none") == cycle
+    /// >>> assert cycle.simplify_algebra(**structural).to_expression() == 3
+    /// >>> selected = cycle.simplify_algebra(**structural, contract="selected",
+    /// ...                                    representations=[fundamental.name])
+    /// >>> assert selected.to_expression() == 3
+    /// >>> assert cycle.simplify_algebra(**structural, contract="selected",
+    /// ...                               representations=[]) == cycle
+    ///
+    /// "dots" includes scalar-product notation conversion. Epsilon reduction is
+    /// separately enabled; here the Euclidean identity epsilon_ijk epsilon_ijk = 6
+    /// is evaluated without gamma or color identities.
+    ///
+    /// >>> lorentz = sp.Representation.mink(4)
+    /// >>> p = sp.TensorName.vector("algebra_docs::p")(lorentz)
+    /// >>> q = sp.TensorName.vector("algebra_docs::q")(lorentz)
+    /// >>> dotted = (p("mu") * q("mu")).simplify_algebra(**structural, contract="dots")
+    /// >>> assert dotted == sp.dot(p, q)
+    /// >>> epsilon = sp.TensorExpression.levi_civita(sp.Representation.euc(3), rank=3)
+    /// >>> product = epsilon("i", "j", "k") * epsilon("i", "j", "k")
+    /// >>> assert product.simplify_algebra(**structural, epsilon=True).to_expression() == 6
+    ///
+    /// Minimal contraction leaves a product of tensor sums exact and factorized.
+    /// It can report Complete even though full contraction would do more work.
+    /// The equivalent structural-only request is contract(expand=False).
+    ///
+    /// >>> metric = sp.TensorExpression.g(lorentz)
+    /// >>> A = sp.TensorName("algebra_docs::A")(lorentz, lorentz)
+    /// >>> factored = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+    /// >>> minimal = factored.simplify_algebra(**structural, contract="minimal")
+    /// >>> assert minimal == factored
+    /// >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+    /// >>> assert minimal == factored.contract(expand=False)
+    /// >>> assert minimal != factored.contract()
+    ///
+    /// An explicit limit preserves the exact remaining expression. Continue by
+    /// calling the same operation without a limit; no manual expansion is needed.
+    ///
+    /// >>> pending = cycle.simplify_algebra(**structural, max_steps_per_domain=0)
+    /// >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+    /// >>> assert pending == cycle
+    /// >>> assert pending.simplify_algebra(**structural).to_expression() == 3
+    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, collect_coefficients=true, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
         &self,
+        py: Python<'_>,
         gamma: bool,
         color: bool,
         epsilon: bool,
-        #[gen_stub(override_type(type_repr="typing.Literal['fully', 'dots', 'selected', 'none']", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Literal['fully', 'minimal', 'dots', 'selected', 'none']", imports=("typing")))]
         contract: &str,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
         representations: Option<Vec<Bound<'_, PyAny>>>,
+        collect_coefficients: bool,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['reduced', 'chains']]", imports=("typing")))]
         gamma_output: Option<&str>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['repeated_pairs', 'canonical']]", imports=("typing")))]
@@ -1742,14 +2503,15 @@ impl TensorExpression {
         color_evaluate_traces: Option<bool>,
         color_expand_fierz: Option<bool>,
         color_substitute_cof_dimension_invariants: Option<bool>,
-        max_steps_per_domain: usize,
-    ) -> PyResult<AliasedTensorExpression> {
+        max_steps_per_domain: Option<usize>,
+    ) -> PyResult<Py<Self>> {
         let settings = crate::simplification::algebra_settings(
             gamma,
             color,
             epsilon,
             contract,
             representations,
+            collect_coefficients,
             gamma_output,
             gamma_ordering,
             gamma_evaluate_traces,
@@ -1765,11 +2527,7 @@ impl TensorExpression {
             .value
             .simplify_algebra(&settings)
             .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            value,
-            self.name,
-            self.name_args.clone(),
-        ))
+        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
     }
 
     /// Give explicit indices a scope that separates them from other copies.
@@ -1983,8 +2741,7 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Equivalent algebra in the requested notation, retaining shared definitions
-    ///     when called on an AliasedTensorExpression.
+    ///     Equivalent algebra in the requested notation.
     ///
     /// Notes
     /// -----
@@ -2009,8 +2766,7 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Equivalent algebra in the requested notation, retaining shared definitions
-    ///     when called on an AliasedTensorExpression.
+    ///     Equivalent algebra in the requested notation.
     ///
     /// Notes
     /// -----
@@ -2726,18 +3482,13 @@ impl TensorExpression {
     /// Parameters
     /// ----------
     /// other : object
-    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
-    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
-            return Ok(py.NotImplemented());
-        };
-        Ok(self
-            .value
-            .same_value(&other.value)
-            .into_pyobject(py)?
-            .to_owned()
-            .into_any()
-            .unbind())
+    ///     TensorExpression to compare. Values without an ordered tensor interface are unequal.
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        // Returning NotImplemented lets Expression's reflected comparison ignore
+        // ordered tensor ports, violating equality transitivity and our hash.
+        other
+            .extract::<PyRef<'_, Self>>()
+            .is_ok_and(|other| self.value.same_value(&other.value))
     }
 
     /// Test whether normalized expressions or their ordered tensor interfaces differ.
@@ -2752,16 +3503,9 @@ impl TensorExpression {
     /// Parameters
     /// ----------
     /// other : object
-    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
-    fn __ne__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
-            return Ok(py.NotImplemented());
-        };
-        Ok((!self.value.same_value(&other.value))
-            .into_pyobject(py)?
-            .to_owned()
-            .into_any()
-            .unbind())
+    ///     TensorExpression to compare. Values without an ordered tensor interface are unequal.
+    fn __ne__(&self, other: &Bound<'_, PyAny>) -> bool {
+        !self.__eq__(other)
     }
 
     /// Hash the immutable tensor value for use in dictionaries and sets.
@@ -2817,62 +3561,231 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
-    /// Contract compatible indices and collect compact matrix products.
+    /// Report completion under the last reduction settings and budget.
+    ///
+    /// Returns
+    /// -------
+    /// ReductionStatus
+    ///     Complete, Deferred, or Capped. Unfinished results remain exact and can be
+    ///     passed to contract() or simplify_algebra() again.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
+    /// >>> TensorExpression(3).contract().reduction_status == ReductionStatus.Complete
+    /// True
+    #[getter]
+    fn reduction_status(&self) -> crate::simplification::PyReductionStatus {
+        self.value.reduction_status().into()
+    }
+
+    /// Whether symbolic metric/vector contraction is certified complete.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     False also covers a value not yet contracted or stopped before completion.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> TensorExpression(3).contract().contraction_complete
+    /// True
+    #[getter]
+    fn contraction_complete(&self) -> bool {
+        self.value.contraction_complete()
+    }
+
+    /// Contract compatible indices without applying tensor-algebra identities.
+    ///
+    /// Eliminate metrics and identity tensors, including closed dimension factors;
+    /// substitute vectors into compatible ports; form scalar products; and collect
+    /// ordered matrix chains and unevaluated traces. Matrix order and orientation
+    /// are preserved. The input is unchanged.
     ///
     /// Parameters
     /// ----------
     /// representations : sequence of Representation or RepresentationName, optional
-    ///     Filter connecting axes by representation name: None permits all, [] none.
-    ///     Compatible dimensions and orientations are still required. Intrinsic
-    ///     constructor normalization, including symmetric dots, is unaffected.
+    ///     Filter connections by representation family: None permits all, [] none.
+    ///     Families include dual representations. For example, Representation.mink(4)
+    ///     permits the Minkowski family, including symbolic-D slots; the 4 is not
+    ///     a dimension filter. Each connection must still satisfy dimension and
+    ///     orientation compatibility. Matching representation names alone is insufficient.
+    ///     The filter acts on connecting ports, not whole tensor factors: a Lorentz
+    ///     connection can enter a gamma matrix while its spinor ports survive.
+    ///     Chain assembly and trace closure also require a permitted connection.
     /// metrics : bool, default True
-    ///     Contract compatible metric tensors.
+    ///     Eliminate compatible metric/identity tensors by index substitution and
+    ///     evaluate closed metric loops to their representation dimension.
     /// rank_one : bool, default True
-    ///     Contract compatible rank-one tensors into scalar products.
+    ///     Substitute vectors into compatible tensor ports (Schoonschip notation)
+    ///     and contract vector pairs into scalar products. This can enter a gamma
+    ///     matrix without applying a gamma identity. False retains those connections.
     /// collect_chains : bool, default True
-    ///     Collect compatible matrix products into ordered chains.
+    ///     Represent connected matrix products as ordered chains without evaluating
+    ///     their matrices. False retains the indexed factors for open products.
     /// collect_traces : bool, default True
-    ///     Collect closed chains without evaluating traces. False preserves indexed closure.
+    ///     Represent compatible closed matrix products as unevaluated traces.
+    ///     False retains indexed closure, including when collect_chains=True.
+    ///     It does not unfold trace notation already present in the input.
+    /// expand : bool, default True
+    ///     Permit local arithmetic distribution required by a selected contraction.
+    ///     False performs the minimal structural work: substitute at boundaries
+    ///     and contract within existing sum branches, but do not multiply out
+    ///     independent sum alternatives. A product of tensor sums can therefore
+    ///     remain indexed and still be Complete under expand=False. Neither value
+    ///     requests global polynomial expansion; expand() is a separate operation.
     /// order : sequence of int, optional
-    ///     Requested factor contraction order; None uses the planner's default.
-    /// max_steps_per_domain : int, default 16
-    ///     Maximum successful transformations per root or alias definition; zero is allowed.
-    ///     Inspect reduction_status for exact unfinished work.
+    ///     Optional zero-based permutation of every normalized top-level factor,
+    ///     used for the initial contraction round. Factors follow Symbolica's
+    ///     normalized order, not necessarily the order in the Python source. None
+    ///     lets the planner choose. This affects scheduling, never matrix order;
+    ///     omit it unless you need to prescribe a factor order explicitly.
+    /// max_steps_per_domain : int or None, default None
+    ///     Optional nonnegative limit on successful planner transformations in each
+    ///     active expression domain. None imposes no automatic work limit. This is
+    ///     not a limit on time, memory, generated terms, or work inside one kernel.
+    ///     Zero preserves eligible work and reports Capped; a request with no eligible
+    ///     work can still report Complete. All unfinished results remain exact.
     ///
     /// Returns
     /// -------
-    /// AliasedTensorExpression
-    ///     An exact result retaining shared definitions. Inspect reduction_status for
-    ///     unfinished work; to_expression() resolves definitions without distributing sums.
+    /// TensorExpression
+    ///     A typed result with its checked external interface and reduction_status.
+    ///     Unrelated scalar coefficients and sums remain factored. No alias wrapper
+    ///     or separate materialization step is required.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     order is not a permutation of all normalized top-level factors, or a
+    ///     substitution cannot produce a valid tensor interface.
     ///
     /// Notes
     /// -----
-    /// This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
-    /// color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
-    /// Polynomial expansion remains an explicit operation.
+    /// Contracting a color delta does not enable generator or Fierz identities.
+    /// Collecting a Dirac or color trace does not evaluate it. Use simplify_algebra()
+    /// for identities, contract_ports(rhs, left=..., right=...) for an explicit
+    /// binary port contraction, and to_tensor() for component-library evaluation.
+    /// With rank_one=False, collect_chains=False and collect_traces=False, only
+    /// metric/identity contraction is requested.
+    ///
+    /// Planning starts with a depth-one view of factor interfaces. It opens a
+    /// selected region only when the contraction needs its interior, reusing
+    /// unchanged leaves and known interfaces. With expand=True, necessary local
+    /// distribution is allowed; an unrelated scalar sum is not routinely expanded.
+    /// Internal dummy contractions can be processed even inside a scalar-interface
+    /// leaf. This is distinct from expanding the whole expression with expand().
+    ///
+    /// Settings do not undo intrinsic normalization performed during construction.
+    /// A metric with identical compatible ports can already be its dimension,
+    /// typed vector multiplication can already form a scalar product, and symmetric
+    /// dot arguments are already ordered. representations=[] and disabled flags
+    /// preserve these existing normalizations. Assign explicit compatible indices
+    /// before requesting a particular Einstein contraction; unresolved axes are
+    /// distinct port identities, not dummy indices to pair by guesswork.
+    ///
+    /// Scalar products can remain in compact metric notation g(p(R), q(R)).
+    /// to_dots() converts that surviving notation to dot(p(R), q(R)) without
+    /// searching for repeated indices. undo_dots(), undo_chain() and undo_trace()
+    /// unfold existing notation with fresh compatible dummy indices, preserving
+    /// matrix order. They do not recover expressions already changed by identities.
+    ///
+    /// Complete means no eligible work remains under the requested settings;
+    /// disabled contractions and unevaluated traces may remain. Deferred retains
+    /// exact work the current implementation could not finish. Capped means an
+    /// explicit work limit stopped the operation. Completed reruns with the same
+    /// settings are stable. Unfinished results can be passed back to contract(),
+    /// possibly with different settings; unsupported cases need not make progress.
+    /// Inspect this operation's reduction_status before other transformations.
+    /// contraction_complete is a separate structural certificate, not a substitute
+    /// for completion under a restricted representation filter or expand=False.
+    ///
+    /// See Also
+    /// --------
+    /// simplify_algebra : Gamma, color and epsilon identities plus their contractions.
+    /// contract_ports : Explicit binary contraction of selected logical ports.
+    /// to_dots : Scalar-product notation conversion without index contraction.
+    /// undo_trace : Turn trace notation into a closed indexed chain.
+    /// expand : Explicit arithmetic distribution.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(3)
-    /// >>> p = TensorName.vector("p")(space)
-    /// >>> expression = TensorExpression.g(space)("i", "j") * p("j")
-    /// >>> result = expression.contract()
-    /// >>> result.to_expression().rank
-    /// 1
-    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, order=None, max_steps_per_domain=16))]
+    /// A metric relabels a vector. A Lorentz-only filter also permits a metric to
+    /// enter a gamma matrix without touching its two spinor ports.
+    ///
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> lorentz = sp.Representation.mink(4)
+    /// >>> metric = sp.TensorExpression.g(lorentz)
+    /// >>> p = sp.TensorName.vector("contract_docs::p")(lorentz)
+    /// >>> source = metric("mu", "nu") * p("nu")
+    /// >>> assert source.contract() == p("mu")
+    /// >>> gamma = sp.TensorExpression.dirac_gamma(4)
+    /// >>> mixed = gamma("a", "b", "nu") * metric("mu", "nu")
+    /// >>> assert mixed.contract(representations=[lorentz]) == gamma("a", "b", "mu")
+    ///
+    /// Trace collection and trace evaluation are separate operations. The collected
+    /// trace represents the same tensor as 4*g(mu,nu), but contract() leaves it
+    /// unevaluated. Unfolding and contracting it recovers the collected notation.
+    ///
+    /// >>> word = gamma("a", "b", "mu") * gamma("b", "a", "nu")
+    /// >>> collected = word.contract()
+    /// >>> assert collected.simplify_algebra(color=False) == 4 * metric("mu", "nu")
+    /// >>> assert collected.undo_trace().undo_chain().contract() == collected
+    /// >>> uncollected = word.contract(collect_traces=False)
+    /// >>> assert uncollected.contract() == collected
+    ///
+    /// A closed color delta gives N_c without any color-algebra identity. An empty
+    /// filter retains this product, and an unrelated scalar power remains factored.
+    ///
+    /// >>> Nc = S("contract_docs::Nc")
+    /// >>> fundamental = sp.Representation.cof(Nc)
+    /// >>> delta = sp.TensorExpression.g(fundamental, fundamental.dual())
+    /// >>> cycle = delta("i", "j") * delta("j", "i")
+    /// >>> assert cycle.contract().to_expression() == Nc
+    /// >>> assert cycle.contract(representations=[]) == cycle
+    /// >>> x, y = S("contract_docs::x", "contract_docs::y")
+    /// >>> assert ((x + y)**8 * cycle).contract().to_expression() == (x + y)**8 * Nc
+    ///
+    /// Minimal contraction still relabels ports through a sum. It leaves products
+    /// of independent tensor sums factorized instead of enumerating their pairings.
+    ///
+    /// >>> q = sp.TensorName.vector("contract_docs::q")(lorentz)
+    /// >>> A = sp.TensorName("contract_docs::A")(lorentz, lorentz)
+    /// >>> relabel = metric("mu", "nu") * (p("nu") + q("nu"))
+    /// >>> assert relabel != p("mu") + q("mu")
+    /// >>> assert relabel.contract(expand=False) == p("mu") + q("mu")
+    /// >>> product = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+    /// >>> minimal = product.contract(expand=False)
+    /// >>> assert minimal == product
+    /// >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+    /// >>> full = product.contract()
+    /// >>> assert minimal != full
+    /// >>> assert minimal.contract() == full
+    ///
+    /// An explicit zero limit retains eligible work exactly. Continuing without
+    /// that limit completes it, while the original input remains available.
+    ///
+    /// >>> pending = cycle.contract(max_steps_per_domain=0)
+    /// >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+    /// >>> assert pending == cycle
+    /// >>> assert pending.contract().to_expression() == Nc
+    #[pyo3(signature=(*, representations=None, metrics=true, rank_one=true, collect_chains=true, collect_traces=true, expand=true, order=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn contract(
         &self,
+        py: Python<'_>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
         representations: Option<Vec<Bound<'_, PyAny>>>,
         metrics: bool,
         rank_one: bool,
         collect_chains: bool,
         collect_traces: bool,
+        expand: bool,
         order: Option<Vec<usize>>,
-        max_steps_per_domain: usize,
-    ) -> PyResult<AliasedTensorExpression> {
+        max_steps_per_domain: Option<usize>,
+    ) -> PyResult<Py<Self>> {
         let representations = crate::simplification::contraction_representations(representations)?;
         let settings = idenso::tensor::ContractSettings {
             representations: representations.as_deref(),
@@ -2880,6 +3793,7 @@ impl TensorExpression {
             rank_one,
             collect_chains,
             collect_traces,
+            expand,
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
         };
@@ -2887,11 +3801,7 @@ impl TensorExpression {
             .value
             .contract(settings)
             .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            Arc::new(value),
-            self.name,
-            self.name_args.clone(),
-        ))
+        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
     }
 
     #[doc = python_doc!("TensorExpression.contract_ports")]
@@ -3045,11 +3955,14 @@ impl TensorExpression {
     /// ----------
     /// max_line_length : int, optional
     ///     Requested line-length bound for the printer. None leaves it unbounded.
+    /// settings : DisplaySettings, optional
+    ///     Index labels, dimensions and invariant notation. Defaults to
+    ///     DisplaySettings(). Only ports layout and default spacing are supported.
     ///
     /// Returns
     /// -------
     /// str
-    ///     LaTeX tensor notation with dimensions omitted.
+    ///     LaTeX tensor notation, including the enclosing math delimiters.
     ///
     /// Examples
     /// --------
@@ -3057,9 +3970,19 @@ impl TensorExpression {
     /// >>> space = Representation.euc(2)
     /// >>> A = TensorName("M")(space, space)
     /// >>> source = A.to_latex()
-    #[pyo3(signature = (max_line_length = None))]
-    fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
-        display::structured_to_latex(Self::structured(&self_), false, max_line_length)
+    #[pyo3(signature = (max_line_length = None, *, settings = None))]
+    fn to_latex(
+        self_: PyRef<'_, Self>,
+        max_line_length: Option<usize>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(None, settings.as_deref());
+        display::reject_renderer_only_settings(&settings, "to_latex")?;
+        Ok(display::structured_to_latex(
+            Self::structured(&self_),
+            &settings,
+            max_line_length,
+        ))
     }
 
     /// Produce static Typst math source.
@@ -3104,7 +4027,7 @@ impl TensorExpression {
         ))
     }
 
-    /// Create a rich display value for a notebook.
+    /// Create a lazy rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
@@ -3120,7 +4043,14 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Symbolica display wrapper with text and available rich representations.
+    ///     Small expressions render once per backend; large notebook displays use bounded pages.
+    ///
+    /// Notes
+    /// -----
+    /// Automatic representations of large expressions are bounded previews.
+    /// Paging retains factorization and ordered ports; explicit exports remain complete.
+    /// Settings are captured here; custom printers run on the first request
+    /// for each backend. Create a new formatted value after changing printers.
     ///
     /// Examples
     /// --------
@@ -3131,18 +4061,96 @@ impl TensorExpression {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         self_: PyRef<'_, Self>,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_structured_output_rich(
+        display::format_structured_output_rich(Arc::clone(&self_.value), settings, notation_source)
+    }
+
+    /// Create a bounded, interactive MathML viewer in marimo or Jupyter.
+    ///
+    /// Only the current page is rendered. Nested expressions retain their
+    /// factorization, and omitted subexpressions can be opened independently.
+    /// Requires the optional notebook-display dependencies for live navigation.
+    ///
+    /// Parameters
+    /// ----------
+    /// page_size : int, default 25
+    ///     Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+    ///     show fewer entries when an individual expression is large.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation, index labels, and other presentation preferences.
+    /// notation_source : str, optional
+    ///     Custom Typst notation source, with the same meaning as in to_html().
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     Notebook viewer retaining the expression and rendering pages on demand.
+    ///     Display it in marimo or Jupyter to navigate its widget.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> viewer = TensorExpression(1).paged(page_size=25)
+    #[pyo3(signature = (page_size=25, *, settings=None, notation_source=None))]
+    fn paged(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        page_size: usize,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        display::paging::viewer(
             py,
-            Self::structured(&self_),
-            &settings,
-            notation_source.as_deref(),
+            Arc::clone(&self_.value),
+            settings.as_deref().cloned().unwrap_or_default(),
+            notation_source,
+            page_size,
         )
+    }
+
+    /// Return marimo's notebook presentation with bounded pages for large expressions.
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     Rich notebook output or an interactive viewer, using default settings.
+    fn _display_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        display::format_structured_output_rich(
+            Arc::clone(&self_.value),
+            display::DisplaySettings::default(),
+            None,
+        )
+        ._display_(py)
+    }
+
+    /// Return the rich representations requested by a Jupyter frontend.
+    ///
+    /// Parameters
+    /// ----------
+    /// include, exclude : list of str, optional
+    ///     MIME types to include or exclude from the returned representations.
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     MIME bundle for the complete small expression or paged large expression.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        display::format_structured_output_rich(
+            Arc::clone(&self_.value),
+            display::DisplaySettings::default(),
+            None,
+        )
+        ._repr_mimebundle_(py, include, exclude)
     }
 
     /// Render the tensor as an HTML fragment.
@@ -3248,7 +4256,11 @@ impl TensorExpression {
     /// >>> A = sp.TensorName("docs::A")(r, r)
     /// >>> text = repr(A)
     fn __repr__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(Self::structured(&self_), false)
+        if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
+        } else {
+            display::format_structured(Self::structured(&self_), false)
+        }
     }
 
     /// Return a readable text representation.
@@ -3260,7 +4272,11 @@ impl TensorExpression {
     /// >>> A = sp.TensorName("docs::A")(r, r)
     /// >>> text = str(A)
     fn __str__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(Self::structured(&self_), false)
+        if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
+        } else {
+            display::format_structured(Self::structured(&self_), false)
+        }
     }
 
     fn _repr_pretty_(
@@ -3270,20 +4286,48 @@ impl TensorExpression {
     ) -> PyResult<()> {
         let text = if cycle {
             "...".to_string()
+        } else if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
         } else {
-            display::format_structured(Self::structured(&self_), false)
+            display::format_structured_backend(
+                pretty.py(),
+                Self::structured(&self_),
+                &display::DisplaySettings::default(),
+                None,
+                FormattedOutputBackend::Text,
+            )?
         };
         pretty.call_method1("text", (text,))?;
         Ok(())
     }
 
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
+        if display::paging::is_large(&self_.value) {
+            return display::paging::static_html(
+                py,
+                Arc::clone(&self_.value),
+                display::DisplaySettings::default(),
+                None,
+            )
+            .ok();
+        }
         let settings = display::DisplaySettings::default();
-        display::structured_to_html(py, Self::structured(&self_), &settings, None).ok()
+        display::format_structured_backend(
+            py,
+            Self::structured(&self_),
+            &settings,
+            None,
+            FormattedOutputBackend::Html,
+        )
+        .ok()
     }
 
-    fn _repr_latex_(self_: PyRef<'_, Self>) -> String {
-        Self::to_latex(self_, None)
+    fn _repr_latex_(self_: PyRef<'_, Self>) -> PyResult<String> {
+        if display::paging::is_large(&self_.value) {
+            Ok(r"$$\text{Large tensor expression: use the paged viewer}$$".into())
+        } else {
+            Self::to_latex(self_, None, None)
+        }
     }
 }
 
@@ -3318,7 +4362,7 @@ impl TensorExpression {
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
     if let Ok(expression) = expression.extract::<PyRef<'_, TensorExpression>>() {
-        return Py::new(py, expression.clone());
+        return Py::new(py, expression.clone().into_initializer());
     }
     let expression = expression
         .extract::<ConvertibleToExpression>()
@@ -4345,8 +5389,6 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression();
             let actual = infer_interface(&simplified).unwrap();
             assert_eq!(actual.canonical(), expected.canonical(), "{simplified}");
@@ -4384,8 +5426,6 @@ mod tests {
                         epsilon: true,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .expression()
             )
@@ -4448,7 +5488,7 @@ mod tests {
                             product
                                 .contract(Default::default())
                                 .unwrap()
-                                .expanded()
+                                .expanded(None, false)
                                 .unwrap()
                                 .to_dots()
                                 .unwrap()
@@ -4494,8 +5534,6 @@ mod tests {
                     product
                         .contract(Default::default())
                         .unwrap()
-                        .resolved()
-                        .unwrap()
                         .into_expression(),
                     expected
                 );
@@ -4532,8 +5570,6 @@ mod tests {
         let projected = contracted
             .contract(Default::default())
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression();
         // Network contraction produces valid slashed gamma factors inside the trace.
         let interface = infer_interface(&projected)
@@ -4561,14 +5597,12 @@ mod tests {
                         * vector.clone()
                         * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
-                    let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?.resolved().map_err(TensorExpression::inference_error)?)?;
+                    let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?)?;
                     let kwargs = pyo3::types::PyDict::new(py);
                     kwargs.set_item("gamma", true)?;
                     kwargs.set_item("gamma_output", "chains")?;
                     let collected = compact.bind(py).call_method("simplify_algebra", (), Some(&kwargs))?;
-                    let collected = collected.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-                    let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
-                    let collected = collected.borrow(py);
+                    let collected = collected.extract::<PyRef<'_, TensorExpression>>()?;
                     let expected = infer_interface(&original)?;
                     assert_eq!(collected.interface().canonical(), expected.canonical());
                     let atom = &collected.atom();
@@ -5114,10 +6148,7 @@ mod tests {
                 let cooked = cooked.extract::<Py<TensorExpression>>()?;
                 assert_eq!(cooked.borrow(py).interface().canonical().order(), rank);
                 if rank == 0 {
-                    let simplified = cooked
-                        .bind(py)
-                        .call_method0("contract")?
-                        .call_method0("to_expression")?;
+                    let simplified = cooked.bind(py).call_method0("contract")?;
                     let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
                     assert_eq!(*simplified.atom(), Atom::num(3));
                 }
@@ -5275,10 +6306,7 @@ mod tests {
                 wrapped.borrow(py).interface(),
                 tensor.borrow(py).interface()
             );
-            let simplified = wrapped
-                .bind(py)
-                .call_method0("contract")?
-                .call_method0("to_expression")?;
+            let simplified = wrapped.bind(py).call_method0("contract")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
                 *simplified.atom(),
@@ -5379,11 +6407,10 @@ mod tests {
                     ("apart", &one),
                     ("apart", &two),
                 ] {
-                    let raw = TensorExpression::to_expression(expression.borrow(py))
-                        .into_pyobject(py)?
+                    let result = expression
+                        .bind(py)
                         .call_method1(method, args)?
-                        .extract::<PythonExpression>()?;
-                    let result = TensorExpression::preserving_interface(&original, py, raw.expr)?;
+                        .extract::<Py<TensorExpression>>()?;
                     let result = result.borrow(py);
                     assert_eq!(result.interface(), original.interface(), "{method}");
                     assert_eq!(result.name, original.name, "{method}");
@@ -5429,13 +6456,10 @@ mod tests {
                 Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
             })?;
             kwargs.set_item("coeff_map", callback)?;
-            let raw = TensorExpression::to_expression(expression.borrow(py))
-                .into_pyobject(py)?
-                .call_method("collect_symbol", (x,), Some(&kwargs))?
-                .extract::<PythonExpression>()?;
-            let error =
-                TensorExpression::preserving_interface(&expression.borrow(py), py, raw.expr)
-                    .unwrap_err();
+            let error = expression
+                .bind(py)
+                .call_method("collect_symbol", (x,), Some(&kwargs))
+                .unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             Ok(())
         })
@@ -5463,7 +6487,12 @@ mod tests {
             let constructed = constructed.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(constructed.interface(), tensor.borrow(py).interface());
             assert_eq!(constructed.name, tensor.borrow(py).name);
-            let ordinary = TensorExpression::to_expression(tensor.borrow(py)).into_pyobject(py)?;
+            assert_eq!(&constructed.as_super().expr, constructed.atom());
+            assert!(tensor.bind(py).is_instance_of::<PythonExpression>());
+            let inherited = tensor.bind(py).call_method0("get_all_symbols")?;
+            let inherited = inherited.extract::<Vec<PythonExpression>>()?;
+            assert!(inherited == tensor.borrow(py).to_expression().get_all_symbols(true));
+            let ordinary = tensor.borrow(py).to_expression().into_pyobject(py)?;
             let inferred = py.get_type::<TensorExpression>().call1((&ordinary,))?;
             assert_eq!(
                 inferred
@@ -5484,15 +6513,12 @@ mod tests {
                 vec![Atom::num(7)],
             )?;
             let x = x.into_pyobject(py)?;
-            let factored = TensorExpression::to_expression(expression.borrow(py))
-                .into_pyobject(py)?
-                .call_method0("factor")?;
+            let factored = expression.bind(py).call_method0("factor")?;
             let collected = factored
                 .call_method1("collect", (&x,))?
-                .extract::<PythonExpression>()?;
-            let collected =
-                TensorExpression::preserving_interface(&expression.borrow(py), py, collected.expr)?;
+                .extract::<Py<TensorExpression>>()?;
             let collected = collected.borrow(py);
+            assert_eq!(&collected.as_super().expr, collected.atom());
             assert_eq!(collected.interface(), expression.borrow(py).interface());
             assert_eq!(collected.name, expression.borrow(py).name);
             assert_eq!(collected.name_args, vec![Atom::num(7)]);
@@ -5507,23 +6533,19 @@ mod tests {
                 Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
             })?;
             kwargs.set_item("coeff_map", strip_tensor)?;
-            let raw = factored
-                .call_method("collect", (&x,), Some(&kwargs))?
-                .extract::<PythonExpression>()?;
-            let error =
-                TensorExpression::preserving_interface(&expression.borrow(py), py, raw.expr)
-                    .unwrap_err();
+            let error = factored
+                .call_method("collect", (&x,), Some(&kwargs))
+                .unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             let zero = TensorExpression::from_atom_interface(
                 py,
                 Atom::Zero,
                 tensor.borrow(py).interface().clone(),
             )?;
-            let raw = TensorExpression::to_expression(zero.borrow(py))
-                .into_pyobject(py)?
+            let zero = zero
+                .bind(py)
                 .call_method0("factor")?
-                .extract::<PythonExpression>()?;
-            let zero = TensorExpression::preserving_interface(&zero.borrow(py), py, raw.expr)?;
+                .extract::<Py<TensorExpression>>()?;
             assert_eq!(zero.borrow(py).interface(), tensor.borrow(py).interface());
 
             let d = Dimension::from(symbol!("tensor_convenience_D"));
@@ -5594,7 +6616,7 @@ mod tests {
             assert_eq!(unchanged.borrow(py).name, Some(name));
             assert_eq!(unchanged.borrow(py).name_args, vec![Atom::num(7)]);
 
-            let ordinary = TensorExpression::to_expression(expression.bind(py).borrow());
+            let ordinary = expression.bind(py).borrow().to_expression();
             let ordinary = ordinary.expand(None, None)?;
             let ordinary = ordinary.into_pyobject(py)?;
             assert!(!ordinary.is_instance_of::<TensorExpression>());
@@ -5652,10 +6674,7 @@ mod tests {
                     Some(name),
                     vec![Atom::num(7)],
                 )?;
-                let result = expression
-                    .bind(py)
-                    .call_method0("contract")?
-                    .call_method0("to_expression")?;
+                let result = expression.bind(py).call_method0("contract")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_eq!(*result.atom(), expected, "contract");
                 assert_eq!(
@@ -5724,7 +6743,6 @@ mod tests {
                     gamma_expression
                         .bind(py)
                         .call_method("simplify_algebra", (), Some(&kwargs))?;
-                let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
                     *result.atom(),
@@ -5773,26 +6791,19 @@ mod tests {
             kwargs.set_item("collect_chains", false)?;
             kwargs.set_item("collect_traces", false)?;
             let metric_only = tensor.bind(py).call_method("contract", (), Some(&kwargs))?;
-            let value = metric_only.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let value = metric_only.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
-                value
-                    .value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
+                value.value.expression(),
                 &(spenso::p!(&nu) * spenso::q!(&nu))
             );
             assert!(!value.value.contraction_complete());
             let again = metric_only.call_method("contract", (), Some(&kwargs))?;
-            let again = again.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-            assert_eq!(again.value.root(), value.value.root());
+            let again = again.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(again.value, value.value);
             let full = metric_only.call_method0("contract")?;
-            let full = full.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let full = full.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
-                full.value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
+                full.value.expression(),
                 &spenso::g!(spenso::p!(spenso::mink!(4)), spenso::q!(spenso::mink!(4)))
             );
             assert!(full.value.contraction_complete());
@@ -5892,15 +6903,8 @@ mod tests {
             let simplified = cooked
                 .bind(py)
                 .call_method("contract", (), Some(&contraction))?;
-            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
-            assert_eq!(
-                simplified
-                    .value
-                    .resolved()
-                    .map_err(TensorExpression::inference_error)?
-                    .expression(),
-                &Atom::num(3)
-            );
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
+            assert_eq!(simplified.value.expression(), &Atom::num(3));
             Ok(())
         })
         .unwrap();
@@ -5926,10 +6930,10 @@ mod tests {
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
             let simplified = original.bind(py).call_method0("simplify_algebra")?;
-            let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             let simplified = simplified
                 .value
-                .expanded()
+                .expanded(None, false)
                 .map_err(TensorExpression::inference_error)?;
             assert_ne!(simplified.expression(), &atom);
             assert_eq!(simplified.expression(), expanded.borrow(py).atom());
@@ -6021,12 +7025,10 @@ mod tests {
                     ("cancel", &empty),
                     ("apart", &one),
                 ] {
-                    let raw = TensorExpression::to_expression(original.borrow(py))
-                        .into_pyobject(py)?
+                    let result = original
+                        .bind(py)
                         .call_method1(method, args)?
-                        .extract::<PythonExpression>()?;
-                    let result =
-                        TensorExpression::preserving_interface(&original.borrow(py), py, raw.expr)?;
+                        .extract::<Py<TensorExpression>>()?;
                     let result = result.borrow(py);
                     assert_eq!(
                         result.interface().logical_slots(),
@@ -6051,10 +7053,10 @@ mod tests {
                     );
                 }
                 let simplified = original.bind(py).call_method0("simplify_algebra")?;
-                let simplified = simplified.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+                let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
                 let simplified = simplified
                     .value
-                    .expanded()
+                    .expanded(None, false)
                     .map_err(TensorExpression::inference_error)?;
                 assert_eq!(
                     simplified.structure().logical_slots(),
@@ -6707,8 +7709,7 @@ mod tests {
             kwargs.set_item("color", true)?;
             let simplified = tensor
                 .bind(py)
-                .call_method("simplify_algebra", (), Some(&kwargs))?
-                .call_method0("to_expression")?;
+                .call_method("simplify_algebra", (), Some(&kwargs))?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert!(simplified.interface().canonical().is_scalar());
             assert_eq!(

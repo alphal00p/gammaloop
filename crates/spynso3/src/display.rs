@@ -2,6 +2,7 @@ use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet},
     fmt::Write,
+    sync::Arc,
 };
 
 use pyo3::{
@@ -35,7 +36,7 @@ use spenso::{
 };
 use std::path::Path;
 use symbolica::{
-    api::python::{PythonExpression, PythonFormattedOutput},
+    api::python::{FormattedOutputBackend, PythonExpression, PythonFormattedOutput},
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
@@ -68,6 +69,7 @@ pub(crate) mod library;
 mod mathml;
 pub(crate) mod metadata;
 pub(crate) mod network;
+pub(crate) mod paging;
 
 /// Immutable presentation options for tensor notation and component displays.
 ///
@@ -145,12 +147,29 @@ pub struct DisplaySettings {
     /// >>> value = DisplaySettings().tensor_view
     #[pyo3(get)]
     tensor_view: String,
+    /// Choose compact or degree-explicit scalar invariant notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     "compact" uses C_F, C_A and T_R for the quadratic color invariants;
+    ///     "explicit" uses C_2(F), C_2(A) and I_2(F). Higher degrees use
+    ///     C_k(R), I_k(R) and G_k(R, S) in either style.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> DisplaySettings(invariant_style="explicit").invariant_style
+    /// 'explicit'
+    #[pyo3(get)]
+    invariant_style: String,
     /// Include representation dimensions in index notation.
     ///
     /// Returns
     /// -------
     /// bool
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     ///
     /// Examples
     /// --------
@@ -234,6 +253,7 @@ impl Default for DisplaySettings {
             index_style: "alphabet".to_owned(),
             component_style: "superscript".to_owned(),
             tensor_view: "interactive".to_owned(),
+            invariant_style: "compact".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -272,7 +292,8 @@ impl DisplaySettings {
     ///     Rich layout: "ports" places indices by tensor axes; "schoonschip"
     ///     uses compact contracted-vector notation; "call" uses function-call notation.
     /// show_dimensions : bool, default False
-    ///     Include representation dimensions in index notation.
+    ///     Include representation dimensions in index notation and scalar invariants.
+    ///     Invariants then show their degree and representation, such as C_2(F_3).
     /// parentheses : bool, default True
     ///     Include the optional grouping parentheses used by tensor notation.
     /// commas : bool or None, default None
@@ -294,6 +315,13 @@ impl DisplaySettings {
     /// tensor_view : str, default "interactive"
     ///     Concrete-tensor HTML: "interactive" provides a component explorer with
     ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+    ///
+    /// invariant_style : {"compact", "explicit"}, default "compact"
+    ///     Compact quadratic color notation uses C_F, C_A and T_R. Explicit
+    ///     notation uses C_2(F), C_2(A) and I_2(F). Both use C_k(R), I_k(R)
+    ///     and G_k(R, S) for higher invariants. show_dimensions adds the
+    ///     dimension to each representation label and disables quadratic aliases.
+    ///     Older scalar symbols have no representation dimension to display.
     ///
     /// Returns
     /// -------
@@ -321,6 +349,7 @@ impl DisplaySettings {
         index_style = "alphabet",
         component_style = "superscript",
         tensor_view = "interactive",
+        invariant_style = "compact",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
@@ -334,6 +363,7 @@ impl DisplaySettings {
         index_style: &str,
         component_style: &str,
         tensor_view: &str,
+        invariant_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
@@ -356,12 +386,18 @@ impl DisplaySettings {
                 "tensor_view must be 'interactive' or 'matrix'",
             ));
         }
+        if !matches!(invariant_style, "compact" | "explicit") {
+            return Err(PyValueError::new_err(
+                "invariant_style must be 'compact' or 'explicit'",
+            ));
+        }
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
             component_style: component_style.to_owned(),
             tensor_view: tensor_view.to_owned(),
+            invariant_style: invariant_style.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -462,6 +498,7 @@ impl DisplaySettings {
                 ("index_style", "index_style"),
                 ("component_style", "component_style"),
                 ("tensor_view", "tensor_view"),
+                ("invariant_style", "invariant_style"),
             ],
         )
     }
@@ -503,7 +540,10 @@ fn has_renderer_only_settings(settings: &DisplaySettings) -> bool {
         || settings.factor_gap != defaults.factor_gap
 }
 
-fn reject_renderer_only_settings(settings: &DisplaySettings, method: &str) -> PyResult<()> {
+pub(crate) fn reject_renderer_only_settings(
+    settings: &DisplaySettings,
+    method: &str,
+) -> PyResult<()> {
     if has_renderer_only_settings(settings) {
         return Err(PyValueError::new_err(format!(
             "{method} emits ports-style source; Schoonschip, call, and custom spacing layouts require to_html or to_svg"
@@ -575,6 +615,7 @@ fn display_options_with_settings(
     presentation.commas = settings.commas.unwrap_or(settings.tensor_layout == "call");
     presentation.symbol_scripts = settings.symbol_scripts;
     presentation.array_components = settings.component_style == "array";
+    presentation.explicit_invariants = settings.invariant_style == "explicit";
 
     let mut options = match mode {
         TensorDisplayMode::Plain => presentation.nice_symbolica(),
@@ -1046,12 +1087,12 @@ pub(crate) fn format_structured(
 
 pub(crate) fn atom_to_latex(
     atom: &Atom,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    let mut options = display_options(TensorDisplayMode::Latex, show_dimensions);
+    let mut options = display_options_with_settings(TensorDisplayMode::Latex, settings);
     options.max_line_length = max_line_length;
-    let body = format_atom_with_options(atom, &options, "alphabet");
+    let body = format_atom_with_options(atom, &options, &settings.index_style);
     if body.contains("\\\\\n") {
         format!("$$\\begin{{gathered}}\n{body}\n\\end{{gathered}}$$")
     } else {
@@ -1061,37 +1102,94 @@ pub(crate) fn atom_to_latex(
 
 pub(crate) fn structured_to_latex(
     value: &SymbolicTensor<PartialStructure>,
-    show_dimensions: bool,
+    settings: &DisplaySettings,
     max_line_length: Option<usize>,
 ) -> String {
-    atom_to_latex(&value.presentation_atom(), show_dimensions, max_line_length)
+    atom_to_latex(&value.presentation_atom(), settings, max_line_length)
 }
 
-// Typst supplies semantic HTML when the optional renderer is installed;
-// Symbolica's LaTeX remains the notebook fallback otherwise.
-pub(crate) fn format_atom_output_rich(
+fn format_atom_backend(
     py: Python<'_>,
     atom: &Atom,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
-) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
-        html: atom_to_html(py, atom, settings, notation_source).ok(),
-        latex: Some({
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    match backend {
+        FormattedOutputBackend::Text => Ok(format_atom_with_settings(
+            atom,
+            TensorDisplayMode::Plain,
+            settings,
+        )),
+        FormattedOutputBackend::Html => atom_to_html(py, atom, settings, notation_source),
+        FormattedOutputBackend::Latex => {
             let body = format_atom_with_settings(atom, TensorDisplayMode::Latex, settings);
-            format!("$${body}$$")
-        }),
+            Ok(format!("$${body}$$"))
+        }
     }
 }
 
-pub(crate) fn format_structured_output_rich(
+pub(crate) fn format_structured_backend(
     py: Python<'_>,
     value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    format_atom_backend(
+        py,
+        &value.presentation_atom(),
+        settings,
+        notation_source,
+        backend,
+    )
+}
+
+// Each backend is rendered on demand and cached by Symbolica's shared output
+// owner. The original immutable tensor remains shared, without materialization.
+pub(crate) fn format_structured_output_rich(
+    value: Arc<SymbolicTensor<PartialStructure>>,
+    settings: DisplaySettings,
+    notation_source: Option<String>,
 ) -> PythonFormattedOutput {
-    format_atom_output_rich(py, &value.presentation_atom(), settings, notation_source)
+    if paging::is_large(&value) {
+        let notebook_value = Arc::clone(&value);
+        let notebook_settings = settings.clone();
+        let notebook_notation = notation_source.clone();
+        return PythonFormattedOutput::lazy(move |py, backend| match backend {
+            FormattedOutputBackend::Html => paging::static_html(
+                py,
+                Arc::clone(&value),
+                settings.clone(),
+                notation_source.clone(),
+            )
+            .map(Some),
+            FormattedOutputBackend::Text => Ok(Some(
+                "Tensor expression (large; use the paged notebook viewer or explicit export)"
+                    .into(),
+            )),
+            FormattedOutputBackend::Latex => Ok(None),
+        })
+        .with_notebook(move |py| {
+            paging::viewer(
+                py,
+                Arc::clone(&notebook_value),
+                notebook_settings.clone(),
+                notebook_notation.clone(),
+                paging::DEFAULT_PAGE_SIZE,
+            )
+        });
+    }
+    PythonFormattedOutput::lazy(move |py, backend| {
+        let result =
+            format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend);
+        // Typst is optional; LaTeX remains the notebook fallback.
+        if matches!(backend, FormattedOutputBackend::Html) {
+            Ok(result.ok())
+        } else {
+            result.map(Some)
+        }
+    })
 }
 
 fn portable_attachments(atom: &Atom) -> Result<AttachmentSet, String> {
@@ -1108,6 +1206,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
             "(\n",
             "  tensor-layout: {:?},\n",
             "  component-style: {:?},\n",
+            "  invariant-style: {:?},\n",
             "  with-dim: {},\n",
             "  parens: {},\n",
             "  commas: {},\n",
@@ -1119,6 +1218,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
         ),
         settings.tensor_layout,
         settings.component_style,
+        settings.invariant_style,
         settings.show_dimensions,
         settings.parentheses,
         commas,
@@ -2317,20 +2417,9 @@ pub(crate) fn concrete_tensor_to_svg(
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
 }
 
-pub(crate) fn format_concrete_tensor_output(
-    tensor: &Spensor,
-    show_dimensions: bool,
-) -> PythonFormattedOutput {
+pub(crate) fn concrete_tensor_to_latex(tensor: &Spensor, show_dimensions: bool) -> String {
     let settings = resolved_settings(Some(show_dimensions), None);
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, &settings),
-        html: None,
-        latex: Some(format_concrete_with_settings(
-            tensor,
-            TensorDisplayMode::Latex,
-            &settings,
-        )),
-    }
+    format_concrete_with_settings(tensor, TensorDisplayMode::Latex, &settings)
 }
 
 pub(crate) fn format_concrete_tensor_output_rich(
@@ -2339,15 +2428,15 @@ pub(crate) fn format_concrete_tensor_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
-        html: concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
-        latex: Some(format_concrete_with_settings(
+    PythonFormattedOutput::new(
+        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
+        concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
+        Some(format_concrete_with_settings(
             tensor,
             TensorDisplayMode::Latex,
             settings,
         )),
-    }
+    )
 }
 
 /// Produce compact plain-text tensor notation.
@@ -2554,7 +2643,7 @@ fn to_svg(
     atom_to_svg(py, &expression.expr, &settings, notation_source.as_deref())
 }
 
-/// Create a rich display value for a notebook.
+/// Create a lazy rich display value for a notebook.
 ///
 /// Parameters
 /// ----------
@@ -2573,7 +2662,12 @@ fn to_svg(
 /// Returns
 /// -------
 /// FormattedOutput
-///     Symbolica display wrapper with text and available rich representations.
+///     Each requested backend renders the complete expression once and caches it.
+///
+/// Notes
+/// -----
+/// Settings are captured here; custom printers run on the first request
+/// for each backend. Create a new formatted value after changing printers.
 ///
 /// Examples
 /// --------
@@ -2589,14 +2683,22 @@ fn to_svg(
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn formatted(
-    py: Python<'_>,
-    expression: &PythonExpression,
+    expression: Py<PythonExpression>,
     show_dimensions: Option<bool>,
     settings: Option<PyRef<'_, DisplaySettings>>,
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
     let settings = resolved_settings(show_dimensions, settings.as_deref());
-    format_atom_output_rich(py, &expression.expr, &settings, notation_source.as_deref())
+    PythonFormattedOutput::lazy(move |py, backend| {
+        let expression = expression.borrow(py);
+        let atom = &expression.expr;
+        let result = format_atom_backend(py, atom, &settings, notation_source.as_deref(), backend);
+        if matches!(backend, FormattedOutputBackend::Html) {
+            Ok(result.ok())
+        } else {
+            result.map(Some)
+        }
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2685,6 +2787,7 @@ mod tests {
                 style,
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.index_style, style);
@@ -2711,6 +2814,7 @@ mod tests {
                 "invalid",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -2731,6 +2835,7 @@ mod tests {
                 "alphabet",
                 style,
                 "interactive",
+                "compact",
             )
             .unwrap();
             assert_eq!(settings.component_style, style);
@@ -2761,6 +2866,7 @@ mod tests {
                 "alphabet",
                 "invalid",
                 "interactive",
+                "compact",
             )
             .is_err()
         );
@@ -3366,6 +3472,7 @@ mod tests {
                 "alphabet",
                 "superscript",
                 "interactive",
+                "compact",
             )
             .unwrap();
             let source = typst_settings_source(&settings, &Atom::Zero);

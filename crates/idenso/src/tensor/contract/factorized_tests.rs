@@ -31,8 +31,86 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
         .unwrap()
         .contract(Default::default())
         .unwrap()
-        .resolved()
-        .unwrap()
+}
+
+#[test]
+fn chain_admission_skips_finished_open_tensor_coefficients() {
+    use crate::Cookable;
+    use crate::shorthands::chain::CHAINIFY_CALLS;
+    use crate::tensor::simplification::observation::INITIAL_SCANS;
+    setup();
+    let reps = crate::test_support::test_initialize();
+    let label = spenso::index_symbol!("fused_raw_routing::chain_channel_edge");
+    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([symbolica::function!(label, i)]));
+    let coefficient = Atom::add_many((0..128).map(|i| {
+        let x = Atom::var(symbolica::symbol!(&format!(
+            "fused_raw_routing::channel_coefficient_{i}"
+        )));
+        x * input("spenso::g(p(17,spenso::mink(4)),q(23,spenso::mink(4)))").pow(i % 4 + 1)
+    }));
+    let vector = |name, slot: &Atom| {
+        FunctionBuilder::new(SPENSO_TAG.rank_one_tensor_symbol(name))
+            .add_arg(slot)
+            .finish()
+    };
+    let source = SymbolicTensor::infer(
+        (&coefficient * spenso::g!(&a, &b)
+            + coefficient.pow(2)
+                * vector("fused_raw_routing::p", &a)
+                * vector("fused_raw_routing::q", &b))
+        .cook_indices(),
+    )
+    .unwrap();
+    source.reduction_observations();
+    let scans = INITIAL_SCANS.with(|count| count.get());
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let result = source.contract(Default::default()).unwrap();
+    assert_eq!(result.expression, source.expression);
+    assert_eq!(result.structure, source.structure);
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(CHAINIFY_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+}
+
+#[test]
+fn chain_admission_updates_channels_after_vector_substitution() {
+    use crate::shorthands::chain::CHAINIFY_CALLS;
+    setup();
+    let source = input(
+        "(t(spenso::mink(4,a),spenso::mink(4,i))+u(spenso::mink(4,a),spenso::mink(4,i)))*p(spenso::mink(4,i))*q(spenso::mink(4,b))",
+    );
+    let expected = input(
+        "(t(spenso::mink(4,a),p(spenso::mink(4)))+u(spenso::mink(4,a),p(spenso::mink(4))))*q(spenso::mink(4,b))",
+    );
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let result = contract(&source);
+    assert_eq!(result.expression, expected);
+    assert_eq!(CHAINIFY_CALLS.with(|count| count.get()), 0);
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+}
+
+#[test]
+fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
+    use crate::{shorthands::chain::CHAINIFY_CALLS, tensor::ContractSettings};
+    setup();
+    let source = SymbolicTensor::infer(input("(x+y)^7*(t(spenso::mink(4,i),spenso::mink(4,j))*u(spenso::mink(4,j),spenso::mink(4,i))+z)^2")).unwrap();
+    CHAINIFY_CALLS.with(|count| count.set(0));
+    let untraced = source
+        .contract(ContractSettings {
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(!untraced.expression.contains_symbol(SPENSO_TAG.trace));
+    assert!(CHAINIFY_CALLS.with(|count| count.get()) > 0);
+    let traced = untraced.contract(Default::default()).unwrap();
+    assert!(traced.expression.contains_symbol(SPENSO_TAG.trace));
+    assert_eq!(traced.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(traced.structure, source.structure);
+    let expected = input(
+        "(x+y)^7*(spenso::trace(spenso::mink(4),spenso::cyclic(t(spenso::in,spenso::out),u(spenso::in,spenso::out)))+z)^2",
+    );
+    assert_eq!(traced.expression, expected);
 }
 
 #[test]
@@ -71,7 +149,7 @@ fn factored_contract_preserves_common_scalar_spectator_factorization() {
     assert_eq!(
         actual.expand(),
         expected.expand(),
-        "resolved definitions retain the exact contracted polynomial"
+        "the factorized result retains the exact contracted polynomial"
     );
     assert_ne!(
         actual,
@@ -80,6 +158,46 @@ fn factored_contract_preserves_common_scalar_spectator_factorization() {
     );
     assert_eq!(actual.expand(), source.expand().schoonschip().expand());
     assert_eq!(contract(&actual).expression.expand(), actual.expand());
+}
+
+#[test]
+fn factored_contract_keeps_completed_dot_coefficients_opaque() {
+    setup();
+    let coefficient = input(
+        &(0..256)
+            .map(|i| format!("x{i}*spenso::g(p({i},spenso::mink(4)),q({i},spenso::mink(4)))"))
+            .collect::<Vec<_>>()
+            .join("+"),
+    );
+    let tensor = input("(p(spenso::mink(4,a))+q(spenso::mink(4,a)))*q(spenso::mink(4,a))");
+    crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
+    let baseline = contract(&tensor);
+    let baseline_opens = crate::tensor::SELECTED_OPENS.with(|count| count.get());
+    let source = &coefficient * tensor;
+    let expected = &coefficient
+        * input(
+            "spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4)))",
+        );
+    crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
+    let actual = contract(&source);
+    assert_eq!(
+        crate::tensor::SELECTED_OPENS.with(|count| count.get()),
+        baseline_opens,
+        "the completed scalar coefficient must remain unopened"
+    );
+    assert_eq!(actual.expression, &coefficient * baseline.expression);
+    assert_eq!(actual.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(actual.expression, expected);
+    assert_eq!(contract(&actual.expression).expression, actual.expression);
+
+    // Scalar interfaces can still hide genuine index contractions. Keep the
+    // large finished coefficient closed while opening the internal dummy pair.
+    let internal = input("p(spenso::mink(4,b))*q(spenso::mink(4,b))+z");
+    let source = &coefficient * internal;
+    let expected = coefficient * input("spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))+z");
+    let actual = contract(&source);
+    assert_eq!(actual.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(actual.expression, expected);
 }
 
 #[test]
@@ -103,18 +221,12 @@ fn factored_contract_preserves_typed_logical_order_and_zero() {
         );
         let original_ports = tensor.structure.logical_slots();
         assert_eq!(original_ports.len(), 2);
-        let result = tensor
-            .contract(Default::default())
-            .unwrap()
-            .resolved()
-            .unwrap();
+        let result = tensor.contract(Default::default()).unwrap();
         assert_eq!(result.expression.expand(), expected.expand());
         assert_eq!(result.structure.logical_slots(), original_ports);
         assert_eq!(
             result
                 .contract(Default::default())
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .expression
                 .expand(),
@@ -186,9 +298,8 @@ fn factored_contract_preserves_callback_fallback_and_hidden_metadata_schedule() 
             typed
                 .contract(Default::default())
                 .unwrap()
-                .expanded()
-                .unwrap()
-                .expression,
+                .expression
+                .expand(),
             expected.expand()
         );
         assert_eq!(
@@ -202,9 +313,8 @@ fn factored_contract_preserves_callback_fallback_and_hidden_metadata_schedule() 
             typed
                 .contract(Default::default())
                 .unwrap()
-                .expanded()
-                .unwrap()
-                .expression,
+                .expression
+                .expand(),
             expected.expand()
         );
         assert!(calls.lock().unwrap().is_empty());
@@ -256,18 +366,15 @@ fn factored_contract_preserves_vector_metadata_in_merged_states() {
     let expected = source.expand().schoonschip().expand();
     let typed = SymbolicTensor::<PartialStructure>::infer(source).unwrap();
     let result = typed.contract(Default::default()).unwrap();
-    assert_eq!(result.expanded().unwrap().expression, expected);
-    assert!(!result.expression.get_aliases().is_empty());
+    assert_eq!(result.expression.expand(), expected);
+    assert_eq!(result.structure, typed.structure);
     assert_eq!(expected.nterms(), 4);
     assert_eq!(
         result
-            .resolved()
-            .unwrap()
             .contract(Default::default())
             .unwrap()
-            .expanded()
-            .unwrap()
-            .expression,
+            .expression
+            .expand(),
         expected
     );
 }
@@ -289,8 +396,8 @@ fn factor_occurrences_follow_transparent_graph_products() {
         "the parsed transparent product must use graph intake"
     );
     let result = typed.contract(Default::default()).unwrap();
-    assert_eq!(result.expanded().unwrap().expression, expected);
-    assert_eq!(result.root().structure, typed.structure);
+    assert_eq!(result.expression.expand(), expected);
+    assert_eq!(result.structure, typed.structure);
 }
 
 #[test]
@@ -307,7 +414,7 @@ fn powered_scalar_vector_sum_preserves_dummy_scope() {
             collected.contraction_complete(),
             "power scope must complete"
         );
-        let actual = collected.resolved().unwrap().expression;
+        let actual = collected.expression;
         let raw = source.schoonschip();
         assert_eq!(raw, expected, "legacy raw control");
         assert_eq!(
@@ -334,7 +441,7 @@ fn powered_scalar_metric_path_sum_preserves_dummy_scope() {
             collected.contraction_complete(),
             "power scope must complete"
         );
-        let actual = collected.resolved().unwrap().expression;
+        let actual = collected.expression;
         let raw = source.schoonschip();
         assert_eq!(raw, expected, "legacy raw control");
         assert_eq!(
@@ -361,7 +468,7 @@ fn powered_scalar_metric_cycle_sum_preserves_dummy_scope() {
             collected.contraction_complete(),
             "power scope must complete"
         );
-        let actual = collected.resolved().unwrap().expression;
+        let actual = collected.expression;
         let raw = source.schoonschip();
         assert_eq!(raw, expected, "legacy raw control");
         assert_eq!(
@@ -372,8 +479,6 @@ fn powered_scalar_metric_cycle_sum_preserves_dummy_scope() {
             SymbolicTensor::checked_parts(actual.clone(), PartialStructure::from_logical_slots([]))
                 .unwrap()
                 .contract(Default::default())
-                .unwrap()
-                .resolved()
                 .unwrap();
         assert_eq!(rerun.expression, actual);
     }
@@ -411,17 +516,13 @@ fn powered_open_metric_path_keeps_internal_and_external_pairs_distinct() {
         direct.status == ReductionStatus::Complete,
         "direct graph contraction must complete"
     );
-    let mut direct_expression = symbolica::atom::AliasedAtom::from(direct.root);
-    for (handle, body) in direct.aliases {
-        direct_expression.register_alias(handle, body);
-    }
-    assert_eq!(direct_expression.into_inner().expand(), expected.expand());
+    assert_eq!(direct.root.expand(), expected.expand());
     let collected = typed.contract(Default::default()).unwrap();
     assert!(
         collected.contraction_complete(),
         "open power must complete through the graph owner, not silently refuse"
     );
-    let actual = collected.resolved().unwrap();
+    let actual = collected;
     let raw = source.schoonschip();
     assert_eq!(
         actual.expression.expand(),
@@ -446,25 +547,17 @@ fn powered_open_vector_base_preserves_internal_scalar_pair() {
         .contract_factorized(source.as_view(), None, true)
         .expect("open internal pair must use the graph owner");
     assert!(direct.status == ReductionStatus::Complete);
-    let mut direct_expression = symbolica::atom::AliasedAtom::from(direct.root);
-    for (handle, body) in direct.aliases {
-        direct_expression.register_alias(handle, body);
-    }
-    assert_eq!(direct_expression.into_inner().expand(), expected.expand());
-    let actual = typed
-        .contract(Default::default())
-        .unwrap()
-        .resolved()
-        .unwrap();
+    assert_eq!(direct.root.expand(), expected.expand());
+    let actual = typed.contract(Default::default()).unwrap();
     assert_eq!(actual.expression.expand(), expected.expand());
     assert_eq!(contract(&actual.expression).expression, actual.expression);
 }
 
 #[test]
-fn budget_limited_alias_contraction_reports_incomplete_without_reentering_its_frontier() {
+fn default_contraction_completes_the_selected_product() {
     setup();
     let slots = (0..9)
-        .map(|i| format!("spenso::mink(4,budget_port_{i})"))
+        .map(|i| format!("spenso::mink(4,product_port_{i})"))
         .collect::<Vec<_>>();
     let expression = input(&format!(
         "t({})*{}",
@@ -477,25 +570,12 @@ fn budget_limited_alias_contraction_reports_incomplete_without_reentering_its_fr
     ));
     let body = SymbolicTensor::infer(expression).unwrap();
     let direct = body.contract(Default::default()).unwrap();
-    assert!(
-        !direct.contraction_complete(),
-        "the fixed test frontier budget must expose its incomplete status"
-    );
-    let handle = body.alias_handle().unwrap();
-    let source = Arc::new(handle.clone().with_aliases([(handle, body)]).unwrap());
-    assert!(
-        !source.contraction_complete(),
-        "attaching a registry alone cannot certify contraction"
-    );
-    let result = source.contract(Default::default()).unwrap();
-    assert!(!result.contraction_complete());
+    assert!(direct.contraction_complete());
+    assert_eq!(direct.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(direct.structure, body.structure);
     assert_eq!(
-        result.expression.get_aliases().len(),
-        direct.expression.get_aliases().len() + 1,
-        "a single call must retain the bounded frontier once, not recursively restart generated templates"
+        direct.expression.expand(),
+        body.expression.expand().schoonschip().expand()
     );
-    assert_eq!(
-        result.resolved().unwrap().expression.expand(),
-        direct.resolved().unwrap().expression.expand()
-    );
+    assert_eq!(direct.contract(Default::default()).unwrap(), direct);
 }

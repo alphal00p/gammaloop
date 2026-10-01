@@ -86,7 +86,6 @@ for pdg in (11, -11):
         )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
-        .to_expression()
     )
     # Physical external momenta, the tree-level charge, masses and invariants
     # are real. Idenso retains these assumptions as explicit conjugations.
@@ -120,7 +119,6 @@ for pdg in (11, -11):
             )
             .simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
             .to_expression()
         )

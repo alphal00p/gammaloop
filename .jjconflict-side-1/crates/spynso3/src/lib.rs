@@ -66,7 +66,6 @@ use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
-pub mod aliases;
 pub mod broadcast;
 mod data;
 pub mod display;
@@ -277,7 +276,6 @@ impl SymbolicaCommunityModule for SpensoModule {
 define_spenso_python_surface! {
     registered_classes: [
         tensor_rule::PyTensorRule,
-        aliases::AliasedTensorExpression,
         SpensoNet,
         network::ExecutionMode,
         network::execution::ExecutionStatus,
@@ -364,6 +362,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
     type Error = PyErr;
 
     fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        // Check typed interfaces before inherited numeric coercion can erase them,
+        // particularly for tensor-valued zeros.
+        for component in value.extract::<Vec<Bound<'py, PyAny>>>()? {
+            TensorElements::validate_scalar(&component)?;
+        }
         if let Ok(values) = value.extract::<Vec<f64>>() {
             Ok(Self::Floats(values))
         } else if let Ok(values) = value.extract::<Vec<Complex<f64>>>() {
@@ -535,6 +538,17 @@ pub enum TensorElements {
     Real(Py<PyFloat>),
     Complex(Py<PyComplex>),
     Symbolica(PythonExpression),
+}
+
+impl TensorElements {
+    fn validate_scalar(value: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(tensor) = value.extract::<PyRef<'_, TensorExpression>>()
+            && !tensor.interface().canonical().is_scalar()
+        {
+            return Err(PyTypeError::new_err("tensor components must be scalar"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "python_stubgen")]
@@ -1118,7 +1132,7 @@ impl Spensor {
     }
 
     fn _repr_latex_(&self) -> Option<String> {
-        display::format_concrete_tensor_output(self, false).latex
+        Some(display::concrete_tensor_to_latex(self, false))
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
@@ -1228,6 +1242,7 @@ impl Spensor {
         item: Bound<'py, PyAny>,
         value: Bound<'py, PyAny>,
     ) -> eyre::Result<()> {
+        TensorElements::validate_scalar(&value)?;
         let value = if let Ok(v) = value.extract::<PythonExpression>() {
             ConcreteOrParam::Param(v.expr)
         } else if let Ok(v) = value.extract::<f64>() {

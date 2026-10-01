@@ -297,8 +297,6 @@ impl TraceEvaluation {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression();
             let mut nonzero_samples = 0;
             for (sample, evaluation) in evaluations.iter().enumerate() {
@@ -352,8 +350,6 @@ impl TraceEvaluation {
                     collect_traces: false,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .into_expression();
             for (sample, evaluation) in evaluations.iter().enumerate() {
@@ -409,8 +405,6 @@ impl TraceEvaluation {
                         ..Default::default()
                     })
                     .unwrap()
-                    .resolved()
-                    .unwrap()
                     .into_expression();
             assert_ne!(trace, simplified);
             assert_eq!(
@@ -427,8 +421,6 @@ impl TraceEvaluation {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression(),
                 simplified
@@ -499,8 +491,6 @@ impl TraceEvaluation {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression();
         assert_ne!(trace, simplified);
         assert_eq!(
@@ -517,8 +507,6 @@ impl TraceEvaluation {
                     collect_traces: false,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .into_expression(),
             simplified
@@ -594,8 +582,6 @@ impl TraceEvaluation {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression();
         let specialize = |expression: &Atom| {
             expression.replace_map(|atom, _, out| {
@@ -621,8 +607,6 @@ impl TraceEvaluation {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression();
             assert_ne!(late, result);
             assert!(
@@ -643,8 +627,6 @@ impl TraceEvaluation {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression(),
                 result
@@ -770,8 +752,6 @@ fn repeated_slashes_match_exact_hep_tensor_contractions() {
                         ..Default::default()
                     })
                     .unwrap()
-                    .resolved()
-                    .unwrap()
                     .into_expression();
                 let _ = evaluation.assert_simplification(&expression, &simplified, &label);
             }
@@ -814,8 +794,6 @@ fn repeated_pair_order_and_cyclic_cuts_match_exact_hep_contractions() {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression()
         })
         .collect();
@@ -849,8 +827,6 @@ fn external_metric_trace_matches_exact_hep_contractions() {
         .unwrap()
         .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
-        .resolved()
-        .unwrap()
         .into_expression();
     assert_ne!(
         original, precontracted,
@@ -871,8 +847,6 @@ fn external_metric_trace_matches_exact_hep_contractions() {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression()
     });
@@ -916,8 +890,6 @@ fn axial_pair_order_and_gamma5_positions_match_exact_hep_contractions() {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression()
     });
@@ -993,8 +965,6 @@ fn reversed_axial_words_match_exact_hep_components() {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression();
                 let value =

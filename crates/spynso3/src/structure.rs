@@ -293,7 +293,7 @@ impl SpensoName {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
+        crate::display::atom_to_latex(&self.to_expression().expr, &Default::default(), None)
     }
 
     /// Register a tensor function name.
@@ -1277,7 +1277,7 @@ impl SpensoRepresentation {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
+        crate::display::atom_to_latex(&self.to_expression().expr, &Default::default(), None)
     }
 
     /// Create or reuse a named index space.
@@ -1921,7 +1921,7 @@ impl SpensoSlot {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
+        crate::display::atom_to_latex(&self.to_expression().expr, &Default::default(), None)
     }
 
     /// Return a readable object description for inspection.

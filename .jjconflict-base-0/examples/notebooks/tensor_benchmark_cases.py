@@ -12,7 +12,6 @@ from symbolica import E, S, T
 from symbolica.community.feynkit import Symbols
 from symbolica.community.tensor import (
     AUTO,
-    AliasedTensorExpression,
     ReductionStatus,
     Representation,
     TensorExpression,
@@ -30,8 +29,6 @@ ORDERS = {
 
 
 def atom(value):
-    if isinstance(value, AliasedTensorExpression):
-        value = value.to_expression()
     return value.to_expression() if isinstance(value, TensorExpression) else value
 
 
@@ -46,7 +43,7 @@ def completed(**operations):
 
 def describe(value):
     expression = atom(value)
-    tensor = value.root if isinstance(value, AliasedTensorExpression) else value
+    tensor = value
     return {
         "terms": sum(1 for _ in expression.terms()),
         "atom_bytes": expression.get_byte_size(),
@@ -463,10 +460,10 @@ class FreeTrace:
         self.indices = [self.lorentz(S(f"r3trace::i{i}")) for i in range(length)]
         gamma = TensorExpression.dirac_gamma(self.dimension)
         self.source = trace(self.spin, *(gamma(AUTO, AUTO, i) for i in self.indices))
-        self.settings = dict(gamma=True)
+        self.settings = dict(color=False, gamma=True)
         self.strategy = {
             "gammas": length,
-            "trace_materialization": "explicit alias expansion inside the operation",
+            "trace_materialization": "explicit polynomial expansion inside the operation",
             "dimension": str(self.dimension),
         }
         self.form_order = "trace-first"
@@ -669,9 +666,9 @@ class AxialTrace(FreeTrace):
     def reduce(self):
         reduced = self.source.simplify_algebra(**self.settings, epsilon=True)
         # M1 and FORM materialize the trace while retaining the scalar factor.
-        # Applying expand to the entire aliased tensor would also distribute
+        # Applying expand to the entire tensor would also distribute
         # (x+y)^8, which is outside this case's declared materialization scope.
-        trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
+        trace = reduced / self.spectator
         return self.spectator * trace.expand().to_expression()
 
     def phases(self, expected):
@@ -679,7 +676,7 @@ class AxialTrace(FreeTrace):
         algebra = self.source.simplify_algebra(**self.settings, epsilon=True)
         reduced = algebra.contract(collect_chains=False, collect_traces=False)
         after_gamma = process_time_ns()
-        trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
+        trace = reduced / self.spectator
         after_interface = process_time_ns()
         expanded = trace.expand()
         after_expansion = process_time_ns()
@@ -743,11 +740,9 @@ class ProductionNumerator:
         }
 
     def reduce(self):
-        return (
-            self.source.simplify_algebra(gamma=True, epsilon=True, color=True)
-            .to_expression()
-            .to_expression()
-        )
+        return self.source.simplify_algebra(
+            gamma=True, epsilon=True, color=True
+        ).to_expression()
 
     def check_interpreter_components(self, native, reference, output):
         """Exact component checks for this capture, not an arbitrary-momentum proof."""
@@ -944,7 +939,7 @@ class ColourFierz:
                 for color, left, right in ports
             )
         )
-        self.settings = dict(color=True)
+        self.settings = dict(gamma=False, color=True)
         self.trace_index = E("spenso::idx(2,spenso::cof(3))")
         self.strategy = {
             "color_group": "SU(3)",

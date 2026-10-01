@@ -249,7 +249,6 @@ impl Amplitude {
                             ..Default::default()
                         })
                     })
-                    .and_then(|value| value.resolved())
                     .map(SymbolicTensor::into_expression)
                     .map_err(|error| AmplitudeError::Tensor(error.to_string()))
             })

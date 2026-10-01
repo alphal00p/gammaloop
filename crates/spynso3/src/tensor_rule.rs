@@ -9,7 +9,7 @@ use crate::{ModuleInit, expression::TensorExpression, network::ReplacementCondit
 
 /// A reusable replacement rule that preserves tensor interfaces.
 ///
-/// Use with TensorExpression.replace or AliasedTensorExpression.replace.
+/// Use with TensorExpression.replace.
 /// A replacement must preserve the matched tensor's external indices, including
 /// their representations. Literal replacements are checked where possible at
 /// construction; wildcard-dependent replacements are checked when matched.

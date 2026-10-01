@@ -80,10 +80,13 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     adjoint = (
         operator.dirac_adjoint()
         .simplify_algebra(
-            gamma=True, gamma0=True, gamma_evaluate_traces=False, epsilon=True
+            color=False,
+            gamma=True,
+            gamma0=True,
+            gamma_evaluate_traces=False,
+            epsilon=True,
         )
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_expression()
     )
     adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
@@ -138,17 +141,17 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     print("color", boson, flush=True)
     colored = (
         TensorExpression(generic, intern="flattened")
-        .simplify_algebra(color=True)
+        .simplify_algebra(gamma=False, color=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(
+            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
+        )
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
     )
 
     # Dirac adjunction exchanges the two endpoints of the open fermion chain.
@@ -159,14 +162,11 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     print("spin", boson, flush=True)
     spin_summed = (
         TensorExpression(colored.to_expression() * spin_projector, intern="flattened")
-        .simplify_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(color=False, gamma=True, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
     )
     reduced = kinematics.apply(
-        spin_summed.contract(collect_chains=False, collect_traces=False)
-        .to_expression()
-        .to_dots()
+        spin_summed.contract(collect_chains=False, collect_traces=False).to_dots()
     )
     for mode in ("covariant", "null", "timelike") if count == 3 else ("ghost",):
         polarizations = E("1")
@@ -190,7 +190,6 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
                 reduced.to_expression() * polarizations, intern="flattened"
             )
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
         )
         assert scalar.is_scalar

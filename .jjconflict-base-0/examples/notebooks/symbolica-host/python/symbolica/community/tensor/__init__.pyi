@@ -30,7 +30,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
 Nc: Expression
@@ -42,530 +42,6 @@ _Projected = typing.TypeVar("_Projected", "TensorExpression", "TensorNetwork", c
 _RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
 _ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
 _ScalarInput: typing.TypeAlias = "Expression | int | float | complex | str | decimal.Decimal | Float | ComplexFloat | tuple[_RealInput, _RealInput]"
-@typing.final
-class AliasedTensorExpression:
-    r"""
-    A symbolic tensor whose repeated subexpressions have named definitions.
-
-    Tensor simplification uses this class to retain shared work instead of
-    expanding large intermediate expressions. ``root`` uses those names and
-    ``aliases`` supplies their definitions. Scalar results use the same class.
-    Call ``to_expression()`` to resolve definitions into a TensorExpression,
-    or ``expand()`` to resolve them and distribute the scalar algebra.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    >>> space = Representation.euc(2)
-    >>> A = TensorName("M")(space, space)
-    >>> from symbolica.community.tensor import AliasedTensorExpression
-    >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-    >>> aliases.to_expression().rank
-    2
-    """
-    @property
-    def root(self) -> TensorExpression:
-        r"""
-        The tensor expression before substituting its shared definitions.
-
-        Returns
-        -------
-        TensorExpression
-            Root containing alias handles.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> aliases.root.rank
-        2
-        """
-    @property
-    def contraction_complete(self) -> builtins.bool:
-        r"""
-        Whether symbolic metric/vector contraction is certified complete.
-
-        Returns
-        -------
-        bool
-            False also covers a value not yet contracted, or a contraction stopped
-            before completion. It does not indicate whether aliases are resolved.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> complete = aliases.contraction_complete
-        """
-    @property
-    def aliases(self) -> builtins.list[tuple[TensorExpression, TensorExpression]]:
-        r"""
-        The tensor handles and their shared definitions.
-
-        Returns
-        -------
-        list of (TensorExpression, TensorExpression)
-            Each pair maps a handle to its definition.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> len(aliases.aliases)
-        1
-        """
-    @property
-    def reduction_status(self) -> ReductionStatus:
-        r"""
-        Report completion under the last reduction settings and budget.
-
-        Returns
-        -------
-        ReductionStatus
-            Complete, Deferred, or Capped. Unfinished results remain exact and can be
-            passed to contract() or simplify_algebra() again.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
-        >>> TensorExpression(3).contract().reduction_status == ReductionStatus.Complete
-        True
-        """
-    def __new__(cls, root: TensorExpression, aliases: typing.Sequence[tuple[TensorExpression, TensorExpression]] = []) -> AliasedTensorExpression:
-        r"""
-        Build a tensor expression with explicitly supplied shared definitions.
-
-        Parameters
-        ----------
-        root : TensorExpression
-            Expression containing the alias handles.
-        aliases : sequence of (TensorExpression, TensorExpression), default []
-            Opaque handle and definition pairs, as returned by from_expression().
-            A scalar alias may use a scalar variable. Each pair must have compatible tensor
-            interfaces and the definitions must form a consistent dependency graph.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            The root and shared definitions, without eager substitution.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> original = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> value = AliasedTensorExpression(original.root, original.aliases)
-        >>> value.to_expression().rank
-        2
-        """
-    @staticmethod
-    def from_expression(expression: TensorExpression) -> AliasedTensorExpression:
-        r"""
-        Name an entire tensor expression with one fresh alias.
-
-        Parameters
-        ----------
-        expression : TensorExpression
-            Tensor to retain as a shared definition.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            A fresh handle as the root and one definition containing expression.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> len(aliases.aliases)
-        1
-        """
-    def to_expression(self) -> TensorExpression:
-        r"""
-        Substitute the shared definitions into the root.
-
-        Returns
-        -------
-        TensorExpression
-            Materialized tensor algebra; this is not a raw Symbolica Expression.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> aliases.to_expression().rank
-        2
-        """
-    def expand(self) -> TensorExpression:
-        r"""
-        Resolve aliases and expand the resulting scalar algebra.
-
-        Returns
-        -------
-        TensorExpression
-            Expanded tensor algebra. This can be much larger than the shared form.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> aliases.expand().rank
-        2
-        """
-    def get_byte_size(self) -> builtins.int:
-        r"""
-        Measure the stored symbolic payload of the root and definitions.
-
-        Returns
-        -------
-        int
-            Byte count of the symbolic payload; not the full Python allocation
-            or total process memory.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> aliases.get_byte_size() > 0
-        True
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a readable object description for inspection.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> from symbolica import E, S
-        >>> x = S("docs::x")
-        >>> value = sp.AliasedTensorExpression.from_expression(sp.TensorExpression((x + 1)**2))
-        >>> text = repr(value)
-        """
-    def map_aliases(self, callback: typing.Any) -> AliasedTensorExpression:
-        r"""
-        Transform each shared definition while retaining its tensor interface.
-
-        Parameters
-        ----------
-        callback : callable
-            Receives a definition as TensorExpression and returns a
-            TensorExpression with a compatible interface.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            Updated definitions under the same handles; the original is unchanged.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> mapped = aliases.map_aliases(lambda body: body.expand())
-        >>> mapped.to_expression().rank
-        2
-        """
-    def replace(self, rules: typing.Any) -> AliasedTensorExpression:
-        r"""
-        Apply one rule or an ordered list of whole-tensor replacement rules.
-
-        Parameters
-        ----------
-        rules : TensorRule or list of TensorRule
-            Rules in priority order. The first match at a source tensor is used;
-            newly produced replacements are not matched again during this call.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            Rewritten value with a checked external interface and shared definitions.
-
-        Notes
-        -----
-        The traversal follows tensor sums and products, leaving scalar key
-        arguments opaque. Matched tensors need explicit axes; unsupported tensor
-        powers and unresolved interfaces are rejected. Normalization/evaluation
-        callbacks remaining in a replacement are not supported. For scalar
-        component substitutions in a network, use TensorNetwork.replace instead.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import TensorRule
-        >>> indexed = A("i", "j")
-        >>> rule = TensorRule(indexed, 2 * indexed)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(indexed)
-        >>> replaced = aliases.replace(rule)
-        """
-    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
-        r"""
-        Contract compatible indices and collect compact matrix products.
-
-        Parameters
-        ----------
-        representations : sequence of Representation or RepresentationName, optional
-            Filter connecting axes by representation name: None permits all, [] none.
-            Compatible dimensions and orientations are still required. Intrinsic
-            constructor normalization, including symmetric dots, is unaffected.
-        metrics : bool, default True
-            Contract compatible metric tensors.
-        rank_one : bool, default True
-            Contract compatible rank-one tensors into scalar products.
-        collect_chains : bool, default True
-            Collect compatible matrix products into ordered chains.
-        collect_traces : bool, default True
-            Collect closed chains without evaluating traces. False preserves indexed closure.
-        order : sequence of int, optional
-            Requested factor contraction order; None uses the planner's default.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations per root or alias definition; zero is allowed.
-            Inspect reduction_status for exact unfinished work.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            An exact result retaining shared definitions. Inspect reduction_status for
-            unfinished work; to_expression() resolves definitions without distributing sums.
-
-        Notes
-        -----
-        This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
-        color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
-        Polynomial expansion remains an explicit operation.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(3)
-        >>> p = TensorName.vector("p")(space)
-        >>> expression = TensorExpression.g(space)("i", "j") * p("j")
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> result = expression.contract()
-        >>> result.to_expression().rank
-        1
-        """
-    def to_dots(self) -> AliasedTensorExpression:
-        r"""
-        Write compact metric products using dot notation.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            An equivalent value in the requested notation; aliases remain shared.
-
-        Notes
-        -----
-        This changes notation; it does not itself contract explicit vector indices.
-        Use contract() first when those contractions are needed.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> converted = aliases.to_dots()
-        """
-    def undo_dots(self) -> AliasedTensorExpression:
-        r"""
-        Write dot products as explicit indexed contractions.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            An equivalent value in the requested notation; aliases remain shared.
-
-        Notes
-        -----
-        Other compact forms and factored sums are retained. This does not
-        evaluate component data or expand a polynomial.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> aliases = AliasedTensorExpression.from_expression(A("i", "j"))
-        >>> converted = aliases.undo_dots()
-        """
-    def undo_chain(self) -> AliasedTensorExpression:
-        r"""
-        Expose collected chain factors with fresh compatible dummy indices.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            Equivalent algebra in the requested notation, retaining shared definitions
-            when called on an AliasedTensorExpression.
-
-        Notes
-        -----
-        This changes notation without distributing polynomial sums or requesting
-        Dirac/color identities. Use undo_trace().undo_chain() to expose indexed trace factors.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, chain, trace
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> expression = chain(space("i"), space("j"), A, A)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> opened = expression.undo_chain()
-        """
-    def undo_trace(self) -> AliasedTensorExpression:
-        r"""
-        Open compact traces as closed chains without evaluating them.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            Equivalent algebra in the requested notation, retaining shared definitions
-            when called on an AliasedTensorExpression.
-
-        Notes
-        -----
-        This changes notation without distributing polynomial sums or requesting
-        Dirac/color identities. Use undo_trace().undo_chain() to expose indexed trace factors.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, chain, trace
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> expression = trace(space, A, A)
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> opened = expression.undo_trace()
-        """
-    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
-        r"""
-        Apply selected tensor identities while retaining shared subexpressions.
-
-        Parameters
-        ----------
-        gamma, color, epsilon : bool, default False
-            Enable only the selected identity families and their prerequisite contractions.
-        contract : {"fully", "dots", "selected", "none"}, default "fully"
-            Additional structural work: all contractions, all plus dot notation,
-            only selected representations, or only identity prerequisites.
-            Collecting a trace does not evaluate it or enable another identity family.
-        representations : sequence of Representation or RepresentationName, optional
-            Required only for contract="selected"; an empty sequence permits no
-            additional connections. Filters do not suppress identity prerequisites
-            or intrinsic normalization already performed during construction.
-        gamma_output : {"reduced", "chains"}, optional
-            Apply Clifford identities (default), or only collect Dirac chains.
-        gamma_ordering : {"repeated_pairs", "canonical"}, optional
-            Open-chain ordering; defaults to repeated-pair reduction.
-        gamma_evaluate_traces : bool, optional
-            Evaluate closed Dirac traces; defaults to True for reduced output.
-        gamma0 : bool, optional
-            Reduce four-dimensional gamma-zero sandwiches; defaults to False.
-        gamma_conjugate : bool, optional
-            Rewrite complex-conjugated Dirac matrices; defaults to False.
-        gamma_expand_three_gamma_epsilon : bool, optional
-            Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
-            to False. This does not enable epsilon identities.
-        color_evaluate_traces : bool, optional
-            Evaluate supported closed color traces; defaults to True.
-        color_expand_fierz : bool, optional
-            Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
-        color_substitute_cof_dimension_invariants : bool, optional
-            Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations per root or alias definition; zero is allowed.
-            Capped results retain exact unfinished work. Family-specific options require
-            the corresponding family to be enabled. None selects its native default.
-
-        Returns
-        -------
-        AliasedTensorExpression
-            Exact reduced algebra with shared definitions and a reduction_status.
-            to_expression() resolves definitions; expand() additionally distributes sums.
-
-        Notes
-        -----
-        Enabled identities and permitted structural work reach a shared fixed point.
-        Closed color deltas produce their dimension even when color identities are off.
-        Each enabled family includes its necessary contractions, including with
-        contract="none". Unrelated sums stay factored. A capped result retains exact
-        unfinished work and can be simplified again.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> gamma = TensorExpression.dirac_gamma(4)
-        >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        >>> from symbolica.community.tensor import AliasedTensorExpression
-        >>> expression = AliasedTensorExpression.from_expression(expression)
-        >>> result = expression.simplify_algebra(gamma=True)
-        >>> result.to_expression().rank
-        2
-        """
-    def evaluator(self, params: typing.Sequence[Expression], *, iterations: builtins.int = 1, n_cores: builtins.int = 1) -> Evaluator:
-        r"""
-        Prepare numerical evaluation of the symbolic algebra without component expansion.
-
-        Parameters
-        ----------
-        params : sequence of Expression
-            Symbolic leaves to treat as numerical inputs, in input-row order.
-        iterations : int, default 1
-            Horner-optimization iterations.
-        n_cores : int, default 1
-            Number of optimization cores.
-
-        Returns
-        -------
-        symbolica.Evaluator
-            Evaluator for the symbolic expression and its shared definitions.
-
-        Notes
-        -----
-        This does not resolve tensor components from a TensorLibrary. To evaluate
-        component formulas, first use to_tensor() and then Tensor.evaluator().
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression, AliasedTensorExpression
-        >>> x = S("x")
-        >>> expression = AliasedTensorExpression.from_expression(TensorExpression(x**2 + 1))
-        >>> evaluator = expression.evaluator([x])
-        """
-
 @typing.final
 class BroadcastFunction:
     r"""
@@ -1157,6 +633,24 @@ class DisplaySettings:
         >>> value = DisplaySettings().tensor_view
         """
     @property
+    def invariant_style(self) -> typing.Literal['compact', 'explicit']:
+        r"""
+        Choose compact or degree-explicit scalar invariant notation.
+
+        Returns
+        -------
+        str
+            "compact" uses C_F, C_A and T_R for the quadratic color invariants;
+            "explicit" uses C_2(F), C_2(A) and I_2(F). Higher degrees use
+            C_k(R), I_k(R) and G_k(R, S) in either style.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import DisplaySettings
+        >>> DisplaySettings(invariant_style="explicit").invariant_style
+        'explicit'
+        """
+    @property
     def show_dimensions(self) -> builtins.bool:
         r"""
         Include representation dimensions in index notation.
@@ -1164,7 +658,8 @@ class DisplaySettings:
         Returns
         -------
         bool
-            Include representation dimensions in index notation.
+            Include representation dimensions in index notation and scalar invariants.
+            Invariants then show their degree and representation, such as C_2(F_3).
 
         Examples
         --------
@@ -1248,7 +743,7 @@ class DisplaySettings:
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().factor_gap
         """
-    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive') -> DisplaySettings:
+    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
         r"""
         Choose tensor notation, index labels, and component presentation.
 
@@ -1258,7 +753,8 @@ class DisplaySettings:
             Rich layout: "ports" places indices by tensor axes; "schoonschip"
             uses compact contracted-vector notation; "call" uses function-call notation.
         show_dimensions : bool, default False
-            Include representation dimensions in index notation.
+            Include representation dimensions in index notation and scalar invariants.
+            Invariants then show their degree and representation, such as C_2(F_3).
         parentheses : bool, default True
             Include the optional grouping parentheses used by tensor notation.
         commas : bool or None, default None
@@ -1280,6 +776,13 @@ class DisplaySettings:
         tensor_view : str, default "interactive"
             Concrete-tensor HTML: "interactive" provides a component explorer with
             a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+
+        invariant_style : {"compact", "explicit"}, default "compact"
+            Compact quadratic color notation uses C_F, C_A and T_R. Explicit
+            notation uses C_2(F), C_2(A) and I_2(F). Both use C_k(R), I_k(R)
+            and G_k(R, S) for higher invariants. show_dimensions adds the
+            dimension to each representation label and disables quadratic aliases.
+            Older scalar symbols have no representation dimension to display.
 
         Returns
         -------
@@ -2087,8 +1590,8 @@ class ReductionStatus:
     Completion of a tensor reduction under its selected settings.
 
     Complete means no eligible work remains. Deferred means exact eligible work
-    remains for another operation. Capped means the transformation budget stopped
-    processing. A partial result still represents the exact original tensor;
+    remains for another operation. Capped means an explicitly requested work limit
+    stopped processing. A partial result still represents the exact original tensor;
     completion is relative to the requested operations, not every possible identity.
 
     Examples
@@ -2108,7 +1611,7 @@ class ReductionStatus:
     """
     Capped: typing.ClassVar[ReductionStatus]
     r"""
-    The work budget stopped processing; the remaining expression is exact.
+    An explicit work limit stopped processing; the remaining expression is exact.
     """
     def __int__(self) -> builtins.int:
         r"""
@@ -4578,7 +4081,7 @@ class TensorEvaluator:
         """
 
 @typing.final
-class TensorExpression:
+class TensorExpression(Expression):
     r"""
     A symbolic tensor expression with an ordered set of external axes.
 
@@ -4591,8 +4094,13 @@ class TensorExpression:
     to choose a contraction, or ``compose`` to choose matrix channels.
     Arithmetic with Tensor or TensorNetwork operands returns a TensorNetwork.
 
-    Simplification may retain shared subexpressions in an AliasedTensorExpression;
-    its ``to_expression()`` returns a TensorExpression when materialization is needed.
+    Reductions preserve this tensor type and keep unrelated sums factorized.
+    Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
+    ``factor()``, also returns a tensor expression with its ordered interface.
+    This is a Symbolica ``Expression`` subclass: inspection, matching, evaluators,
+    and other unoverridden methods are inherited directly. Inherited transformations
+    return ordinary expressions; the tensor-aware overrides retain the interface.
+    Use ``to_expression()`` to explicitly drop the tensor interface.
 
     Pass ``intern="indices"`` to reversibly encode compound index labels, or
     ``intern="flattened"`` to create readable names. Both modes operate only on
@@ -4697,6 +4205,39 @@ class TensorExpression:
         >>> space = Representation.euc(3)
         >>> A = TensorName("A")(space, space)
         >>> name = A.name
+        """
+    @property
+    def reduction_status(self) -> ReductionStatus:
+        r"""
+        Report completion under the last reduction settings and budget.
+
+        Returns
+        -------
+        ReductionStatus
+            Complete, Deferred, or Capped. Unfinished results remain exact and can be
+            passed to contract() or simplify_algebra() again.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression, ReductionStatus
+        >>> TensorExpression(3).contract().reduction_status == ReductionStatus.Complete
+        True
+        """
+    @property
+    def contraction_complete(self) -> builtins.bool:
+        r"""
+        Whether symbolic metric/vector contraction is certified complete.
+
+        Returns
+        -------
+        bool
+            False also covers a value not yet contracted or stopped before completion.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> TensorExpression(3).contract().contraction_complete
+        True
         """
     def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
@@ -5151,8 +4692,9 @@ class TensorExpression:
 
         Notes
         -----
-        Keep the TensorExpression when using tensor operations. Conversion is
-        useful for raw Symbolica matching or algorithms that require an Expression.
+        TensorExpression already inherits Expression. Convert when deliberately
+        requesting ordinary Symbolica behavior, including replacements that change
+        the tensor interface, rather than its tensor-aware overrides.
 
         Examples
         --------
@@ -5161,38 +4703,200 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> raw = A.to_expression()
         """
-    def replace(self, rules: TensorRule | list[TensorRule]) -> TensorExpression:
+    def is_zero(self) -> builtins.bool:
         r"""
-        Apply one rule or an ordered list of whole-tensor replacement rules.
+        Test whether the expression is exactly zero, including zeros with nonzero tensor rank.
+        This does not perform algebraic simplification.
+
+        Returns
+        -------
+        bool
+            True for an exact symbolic zero, irrespective of rank.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (0 * A).is_zero()
+        >>> assert (0 * A).rank == 1
+        """
+    def is_one(self) -> builtins.bool:
+        r"""
+        Test whether the expression is exactly the scalar one.
+
+        Returns
+        -------
+        bool
+            True for scalar one; an identity tensor is not the scalar one.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> assert TensorExpression(1).is_one()
+        """
+    def is_expanded(self, var: typing.Optional[_ScalarInput] = None) -> builtins.bool:
+        r"""
+        Test whether products and powers are expanded, optionally with respect to var.
+        The expression and its tensor interface are unchanged.
 
         Parameters
         ----------
-        rules : TensorRule or list of TensorRule
-            Rules in priority order. The first match at a source tensor is used;
-            newly produced replacements are not matched again during this call.
+        var : Expression, optional
+            Restrict the expansion check to this indeterminate.
+
+        Returns
+        -------
+        bool
+            True if no further arithmetic distribution is needed for the requested scope.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> value = TensorExpression((x + 1)**2)
+        >>> assert not value.is_expanded()
+        >>> assert value.expand().is_expanded(x)
+        """
+    def nterms(self) -> builtins.int:
+        r"""
+        Count top-level additive terms without expanding the expression.
+        Unlike len(tensor), this counts symbolic terms rather than tensor components.
+
+        Returns
+        -------
+        int
+            Number of terms in the outermost sum, or one for a non-sum.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x = S("x")
+        >>> value = TensorExpression((x + 1)**2)
+        >>> assert value.nterms() == 1
+        >>> assert value.expand().nterms() == 3
+        """
+    def replace(self, pattern: TensorRule | list[TensorRule] | _ScalarInput, rhs: typing.Optional[_ReplacementInput] = None, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, min_level: builtins.int = 0, max_level: typing.Optional[builtins.int] = None, level_is_tree_depth: builtins.bool = False, partial: builtins.bool = True, allow_new_wildcards_on_rhs: builtins.bool = False, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
+        r"""
+        Replace symbolic patterns or apply whole-tensor replacement rules.
+
+        Parameters
+        ----------
+        pattern : Expression, TensorRule, or list of TensorRule
+            Symbolica pattern when rhs is supplied. Without rhs, apply prepared
+            TensorRules in priority order, leaving scalar key arguments opaque.
+        rhs : Expression, HeldExpression, or callable, optional
+            Symbolica replacement, including callbacks. The result must preserve
+            the tensor's ordered interface. Use reindex() to change external labels.
+        cond : PatternRestriction or Condition, optional
+            Restriction on a symbolic match.
+        non_greedy_wildcards : list of Expression, optional
+            Wildcards whose matches should be selected non-greedily.
+        min_level, max_level : int, optional
+            Inclusive traversal bounds, starting at zero.
+        level_is_tree_depth : bool, default False
+            Count expression-tree levels rather than function nesting.
+        partial : bool, default True
+            Allow matches inside larger expressions.
+        allow_new_wildcards_on_rhs : bool, default False
+            Allow wildcard symbols that do not occur in the pattern.
+        rhs_cache_size : int, optional
+            Cache repeated symbolic replacements; zero disables caching.
+        repeat, once, bottom_up, nested : bool, default False
+            Symbolica's replacement traversal controls. Prepared TensorRules own
+            their conditions and cache settings and do not accept these options.
 
         Returns
         -------
         TensorExpression
-            Rewritten value with a checked external interface.
-
-        Notes
-        -----
-        The traversal follows tensor sums and products, leaving scalar key
-        arguments opaque. Matched tensors need explicit axes; unsupported tensor
-        powers and unresolved interfaces are rejected. Normalization/evaluation
-        callbacks remaining in a replacement are not supported. For scalar
-        component substitutions in a network, use TensorNetwork.replace instead.
+            Rewritten value retaining its checked tensor interface and metadata.
 
         Examples
         --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import TensorRule
-        >>> indexed = A("i", "j")
-        >>> rule = TensorRule(indexed, 2 * indexed)
-        >>> replaced = indexed.replace(rule)
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorRule
+        >>> A = TensorName("M")(Representation.euc(2))("i")
+        >>> x, y = S("x", "y")
+        >>> assert (x * A).replace(x, y) == y * A
+        >>> assert A.replace(TensorRule(A, 2 * A)) == 2 * A
+        """
+    def replace_multiple(self, replacements: typing.Sequence[Replacement], repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
+        r"""
+        Apply simultaneous Symbolica replacements and validate the resulting tensor.
+
+        Parameters
+        ----------
+        replacements : list of Replacement
+            Symbolica replacements, including their conditions and callbacks.
+        repeat, once, bottom_up, nested : bool, default False
+            Traversal controls with the same meaning as Expression.replace_multiple.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten value preserving ordered ports, metadata, and typed zeros.
+
+        Examples
+        --------
+        >>> from symbolica import S, Replacement
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (x*A).replace_multiple([Replacement(x, y)]) == y*A
+        """
+    def map(self, op: Transformer, n_cores: typing.Optional[builtins.int] = None, stats_to_file: typing.Optional[builtins.str] = None) -> TensorExpression:
+        r"""
+        Apply a Symbolica Transformer and retain the validated tensor interface.
+
+        Parameters
+        ----------
+        op : Transformer
+            Transformations to apply, including user callbacks.
+        n_cores : int, optional
+            Number of cores for Symbolica's term mapping.
+        stats_to_file : str, optional
+            JSON output file for the transformer's statistics.
+
+        Returns
+        -------
+        TensorExpression
+            Transformed expression with its original ordered tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S, T
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = ((x + 1)**2 * A).map(T().expand())
+        >>> assert result == ((x + 1)**2 * A).expand()
+        """
+    def derivative(self, x: _ScalarInput) -> TensorExpression:
+        r"""
+        Differentiate scalar coefficients, preserving tensor zeros and ports.
+        Formal derivatives of unknown tensor functions are not supported by the
+        network executor. Differentiate their component expressions with
+        Tensor.map_components() instead, or supply a TensorName derivative callback.
+
+        Parameters
+        ----------
+        x : Expression
+            Scalar differentiation variable.
+
+        Returns
+        -------
+        TensorExpression
+            Derivative with the same ordered external ports, even when zero.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (x**2 * A).derivative(x) == 2*x*A
+        >>> assert A.derivative(x).rank == A.rank
         """
     def expand(self, var: typing.Optional[_ScalarInput] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
         r"""
@@ -5228,36 +4932,237 @@ class TensorExpression:
         >>> expanded.rank
         2
         """
-    def evaluator(self, params: typing.Sequence[Expression], *, iterations: builtins.int = 1, n_cores: builtins.int = 1) -> Evaluator:
+    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorExpression:
         r"""
-        Prepare numerical evaluation of the symbolic algebra without component expansion.
+        Factor scalar algebra while retaining ordered tensor ports and data metadata.
+        Tensor leaves are treated as symbolic indeterminates; no tensor identity is applied.
 
         Parameters
         ----------
-        params : sequence of Expression
-            Symbolic leaves to treat as numerical inputs, in input-row order.
-        iterations : int, default 1
-            Horner-optimization iterations.
-        n_cores : int, default 1
-            Number of optimization cores.
+        complex : bool, default False
+            Factor over the complex rationals rather than the rationals.
+        extension : list of Expression, optional
+            Algebraic numbers defining the coefficient field, as in Expression.factor.
 
         Returns
         -------
-        symbolica.Evaluator
-            Evaluator for the symbolic expression.
+        TensorExpression
+            Factored expression with the original tensor interface, including typed zeros.
 
-        Notes
-        -----
-        This does not resolve tensor components from a TensorLibrary. To evaluate
-        component formulas, first use to_tensor() and then Tensor.evaluator().
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> factored = ((x**2 + 2*x + 1) * A).factor()
+        >>> assert factored == (x + 1)**2 * A
+        """
+    def expand_num(self) -> TensorExpression:
+        r"""
+        Distribute numerical coefficients over sums without expanding symbolic products.
+        The result remains a TensorExpression with the same ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (2 * (x + y) * A).expand_num()
+        >>> assert result == (2*x + 2*y) * A
+        """
+    def collect(self, *x: symbolica.core.Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms in variables or functions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *x : Expression
+            Variables or functions to collect in, with Expression.collect semantics.
+        key_map, coeff_map : callable, optional
+            Map each collected key or coefficient. Callbacks receive and return ordinary
+            Expressions. Their results must preserve this tensor's ordered external ports;
+            otherwise the operation raises ValueError. Zero retains the original interface.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + x*y*A).collect(x)
+        >>> assert result.expand() == (x*(1+y)*A).expand()
+        """
+    def collect_num(self) -> TensorExpression:
+        r"""
+        Extract common numerical coefficients from sums, retaining ordered ports and metadata.
+        This reverses numerical distribution performed by expand_num().
+
+        Returns
+        -------
+        TensorExpression
+            Expression with common numerical coefficients extracted.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((2*x + 4*y)*A).collect_num() == 2*(x + 2*y)*A
+        """
+    def collect_factors(self) -> TensorExpression:
+        r"""
+        Collect common factors from nested sums without applying tensor identities.
+        Ordered ports, unresolved axes, tensor zeros, and data metadata are retained.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + y*A).collect_factors()
+        >>> assert result == (x+y)*A
+        """
+    def collect_by_coefficient(self) -> TensorExpression:
+        r"""
+        Group terms with equal numerical coefficients, retaining ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Expression grouped by numerical coefficient with the original tensor interface.
 
         Examples
         --------
         >>> from symbolica import S
         >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(2*x + 2*y).collect_by_coefficient()
+        >>> assert result.to_expression() == 2*(x + y)
+        """
+    def collect_symbol(self, x: Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms by powers of a variable or calls with the same function head.
+
+        Parameters
+        ----------
+        x : Expression
+            Variable or function symbol to collect in.
+        key_map, coeff_map : callable, optional
+            Map ordinary Expressions. As with collect(), the result is checked for
+            preservation of the tensor's ordered external ports.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, f = S("x", "f")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (f(x)*A + 2*f(x)*A).collect_symbol(f)
+        >>> assert result.expand() == (3*f(x)*A).expand()
+        """
+    def collect_horner(self, vars: typing.Optional[typing.Sequence[Expression]] = None) -> TensorExpression:
+        r"""
+        Rewrite polynomial algebra in Horner form, retaining ordered ports and metadata.
+
+        Parameters
+        ----------
+        vars : list of Expression, optional
+            Variable order. Omit it to use Symbolica's heuristic ordering.
+
+        Returns
+        -------
+        TensorExpression
+            Horner-form expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(x**2 + x*y).collect_horner([x, y])
+        >>> assert result.to_expression() == x*(x + y)
+        """
+    def together(self) -> TensorExpression:
+        r"""
+        Combine scalar denominators into one fraction, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Single rational expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> assert TensorExpression(1/x + 1/y).together().to_expression() == (x + y)/(x*y)
+        """
+    def cancel(self) -> TensorExpression:
+        r"""
+        Cancel common numerator and denominator factors, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Rational expression with common factors cancelled and the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
         >>> x = S("x")
-        >>> expression = TensorExpression(x**2 + 1)
-        >>> evaluator = expression.evaluator([x])
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((x**2 - 1)/(x - 1)*A).cancel() == (x + 1)*A
+        """
+    def apart(self, *variables: symbolica.core.Expression) -> TensorExpression:
+        r"""
+        Decompose scalar denominators into partial fractions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *variables : Expression
+            Variables for partial fractioning. Omit them to use all indeterminates,
+            as in Expression.apart().
+
+        Returns
+        -------
+        TensorExpression
+            Partial fractions with the original ordered ports and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (A/(x*(x + 1))).apart(x) == A/x - A/(x + 1)
         """
     def __copy__(self) -> TensorExpression:
         r"""
@@ -5276,6 +5181,38 @@ class TensorExpression:
         >>> import copy
         >>> copy.copy(A).shape
         (2, 2)
+        """
+    def __deepcopy__(self, memo: dict) -> TensorExpression:
+        r"""
+        Copy the tensor's immutable expression, ordered axes, and data metadata.
+
+        Parameters
+        ----------
+        memo : dict
+            Copy bookkeeping maintained by Python's copy module.
+
+        Returns
+        -------
+        TensorExpression
+            Independent Python wrapper sharing the immutable tensor value.
+
+        Examples
+        --------
+        >>> import copy
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> A = TensorName("A")(Representation.euc(3))
+        >>> zero = 0 * A
+        >>> assert copy.deepcopy(zero).structure == zero.structure
+        """
+    def __reduce__(self) -> typing.NoReturn:
+        r"""
+        Reject pickling that would silently discard the ordered tensor interface.
+        Use to_expression() when explicitly serializing only the symbolic algebra.
+
+        Raises
+        ------
+        TypeError
+            Tensor metadata serialization is not supported.
         """
     def with_lorentz_dimension(self, dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
@@ -5306,68 +5243,239 @@ class TensorExpression:
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def simplify_algebra(self, *, gamma: builtins.bool = False, color: builtins.bool = False, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = True, color: builtins.bool = True, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'minimal', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, collect_coefficients: builtins.bool = True, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
         r"""
-        Apply selected tensor identities while retaining shared subexpressions.
+        Reduce enabled tensor identities and their required index contractions.
+
+        Gamma and color identities are enabled by default; epsilon identities are
+        opt-in. The default also completes supported structural contractions, so
+        a second contract() call is normally unnecessary. The input is unchanged.
 
         Parameters
         ----------
-        gamma, color, epsilon : bool, default False
-            Enable only the selected identity families and their prerequisite contractions.
-        contract : {"fully", "dots", "selected", "none"}, default "fully"
-            Additional structural work: all contractions, all plus dot notation,
-            only selected representations, or only identity prerequisites.
-            Collecting a trace does not evaluate it or enable another identity family.
+        gamma, color : bool, default True
+            Enable Dirac/Clifford and color identities, respectively. Each family
+            authorizes the structural contractions required to apply its identities.
+            Set the other families to False when requesting only one family.
+        epsilon : bool, default False
+            Enable supported Levi-Civita pair contractions and their prerequisites.
+            These can generate determinant sums. Epsilon tensors emitted by gamma
+            reduction do not implicitly enable this option. Intrinsic antisymmetry
+            normalization during construction is independent of this setting.
+        contract : {"fully", "dots", "minimal", "selected", "none"}, default "fully"
+            Structural work in addition to enabled identities and their prerequisites:
+
+            - "fully": contract compatible metrics/identities and vectors, collect
+              matrix chains, and close compatible chains into trace notation.
+            - "dots": the same work, plus canonical dot notation for scalar products.
+            - "minimal": perform structural contractions that do not multiply out
+              independent sum alternatives. Boundary substitutions through existing
+              sums and contractions within their branches are allowed. Products of
+              sums stay factored when contracting them would require distribution.
+            - "selected": the same structural operations, restricted to connections
+              in representations. This does not restrict identity prerequisites.
+            - "none": no additional structural pass. Enabled identities still get
+              their prerequisite contractions; this does not disable all contraction.
+
+            These modes do not enable identity families. In particular, collecting
+            a trace does not evaluate it, and contracting a color delta does not
+            apply a generator or Fierz identity. "minimal" restricts additional
+            structural work; enabled algebra identities retain their prerequisites
+            and can still introduce sums. It is not a global ban on expansion.
         representations : sequence of Representation or RepresentationName, optional
-            Required only for contract="selected"; an empty sequence permits no
-            additional connections. Filters do not suppress identity prerequisites
-            or intrinsic normalization already performed during construction.
+            Required with contract="selected" and rejected with the other modes.
+            Select connecting representation families, including their duals, rather
+            than whole tensor factors. For example, Representation.mink(4) selects
+            the Minkowski family, including symbolic-D instances; it does not change
+            dimensions. Each connection must still have compatible dimensions and
+            orientation. [] permits no additional index contractions or trace closure.
+            Identity prerequisites and existing constructor normalization are unaffected.
+        collect_coefficients : bool, default True
+            Collect generated exact coefficients in contracted Dirac traces and
+            their bound vector factors so equal terms combine and cancel. Includes
+            Symbolica's expand_num() distribution of numerical factors over sums
+            inside those generated coefficients. False retains their nested,
+            factored output. Other family kernels retain their
+            existing coefficient normalization. This is not global expansion:
+            unrelated input sums and scalar prefactors remain factorized. It neither
+            expands free Dirac traces nor reverses simplification already performed.
         gamma_output : {"reduced", "chains"}, optional
-            Apply Clifford identities (default), or only collect Dirac chains.
+            Defaults to "reduced": apply supported Clifford and trace identities.
+            "chains" collects Dirac chains/traces without Clifford reduction or
+            trace evaluation, even if gamma_evaluate_traces=True. Explicit gamma0
+            and gamma_conjugate preparation still applies when requested.
         gamma_ordering : {"repeated_pairs", "canonical"}, optional
-            Open-chain ordering; defaults to repeated-pair reduction.
+            Ordering for reduced open Dirac chains. The default "repeated_pairs"
+            brings repeated indices together without fully sorting unrelated
+            matrices. "canonical" orders the chain and can introduce metric-term
+            sums through anticommutation. It is inactive for gamma_output="chains".
         gamma_evaluate_traces : bool, optional
-            Evaluate closed Dirac traces; defaults to True for reduced output.
+            Evaluate supported closed Dirac traces with reduced output; defaults to
+            True. False retains trace notation while other enabled identities remain
+            available. Trace normalization follows the spinor representation dimension.
         gamma0 : bool, optional
-            Reduce four-dimensional gamma-zero sandwiches; defaults to False.
+            Apply gamma-zero factoring before chain collection; defaults to False.
+            This controls the preparation pass, not every gamma-zero identity already
+            included in reduced Dirac algebra.
         gamma_conjugate : bool, optional
-            Rewrite complex-conjugated Dirac matrices; defaults to False.
+            Rewrite explicitly complex-conjugated Dirac matrices before collection;
+            defaults to False. This does not conjugate the input tensor.
         gamma_expand_three_gamma_epsilon : bool, optional
-            Expand three four-dimensional gammas in a gamma5/epsilon basis; defaults
-            to False. This does not enable epsilon identities.
+            With reduced output, expand three compatible four-dimensional gammas
+            in a gamma5/epsilon basis; defaults to False. This can introduce sums
+            and epsilon tensors, but does not enable epsilon identities.
         color_evaluate_traces : bool, optional
-            Evaluate supported closed color traces; defaults to True.
+            Evaluate supported closed color traces; defaults to True. False retains
+            unevaluated traces, but enabled Fierz identities may still join or change
+            them. It does not disable the rest of color algebra.
         color_expand_fierz : bool, optional
-            Apply cross-chain Fierz identities, possibly introducing sums; defaults to True.
+            Apply fundamental Fierz identities between different open chains or
+            traces; defaults to True. This may introduce sums. False disables these
+            cross-chain expansions, not every color identity or source of sums.
         color_substitute_cof_dimension_invariants : bool, optional
-            Substitute fundamental SU(N) invariants with T_R=1/2; defaults to False.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations per root or alias definition; zero is allowed.
-            Capped results retain exact unfinished work. Family-specific options require
-            the corresponding family to be enabled. None selects its native default.
+            Write supported color invariants in terms of the fundamental SU(N)
+            dimension, with T_F=1/2; defaults to False, retaining symbolic invariants.
+            In the supported fundamental/adjoint spaces this gives
+            C_F=(N**2-1)/(2*N) and C_A=N. The dimension comes from the representation:
+            this does not set every color space to SU(3) or reduce arbitrary groups.
+        max_steps_per_domain : int or None, default None
+            Optional nonnegative limit on successful planner transformations in each
+            active expression domain. None imposes no automatic work limit. This is
+            not a bound on time, memory, terms, or work inside one kernel. Zero leaves
+            eligible work untouched and reports Capped; an already completed request
+            can still report Complete. Unfinished results remain exact.
 
         Returns
         -------
-        AliasedTensorExpression
-            Exact reduced algebra with shared definitions and a reduction_status.
-            to_expression() resolves definitions; expand() additionally distributes sums.
+        TensorExpression
+            A typed result carrying its checked interface and reduction_status.
+            No alias wrapper or separate materialization step is required.
+
+        Raises
+        ------
+        ValueError
+            An option value is invalid, representations is missing or used with the
+            wrong mode, a family-specific option is supplied for a disabled family,
+            or a rewrite cannot produce a valid tensor interface.
 
         Notes
         -----
-        Enabled identities and permitted structural work reach a shared fixed point.
-        Closed color deltas produce their dimension even when color identities are off.
-        Each enabled family includes its necessary contractions, including with
-        contract="none". Unrelated sums stay factored. A capped result retains exact
-        unfinished work and can be simplified again.
+        Select the families together; the shared planner schedules identities and
+        contractions until no further permitted work is found. Under "fully" and
+        "dots", a closed color delta produces its dimension even with color=False.
+        Under "none", an unrelated Lorentz numerator can remain indexed and factored
+        after its color sector is reduced. Use contract() for structural work alone.
+
+        This is not a global arithmetic expansion. Planning starts with a shallow
+        view of factor interfaces and opens selected regions when needed. Necessary
+        local distribution and identity-generated sums are allowed; unrelated sums
+        and scalar coefficients stay factored. Request expand() explicitly when the
+        final output must be a fully expanded polynomial.
+
+        Dimensions belong to the tensor representations. Set them before reduction,
+        for example with with_lorentz_dimension(D). Ordinary Clifford contractions
+        support compatible symbolic Lorentz dimensions. Four-dimensional gamma5,
+        axial-trace and epsilon-basis rules are not a general D-dimensional gamma5
+        prescription; changing D after evaluation cannot recover lost dimension factors.
+
+        Family-specific None values use the defaults documented above. Even an
+        explicitly supplied False option requires its family to be enabled. Reusable
+        configurations are ordinary dictionaries passed with **options.
+
+        Inspect reduction_status on the returned reduction result. Complete means
+        no eligible work remains under these settings, not under disabled families
+        or other output requirements. Deferred retains exact work the current
+        implementation could not finish. Capped means an explicit limit stopped it.
+        Rerunning a Complete result with the same settings is stable. Capped or
+        Deferred results can be passed back for further work, without a guarantee
+        that an unsupported Deferred case will progress. contraction_complete is a
+        separate structural certificate and can be False for a Complete "none" result.
+
+        See Also
+        --------
+        contract : Structural contractions without enabling identities.
+        to_dots : Change surviving scalar-product notation without contracting indices.
+        expand : Explicit arithmetic distribution.
+        undo_trace : Unfold an existing trace without evaluating it.
 
         Examples
         --------
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> gamma = TensorExpression.dirac_gamma(4)
-        >>> expression = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        >>> result = expression.simplify_algebra(gamma=True)
-        >>> result.to_expression().rank
-        2
+        A closed Dirac word evaluates to 4*D even with no additional structural
+        pass. The spinor dimension remains four while the Lorentz dimension is D.
+
+        >>> from symbolica import E, S
+        >>> from symbolica.community import tensor as sp
+        >>> D = S("algebra_docs::D")
+        >>> gamma = sp.TensorExpression.dirac_gamma(4).with_lorentz_dimension(D)
+        >>> word = gamma("a", "b", "mu") * gamma("b", "a", "mu")
+        >>> result = word.simplify_algebra(color=False, contract="none")
+        >>> assert result.to_expression() == 4 * D
+        >>> assert result.reduction_status == sp.ReductionStatus.Complete
+
+        Retain nested identity output when that form is preferable. Both requests
+        represent the same tensor and leave unrelated scalar prefactors factored.
+
+        >>> nested = word.simplify_algebra(color=False, collect_coefficients=False)
+        >>> assert (nested - result).expand().to_expression() == 0
+
+        Color-only reduction with explicit SU(3) invariants gives T^a T^a = 4/3 I.
+        Omit the invariant-substitution option to retain symbolic Casimirs.
+
+        >>> fundamental = sp.Representation.cof(3)
+        >>> identity = sp.TensorExpression.g(fundamental, fundamental.dual())
+        >>> T = sp.TensorExpression.color_t(8, 3)
+        >>> pair = T("a", "i", "j") * T("a", "j", "k")
+        >>> color_only = dict(gamma=False, color=True, contract="none",
+        ...                   color_substitute_cof_dimension_invariants=True)
+        >>> assert pair.simplify_algebra(**color_only) == E("4/3") * identity("i", "k")
+
+        Structural color-delta contraction is independent of color identities.
+        With both identity families disabled, "none" preserves this product;
+        "fully" and a matching "selected" filter produce its dimension.
+
+        >>> cycle = identity("i", "j") * identity("j", "i")
+        >>> structural = dict(gamma=False, color=False)
+        >>> assert cycle.simplify_algebra(**structural, contract="none") == cycle
+        >>> assert cycle.simplify_algebra(**structural).to_expression() == 3
+        >>> selected = cycle.simplify_algebra(**structural, contract="selected",
+        ...                                    representations=[fundamental.name])
+        >>> assert selected.to_expression() == 3
+        >>> assert cycle.simplify_algebra(**structural, contract="selected",
+        ...                               representations=[]) == cycle
+
+        "dots" includes scalar-product notation conversion. Epsilon reduction is
+        separately enabled; here the Euclidean identity epsilon_ijk epsilon_ijk = 6
+        is evaluated without gamma or color identities.
+
+        >>> lorentz = sp.Representation.mink(4)
+        >>> p = sp.TensorName.vector("algebra_docs::p")(lorentz)
+        >>> q = sp.TensorName.vector("algebra_docs::q")(lorentz)
+        >>> dotted = (p("mu") * q("mu")).simplify_algebra(**structural, contract="dots")
+        >>> assert dotted == sp.dot(p, q)
+        >>> epsilon = sp.TensorExpression.levi_civita(sp.Representation.euc(3), rank=3)
+        >>> product = epsilon("i", "j", "k") * epsilon("i", "j", "k")
+        >>> assert product.simplify_algebra(**structural, epsilon=True).to_expression() == 6
+
+        Minimal contraction leaves a product of tensor sums exact and factorized.
+        It can report Complete even though full contraction would do more work.
+        The equivalent structural-only request is contract(expand=False).
+
+        >>> metric = sp.TensorExpression.g(lorentz)
+        >>> A = sp.TensorName("algebra_docs::A")(lorentz, lorentz)
+        >>> factored = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+        >>> minimal = factored.simplify_algebra(**structural, contract="minimal")
+        >>> assert minimal == factored
+        >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+        >>> assert minimal == factored.contract(expand=False)
+        >>> assert minimal != factored.contract()
+
+        An explicit limit preserves the exact remaining expression. Continue by
+        calling the same operation without a limit; no manual expansion is needed.
+
+        >>> pending = cycle.simplify_algebra(**structural, max_steps_per_domain=0)
+        >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+        >>> assert pending == cycle
+        >>> assert pending.simplify_algebra(**structural).to_expression() == 3
         """
     def wrap_indices(self, header: Expression, *, dummies_only: builtins.bool = False) -> TensorExpression:
         r"""
@@ -5534,8 +5642,7 @@ class TensorExpression:
         Returns
         -------
         TensorExpression
-            Equivalent algebra in the requested notation, retaining shared definitions
-            when called on an AliasedTensorExpression.
+            Equivalent algebra in the requested notation.
 
         Notes
         -----
@@ -5557,8 +5664,7 @@ class TensorExpression:
         Returns
         -------
         TensorExpression
-            Equivalent algebra in the requested notation, retaining shared definitions
-            when called on an AliasedTensorExpression.
+            Equivalent algebra in the requested notation.
 
         Notes
         -----
@@ -5784,7 +5890,7 @@ class TensorExpression:
         >>> transposed.shape
         (2, 2)
         """
-    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
+    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Assign labels to the unresolved external axes.
 
@@ -5834,7 +5940,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> negated = -A
         """
-    def __pow__(self, exponent: TensorExpression | _ScalarInput, modulo: typing.Optional[typing.Any] = None) -> TensorExpression:
+    def __pow__(self, exponent: TensorExpression | _ScalarInput, modulo: typing.Optional[typing.Any] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Raise tensor algebra to a scalar power.
 
@@ -5882,7 +5988,7 @@ class TensorExpression:
         >>> result.to_expression() == 8
         True
         """
-    def __eq__(self, other: typing.Any) -> typing.Any:
+    def __eq__(self, other: typing.Any) -> builtins.bool:
         r"""
         Compare normalized expressions and their ordered tensor interfaces for equality.
         For a comparison to a plain Symbolica expression, first use `.to_expression()`.
@@ -5897,9 +6003,9 @@ class TensorExpression:
         Parameters
         ----------
         other : object
-            TensorExpression to compare. Other types can provide their own reverse comparison.
+            TensorExpression to compare. Values without an ordered tensor interface are unequal.
         """
-    def __ne__(self, other: typing.Any) -> typing.Any:
+    def __ne__(self, other: typing.Any) -> builtins.bool:
         r"""
         Test whether normalized expressions or their ordered tensor interfaces differ.
 
@@ -5913,7 +6019,7 @@ class TensorExpression:
         Parameters
         ----------
         other : object
-            TensorExpression to compare. Other types can provide their own reverse comparison.
+            TensorExpression to compare. Values without an ordered tensor interface are unequal.
         """
     def __hash__(self) -> builtins.int:
         r"""
@@ -5939,51 +6045,183 @@ class TensorExpression:
         >>> A = sp.TensorName("docs::A")(r, r)
         >>> nonzero = bool(A)
         """
-    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: builtins.int = 16) -> AliasedTensorExpression:
+    def contract(self, *, representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, metrics: builtins.bool = True, rank_one: builtins.bool = True, collect_chains: builtins.bool = True, collect_traces: builtins.bool = True, expand: builtins.bool = True, order: typing.Optional[typing.Sequence[builtins.int]] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
         r"""
-        Contract compatible indices and collect compact matrix products.
+        Contract compatible indices without applying tensor-algebra identities.
+
+        Eliminate metrics and identity tensors, including closed dimension factors;
+        substitute vectors into compatible ports; form scalar products; and collect
+        ordered matrix chains and unevaluated traces. Matrix order and orientation
+        are preserved. The input is unchanged.
 
         Parameters
         ----------
         representations : sequence of Representation or RepresentationName, optional
-            Filter connecting axes by representation name: None permits all, [] none.
-            Compatible dimensions and orientations are still required. Intrinsic
-            constructor normalization, including symmetric dots, is unaffected.
+            Filter connections by representation family: None permits all, [] none.
+            Families include dual representations. For example, Representation.mink(4)
+            permits the Minkowski family, including symbolic-D slots; the 4 is not
+            a dimension filter. Each connection must still satisfy dimension and
+            orientation compatibility. Matching representation names alone is insufficient.
+            The filter acts on connecting ports, not whole tensor factors: a Lorentz
+            connection can enter a gamma matrix while its spinor ports survive.
+            Chain assembly and trace closure also require a permitted connection.
         metrics : bool, default True
-            Contract compatible metric tensors.
+            Eliminate compatible metric/identity tensors by index substitution and
+            evaluate closed metric loops to their representation dimension.
         rank_one : bool, default True
-            Contract compatible rank-one tensors into scalar products.
+            Substitute vectors into compatible tensor ports (Schoonschip notation)
+            and contract vector pairs into scalar products. This can enter a gamma
+            matrix without applying a gamma identity. False retains those connections.
         collect_chains : bool, default True
-            Collect compatible matrix products into ordered chains.
+            Represent connected matrix products as ordered chains without evaluating
+            their matrices. False retains the indexed factors for open products.
         collect_traces : bool, default True
-            Collect closed chains without evaluating traces. False preserves indexed closure.
+            Represent compatible closed matrix products as unevaluated traces.
+            False retains indexed closure, including when collect_chains=True.
+            It does not unfold trace notation already present in the input.
+        expand : bool, default True
+            Permit local arithmetic distribution required by a selected contraction.
+            False performs the minimal structural work: substitute at boundaries
+            and contract within existing sum branches, but do not multiply out
+            independent sum alternatives. A product of tensor sums can therefore
+            remain indexed and still be Complete under expand=False. Neither value
+            requests global polynomial expansion; expand() is a separate operation.
         order : sequence of int, optional
-            Requested factor contraction order; None uses the planner's default.
-        max_steps_per_domain : int, default 16
-            Maximum successful transformations per root or alias definition; zero is allowed.
-            Inspect reduction_status for exact unfinished work.
+            Optional zero-based permutation of every normalized top-level factor,
+            used for the initial contraction round. Factors follow Symbolica's
+            normalized order, not necessarily the order in the Python source. None
+            lets the planner choose. This affects scheduling, never matrix order;
+            omit it unless you need to prescribe a factor order explicitly.
+        max_steps_per_domain : int or None, default None
+            Optional nonnegative limit on successful planner transformations in each
+            active expression domain. None imposes no automatic work limit. This is
+            not a limit on time, memory, generated terms, or work inside one kernel.
+            Zero preserves eligible work and reports Capped; a request with no eligible
+            work can still report Complete. All unfinished results remain exact.
 
         Returns
         -------
-        AliasedTensorExpression
-            An exact result retaining shared definitions. Inspect reduction_status for
-            unfinished work; to_expression() resolves definitions without distributing sums.
+        TensorExpression
+            A typed result with its checked external interface and reduction_status.
+            Unrelated scalar coefficients and sums remain factored. No alias wrapper
+            or separate materialization step is required.
+
+        Raises
+        ------
+        ValueError
+            order is not a permutation of all normalized top-level factors, or a
+            substitution cannot produce a valid tensor interface.
 
         Notes
         -----
-        This performs symbolic structural contraction. Use simplify_algebra() for Dirac,
-        color, or Levi-Civita identities, or to_tensor() to evaluate stored components.
-        Polynomial expansion remains an explicit operation.
+        Contracting a color delta does not enable generator or Fierz identities.
+        Collecting a Dirac or color trace does not evaluate it. Use simplify_algebra()
+        for identities, contract_ports(rhs, left=..., right=...) for an explicit
+        binary port contraction, and to_tensor() for component-library evaluation.
+        With rank_one=False, collect_chains=False and collect_traces=False, only
+        metric/identity contraction is requested.
+
+        Planning starts with a depth-one view of factor interfaces. It opens a
+        selected region only when the contraction needs its interior, reusing
+        unchanged leaves and known interfaces. With expand=True, necessary local
+        distribution is allowed; an unrelated scalar sum is not routinely expanded.
+        Internal dummy contractions can be processed even inside a scalar-interface
+        leaf. This is distinct from expanding the whole expression with expand().
+
+        Settings do not undo intrinsic normalization performed during construction.
+        A metric with identical compatible ports can already be its dimension,
+        typed vector multiplication can already form a scalar product, and symmetric
+        dot arguments are already ordered. representations=[] and disabled flags
+        preserve these existing normalizations. Assign explicit compatible indices
+        before requesting a particular Einstein contraction; unresolved axes are
+        distinct port identities, not dummy indices to pair by guesswork.
+
+        Scalar products can remain in compact metric notation g(p(R), q(R)).
+        to_dots() converts that surviving notation to dot(p(R), q(R)) without
+        searching for repeated indices. undo_dots(), undo_chain() and undo_trace()
+        unfold existing notation with fresh compatible dummy indices, preserving
+        matrix order. They do not recover expressions already changed by identities.
+
+        Complete means no eligible work remains under the requested settings;
+        disabled contractions and unevaluated traces may remain. Deferred retains
+        exact work the current implementation could not finish. Capped means an
+        explicit work limit stopped the operation. Completed reruns with the same
+        settings are stable. Unfinished results can be passed back to contract(),
+        possibly with different settings; unsupported cases need not make progress.
+        Inspect this operation's reduction_status before other transformations.
+        contraction_complete is a separate structural certificate, not a substitute
+        for completion under a restricted representation filter or expand=False.
+
+        See Also
+        --------
+        simplify_algebra : Gamma, color and epsilon identities plus their contractions.
+        contract_ports : Explicit binary contraction of selected logical ports.
+        to_dots : Scalar-product notation conversion without index contraction.
+        undo_trace : Turn trace notation into a closed indexed chain.
+        expand : Explicit arithmetic distribution.
 
         Examples
         --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(3)
-        >>> p = TensorName.vector("p")(space)
-        >>> expression = TensorExpression.g(space)("i", "j") * p("j")
-        >>> result = expression.contract()
-        >>> result.to_expression().rank
-        1
+        A metric relabels a vector. A Lorentz-only filter also permits a metric to
+        enter a gamma matrix without touching its two spinor ports.
+
+        >>> from symbolica import S
+        >>> from symbolica.community import tensor as sp
+        >>> lorentz = sp.Representation.mink(4)
+        >>> metric = sp.TensorExpression.g(lorentz)
+        >>> p = sp.TensorName.vector("contract_docs::p")(lorentz)
+        >>> source = metric("mu", "nu") * p("nu")
+        >>> assert source.contract() == p("mu")
+        >>> gamma = sp.TensorExpression.dirac_gamma(4)
+        >>> mixed = gamma("a", "b", "nu") * metric("mu", "nu")
+        >>> assert mixed.contract(representations=[lorentz]) == gamma("a", "b", "mu")
+
+        Trace collection and trace evaluation are separate operations. The collected
+        trace represents the same tensor as 4*g(mu,nu), but contract() leaves it
+        unevaluated. Unfolding and contracting it recovers the collected notation.
+
+        >>> word = gamma("a", "b", "mu") * gamma("b", "a", "nu")
+        >>> collected = word.contract()
+        >>> assert collected.simplify_algebra(color=False) == 4 * metric("mu", "nu")
+        >>> assert collected.undo_trace().undo_chain().contract() == collected
+        >>> uncollected = word.contract(collect_traces=False)
+        >>> assert uncollected.contract() == collected
+
+        A closed color delta gives N_c without any color-algebra identity. An empty
+        filter retains this product, and an unrelated scalar power remains factored.
+
+        >>> Nc = S("contract_docs::Nc")
+        >>> fundamental = sp.Representation.cof(Nc)
+        >>> delta = sp.TensorExpression.g(fundamental, fundamental.dual())
+        >>> cycle = delta("i", "j") * delta("j", "i")
+        >>> assert cycle.contract().to_expression() == Nc
+        >>> assert cycle.contract(representations=[]) == cycle
+        >>> x, y = S("contract_docs::x", "contract_docs::y")
+        >>> assert ((x + y)**8 * cycle).contract().to_expression() == (x + y)**8 * Nc
+
+        Minimal contraction still relabels ports through a sum. It leaves products
+        of independent tensor sums factorized instead of enumerating their pairings.
+
+        >>> q = sp.TensorName.vector("contract_docs::q")(lorentz)
+        >>> A = sp.TensorName("contract_docs::A")(lorentz, lorentz)
+        >>> relabel = metric("mu", "nu") * (p("nu") + q("nu"))
+        >>> assert relabel != p("mu") + q("mu")
+        >>> assert relabel.contract(expand=False) == p("mu") + q("mu")
+        >>> product = (metric("mu", "nu") + A("mu", "nu")) * (p("mu") + q("mu"))
+        >>> minimal = product.contract(expand=False)
+        >>> assert minimal == product
+        >>> assert minimal.reduction_status == sp.ReductionStatus.Complete
+        >>> full = product.contract()
+        >>> assert minimal != full
+        >>> assert minimal.contract() == full
+
+        An explicit zero limit retains eligible work exactly. Continuing without
+        that limit completes it, while the original input remains available.
+
+        >>> pending = cycle.contract(max_steps_per_domain=0)
+        >>> assert pending.reduction_status == sp.ReductionStatus.Capped
+        >>> assert pending == cycle
+        >>> assert pending.contract().to_expression() == Nc
         """
     def trace(self, *, channel: typing.Optional[tuple[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
@@ -6038,7 +6276,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> output = A.format_tensor()
         """
-    def to_latex(self, max_line_length: typing.Optional[builtins.int] = None) -> builtins.str:
+    def to_latex(self, max_line_length: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
         Produce LaTeX for the symbolic tensor expression.
 
@@ -6046,11 +6284,14 @@ class TensorExpression:
         ----------
         max_line_length : int, optional
             Requested line-length bound for the printer. None leaves it unbounded.
+        settings : DisplaySettings, optional
+            Index labels, dimensions and invariant notation. Defaults to
+            DisplaySettings(). Only ports layout and default spacing are supported.
 
         Returns
         -------
         str
-            LaTeX tensor notation with dimensions omitted.
+            LaTeX tensor notation, including the enclosing math delimiters.
 
         Examples
         --------
@@ -6059,7 +6300,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> source = A.to_latex()
         """
-    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Produce static Typst math source.
 
@@ -6090,9 +6331,9 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> output = A.to_typst()
         """
-    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
-        Create a rich display value for a notebook.
+        Create a lazy rich display value for a notebook.
 
         Parameters
         ----------
@@ -6108,7 +6349,14 @@ class TensorExpression:
         Returns
         -------
         FormattedOutput
-            Symbolica display wrapper with text and available rich representations.
+            Small expressions render once per backend; large notebook displays use bounded pages.
+
+        Notes
+        -----
+        Automatic representations of large expressions are bounded previews.
+        Paging retains factorization and ordered ports; explicit exports remain complete.
+        Settings are captured here; custom printers run on the first request
+        for each backend. Create a new formatted value after changing printers.
 
         Examples
         --------
@@ -6116,6 +6364,58 @@ class TensorExpression:
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> output = A.formatted()
+        """
+    def paged(self, page_size: builtins.int = 25, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Create a bounded, interactive MathML viewer in marimo or Jupyter.
+
+        Only the current page is rendered. Nested expressions retain their
+        factorization, and omitted subexpressions can be opened independently.
+        Requires the optional notebook-display dependencies for live navigation.
+
+        Parameters
+        ----------
+        page_size : int, default 25
+            Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+            show fewer entries when an individual expression is large.
+        settings : DisplaySettings, optional
+            Tensor notation, index labels, and other presentation preferences.
+        notation_source : str, optional
+            Custom Typst notation source, with the same meaning as in to_html().
+
+        Returns
+        -------
+        object
+            Notebook viewer retaining the expression and rendering pages on demand.
+            Display it in marimo or Jupyter to navigate its widget.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> viewer = TensorExpression(1).paged(page_size=25)
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Return marimo's notebook presentation with bounded pages for large expressions.
+
+        Returns
+        -------
+        object
+            Rich notebook output or an interactive viewer, using default settings.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Return the rich representations requested by a Jupyter frontend.
+
+        Parameters
+        ----------
+        include, exclude : list of str, optional
+            MIME types to include or exclude from the returned representations.
+
+        Returns
+        -------
+        object
+            MIME bundle for the complete small expression or paged large expression.
         """
     def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
@@ -6206,7 +6506,7 @@ class TensorExpression:
         >>> text = str(A)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...  # type: ignore[override]  # ty: ignore[invalid-method-override]
     def _repr_latex_(self) -> builtins.str: ...
     @typing.overload
     def __add__(self, rhs: TensorExpression | _ScalarInput) -> TensorExpression:
@@ -8604,7 +8904,7 @@ class TensorNetwork:
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
-        Create a rich display value for a notebook.
+        Create a lazy rich display value for a notebook.
 
         Parameters
         ----------
@@ -8620,12 +8920,14 @@ class TensorNetwork:
         Returns
         -------
         FormattedOutput
-            Symbolica display wrapper with text and available rich representations.
+            Each requested backend renders the complete source expression once
+            and caches it.
 
         Notes
         -----
         This formats the symbolic source expression, independent of execution
-        progress. Use render() or to_html() for the network graph.
+        progress, retaining a snapshot of that source. Use render() or to_html()
+        for the network graph.
 
         Examples
         --------
@@ -10047,7 +10349,7 @@ class TensorRule:
     r"""
     A reusable replacement rule that preserves tensor interfaces.
 
-    Use with TensorExpression.replace or AliasedTensorExpression.replace.
+    Use with TensorExpression.replace.
     A replacement must preserve the matched tensor's external indices, including
     their representations. Literal replacements are checked where possible at
     construction; wildcard-dependent replacements are checked when matched.
@@ -10333,6 +10635,10 @@ class _AutoIndex:
     Use the exported singleton ``AUTO`` (also available as ``_``), rather than
     constructing this type. During index() or reindex(), AUTO leaves that axis
     unchanged. It is not a wildcard and not a component coordinate.
+    Unresolved axes display as hollow squares. When several axes of a tensor
+    are unresolved, their squares carry zero-based axis numbers, excluding
+    scalar parameters. These local numbers do not imply contractions. Hover
+    over a square in HTML output to see its axis and representation.
 
     Examples
     --------
@@ -10637,7 +10943,7 @@ def format_tensor(expression: Expression, show_dimensions: typing.Optional[built
 
 def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
     r"""
-    Create a rich display value for a notebook.
+    Create a lazy rich display value for a notebook.
 
     Parameters
     ----------
@@ -10656,7 +10962,12 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     Returns
     -------
     FormattedOutput
-        Symbolica display wrapper with text and available rich representations.
+        Each requested backend renders the complete expression once and caches it.
+
+    Notes
+    -----
+    Settings are captured here; custom printers run on the first request
+    for each backend. Create a new formatted value after changing printers.
 
     Examples
     --------

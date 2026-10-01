@@ -82,8 +82,11 @@ For a collection in marimo, use `mo.vstack(model.vertex_rules)`; in a terminal, 
 `print` the members or use `pprint` on the list.
 
 #callout("Keep the same Symbolica kernel", [
-  Numerators are Spenso `TensorExpression` values, which extend Symbolica `Expression`; CFF
-  expressions are ordinary `Expression` values. The FeynKit module
+  Numerators are Spenso `TensorExpression` values, subclasses of Symbolica's `Expression`
+  with an ordered tensor interface; CFF expressions are ordinary `Expression` values. Algebraic
+  methods such as `expand_num()` and `collect_factors()` preserve the tensor type.
+  Inherited Symbolica methods remain available directly. Use `to_expression()` to explicitly
+  discard the tensor interface and select ordinary expression behavior. The FeynKit module
   must share `symbolica.core` with Spenso, Idenso, and other community modules; independently
   linking a second Symbolica extension breaks that ownership contract.
 ])

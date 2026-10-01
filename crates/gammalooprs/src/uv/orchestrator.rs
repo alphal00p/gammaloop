@@ -346,8 +346,7 @@ impl<'a> ComparableExpr<'a> {
                 collect_traces: false,
                 ..Default::default()
             })?
-            .to_dots()?
-            .resolved()?;
+            .to_dots()?;
         Ok(cooking.uncook(normalized.expression().as_view()))
     }
 }

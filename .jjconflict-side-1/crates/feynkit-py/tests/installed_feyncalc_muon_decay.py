@@ -70,7 +70,6 @@ adjoint = (
     )
     .contract(collect_chains=False, collect_traces=False)
     .to_expression()
-    .to_expression()
 )
 momentum_index = S("muon_decay::momentum_index_")
 adjoint = adjoint.replace(conjugate(P(momentum_index, index)), P(momentum_index, index))
@@ -87,9 +86,8 @@ contracted = (
     TensorExpression(operator.to_expression() * adjoint * projector, intern="flattened")
     .simplify_algebra(gamma=True, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
-    .simplify_algebra(epsilon=True)
+    .simplify_algebra(gamma=False, color=False, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .contract(collect_chains=False, collect_traces=False)
 )
 assert contracted.contraction_complete

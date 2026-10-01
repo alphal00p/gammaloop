@@ -1415,7 +1415,6 @@ pub fn simplify_color(expr: &[u8]) -> Result<Vec<u8>, String> {
     let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
     let result = source
         .simplify_color(ColorSimplifySettings::default())
-        .and_then(|result| result.resolved())
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(result.expression(), &context)
 }
@@ -1426,7 +1425,6 @@ pub fn simplify_gamma(expr: &[u8]) -> Result<Vec<u8>, String> {
     let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
     let result = source
         .simplify_gamma(GammaSimplifySettings::default())
-        .and_then(|result| result.resolved())
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(result.expression(), &context)
 }
@@ -1441,7 +1439,6 @@ pub fn contract(expr: &[u8]) -> Result<Vec<u8>, String> {
     if !result.contraction_complete() {
         return Err("tensor contraction did not complete".into());
     }
-    let result = result.resolved().map_err(|error| error.to_string())?;
     encode_atom_with_context(result.expression(), &context)
 }
 
@@ -2232,8 +2229,6 @@ mod tests {
             SymbolicTensor::infer(expression.clone())
                 .unwrap()
                 .contract(ContractionSettings::default())
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .into_expression(),
             vector.call(i.clone())

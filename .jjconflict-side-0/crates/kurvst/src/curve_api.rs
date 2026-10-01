@@ -582,6 +582,116 @@ pub fn curve_pattern_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+#[derive(Deserialize)]
+struct PatternCetzSpec {
+    pattern: PatternPathSpec,
+    #[serde(deserialize_with = "deserialize_f64")]
+    unit: f64,
+}
+
+#[derive(Serialize)]
+struct CetzSubpath([f64; 3], bool, Vec<CetzSegment>);
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum CetzSegment {
+    Line((&'static str, [f64; 3])),
+    Cubic((&'static str, [f64; 3], [f64; 3], [f64; 3])),
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum PatternCetzOutput {
+    Data(Vec<CetzSubpath>),
+    Original(PatternPathOutput),
+}
+
+impl PatternCetzOutput {
+    // Match Typst's _to-cetz-data numeric representation, including subpath
+    // boundaries, quadratic promotion, and multiplication before float coercion.
+    fn from_pattern(output: PatternPathOutput, unit: f64) -> Self {
+        let point = |p: Point| [p.x * unit, p.y * unit, 0.0];
+        let mut subpaths = Vec::new();
+        let mut origin = None;
+        let mut current = Point::ZERO;
+        let mut segments = Vec::new();
+        for &element in output.path.elements() {
+            if let PathEl::MoveTo(start) = element {
+                if let Some(previous) = origin {
+                    subpaths.push(CetzSubpath(
+                        point(previous),
+                        false,
+                        std::mem::take(&mut segments),
+                    ));
+                }
+                origin = Some(start);
+                current = start;
+                continue;
+            }
+            if origin.is_none() {
+                // Typst synthesizes an integer (0, 0) origin here. Retain its
+                // number types and signed-zero behavior for coordinate hooks.
+                return Self::Original(output);
+            }
+            match element {
+                PathEl::MoveTo(_) => unreachable!(),
+                PathEl::LineTo(end) => {
+                    segments.push(CetzSegment::Line(("l", point(end))));
+                    current = end;
+                }
+                PathEl::QuadTo(control, end) => {
+                    // Keep the scalar operation order of _quad-cubic-segment;
+                    // Kurbo's general quadratic conversion uses another order.
+                    let first = Point::new(
+                        current.x + (control.x - current.x) * 2.0 / 3.0,
+                        current.y + (control.y - current.y) * 2.0 / 3.0,
+                    );
+                    let second = Point::new(
+                        end.x + (control.x - end.x) * 2.0 / 3.0,
+                        end.y + (control.y - end.y) * 2.0 / 3.0,
+                    );
+                    segments.push(CetzSegment::Cubic((
+                        "c",
+                        point(first),
+                        point(second),
+                        point(end),
+                    )));
+                    current = end;
+                }
+                PathEl::CurveTo(first, second, end) => {
+                    segments.push(CetzSegment::Cubic((
+                        "c",
+                        point(first),
+                        point(second),
+                        point(end),
+                    )));
+                    current = end;
+                }
+                PathEl::ClosePath => {
+                    let start = origin.take().unwrap();
+                    subpaths.push(CetzSubpath(
+                        point(start),
+                        true,
+                        std::mem::take(&mut segments),
+                    ));
+                    current = start;
+                }
+            }
+        }
+        if let Some(start) = origin {
+            subpaths.push(CetzSubpath(point(start), false, segments));
+        }
+        Self::Data(subpaths)
+    }
+}
+
+pub fn curve_pattern_cetz_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PatternCetzSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize CeTZ pattern spec: {err}"))?;
+    let output = pattern_path(spec.pattern)?;
+    encode_cbor(&PatternCetzOutput::from_pattern(output, spec.unit))
+}
+
 pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
@@ -594,6 +704,123 @@ pub fn curve_path_length_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|err| format!("Failed to deserialize path length spec: {err}"))?;
     let output = path_length(spec)?;
     encode_cbor(&output)
+}
+
+#[derive(Deserialize)]
+struct PathFramesSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    path: BezPath,
+    distances: Vec<F64OrInt>,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    accuracy: f64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct PathFrame {
+    point: CurvePoint,
+    tangent: CurvePoint,
+}
+
+impl CubicBezierSpec {
+    // Match Typst's segments() conversions and de Casteljau arithmetic exactly:
+    // equivalent rearrangements can perturb the label optimizer's tie-breaking.
+    fn drawable(segment: PathSeg) -> Self {
+        let lerp_third = |a: Point, b: Point, twice: bool| CurvePoint {
+            x: a.x
+                + if twice {
+                    (b.x - a.x) * 2.0 / 3.0
+                } else {
+                    (b.x - a.x) / 3.0
+                },
+            y: a.y
+                + if twice {
+                    (b.y - a.y) * 2.0 / 3.0
+                } else {
+                    (b.y - a.y) / 3.0
+                },
+        };
+        match segment {
+            PathSeg::Cubic(cubic) => cubic.into(),
+            PathSeg::Line(line) => Self {
+                start: line.p0.into(),
+                end: line.p1.into(),
+                control_start: lerp_third(line.p0, line.p1, false),
+                control_end: lerp_third(line.p0, line.p1, true),
+            },
+            PathSeg::Quad(quad) => Self {
+                start: quad.p0.into(),
+                end: quad.p2.into(),
+                control_start: lerp_third(quad.p0, quad.p1, true),
+                control_end: lerp_third(quad.p2, quad.p1, true),
+            },
+        }
+    }
+
+    fn endpoint_frame(self, at_end: bool) -> PathFrame {
+        let t = if at_end { 1.0 } else { 0.0 };
+        let lerp = |a: CurvePoint, b: CurvePoint| CurvePoint {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+        };
+        let ab = lerp(self.start, self.control_start);
+        let bc = lerp(self.control_start, self.control_end);
+        let cd = lerp(self.control_end, self.end);
+        let abc = lerp(ab, bc);
+        let bcd = lerp(bc, cd);
+        PathFrame {
+            point: if at_end { self.end } else { self.start },
+            tangent: CurvePoint {
+                x: bcd.x - abc.x,
+                y: bcd.y - abc.y,
+            },
+        }
+    }
+}
+
+impl PathFramesSpec {
+    fn frames(self) -> Result<Vec<Option<PathFrame>>, String> {
+        let accuracy = validate_positive_accuracy(self.accuracy)?;
+        let segments: Vec<_> = self.path.segments().collect();
+        let total: f64 = segments
+            .iter()
+            .map(|segment| segment.arclen(accuracy))
+            .sum();
+        self.distances
+            .into_iter()
+            .map(|distance| {
+                let Some(first) = segments.first() else {
+                    return Ok(None);
+                };
+                if distance.0.is_nan() {
+                    return Err("frame distance must not be NaN".to_owned());
+                }
+                let at = distance.0.clamp(0.0, total);
+                let (segment, at_end) = if at == 0.0 {
+                    (*first, false)
+                } else if at == total {
+                    (*segments.last().unwrap(), true)
+                } else if total <= accuracy {
+                    (*first, false)
+                } else {
+                    let prefix =
+                        trim_path_segments(segments.iter().copied(), 0.0, total - at, accuracy)?;
+                    (*prefix.last().unwrap_or(first), !prefix.is_empty())
+                };
+                Ok(Some(
+                    CubicBezierSpec::drawable(segment).endpoint_frame(at_end),
+                ))
+            })
+            .collect()
+    }
+}
+
+pub fn curve_path_frames_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PathFramesSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path frames spec: {err}"))?;
+    encode_cbor(&spec.frames()?)
 }
 
 pub fn curve_path_intersections_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -1556,9 +1783,227 @@ fn solve_tridiagonal(
     Ok(solution)
 }
 
+#[derive(Deserialize)]
+struct RegionPart {
+    segments: Vec<CubicBezierSpec>,
+    visible: bool,
+}
+
+#[derive(Deserialize)]
+struct RegionSamplesSpec {
+    parts: Vec<RegionPart>,
+    regions: usize,
+    #[serde(deserialize_with = "deserialize_f64")]
+    unit: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    step: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    accuracy: f64,
+}
+
+impl RegionSamplesSpec {
+    fn samples(self) -> Result<Vec<(usize, Vec<CurvePoint>)>, String> {
+        let accuracy = validate_positive_accuracy(self.accuracy)?;
+        if self.regions == 0
+            || !self.unit.is_finite()
+            || !(self.step.is_finite() && self.step > 0.0)
+        {
+            return Err("Region sampling needs positive regions/step and a finite unit".into());
+        }
+        let paths: Vec<_> = self
+            .parts
+            .iter()
+            .map(|part| {
+                let mut path = BezPath::new();
+                let mut previous = None;
+                for &segment in &part.segments {
+                    if previous != Some(segment.start) {
+                        path.move_to(segment.start);
+                    }
+                    path.curve_to(segment.control_start, segment.control_end, segment.end);
+                    previous = Some(segment.end);
+                }
+                path
+            })
+            .collect();
+        let lengths: Vec<f64> = paths
+            .iter()
+            .map(|p| p.segments().map(|s| s.arclen(accuracy)).sum())
+            .collect();
+        let total: f64 = lengths.iter().sum();
+        let mut offset = 0.0;
+        let mut samples = Vec::new();
+        for ((part, path), length) in self.parts.iter().zip(paths).zip(lengths) {
+            if part.visible && length > 0.0 {
+                for region in 0..self.regions {
+                    let start = 0.0f64.max(total * region as f64 / self.regions as f64 - offset);
+                    let end =
+                        length.min(total * (region + 1) as f64 / self.regions as f64 - offset);
+                    if start >= end {
+                        continue;
+                    }
+                    let trimmed = trim_path(TrimPathSpec {
+                        path: path.clone(),
+                        start_outset: start,
+                        end_outset: length - end,
+                        accuracy,
+                    })?;
+                    let mut points = Vec::new();
+                    for segment in trimmed.path.segments().map(CubicBezierSpec::drawable) {
+                        let distance = |a: CurvePoint, b: CurvePoint| {
+                            let dx = a.x - b.x;
+                            let dy = a.y - b.y;
+                            (dx * dx + dy * dy).sqrt()
+                        };
+                        let speed = 3.0
+                            * distance(segment.start, segment.control_start)
+                                .max(distance(segment.control_start, segment.control_end))
+                                .max(distance(segment.control_end, segment.end));
+                        let steps = (speed * self.unit / self.step).ceil().max(1.0);
+                        if !(steps.is_finite() && steps < usize::MAX as f64) {
+                            return Err("Region sampling count is too large".into());
+                        }
+                        let steps = steps as usize;
+                        for step in 0..=steps {
+                            let t = step as f64 / steps as f64;
+                            let lerp = |a: CurvePoint, b: CurvePoint| CurvePoint {
+                                x: a.x + (b.x - a.x) * t,
+                                y: a.y + (b.y - a.y) * t,
+                            };
+                            let ab = lerp(segment.start, segment.control_start);
+                            let bc = lerp(segment.control_start, segment.control_end);
+                            let cd = lerp(segment.control_end, segment.end);
+                            points.push(lerp(lerp(ab, bc), lerp(bc, cd)));
+                        }
+                    }
+                    samples.push((region, points));
+                }
+            }
+            offset += length;
+        }
+        Ok(samples)
+    }
+}
+
+pub fn curve_region_samples_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: RegionSamplesSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize region sample spec: {err}"))?;
+    encode_cbor(&spec.samples()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cetz_pattern_promotes_quadratics_before_scaling() {
+        let mut path = BezPath::new();
+        path.move_to((-2.5, 4.0));
+        path.quad_to((0.3, -1.2), (7.1, 0.8));
+        let output = PatternPathOutput {
+            path,
+            pattern: "wave".into(),
+        };
+        let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.75)
+        else {
+            panic!("expected compact output")
+        };
+        assert_eq!(subpaths.len(), 1);
+        let CetzSegment::Cubic((kind, first, second, end)) = &subpaths[0].2[0] else {
+            panic!("expected cubic promotion")
+        };
+        assert_eq!(*kind, "c");
+        let expected_first: [f64; 3] = [
+            (-2.5 + (0.3 + 2.5) * 2.0 / 3.0) * -1.75,
+            (4.0 + (-1.2 - 4.0) * 2.0 / 3.0) * -1.75,
+            0.0,
+        ];
+        let expected_second: [f64; 3] = [
+            (7.1 + (0.3 - 7.1) * 2.0 / 3.0) * -1.75,
+            (0.8 + (-1.2 - 0.8) * 2.0 / 3.0) * -1.75,
+            0.0,
+        ];
+        assert_eq!(first.map(f64::to_bits), expected_first.map(f64::to_bits));
+        assert_eq!(second.map(f64::to_bits), expected_second.map(f64::to_bits));
+        assert_eq!(*end, [7.1 * -1.75, 0.8 * -1.75, 0.0]);
+    }
+
+    #[test]
+    fn cetz_pattern_keeps_subpath_boundaries_and_signed_zeros() {
+        let mut path = BezPath::new();
+        path.move_to((-0.0, 0.0));
+        path.line_to((1.0, 2.0));
+        path.close_path();
+        path.move_to((3.0, 4.0));
+        let output = PatternPathOutput {
+            path,
+            pattern: "zigzag".into(),
+        };
+        let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.0)
+        else {
+            panic!("expected compact output")
+        };
+        assert_eq!(subpaths.len(), 2);
+        assert_eq!(
+            subpaths[0].0.map(f64::to_bits),
+            [0.0f64, -0.0, 0.0].map(f64::to_bits)
+        );
+        assert!(subpaths[0].1);
+        assert_eq!(subpaths[0].2.len(), 1);
+        assert!(!subpaths[1].1);
+        assert!(subpaths[1].2.is_empty());
+    }
+
+    #[test]
+    fn cetz_pattern_retains_original_commands_for_implicit_integer_origins() {
+        let path = BezPath::from_vec(vec![
+            PathEl::MoveTo(Point::ZERO),
+            PathEl::ClosePath,
+            PathEl::LineTo(Point::ZERO),
+        ]);
+        let output = PatternPathOutput {
+            path,
+            pattern: "coil".into(),
+        };
+        let expected = encode_cbor(&output).unwrap();
+        for unit in [-1.0, -0.0, 0.0, 1.0] {
+            let converted = PatternCetzOutput::from_pattern(output.clone(), unit);
+            assert!(matches!(converted, PatternCetzOutput::Original(_)));
+            assert_eq!(encode_cbor(&converted).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn batched_frames_clamp_and_handle_empty_or_short_paths() {
+        let samples = |path, distances: &[f64], accuracy| {
+            PathFramesSpec {
+                path,
+                distances: distances.iter().copied().map(F64OrInt).collect(),
+                accuracy,
+            }
+            .frames()
+            .unwrap()
+        };
+        let line = BezPath::from_path_segments(
+            [PathSeg::Line(Line::new((0.0, 0.0), (3.0, 0.0)))].into_iter(),
+        );
+        let frames = samples(line, &[-1.0, 0.0, 1.5, 3.0, 4.0], 1e-6);
+        assert_eq!(frames[0], frames[1]);
+        assert_eq!(frames[3], frames[4]);
+        for (frame, x) in frames.iter().zip([0.0, 0.0, 1.5, 3.0, 3.0]) {
+            assert_point_close(frame.as_ref().unwrap().point, point(x, 0.0));
+        }
+        assert_eq!(samples(BezPath::new(), &[0.0, 1.0], 1e-6), [None, None]);
+        let short = BezPath::from_path_segments(
+            [PathSeg::Line(Line::new((0.0, 0.0), (1e-8, 0.0)))].into_iter(),
+        );
+        let frames = samples(short, &[5e-9, 1e-8], 1e-6);
+        assert_eq!(frames[0].as_ref().unwrap().point, point(0.0, 0.0));
+        assert_eq!(frames[1].as_ref().unwrap().point, point(1e-8, 0.0));
+    }
 
     fn point(x: f64, y: f64) -> CurvePoint {
         CurvePoint { x, y }
@@ -2722,5 +3167,86 @@ mod tests {
         assert_eq!(curves[1].start, point(1.0, 1.0));
         assert_eq!(curves[1].end, point(2.0, 0.0));
         assert_eq!(output.path.segments().count(), 2);
+    }
+}
+
+#[cfg(test)]
+mod region_sampling_tests {
+    use super::*;
+
+    fn part(start: f64, end: f64, visible: bool) -> RegionPart {
+        RegionPart {
+            visible,
+            segments: vec![CubicBezierSpec {
+                start: CurvePoint { x: start, y: 0.0 },
+                end: CurvePoint { x: end, y: 0.0 },
+                control_start: CurvePoint {
+                    x: start + (end - start) / 3.0,
+                    y: 0.0,
+                },
+                control_end: CurvePoint {
+                    x: start + (end - start) * 2.0 / 3.0,
+                    y: 0.0,
+                },
+            }],
+        }
+    }
+
+    fn request(parts: Vec<RegionPart>) -> RegionSamplesSpec {
+        RegionSamplesSpec {
+            parts,
+            regions: 4,
+            unit: 0.0,
+            step: 4.0,
+            accuracy: 0.001,
+        }
+    }
+
+    #[test]
+    fn hidden_parts_retain_their_arc_length_regions() {
+        let samples = request(vec![part(0.0, 4.0, false), part(4.0, 8.0, true)])
+            .samples()
+            .unwrap();
+        assert_eq!(
+            samples.iter().map(|group| group.0).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+        assert_eq!(samples[0].1.first().unwrap().x, 4.0);
+        assert!((samples[1].1.last().unwrap().x - 8.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn both_ends_of_each_region_are_sampled() {
+        let samples = request(vec![part(0.0, 4.0, true)]).samples().unwrap();
+        assert!(samples.iter().all(|(_, points)| points.len() == 2));
+        for adjacent in samples.windows(2) {
+            assert!(
+                (adjacent[0].1.last().unwrap().x - adjacent[1].1.first().unwrap().x).abs() < 0.001
+            );
+        }
+    }
+
+    #[test]
+    fn empty_and_zero_length_parts_produce_no_samples() {
+        assert!(request(vec![]).samples().unwrap().is_empty());
+        assert!(
+            request(vec![part(0.0, 0.0, true)])
+                .samples()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn invalid_sampling_parameters_are_rejected() {
+        let mut zero_regions = request(vec![]);
+        zero_regions.regions = 0;
+        assert!(zero_regions.samples().is_err());
+        let mut zero_step = request(vec![]);
+        zero_step.step = 0.0;
+        assert!(zero_step.samples().is_err());
+        let mut infinite_scale = request(vec![]);
+        infinite_scale.unit = f64::INFINITY;
+        assert!(infinite_scale.samples().is_err());
     }
 }

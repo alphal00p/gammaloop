@@ -177,14 +177,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings {
                     ..Default::default()
                 }),
                 ..Default::default()
-            })?
-            .resolved()?;
+            },
+        )?;
         let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -261,14 +261,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings {
                     ..Default::default()
                 }),
                 ..Default::default()
-            })?
-            .resolved()?;
+            },
+        )?;
         let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
@@ -563,7 +563,6 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     collect_traces: false,
                     ..Default::default()
                 })?
-                .resolved()?
                 .expand_dots()?;
             atom = cooking.uncook(reduced.as_view());
 

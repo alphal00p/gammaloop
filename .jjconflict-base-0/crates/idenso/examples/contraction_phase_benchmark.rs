@@ -14,7 +14,7 @@
 //! Three additional factored generic-tensor controls exercise a selected bispinor
 //! representation and both orientations of an unrelated dual representation.
 //!
-//! Typed gamma methods include admission and alias resolution in each call.
+//! Typed gamma methods include admission in each call.
 //! Public operations call the linked production API. `Chainify` isolates the
 //! internal notation primitive through the `reference-cases` feature. Compare
 //! output snapshots across builds; term counts alone do not establish equivalence.
@@ -30,23 +30,23 @@ enum Method {
     Clone,
     RepeatedIndices,
     NotationToDots,
-    MetricContractResolve,
-    ContractResolve,
+    MetricContract,
+    Contract,
     Epsilon,
     Chainify,
-    TypedGammaChainsResolve,
-    TypedGammaResolve,
+    TypedGammaChains,
+    TypedGamma,
 }
 const METHODS: [Method; 9] = [
     Method::Clone,
     Method::RepeatedIndices,
     Method::NotationToDots,
-    Method::MetricContractResolve,
-    Method::ContractResolve,
+    Method::MetricContract,
+    Method::Contract,
     Method::Epsilon,
     Method::Chainify,
-    Method::TypedGammaChainsResolve,
-    Method::TypedGammaResolve,
+    Method::TypedGammaChains,
+    Method::TypedGamma,
 ];
 
 enum Outcome {
@@ -74,7 +74,7 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
             .to_dots()
             .unwrap()
             .into_expression(),
-        MetricContractResolve => SymbolicTensor::infer(view.to_owned())
+        MetricContract => SymbolicTensor::infer(view.to_owned())
             .unwrap()
             .contract(ContractSettings {
                 rank_one: false,
@@ -83,18 +83,14 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression(),
-        ContractResolve => SymbolicTensor::infer(view.to_owned())
+        Contract => SymbolicTensor::infer(view.to_owned())
             .unwrap()
             .contract(idenso::tensor::ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression(),
         Epsilon => SymbolicTensor::infer(view.to_owned())
@@ -110,45 +106,35 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression(),
         Chainify => idenso::reference_cases::chain_notation_phase(view),
-        TypedGammaChainsResolve => {
-            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
-                .unwrap()
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    gamma: Some(idenso::dirac::GammaSimplifySettings {
-                        output: idenso::dirac::GammaOutput::Chains,
-                        ..Default::default()
-                    }),
-                    epsilon: false,
+        TypedGammaChains => idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings {
+                    output: idenso::dirac::GammaOutput::Chains,
                     ..Default::default()
-                })
-                .unwrap()
-                .resolved()
-                .unwrap()
-                .into_expression()
-        }
-        TypedGammaResolve => {
-            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
-                .unwrap()
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
-                    epsilon: true,
-                    ..Default::default()
-                })
-                .unwrap()
-                .contract(idenso::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })
-                .unwrap()
-                .resolved()
-                .unwrap()
-                .into_expression()
-        }
+                }),
+                epsilon: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression(),
+        TypedGamma => idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression(),
         RepeatedIndices => unreachable!(),
     })
 }
@@ -162,6 +148,13 @@ fn batch(method: Method, input: &Atom, repetitions: usize) -> f64 {
 
 fn main() {
     let arguments: Vec<_> = std::env::args().collect();
+    if arguments
+        .get(1)
+        .is_some_and(|mode| mode == "--reduce-input")
+    {
+        reduce_input(&arguments[2..]);
+        return;
+    }
     let input_directory = Path::new(&arguments[1]);
     let output_directory = Path::new(&arguments[2]);
     let samples: usize = arguments.get(3).map_or(5, |s| s.parse().unwrap());
@@ -239,11 +232,11 @@ fn main() {
         )
         .unwrap();
         for method in METHODS {
-            if matches!(method, Method::TypedGammaResolve) && !has_gamma {
+            if matches!(method, Method::TypedGamma) && !has_gamma {
                 continue;
             }
             let output = run(method, input.as_view()).atom();
-            if matches!(method, Method::TypedGammaResolve) && variant == "gamma_terminal" {
+            if matches!(method, Method::TypedGamma) && variant == "gamma_terminal" {
                 assert_eq!(output, input, "{case}: terminal gamma expression changed");
             }
             let changed = output != input;
@@ -306,5 +299,94 @@ fn main() {
             repetitions[index],
             timings[index]
         );
+    }
+}
+
+/// Diagnose an exact production input without distributing its numerator.
+/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra] [collected|nested]` records admission and
+/// each exact continuation separately. `algebra` matches the public gamma/colour
+/// defaults with full contraction; `gamma` retains the trace-only diagnostic.
+fn reduce_input(arguments: &[String]) {
+    use idenso::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
+
+    idenso::representations::initialize();
+    let _ = *idenso::epsilon::EPSILON_SYMBOL;
+    let output = Path::new(&arguments[1]);
+    std::fs::create_dir_all(output).unwrap();
+    let atom = if Path::new(&arguments[0])
+        .extension()
+        .is_some_and(|extension| extension == "raw")
+    {
+        Atom::import(&mut std::fs::File::open(&arguments[0]).unwrap(), None).unwrap()
+    } else {
+        for head in ["gammalooprs::K", "gammalooprs::Q", "gammalooprs::P"] {
+            SPENSO_TAG.rank_one_tensor_symbol(head);
+        }
+        let _ = spenso::index_symbol!("gammalooprs::hedge");
+        let _ = spenso::index_symbol!("gammalooprs::edge");
+        let source = std::fs::read_to_string(&arguments[0]).unwrap();
+        Atom::parse(
+            &source,
+            "spenso",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    let (input, clocks) = idenso::reference_cases::timing::measure("admission", || {
+        SymbolicTensor::infer(atom).unwrap()
+    });
+    std::fs::write(output.join("admission.json"), clocks.to_string()).unwrap();
+    let mode = arguments.get(2).map(String::as_str);
+    assert!(matches!(mode, None | Some("gamma" | "algebra")));
+    let coefficients = arguments.get(3).map(String::as_str);
+    assert!(matches!(coefficients, None | Some("collected" | "nested")));
+    let settings = AlgebraSettings {
+        gamma: mode.map(|_| Default::default()),
+        color: (mode == Some("algebra")).then(Default::default),
+        collect_coefficients: coefficients != Some("nested"),
+        contract: if mode == Some("algebra") {
+            AlgebraContraction::Fully
+        } else {
+            AlgebraContraction::Dots
+        },
+        ..Default::default()
+    };
+    let mut current = input;
+    for step in 1..=8 {
+        let start = Instant::now();
+        let reduced = current.simplify_algebra(&settings).unwrap();
+        let elapsed = start.elapsed().as_secs_f64();
+        println!(
+            "step={step} seconds={elapsed:.9} status={:?} atom_bytes={}",
+            reduced.reduction_status(),
+            reduced.expression().as_view().get_byte_size()
+        );
+        let (diagnostic, clocks) =
+            idenso::reference_cases::timing::measure("production reduction", || {
+                current.simplify_algebra(&settings).unwrap()
+            });
+        assert_eq!(diagnostic.expression(), reduced.expression());
+        assert_eq!(diagnostic.reduction_status(), reduced.reduction_status());
+        std::fs::write(output.join(format!("step-{step}.json")), clocks.to_string()).unwrap();
+        std::fs::write(
+            output.join(format!("step-{step}.expr")),
+            reduced.expression().to_plain_string(),
+        )
+        .unwrap();
+        if reduced.reduction_status() == ReductionStatus::Complete {
+            let start = Instant::now();
+            let rerun = reduced.simplify_algebra(&settings).unwrap();
+            println!(
+                "rerun_seconds={:.9} stable={}",
+                start.elapsed().as_secs_f64(),
+                rerun.expression() == reduced.expression()
+            );
+            break;
+        }
+        assert!(
+            reduced.expression() != current.expression(),
+            "unfinished result made no progress"
+        );
+        current = reduced;
     }
 }

@@ -12,9 +12,9 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    CookMode, CookSettings, IndexTooling, cof,
+    CookMode, CookSettings, IndexTooling, coad, cof,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
-    color_idx,
+    color_cas, color_idx,
     dirac::GammaSimplifySettings,
     tensor::{ContractSettings, SymbolicTensor},
 };
@@ -68,8 +68,6 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
             collect_traces: false,
             ..Default::default()
         })
-        .unwrap()
-        .resolved()
         .unwrap();
     let color = cooking.uncook(color.expression().as_view());
     let expression = model
@@ -80,8 +78,6 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
         .unwrap()
         .contract(ContractSettings::default().without_rank_one_tensors())
-        .unwrap()
-        .resolved()
         .unwrap()
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
@@ -97,15 +93,11 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         })
         .unwrap()
         .to_dots()
-        .unwrap()
-        .resolved()
         .unwrap();
     (cooking
         .uncook(expression.expression().as_view())
-        .replace(CS.tr)
-        .with(Atom::num((1, 2)))
         .replace(CS.nc)
-        .with(CS.ca)
+        .with(color_cas!(2, coad!(8)))
         // RQFT closed-quark-loop references write the flavor-summed index as
         // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))
@@ -180,8 +172,6 @@ fn scalar_pole_part() {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap();
         let color = cooking.uncook(color.expression().as_view());
         println!(
@@ -294,8 +284,6 @@ fn finite_part_quark_lo() {
                 .unwrap()
                 .contract(ContractSettings::default())
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .to_dots()
                 .unwrap();
         let contracted_log_coefficient = cooking
@@ -358,8 +346,6 @@ fn finite_part_ghost_2loop() {
                 .unwrap()
                 .contract(ContractSettings::default())
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .to_dots()
                 .unwrap()
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
@@ -372,8 +358,6 @@ fn finite_part_ghost_2loop() {
                     collect_traces: false,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap();
             cooking
                 .uncook(atom.expression().as_view())
@@ -701,8 +685,6 @@ mod failing {
         let aligned = SymbolicTensor::infer(aligned)
             .unwrap()
             .contract(ContractSettings::default())
-            .unwrap()
-            .resolved()
             .unwrap()
             .to_dots()
             .unwrap();

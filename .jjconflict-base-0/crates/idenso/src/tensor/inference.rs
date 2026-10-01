@@ -31,6 +31,7 @@ use thiserror::Error;
 use super::{
     SymbolicTensor,
     composition::{self, ExplicitIndexOccurrences, TensorCompositionError},
+    simplification::observation::DomainObservations,
 };
 use crate::{
     color::CS,
@@ -113,17 +114,31 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Publish an identity implemented by our algebra, preserving its proven
     /// logical interface. User callbacks remain a checked result boundary.
-    pub(crate) fn with_identity_result(&self, expression: Atom) -> InferenceResult<Self> {
+    pub(crate) fn with_identity_result(
+        &self,
+        expression: Atom,
+        observations: Option<DomainObservations>,
+    ) -> InferenceResult<Self> {
         self.ensure_validated()?;
         if expression == self.expression {
             return Ok(self.clone());
         }
-        let mut result = if expression.is_zero() || self.normalization_is_intrinsic() {
+        let intrinsic = self.normalization_is_intrinsic();
+        let result = if expression.is_zero() || intrinsic {
             Self::from_validated_parts(expression, self.structure.clone())
         } else {
             self.with_rewritten_expression(expression)?
         };
-        result.proofs.literal_origin = self.proofs.literal_origin.clone();
+        if intrinsic && let Some(observations) = observations {
+            let _ = result
+                .proofs
+                .intrinsic
+                .set(observations.candidates.intrinsic);
+            let _ = result
+                .proofs
+                .observations
+                .set(std::sync::Arc::new(observations));
+        }
         if self.proofs.observations.get().is_some() {
             result.observe_replacement(self);
         }
@@ -410,7 +425,62 @@ impl SymbolicTensor<PartialStructure> {
     /// Observation checks tensor scopes before index multiplicity; scalar results
     /// still check those scopes after their interface has been accepted.
     pub fn with_checked_expression(&self, expression: Atom) -> InferenceResult<Self> {
+        if expression != self.expression
+            && !expression.as_view().is_zero()
+            && !self.structure.open_positions().is_empty()
+        {
+            return self.finish_checked_open_expression(expression);
+        }
         self.finish_checked_expression(expression, &self.structure, LeafInference::Observe)
+    }
+
+    fn finish_checked_open_expression(&self, expression: Atom) -> InferenceResult<Self> {
+        // The source already supplies the interface; recover only its encoded
+        // boundary identities here. Validate scopes on the actual result once.
+        let encoded = InterfaceInference {
+            leaf_inference: LeafInference::ObserveEncoded,
+            ..Default::default()
+        }
+        .infer_view(self.expression.as_view())
+        .and_then(|interface| {
+            InterfaceInference::merge_explicit_interface_sequence(&[interface])
+                .map(|interface| interface.canonicalize_open_ports())
+        });
+        if let Ok(encoded) = encoded
+            && (encoded.open_positions().is_empty()
+                || InterfaceInference::unambiguous_anonymous_ports(&encoded))
+        {
+            // Retain occurrence/axis identities when explicit ports move past
+            // AUTO ports. Observing only anonymous positions can silently swap
+            // tensor components after a callback changes normalized factor order.
+            let partial = PartialStructure::from_logical_slots(
+                encoded.logical_slots().into_iter().map(|slot| {
+                    slot.rep().slot(match slot.aind {
+                        PartialIndex::Explicit(index) => {
+                            InterfaceInference::partial_index(index, LeafInference::Observe)
+                        }
+                        open => open,
+                    })
+                }),
+            );
+            if partial.canonical() == self.structure.canonical()
+                && (encoded.open_positions().is_empty()
+                    || partial.logical_slots() == self.structure.logical_slots())
+            {
+                return self.finish_checked_expression(
+                    expression,
+                    &encoded,
+                    LeafInference::ObserveEncoded,
+                );
+            }
+        }
+        // Report invalid result syntax before refusing an otherwise valid
+        // rewrite whose unresolved identities have no safe witness. This
+        // observation cannot admit the rewrite or replay a normalizer.
+        Self::validate_interface(&expression, &self.structure)?;
+        Err(TensorInferenceError::invalid(
+            "cannot certify unresolved tensor port identities after transformation",
+        ))
     }
 
     fn finish_checked_expression(
@@ -563,46 +633,6 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(Self::from_validated_parts(
                 expression,
                 self.structure.clone(),
-            ));
-        }
-        if !self.structure.open_positions().is_empty()
-            && let Ok((encoded, _)) =
-                Self::observed_interface(&self.expression, LeafInference::ObserveEncoded)
-            && (encoded.open_positions().is_empty()
-                || InterfaceInference::unambiguous_anonymous_ports(&encoded))
-        {
-            // A tensor identity can move an explicit port past AUTO ports in
-            // the stored syntax (for example g(mu,nu) gamma(AUTO,AUTO,nu)).
-            // Encoded occurrence/axis identities allow that movement without
-            // changing the public logical order or trusting callback outputs.
-            let partial = PartialStructure::from_logical_slots(
-                encoded.logical_slots().into_iter().map(|slot| {
-                    slot.rep().slot(match slot.aind {
-                        PartialIndex::Explicit(index) => {
-                            InterfaceInference::partial_index(index, LeafInference::Observe)
-                        }
-                        open => open,
-                    })
-                }),
-            );
-            if partial.canonical() == self.structure.canonical()
-                && (encoded.open_positions().is_empty()
-                    || partial.logical_slots() == self.structure.logical_slots())
-            {
-                return self.finish_checked_expression(
-                    expression,
-                    &encoded,
-                    LeafInference::ObserveEncoded,
-                );
-            }
-        }
-        if !self.structure.open_positions().is_empty() {
-            // Report invalid result syntax before refusing an otherwise valid
-            // rewrite whose unresolved identities have no safe witness. This
-            // observation cannot admit the rewrite or replay a normalizer.
-            Self::validate_interface(&expression, &self.structure)?;
-            return Err(TensorInferenceError::invalid(
-                "cannot certify unresolved tensor port identities after transformation",
             ));
         }
         self.with_checked_expression(expression)
@@ -2714,14 +2744,14 @@ pub(crate) mod tests {
         let callback = symbolica::symbol!("trusted_identity_new_callback"; Scalar;
             norm = |_value, _out| {});
         let result = source
-            .with_identity_result(FunctionBuilder::new(callback).add_arg(7).finish())
+            .with_identity_result(FunctionBuilder::new(callback).add_arg(7).finish(), None)
             .unwrap();
         assert_eq!(result.proofs.validated.get(), Some(&true));
         assert!(!result.normalization_is_intrinsic());
         let tensor = FunctionBuilder::new(spenso::tensor_symbol!("trusted_identity_added_port"))
             .add_arg(spenso::mink!(4, 98491))
             .finish();
-        assert!(result.with_identity_result(tensor).is_err());
+        assert!(result.with_identity_result(tensor, None).is_err());
     }
 
     #[test]
@@ -4372,8 +4402,6 @@ pub(crate) mod tests {
                             ..Default::default()
                         })
                         .unwrap()
-                        .resolved()
-                        .unwrap()
                         .into_expression(),
                         crate::tensor::SymbolicTensor::infer(
                             (expected.expression).as_atom_view().to_owned(),
@@ -4391,8 +4419,6 @@ pub(crate) mod tests {
                             collect_traces: false,
                             ..Default::default()
                         })
-                        .unwrap()
-                        .resolved()
                         .unwrap()
                         .into_expression(),
                     ),
@@ -4445,8 +4471,19 @@ pub(crate) mod tests {
         ]);
         let source = SymbolicTensor::checked_parts(metric * gamma(ends, nu), logical).unwrap();
         let result = gamma(ends, mu);
-        assert!(source.with_checked_expression(result.clone()).is_err());
-        assert!(source.with_rewritten_expression(result).is_ok());
+        // Both boundaries can retain the public order when encoded owners prove
+        // that moving the explicit Lorentz port past AUTO axes is harmless.
+        for finish in [
+            SymbolicTensor::with_checked_expression,
+            SymbolicTensor::with_rewritten_expression,
+        ] {
+            let accepted = finish(&source, result.clone()).unwrap();
+            assert_eq!(accepted.expression, result);
+            assert_eq!(
+                accepted.structure.logical_slots(),
+                source.structure.logical_slots()
+            );
+        }
         for changed in [
             AbstractIndex::Open {
                 owner: owner + 1,
@@ -4459,11 +4496,21 @@ pub(crate) mod tests {
                     .with_rewritten_expression(gamma([changed, ends[1]], mu))
                     .is_err()
             );
+            assert!(
+                source
+                    .with_checked_expression(gamma([changed, ends[1]], mu))
+                    .is_err()
+            );
         }
         let wrong_branch = gamma(ends, AbstractIndex::Normal(74815));
         assert!(
             source
-                .with_rewritten_expression(gamma(ends, mu) + wrong_branch)
+                .with_rewritten_expression(gamma(ends, mu) + &wrong_branch)
+                .is_err()
+        );
+        assert!(
+            source
+                .with_checked_expression(gamma(ends, mu) + wrong_branch)
                 .is_err()
         );
         let reordered = PartialStructure::from_logical_slots([
@@ -4636,8 +4683,6 @@ pub(crate) mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression();
                     assert_ne!(expected, value.expression);
@@ -4835,6 +4880,7 @@ pub(crate) mod tests {
         let settings = crate::dirac::GammaSimplifySettings::default();
         let rewritten = crate::dirac::DiracSimplifier::new(&settings)
             .evaluate_terminal_trace::<false>(value.expression.as_view())
+            .map(|(expression, _)| expression)
             .unwrap();
         assert_eq!(rewritten, Atom::num(4) * scalar);
         assert!(
@@ -5781,8 +5827,6 @@ pub(crate) mod tests {
             let contracted = SymbolicTensor::infer(delta * symbolica::function!(vector, &slot))
                 .unwrap()
                 .contract(Default::default())
-                .unwrap()
-                .resolved()
                 .unwrap()
                 .expand_dots()
                 .unwrap();

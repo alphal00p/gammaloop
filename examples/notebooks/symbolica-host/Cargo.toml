@@ -22,6 +22,8 @@ native = ["feynkit-py/native", "spynso3/native"]
 wasm = ["feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
+# Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
+symbolica = { path = "../../../../../symbolica-lazy-formatting" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 
 [profile.dev]

@@ -1123,8 +1123,6 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap();
             assert_eq!(
                 contracted.expression(),

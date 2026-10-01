@@ -81,7 +81,6 @@ for count in (1, 3, 5):
             .contract(collect_chains=False, collect_traces=False)
             .expand()
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
         )
         assert tensor.is_scalar

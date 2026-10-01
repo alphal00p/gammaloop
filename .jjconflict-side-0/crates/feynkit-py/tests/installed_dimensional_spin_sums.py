@@ -28,7 +28,6 @@ for dimension in (4, 6, E("4"), E("6"), D):
                 contraction = (
                     TensorExpression((projector * vector(mink(dimension, i))).expand())
                     .contract(collect_chains=False, collect_traces=False)
-                    .to_expression()
                     .to_dots()
                 )
                 assert kin.apply(contraction.to_expression()).together() == zero
@@ -39,7 +38,6 @@ for dimension in (4, 6, E("4"), E("6"), D):
                     ).expand()
                 )
                 .contract(collect_chains=False, collect_traces=False)
-                .to_expression()
                 .to_dots()
             )
             expected = -one if average else missing - dimension

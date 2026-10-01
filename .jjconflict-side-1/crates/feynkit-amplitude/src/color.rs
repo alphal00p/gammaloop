@@ -137,8 +137,6 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap()
-                .resolved()
-                .unwrap()
                 .into_expression();
             assert_eq!(trace, Atom::num(color.unsigned_abs()));
             let average =
@@ -150,8 +148,6 @@ mod tests {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression();
             assert_eq!(average, Atom::one());

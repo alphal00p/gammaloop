@@ -102,7 +102,7 @@ class FermionLadder:
         }
         # The three-loop 4D scalar is small enough to expand in one step. Larger
         # cases benefit from collecting each momentum substitution separately.
-        self.settings = dict(gamma=True)
+        self.settings = dict(color=False, gamma=True)
         self.staged_routing = mode == "tracen" or loops == 4
         if self.staged_routing:
             self._prepare_polynomial_routing()
@@ -127,9 +127,9 @@ class FermionLadder:
                     )
         self.form_order = "trace-first"
         self.strategy = {
-            "trace_materialization": "explicit alias expansion"
+            "trace_materialization": "explicit polynomial expansion"
             if self.staged_routing
-            else "explicit factored alias resolution",
+            else "factored tensor result",
             "scalar_expansion": (
                 "grouped polynomial substitution, outer momentum pairs first"
                 if self.staged_routing
@@ -213,9 +213,7 @@ class FermionLadder:
         if source is None:
             source = self.source
         traced = source.simplify_algebra(**self.settings, epsilon=True)
-        traced = (
-            traced.expand() if self.staged_routing else traced.to_expression()
-        ).to_expression()
+        traced = (traced.expand() if self.staged_routing else traced).to_expression()
         if self.staged_routing:
             polynomial = traced.to_polynomial(vars=self.polynomial_variables)
             return self._substitute_momenta(polynomial).to_expression()
@@ -242,9 +240,7 @@ class FermionLadder:
         owner = algebra.contract(collect_chains=False, collect_traces=False)
         traced = owner
         after_gamma = process_time_ns()
-        traced = (
-            traced.expand() if self.staged_routing else traced.to_expression()
-        ).to_expression()
+        traced = (traced.expand() if self.staged_routing else traced).to_expression()
         after_trace = process_time_ns()
         if self.staged_routing:
             polynomial = traced.to_polynomial(vars=self.polynomial_variables)
@@ -693,7 +689,7 @@ def consolidation_child(args):
             else None,
             "rule_application": "reusable TensorRule per local vertex; factorized output",
             "contraction": "existing Rust component reducer with merged states",
-            "materialization": "explicit polynomial forward pass over aliases",
+            "materialization": "explicit polynomial expansion",
         }
     else:
         record["phases"] = case.phases(result)
@@ -941,7 +937,7 @@ def consolidation_benchmark(args):
         "sources": sources,
         "interpreters": dict(variants),
         "saved_frontends": frontends,
-        "target_api": "Typed rule/alias contraction; gamma result expanded explicitly within the measured operation when the case requests a polynomial",
+        "target_api": "Typed rule/contraction; gamma result expanded explicitly within the measured operation when the case requests a polynomial",
         "ladder_routes": ladder_routes,
         "contraction_order": args.contraction_order,
         "contraction_order_scope": "Current frontend only; frozen saved frontends retain their recorded strategy and do not receive this option",
@@ -1301,8 +1297,9 @@ def consolidation_benchmark(args):
                             "explicit_materialization",
                         )
                     },
-                    "aliased_bytes": [row["phases"]["aliased_bytes"] for row in own],
-                    "definitions": [row["phases"]["definitions"] for row in own],
+                    "factorized_bytes": [
+                        row["phases"]["factorized_bytes"] for row in own
+                    ],
                     "scope": "Separate diagnostic calls; primary end-to-end clocks above",
                 }
             if label != variants[0][0]:
@@ -1423,7 +1420,6 @@ def consolidation_benchmark(args):
                 "contraction_under_50ms": clocks["contraction"] < 50_000_000,
                 "materialization_under_150ms": clocks["explicit_materialization"]
                 < 150_000_000,
-                "aliases_under_100KB": max(value["aliased_bytes"]) < 100_000,
             }
             report["acceptance"][label] = {
                 "gate": "M1 historical ladder; plan's reverse order = 5,4,6,3,7,2,8,1",

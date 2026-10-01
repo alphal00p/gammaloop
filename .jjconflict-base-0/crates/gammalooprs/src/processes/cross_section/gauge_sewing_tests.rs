@@ -115,7 +115,7 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
             .contains("complete vector/Goldstone/ghost sector")
     );
     let mut invalid = model.clone();
-    invalid.covariant_cut_multiplets.get_mut(&24).unwrap()[3] = -9000003;
+    invalid.covariant_cut_multiplets_mut().get_mut(&24).unwrap()[3] = -9000003;
     assert!(invalid.validate_covariant_cut_multiplets().is_err());
     let mut invalid = serde_json::to_value(&model)?;
     let propagator = invalid["propagators"]

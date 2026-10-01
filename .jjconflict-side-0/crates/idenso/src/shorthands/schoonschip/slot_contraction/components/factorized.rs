@@ -5,7 +5,8 @@
 //! substitutions remain port bindings until a distinct output variable is emitted.
 
 use super::*;
-use crate::tensor::SymbolicNet;
+use crate::tensor::{SymbolicNet, simplification::observation::DomainObservations};
+use ahash::AHashSet;
 use linnet::{
     half_edge::{
         NodeIndex,
@@ -22,7 +23,9 @@ use spenso::{
         store::{TensorScalarStore, TensorScalarStoreMapping},
     },
     structure::{
-        OrderedStructure, TensorStructure, abstract_index::AbstractIndex, partial::PartialIndex,
+        OrderedStructure, TensorStructure,
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructureExt},
         slot::IsAbstractSlot,
     },
 };
@@ -34,23 +37,36 @@ use symbolica::{atom::AtomOrView, coefficient::CoefficientView};
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Remaining<'a> {
     factors: Vec<(usize, Vec<Argument<'a>>)>,
-    residual: Vec<(usize, u16)>,
+    residual: Vec<(usize, u32)>,
 }
 
-type FactorTerm = (Vec<(usize, u16)>, Rational);
-// Selected expression/interface, retained factors, alias exposure, incident ports.
-type PrerequisiteFactors = (Atom, PartialStructure, Vec<Atom>, bool, Vec<Atom>);
+impl Remaining<'_> {
+    #[cfg(feature = "reference-cases")]
+    fn storage_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.factors.capacity() * std::mem::size_of::<(usize, Vec<Argument<'_>>)>()
+            + self
+                .factors
+                .iter()
+                .map(|(_, arguments)| arguments.capacity() * std::mem::size_of::<Argument<'_>>())
+                .sum::<usize>()
+            + self.residual.capacity() * std::mem::size_of::<(usize, u32)>()
+    }
+}
+
+type FactorTerm = (Vec<(usize, u32)>, Rational);
+// Selected expression/interface and retained factors.
+type PrerequisiteFactors = (Atom, PartialStructure, Vec<Atom>);
 
 pub(crate) use crate::tensor::simplification::ReductionStatus;
 
-/// Exact output may retain pending contractions when a frontier budget is met.
+/// Exact output may retain unsupported contractions for subsequent operations.
 /// Algebraic validity and completion are separate facts.
 #[derive(Clone)]
 pub(crate) struct FactorizedContraction<Root = Atom> {
     pub(crate) root: Root,
-    pub(crate) aliases: Vec<(Atom, Atom)>,
     pub(crate) status: ReductionStatus,
-    pub(crate) literal_relabellings: Vec<(Atom, Atom)>,
+    pub(crate) observations: Option<DomainObservations>,
 }
 
 // A parse belongs to one arithmetic scope. Opening an occurrence is cached on
@@ -63,7 +79,7 @@ struct ContractionScope<'src> {
     root: NodeIndex,
     ports: AHashMap<NodeIndex, (Vec<Atom>, PartialStructure)>,
     opened: AHashMap<NodeIndex, std::cell::OnceCell<Option<Box<Self>>>>,
-    powers: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
+    reductions: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
     work: AHashMap<NodeIndex, std::cell::OnceCell<bool>>,
     interfaces: Option<LeafInterfaceCache>,
 }
@@ -85,20 +101,34 @@ impl<'src> ContractionScope<'src> {
             .iter_preorder_tree_nodes(&network.graph.graph, root)
             .collect::<Vec<_>>();
         let external: SuBitGraph = network.graph.graph.external_filter();
-        let mut ports = AHashMap::new();
-        for &node in &nodes {
-            let members = tree
-                .iter_preorder_tree_nodes(&network.graph.graph, node)
-                .collect::<std::collections::BTreeSet<_>>();
+        // Preorder makes each arithmetic subtree a contiguous interval. Reuse
+        // those intervals for every boundary instead of allocating a descendant
+        // set and traversing the same tree for each node.
+        let positions = nodes
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(position, node)| (node, position))
+            .collect::<AHashMap<_, _>>();
+        let mut ends = (1..=nodes.len()).collect::<Vec<_>>();
+        for (position, &node) in nodes.iter().enumerate().rev() {
+            for child in tree.iter_children(node, &network.graph.graph) {
+                ends[position] = ends[position].max(ends[positions[&child]]);
+            }
+        }
+        let mut ports = AHashMap::with_capacity(nodes.len());
+        for (begin, &node) in nodes.iter().enumerate() {
+            let end = ends[begin];
             let mut boundary = Vec::new();
-            for &member in &members {
+            for &member in &nodes[begin..end] {
                 for hedge in network.graph.graph.iter_crown(member) {
                     let NetworkEdge::Slot(slot) = network.graph.graph[[&hedge]] else {
                         continue;
                     };
                     if !external.includes(&hedge)
-                        && members
-                            .contains(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                        && positions
+                            .get(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                            .is_some_and(|&other| begin <= other && other < end)
                     {
                         continue;
                     }
@@ -139,7 +169,7 @@ impl<'src> ContractionScope<'src> {
                 .iter()
                 .map(|&node| (node, Default::default()))
                 .collect(),
-            powers: nodes
+            reductions: nodes
                 .iter()
                 .map(|&node| (node, Default::default()))
                 .collect(),
@@ -202,9 +232,12 @@ impl<'src> ContractionScope<'src> {
                 return false;
             };
             if let Some(observed) = &contractor.observations {
+                // Compact vectors and metrics in a scalar coefficient already
+                // denote contracted products. Only explicit ports or a
+                // transparent bracket require opening its arithmetic here.
                 observed
                     .region(value)
-                    .is_none_or(|region| region.structural_work())
+                    .is_none_or(|region| region.has_indices() || region.counts[7] > 0)
             } else {
                 let observed = SimplificationCandidates::scan(value, [contractor.metric], || true);
                 observed.symbols[0] || observed.dots || observed.repeated_indices
@@ -230,6 +263,171 @@ impl<'src> ContractionScope<'src> {
 }
 
 impl SlotContraction {
+    /// Budget admission uses the same shallow scopes and boundary edges as the
+    /// contraction. It does not normalize a tensor or invoke user callbacks.
+    pub(crate) fn minimal_work_permitted(
+        &self,
+        source: AtomView<'_>,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> Option<bool> {
+        let scope = self.scope(source)?;
+        self.minimal_scope_work(&scope, scope.root, settings)
+    }
+
+    fn minimal_scope_work(
+        &self,
+        scope: &ContractionScope<'_>,
+        root: NodeIndex,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> Option<bool> {
+        match scope.network.graph.graph[root] {
+            NetworkNode::Op(NetworkOp::Sum) => {
+                for child in scope.tree.iter_children(root, &scope.network.graph.graph) {
+                    if self.minimal_scope_work(scope, child, settings)? {
+                        return Some(true);
+                    }
+                }
+                return Some(false);
+            }
+            NetworkNode::Op(NetworkOp::Power(_)) => {
+                let child = scope
+                    .tree
+                    .iter_children(root, &scope.network.graph.graph)
+                    .next()?;
+                if !scope.ports[&child].0.is_empty()
+                    && !self.tensor_alternatives(scope.literal(child)?)
+                {
+                    // An atomic tensor power can connect copies directly.
+                    let sources = self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(scope.literal(child)?))
+                        .map(|region| region.contraction_sources(settings))?;
+                    return Some(
+                        (sources || (settings.collect_traces && scope.ports[&child].0.len() == 2))
+                            && scope.ports[&child]
+                                .1
+                                .logical_slots()
+                                .iter()
+                                .any(|slot| self.permits(slot.rep().rep)),
+                    );
+                }
+                return self.minimal_scope_work(scope, child, settings);
+            }
+            _ => {}
+        }
+        let nodes = scope.factors(root);
+        let external: SuBitGraph = scope.network.graph.graph.external_filter();
+        let components = scope.network.graph.slot_components(&scope.tree, &nodes);
+        for &node in &nodes {
+            let literal = scope.literal(node)?;
+            let component = components
+                .iter()
+                .find(|component| component.contains(&node))?;
+            let alternatives = component
+                .iter()
+                .copied()
+                .filter(|&member| {
+                    !scope.ports[&member].0.is_empty()
+                        && scope
+                            .literal(member)
+                            .is_some_and(|source| self.tensor_alternatives(source))
+                })
+                .collect::<Vec<_>>();
+            let open_component = component.iter().any(|&member| {
+                scope.network.graph.graph.iter_crown(member).any(|edge| {
+                    matches!(scope.network.graph.graph[[&edge]], NetworkEdge::Slot(_))
+                        && external.includes(&edge)
+                })
+            });
+            let matrix = scope.ports[&node].0.len() == 2
+                && (settings.collect_traces || (settings.collect_chains && open_component));
+            let connected = scope.network.graph.graph.iter_crown(node).any(|edge| {
+                matches!(scope.network.graph.graph[[&edge]], NetworkEdge::Slot(slot)
+                    if self.permits(slot.rep().rep))
+                    && !external.includes(&edge)
+                    && component.contains(
+                        &scope
+                            .network
+                            .graph
+                            .graph
+                            .node_id(scope.network.graph.graph.inv(edge)),
+                    )
+            });
+            if alternatives.len() == 1
+                && alternatives[0] == node
+                && connected
+                && (matrix
+                    || self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(literal))?
+                        .contraction_sources(settings))
+            {
+                // One selected existing sum may supply a metric/vector to an
+                // atomic partner. It never combines independent alternatives.
+                return Some(true);
+            }
+            if let AtomView::Fun(function) = literal {
+                let head = function.get_symbol();
+                let source = (settings.metrics && head == self.metric)
+                    || (settings.rank_one && head.has_tag(&self.tags.rank1));
+                if (source || matrix) && connected {
+                    return Some(true);
+                }
+                if !source
+                    && scope.ports[&node].0.is_empty()
+                    && settings.collect_traces
+                    && self
+                        .observations
+                        .as_ref()
+                        .and_then(|observed| observed.region(literal))?
+                        .has_indices()
+                {
+                    // An internally closed matrix leaf has no graph boundary;
+                    // its notation owner establishes trace eligibility.
+                    return None;
+                }
+                if head == self.tags.chain || head == self.tags.trace || head == self.tags.bracket {
+                    // These notation owners carry ports inside their words.
+                    // Keep their existing admission and checked rewrite rules.
+                    return None;
+                }
+            } else if scope.contains_work(node, self) {
+                if !matches!(scope.network.graph.graph[node], NetworkNode::Leaf(_)) {
+                    if self.minimal_scope_work(scope, node, settings)? {
+                        return Some(true);
+                    }
+                } else {
+                    let opened = scope.open(node)?;
+                    if self.minimal_scope_work(opened, opened.root, settings)? {
+                        return Some(true);
+                    }
+                }
+            }
+        }
+        Some(false)
+    }
+
+    fn tensor_alternatives(&self, source: AtomView<'_>) -> bool {
+        if self
+            .observations
+            .as_ref()
+            .and_then(|observed| observed.region(source))
+            .is_some_and(|region| !region.has_indices())
+        {
+            return false;
+        }
+        match source {
+            AtomView::Add(_) => true,
+            AtomView::Mul(product) => product
+                .iter()
+                .any(|factor| self.tensor_alternatives(factor)),
+            AtomView::Pow(power) => self.tensor_alternatives(power.get_base_exp().0),
+            _ => false,
+        }
+    }
+
     fn scope<'a>(&'a self, source: AtomView<'a>) -> Option<ContractionScope<'a>> {
         if let Some((planned, graph)) = &self.graph
             && planned.as_view() == source
@@ -349,12 +547,7 @@ impl SlotContraction {
                         self.observations
                             .as_ref()
                             .and_then(|observed| observed.region(factor))
-                            .is_none_or(|region| {
-                                region
-                                    .representations
-                                    .iter()
-                                    .any(|rep| rep.base() == representation.base())
-                            })
+                            .is_none_or(|region| region.has_chain_channel(representation))
                     });
                 if relevant {
                     let next = expression.collect_chains(representation, collect, traces);
@@ -377,7 +570,7 @@ impl SlotContraction {
         &self,
         source: AtomView<'_>,
         mut selected: impl FnMut(AtomView<'_>) -> bool,
-        additional: impl Fn(AtomView<'_>) -> bool,
+        allowed_vector: &dyn Fn(LibraryRep) -> bool,
     ) -> Option<PrerequisiteFactors> {
         let scope = self.scope(source)?;
         let nodes = scope.factors(scope.root);
@@ -395,11 +588,16 @@ impl SlotContraction {
         if !active.iter().any(|active| *active) {
             return None;
         }
-        let eligible = nodes.iter().map(|&node| {
-            matches!(scope.literal(node), Some(AtomView::Fun(function))
-                if (self.metrics && function.get_symbol() == self.metric) || function.get_symbol().has_tag(&self.tags.rank1))
-                || scope.literal(node).is_some_and(&additional)
-        }).collect::<Vec<_>>();
+        let eligible = nodes
+            .iter()
+            .map(|&node| {
+                matches!(scope.literal(node), Some(AtomView::Fun(function))
+                if (self.metrics && function.get_symbol() == self.metric)
+                    || (function.get_symbol().has_tag(&self.tags.rank1)
+                        && scope.ports[&node].1.logical_slots().iter()
+                            .all(|slot| allowed_vector(slot.rep().rep))))
+            })
+            .collect::<Vec<_>>();
         let mut joined = false;
         let mut touched = vec![false; nodes.len()];
         loop {
@@ -441,15 +639,11 @@ impl SlotContraction {
         let mut factors = Vec::new();
         let mut interfaces = Vec::new();
         let mut spectators = Vec::new();
-        let mut expose = false;
-        let mut incident_ports = Vec::new();
         for (position, &node) in nodes.iter().enumerate() {
             let value = scope.literal(node)?.to_owned();
             if active[position] && touched[position] {
                 // A selected but disconnected scalar child is still opaque:
                 // another family's occurrence is no reason to open it here.
-                expose |= additional(value.as_view());
-                incident_ports.extend(scope.ports[&node].0.iter().cloned());
                 factors.push(value);
                 interfaces.push(scope.ports[&node].1.clone());
             } else {
@@ -457,13 +651,7 @@ impl SlotContraction {
             }
         }
         let interface = InterfaceInference::merge_explicit_interface_sequence(&interfaces).ok()?;
-        Some((
-            Atom::mul_many(factors),
-            interface,
-            spectators,
-            expose,
-            incident_ports,
-        ))
+        Some((Atom::mul_many(factors), interface, spectators))
     }
 
     /// Plan an already admitted interface; the typed caller owns source validation.
@@ -473,6 +661,9 @@ impl SlotContraction {
         order: Option<&[usize]>,
         rank_one: bool,
     ) -> Option<FactorizedContraction> {
+        if rank_one && self.observations.is_none() && source.contains_symbol(self.tags.chain) {
+            self.dummy_state().reserve_indices(source);
+        }
         let intrinsic = self
             .graph
             .as_ref()
@@ -504,10 +695,13 @@ impl SlotContraction {
         };
         let mut children = scope.tree.iter_children(node, &scope.network.graph.graph);
         let child = children.next()?;
-        if children.next().is_some() || !scope.ports[&child].0.is_empty() {
+        if children.next().is_some() {
             return None;
         }
         let source = scope.literal(child)?;
+        if !scope.ports[&child].0.is_empty() && (self.expand || !self.tensor_alternatives(source)) {
+            return None;
+        }
         use spenso::network::parsing::AtomStructureExt;
         let internal = self
             .observations
@@ -527,7 +721,7 @@ impl SlotContraction {
         rank_one: bool,
     ) -> Option<&'a FactorizedContraction> {
         let (child, power, internal) = self.power_scope(scope, node)?;
-        scope.powers[&node]
+        scope.reductions[&node]
             .get_or_init(|| {
                 if !internal {
                     // A transparent bracket can remain after local dot pairing
@@ -545,13 +739,15 @@ impl SlotContraction {
                     }
                     return Some(FactorizedContraction {
                         root: scope.literal(node)?.to_owned(),
-                        aliases: Vec::new(),
                         status: ReductionStatus::Complete,
-                        literal_relabellings: Vec::new(),
+                        observations: self.observations.as_ref().and_then(|observed| {
+                            observed.certify_scalar_region(scope.literal(node)?)
+                        }),
                     });
                 }
-                // Contract a closed base once in its own scope before applying the
-                // exponent. Copies must never share their internal dummy pairs.
+                // Contract the base in its own scope before applying the
+                // exponent. Closed bases keep independent dummy copies; minimal
+                // open sums retain their alternatives and external connections.
                 let mut result = self.contract_graph(scope, child, None, rank_one)?;
                 result.root = result.root.pow(power);
                 Some(result)
@@ -626,6 +822,57 @@ impl SlotContraction {
         Some(planned)
     }
 
+    /// Compile selected, admitted arithmetic on the existing contraction tape.
+    /// The outer shallow graph already supplied topology and factor order.
+    /// Selected sums and products use the same tape as their parsed graph;
+    /// indexed powers and transparent brackets retain the scoped graph path.
+    fn compile_arithmetic<'a>(
+        &self,
+        value: AtomView<'a>,
+        tape: &mut TermTape<InputLeaf<'a>>,
+        sum: &mut ComponentSum<'a, '_>,
+    ) -> Option<(usize, (usize, usize))> {
+        if let AtomView::Num(number) = value {
+            return if let Ok(coefficient) = Rational::try_from(value) {
+                tape.number(InputLeaf::Atom(value), coefficient)
+            } else if matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            ) {
+                tape.leaf(InputLeaf::Scalar(value))
+            } else {
+                None
+            };
+        }
+        if self
+            .observations
+            .as_ref()
+            .and_then(|observed| observed.region(value))
+            .is_some_and(|region| region.certifies_scalar_interface_syntax())
+        {
+            sum.scalar_interfaces.insert(value, true);
+            return tape.leaf(InputLeaf::Scalar(value));
+        }
+        match value {
+            AtomView::Add(add) => {
+                let children = add
+                    .iter()
+                    .map(|child| self.compile_arithmetic(child, tape, sum))
+                    .collect::<Option<Vec<_>>>()?;
+                tape.group(children.into_iter(), true)
+            }
+            AtomView::Mul(product) => {
+                let children = product
+                    .iter()
+                    .map(|child| self.compile_arithmetic(child, tape, sum))
+                    .collect::<Option<Vec<_>>>()?;
+                tape.group(children.into_iter(), false)
+            }
+            AtomView::Pow(_) => None,
+            _ => tape.leaf(InputLeaf::Atom(value)),
+        }
+    }
+
     fn compile_scope<'a>(
         &self,
         scope: &'a ContractionScope<'_>,
@@ -654,15 +901,22 @@ impl SlotContraction {
                     // a contraction. It must not disable exact source reuse.
                     if !unchanged
                         || result.status != ReductionStatus::Complete
-                        || !result.aliases.is_empty()
-                        || result
-                            .literal_relabellings
-                            .iter()
-                            .any(|(source, target)| source != target)
                     {
                         scoped.insert((scope as *const _ as usize, node), result);
                     }
-                    return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
+                    if let Some(observed) = &result.observations {
+                        sum.scalar_forms.insert(
+                            result.root.as_view(),
+                            observed.needs_dot_normalization(),
+                        );
+                    }
+                    return Some(if scope.ports[&node].0.is_empty() {
+                        TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
+                    } else {
+                        let position = sum.register_factor(scope, node, positions)?;
+                        sum.opaque_factors[position].0 = result.root.as_view();
+                        TermLeaf::Value(InputLeaf::Subtree(position))
+                    });
                 }
                 if !matches!(value, NetworkNode::Leaf(_)) {
                     return None;
@@ -675,10 +929,45 @@ impl SlotContraction {
                     AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
                 ) || matches!(literal, AtomView::Fun(function) if function.get_symbol() == self.tags.bracket) {
                     if scope.contains_work(node, self) {
+                        if self.expand
+                            && matches!(literal, AtomView::Add(_) | AtomView::Mul(_))
+                            && self.observations.as_ref()
+                                .and_then(|observed| observed.region(literal))
+                                .is_some_and(|region| !region.has_indexed_powers() && region.counts[7] == 0)
+                        {
+                            let (node, size) = self.compile_arithmetic(literal, tape, sum)?;
+                            return Some(TermLeaf::Reference(node, size));
+                        }
                         let opened = scope.open(node)?;
+                        if !self.expand && sum.exposed_sum != Some((scope as *const _ as usize, node)) && self.tensor_alternatives(literal) {
+                            // Reduce this existing scope independently; its
+                            // alternatives remain inside one opaque factor of
+                            // the surrounding product. Boundary bindings are
+                            // applied by the same positional emitter below.
+                            let result = scope.reductions[&node]
+                                .get_or_init(|| self.contract_graph(opened, opened.root, None, sum.rank_one))
+                                .as_ref()?;
+                            if result.root.as_view() != literal || result.status != ReductionStatus::Complete {
+                                scoped.insert((scope as *const _ as usize, node), result);
+                            }
+                            if let Some(observed) = &result.observations {
+                                sum.scalar_forms.insert(result.root.as_view(), observed.needs_dot_normalization());
+                            }
+                            return Some(if scope.ports[&node].0.is_empty() {
+                                TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
+                            } else {
+                                let position = sum.register_factor(scope, node, positions)?;
+                                sum.opaque_factors[position].0 = result.root.as_view();
+                                TermLeaf::Value(InputLeaf::Subtree(position))
+                            });
+                        }
                         let (node, size) =
                             self.compile_scope(opened, opened.root, tape, sum, positions, scoped)?;
                         Some(TermLeaf::Reference(node, size))
+                    } else if scope.ports[&node].0.is_empty() {
+                        // Equal finished coefficients share expression identity
+                        // across branches, independently of graph occurrence.
+                        Some(TermLeaf::Value(InputLeaf::Scalar(literal)))
                     } else {
                         let position = sum.register_factor(scope, node, positions)?;
                         Some(TermLeaf::Value(InputLeaf::Subtree(position)))
@@ -711,14 +1000,71 @@ impl SlotContraction {
         if self.power_scope(scope, root).is_some() {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
+        let scalar_boundary = scope.ports[&root].0.is_empty();
+        if !self.expand
+            && matches!(
+                scope.network.graph.graph[root],
+                NetworkNode::Op(NetworkOp::Sum)
+            )
+        {
+            // Existing additive branches already own their dummy scopes. Visit
+            // them independently instead of exposing them to a product tape.
+            let mut terms = Vec::new();
+            let mut status = ReductionStatus::Complete;
+            let mut scalar_form = Some(false);
+            for node in scope.tree.iter_children(root, &scope.network.graph.graph) {
+                let result = self.contract_graph(scope, node, None, rank_one)?;
+                status = status.max(result.status);
+                scalar_form = scalar_form
+                    .zip(result.observations.as_ref())
+                    .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
+                terms.push(result.root);
+            }
+            return Some(FactorizedContraction {
+                root: Atom::add_many(terms),
+                status,
+                observations: scalar_form
+                    .filter(|_| scalar_boundary)
+                    .map(DomainObservations::closed_scalar),
+            });
+        }
         let nodes = scope.factors(root);
         let selected = nodes
             .iter()
             .enumerate()
             .filter_map(|(i, &node)| scope.contains_work(node, self).then_some(i))
             .collect();
-        let selected = self.factor_order(scope, &nodes, selected, order)?;
+        let mut selected = self.factor_order(scope, &nodes, selected, order)?;
+        if !self.expand && order.is_none() {
+            // Apply outer atomic sources before visiting opaque arithmetic
+            // scopes. A scalar or tensor sum is never a list of alternatives
+            // in the surrounding contraction state.
+            selected.sort_by_key(|&position| {
+                matches!(
+                    scope.literal(nodes[position]),
+                    Some(AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                )
+            });
+        }
         let components = scope.network.graph.slot_components(&scope.tree, &nodes);
+        let mut exposed_sums = AHashSet::new();
+        if !self.expand {
+            for component in &components {
+                let alternatives = component
+                    .iter()
+                    .copied()
+                    .filter(|&node| {
+                        !scope.ports[&node].0.is_empty()
+                            && scope
+                                .literal(node)
+                                .is_some_and(|source| self.tensor_alternatives(source))
+                    })
+                    .collect::<Vec<_>>();
+                if let [node] = alternatives.as_slice() {
+                    exposed_sums.insert(*node);
+                }
+            }
+        }
         let node_positions = nodes
             .iter()
             .copied()
@@ -745,6 +1091,11 @@ impl SlotContraction {
         let mut scoped = AHashMap::new();
         let mut compile = |sum: &mut ComponentSum<'a, '_>, position: usize| {
             let mut tape = std::mem::take(&mut sum.input);
+            sum.exposed_sum = if exposed_sums.contains(&nodes[position]) {
+                Some((scope as *const _ as usize, nodes[position]))
+            } else {
+                None
+            };
             let result = self.compile_scope(
                 scope,
                 nodes[position],
@@ -753,12 +1104,13 @@ impl SlotContraction {
                 &mut positions,
                 &mut scoped,
             );
+            sum.exposed_sum = None;
             sum.input = tape;
             result.map(|(node, _)| node)
         };
         let mut roots = Vec::new();
-        let mut definitions = Vec::new();
         let mut status = ReductionStatus::Complete;
+        let mut scalar_form = Some(false);
         for component in components {
             sum.alpha_terms.clear();
             let component = component
@@ -771,6 +1123,14 @@ impl SlotContraction {
                 .filter(|position| component.contains(position))
                 .collect::<Vec<_>>();
             if selected.is_empty() {
+                for &position in &component {
+                    scalar_form = scalar_form
+                        .zip(sum.scalar_form(sum.opaque_factors[position].0))
+                        .map(|(first, second)| first || second);
+                    if !sum.opaque_factors[position].1.is_empty() {
+                        scalar_form = None;
+                    }
+                }
                 roots.push(Atom::mul_many(
                     component
                         .iter()
@@ -791,22 +1151,15 @@ impl SlotContraction {
                 &mut compile,
             )?;
             roots.push(result.root);
-            definitions.extend(result.aliases);
             status = status.max(result.status);
+            scalar_form = scalar_form
+                .zip(result.observations.as_ref())
+                .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
         }
         for result in scoped.values() {
-            definitions.extend(result.aliases.iter().cloned());
             status = status.max(result.status);
         }
-        if status == ReductionStatus::Complete
-            && scoped.is_empty()
-            && !sum.contracted
-            && sum
-                .literal_relabellings
-                .borrow()
-                .iter()
-                .all(|(source, target)| source == target)
-        {
+        if status == ReductionStatus::Complete && scoped.is_empty() && !sum.contracted {
             let source = scope.literal(root)?;
             // The bracket normalizer owns whether a product can be exposed:
             // closed scalar wrappers disappear, while AUTO operand order stays.
@@ -819,25 +1172,107 @@ impl SlotContraction {
             };
             return Some(FactorizedContraction {
                 root,
-                aliases: Vec::new(),
                 status,
-                literal_relabellings: Vec::new(),
+                observations: scalar_form
+                    .filter(|_| scalar_boundary)
+                    .map(DomainObservations::closed_scalar),
             });
         }
         Some(FactorizedContraction {
             root: Atom::mul_many(roots),
-            aliases: definitions,
             status,
-            literal_relabellings: scoped
-                .values()
-                .flat_map(|value| value.literal_relabellings.iter().cloned())
-                .chain(std::mem::take(&mut *sum.literal_relabellings.borrow_mut()))
-                .collect(),
+            observations: scalar_form
+                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
+                .map(DomainObservations::closed_scalar),
         })
     }
 }
 
 impl<'a> ComponentSum<'a, '_> {
+    /// Reuse the admitted inventory; never inspect a completed coefficient to
+    /// rediscover whether its source contains an identity or an index.
+    fn scalar_form(&self, value: AtomView<'a>) -> Option<bool> {
+        if let Some(&needs_dots) = self.scalar_forms.get(&value) {
+            return Some(needs_dots);
+        }
+        if matches!(value, AtomView::Num(_)) {
+            return Some(false);
+        }
+        if let AtomView::Var(variable) = value {
+            let head = variable.get_symbol();
+            let tags = self.contractor.tags;
+            if head.get_wildcard_level() == 0
+                && !head.has_tag(&tags.tensor)
+                && !head.has_tag(&tags.rank1)
+                && !head.has_tag(&tags.representation)
+                && head != tags.chain_in
+                && head != tags.chain_out
+            {
+                return Some(false);
+            }
+        }
+        let observed = self.contractor.observations.as_ref();
+        let known = observed.is_some_and(|observed| observed.region(value).is_some());
+        if known {
+            observed
+                .and_then(|observed| observed.certify_scalar_region(value))
+                .map(|observed| observed.needs_dot_normalization())
+        } else {
+            // The shallow parser can compose scalar coefficients that were
+            // separate factors at admission. Combine only these new arithmetic
+            // connectors, stopping at every already-observed subtree.
+            match value {
+                AtomView::Add(sum) => sum.iter().try_fold(false, |needs_dots, term| {
+                    self.scalar_form(term).map(|next| needs_dots || next)
+                }),
+                AtomView::Mul(product) => product.iter().try_fold(false, |needs_dots, factor| {
+                    self.scalar_form(factor).map(|next| needs_dots || next)
+                }),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    self.scalar_form(base)
+                        .zip(self.scalar_form(exponent))
+                        .map(|(base, exponent)| base || exponent)
+                }
+                _ => None,
+            }
+        }
+    }
+
+    fn variable_scalar_form(&mut self, variable: &Variable<'a>) -> Option<bool> {
+        match variable {
+            Variable::Scalar(value @ AtomView::Fun(function))
+                if self.scalar_form(*value).is_none() =>
+            {
+                // A compact dot can come from the shallow parser's scalar
+                // store, after notation normalization changed its source key.
+                // Reuse the same admitted vector/space parser as dot emission.
+                let (space, first, second) = self.compact_dot(*function)?;
+                let needs_dots =
+                    self.variable_scalar_form(&Variable::Dot(space, [first, second]))?;
+                self.scalar_forms.insert(*value, needs_dots);
+                Some(needs_dots)
+            }
+            Variable::Scalar(value) => self.scalar_form(*value),
+            Variable::Subtree(position) if self.opaque_factors[*position].1.is_empty() => {
+                self.scalar_form(self.opaque_factors[*position].0)
+            }
+            Variable::Dot(_, vectors) => {
+                // Vector admission already proved intrinsic heads, compatible
+                // atomic dimensions and scalar metadata. Require the stronger
+                // identity-free certificate before skipping future family work.
+                for &vector in vectors {
+                    let source = self.vectors[vector];
+                    for argument in source.iter().take(source.get_nargs() - 1) {
+                        self.scalar_form(argument)?;
+                    }
+                }
+                Some(true)
+            }
+            _ => None,
+        }
+    }
+
     fn register_factor(
         &mut self,
         scope: &'a ContractionScope<'_>,
@@ -881,7 +1316,7 @@ impl<'a> ComponentSum<'a, '_> {
         Some(())
     }
 
-    fn residual_factor(&mut self, variable: usize, exponent: u16) -> Option<()> {
+    fn residual_factor(&mut self, variable: usize, exponent: u32) -> Option<()> {
         match self.variables[variable].clone() {
             Variable::Vector(head, slot) => {
                 let (space, index) = self.resolve_endpoint(slot)?;
@@ -942,7 +1377,7 @@ impl<'a> ComponentSum<'a, '_> {
         let node = self.factor_roots.get(position).copied().flatten()?;
         self.input.clear_terms();
         self.input
-            .distribute(&mut vec![(node, 1)], &Rational::one(), 0)?;
+            .distribute(&mut vec![(node, 1)], &Rational::one())?;
         Some(self.input.take_terms())
     }
 
@@ -952,56 +1387,66 @@ impl<'a> ComponentSum<'a, '_> {
         order: &[usize],
         compile: &mut impl FnMut(&mut Self, usize) -> Option<usize>,
     ) -> Option<FactorizedContraction> {
-        let mut states = vec![(remaining, Atom::num(1))];
-        let mut definitions = Vec::new();
+        #[cfg(feature = "reference-cases")]
+        let _states_timing = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::ContractionStates,
+        );
+        let mut states = vec![(remaining, ScalarPolynomial::new_one(&Q))];
         let mut emitted: AHashMap<usize, Atom> = AHashMap::new();
-        let mut weights = AHashMap::<Atom, Atom>::new();
+        #[cfg(feature = "reference-cases")]
+        let mut emitted_bytes = 0usize;
+        let mut scalar_variables: AHashMap<Atom, usize> = AHashMap::new();
+        let mut scalar_form = Some(false);
+        #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
-        let mut definition_bytes = 0usize;
-        let mut complete = true;
         for &selected in order {
             if self.factor_roots[selected].is_none() {
                 self.factor_roots[selected] = Some(compile(self, selected)?);
             }
             let terms = self.factor_terms(selected)?;
-            // Predict growth of the whole frontier, not just the local
-            // template's term iterator. This includes graph-state storage and
-            // existing definitions, not a hard heap bound on Atom buffers.
-            // Flush exact remaining factors before an exponential next level;
-            // explicit materialization may expand them.
+            // Measure generated coefficient storage without placing an
+            // automatic work limit on the selected contraction.
+            #[cfg(feature = "reference-cases")]
             let state_bytes = states
                 .iter()
-                .map(|(remaining, _)| {
-                    std::mem::size_of::<Remaining<'a>>()
-                        + remaining
-                            .factors
-                            .iter()
-                            .map(|(_, arguments)| {
-                                std::mem::size_of::<(usize, Vec<Argument<'a>>)>()
-                                    + arguments.len() * std::mem::size_of::<Argument<'a>>()
-                            })
-                            .sum::<usize>()
-                        + remaining.residual.len() * std::mem::size_of::<(usize, u16)>()
+                .map(|(remaining, coefficient)| {
+                    Self::coefficient_bytes(coefficient) + remaining.storage_bytes()
                 })
-                .max()
-                .unwrap_or(0);
-            let count = states.len().saturating_mul(terms.len());
-            let predicted = count.saturating_mul(state_bytes.saturating_mul(4).saturating_add(256));
-            const MAX_FRONTIER_BYTES: usize = if cfg!(test) {
-                64 * 1024
-            } else {
-                64 * 1024 * 1024
-            };
-            if generated.saturating_add(count) > Self::MAX_GENERATED_TERMS
-                || predicted.saturating_add(definition_bytes) > MAX_FRONTIER_BYTES
+                .fold(0usize, usize::saturating_add);
+            #[cfg(feature = "reference-cases")]
+            let count = states
+                .iter()
+                .map(|(_, weight)| weight.nterms())
+                .fold(0usize, usize::saturating_add)
+                .saturating_mul(terms.len());
+            #[cfg(feature = "reference-cases")]
+            let predicted = state_bytes.saturating_add(emitted_bytes.saturating_mul(2));
+            #[cfg(feature = "reference-cases")]
+            crate::reference_cases::timing::frontier(crate::reference_cases::timing::Frontier {
+                selected,
+                states: states.len(),
+                local_terms: terms.len(),
+                generated,
+                predicted_bytes: predicted,
+                coefficient_bytes: states
+                    .iter()
+                    .map(|(_, coefficient)| Self::coefficient_bytes(coefficient))
+                    .sum(),
+                max_coefficient_bytes: states
+                    .iter()
+                    .map(|(_, coefficient)| Self::coefficient_bytes(coefficient))
+                    .max()
+                    .unwrap_or(0),
+            });
+            #[cfg(feature = "reference-cases")]
             {
-                complete = false;
-                break;
+                generated = generated.saturating_add(count);
             }
-            generated += count;
             let mut positions: AHashMap<Remaining<'a>, usize> = AHashMap::new();
-            let mut next: Vec<(Remaining<'a>, Vec<Atom>)> = Vec::new();
-            for (remaining, weight) in states {
+            let mut next: Vec<(Remaining<'a>, ScalarPolynomial)> = Vec::new();
+            #[cfg(feature = "reference-cases")]
+            let mut next_bytes = 0usize;
+            for (remaining, weight) in &states {
                 let source = remaining
                     .factors
                     .iter()
@@ -1054,11 +1499,13 @@ impl<'a> ComponentSum<'a, '_> {
                         factors: Vec::new(),
                         residual: Vec::new(),
                     };
-                    let mut coefficient = vec![Atom::num(self.coefficient.clone()), weight.clone()];
-                    for &(variable, exponent) in &self.factors {
-                        match &self.variables[variable] {
+                    let mut variables = Vec::new();
+                    let mut exponents: Vec<u32> = Vec::new();
+                    for factor in 0..self.factors.len() {
+                        let (variable, exponent) = self.factors[factor];
+                        match self.variables[variable].clone() {
                             Variable::Tensor(TensorSource::Factor(position), arguments) => {
-                                key.factors.push((*position, arguments.clone()));
+                                key.factors.push((position, arguments));
                             }
                             value @ (Variable::Scalar(_)
                             | Variable::Subtree(_)
@@ -1066,70 +1513,145 @@ impl<'a> ComponentSum<'a, '_> {
                                 let atom = if let Some(value) = emitted.get(&variable) {
                                     value.clone()
                                 } else {
-                                    let atom = self.emit_variable(value)?;
+                                    scalar_form = scalar_form
+                                        .zip(self.variable_scalar_form(&value))
+                                        .map(|(first, second)| first || second);
+                                    let atom = self.emit_variable(&value)?;
+                                    #[cfg(feature = "reference-cases")]
+                                    {
+                                        emitted_bytes = emitted_bytes
+                                            .saturating_add(atom.as_view().get_byte_size());
+                                    }
                                     emitted.insert(variable, atom.clone());
                                     atom
                                 };
-                                coefficient.push(atom.pow(exponent));
+                                let index = *scalar_variables.entry(atom).or_insert(variable);
+                                let variable = PolyVariable::Temporary(index);
+                                if let Some(position) =
+                                    variables.iter().position(|entry| entry == &variable)
+                                {
+                                    exponents[position] =
+                                        exponents[position].checked_add(exponent)?;
+                                } else {
+                                    variables.push(variable);
+                                    exponents.push(exponent);
+                                }
                             }
                             _ => key.residual.push((variable, exponent)),
                         }
                     }
                     key.factors.sort_unstable_by_key(|(position, _)| *position);
                     key.residual.sort_unstable();
-                    let coefficient = Atom::mul_many(coefficient);
+                    for (variable, exponent) in variables.iter().zip(&exponents) {
+                        if let Some(position) = weight
+                            .variables()
+                            .iter()
+                            .position(|entry| entry == variable)
+                        {
+                            // Machine exponent capacity is not a work budget.
+                            // A decline preserves the caller's exact source.
+                            weight.degree(position).checked_add(*exponent)?;
+                        }
+                    }
+                    #[cfg(feature = "reference-cases")]
+                    let incoming_bytes = weight.nterms().saturating_mul(
+                        std::mem::size_of::<Rational>()
+                            + (weight.nvars() + variables.len()) * std::mem::size_of::<u32>(),
+                    );
+                    let position = positions.get(&key).copied();
+                    // The position map and frontier both own a key.
+                    #[cfg(feature = "reference-cases")]
+                    let key_bytes = if position.is_none() {
+                        key.storage_bytes().saturating_mul(2)
+                    } else {
+                        0
+                    };
+                    #[cfg(feature = "reference-cases")]
+                    let target_bytes = position.map_or(0, |position| {
+                        let target = &next[position].1;
+                        target.nterms().saturating_mul(
+                            std::mem::size_of::<Rational>()
+                                + (target.nvars() + weight.nvars() + variables.len())
+                                    * std::mem::size_of::<u32>(),
+                        )
+                    });
+                    // Existing polynomial addition owns the only workspace:
+                    // two unified inputs and the merged output.
+                    #[cfg(feature = "reference-cases")]
+                    let live_bytes = state_bytes
+                        .saturating_add(next_bytes)
+                        .saturating_add(key_bytes)
+                        .saturating_add(emitted_bytes.saturating_mul(2))
+                        .saturating_add(
+                            incoming_bytes
+                                .saturating_add(target_bytes)
+                                .saturating_mul(2),
+                        );
+                    #[cfg(feature = "reference-cases")]
+                    crate::reference_cases::timing::frontier_workspace(live_bytes);
+                    let monomial = ScalarPolynomial::new(&Q, Some(1), Arc::new(variables))
+                        .monomial(self.coefficient.clone(), exponents);
+                    let coefficient = weight * &monomial;
                     if coefficient.is_zero() {
                         continue;
                     }
-                    if let Some(&position) = positions.get(&key) {
-                        next[position].1.push(coefficient);
+                    #[cfg(feature = "reference-cases")]
+                    let _merge_timing = crate::reference_cases::timing::scope(
+                        crate::reference_cases::timing::Phase::CoefficientMerge,
+                    );
+                    if let Some(position) = position {
+                        let old = std::mem::replace(
+                            &mut next[position].1,
+                            ScalarPolynomial::new_zero(&Q),
+                        );
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes -= Self::coefficient_bytes(&old);
+                        }
+                        let merged = old + coefficient;
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes += Self::coefficient_bytes(&merged);
+                        }
+                        next[position].1 = merged;
                     } else {
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes += Self::coefficient_bytes(&coefficient) + key_bytes;
+                        }
                         positions.insert(key.clone(), next.len());
-                        next.push((key, vec![coefficient]));
+                        next.push((key, coefficient));
                     }
                 }
             }
             self.overrides.clear();
-            states = Vec::with_capacity(next.len());
-            for (key, coefficients) in next {
-                let body = Atom::add_many(coefficients);
-                if body.is_zero() {
-                    continue;
-                }
-                // Different remaining states often carry the same coefficient.
-                // Keep one literal definition for that value, and avoid aliases
-                // whose body is just a number or an existing weight handle.
-                if matches!(body.as_view(), AtomView::Num(_)) {
-                    states.push((key, body));
-                    continue;
-                }
-                if let Some(handle) = weights.get(&body) {
-                    states.push((key, handle.clone()));
-                    continue;
-                }
-                let body =
-                    SymbolicTensor::checked_parts(body, PartialStructure::from_logical_slots([]))
-                        .ok()?;
-                let handle = body.alias_handle().ok()?;
-                definition_bytes = definition_bytes
-                    .saturating_add(body.expression.as_view().get_byte_size())
-                    .saturating_add(handle.expression.as_view().get_byte_size());
-                weights.insert(body.expression.clone(), handle.expression.clone());
-                weights.insert(handle.expression.clone(), handle.expression.clone());
-                definitions.push((handle.expression.clone(), body.expression));
-                states.push((key, handle.expression));
-            }
+            states = next
+                .into_iter()
+                .filter(|(_, weight)| !weight.is_zero())
+                .collect();
         }
+        self.overrides.clear();
+        #[cfg(feature = "reference-cases")]
+        let _emission_timing = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::ContractionEmission,
+        );
         let mut terms = Vec::with_capacity(states.len());
         for (remaining, weight) in states {
-            let mut factors = vec![weight];
+            let mut factors = vec![self.emit_coefficient(&weight)?];
             for (position, arguments) in remaining.factors {
+                scalar_form = scalar_form
+                    .zip(self.scalar_form(self.opaque_factors[position].0))
+                    .filter(|_| self.opaque_factors[position].1.is_empty())
+                    .map(|(first, second)| first || second);
                 factors.push(self.emit_factor(position, &arguments)?);
             }
             for (variable, exponent) in remaining.residual {
                 let atom = if let Some(value) = emitted.get(&variable) {
                     value.clone()
                 } else {
+                    scalar_form = scalar_form
+                        .zip(self.variable_scalar_form(&self.variables[variable].clone()))
+                        .map(|(first, second)| first || second);
                     let atom = self.emit_variable(&self.variables[variable])?;
                     emitted.insert(variable, atom.clone());
                     atom
@@ -1140,13 +1662,8 @@ impl<'a> ComponentSum<'a, '_> {
         }
         Some(FactorizedContraction {
             root: Atom::add_many(terms),
-            aliases: definitions,
-            status: if complete {
-                ReductionStatus::Complete
-            } else {
-                ReductionStatus::Capped
-            },
-            literal_relabellings: Vec::new(),
+            status: ReductionStatus::Complete,
+            observations: scalar_form.map(DomainObservations::closed_scalar),
         })
     }
 
@@ -1181,12 +1698,12 @@ impl<'a> ComponentSum<'a, '_> {
             return Some(source);
         }
         let source = SymbolicTensor::from_normalized_parts(source, interface.clone());
-        let expression =
-            crate::tensor::composition::rewrite_interface_ports(&source, &replacements, &mut |source, result| {
-                if matches!(source, AtomView::Fun(function) if function.get_symbol() == spenso::tensor_symbol!("idenso::tensor_alias")) {
-                    self.literal_relabellings.borrow_mut().push((source.to_owned(), result.clone()));
-                }
-            }).ok()?;
+        let expression = crate::tensor::composition::rewrite_interface_ports(
+            &source,
+            &replacements,
+            Some(self.contractor.dummy_state()),
+        )
+        .ok()?;
         Some(
             crate::shorthands::schoonschip::DotNormalizer::with_settings(
                 expression.as_view(),
@@ -1204,7 +1721,7 @@ impl<'a> ComponentSum<'a, '_> {
         &mut self,
         first: Argument<'a>,
         second: Argument<'a>,
-        exponent: u16,
+        exponent: u32,
     ) -> Option<()> {
         match (first, second) {
             (Argument::Vector(space, a), Argument::Vector(other, b)) => {
@@ -1261,16 +1778,6 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
-    use ahash::AHashSet;
-    use symbolica::atom::AliasedAtom;
-
-    fn resolve(contracted: FactorizedContraction) -> Atom {
-        let mut result = AliasedAtom::from(contracted.root);
-        for (handle, body) in contracted.aliases {
-            result.register_alias(handle, body);
-        }
-        result.into_inner()
-    }
 
     #[test]
     fn negative_power_contracts_its_existing_graph_scope() {
@@ -1289,7 +1796,7 @@ mod tests {
             let result = contractor
                 .contract_factorized(source.as_view(), None, true)
                 .unwrap();
-            assert_eq!(resolve(result), input(expected), "{source}");
+            assert_eq!(result.root, input(expected), "{source}");
         }
     }
 
@@ -1302,7 +1809,7 @@ mod tests {
             .unwrap();
         assert!(result.status == ReductionStatus::Complete);
         assert_eq!(
-            resolve(result),
+            result.root,
             input("1i*g(p(mink(4)),q(mink(4)))+2i*g(r(mink(4)),s(mink(4)))")
         );
         let inexact = input("1.25*p(mink(4,a))*q(mink(4,a))+2.5*r(mink(4,b))*s(mink(4,b))");
@@ -1333,18 +1840,8 @@ mod tests {
                 let contracted = contractor
                     .contract_factorized(source.as_view(), order, true)
                     .unwrap();
-                let mut bodies = AHashSet::new();
-                let handles = contracted
-                    .aliases
-                    .iter()
-                    .map(|(handle, _)| handle)
-                    .collect::<AHashSet<_>>();
-                for (_, body) in &contracted.aliases {
-                    assert!(bodies.insert(body));
-                    assert!(!matches!(body.as_view(), AtomView::Num(_)));
-                    assert!(!handles.contains(body));
-                }
-                assert_eq!(resolve(contracted).expand(), expected, "{source}");
+                SymbolicTensor::infer(contracted.root.clone()).unwrap();
+                assert_eq!(contracted.root.expand(), expected, "{source}");
             }
         }
     }
@@ -1359,7 +1856,7 @@ mod tests {
         let contracted = contractor
             .contract_factorized(source.as_view(), None, true)
             .unwrap();
-        let result = resolve(contracted);
+        let result = contracted.root;
         let expected = Atom::mul_many([
             spectator,
             first.expand().schoonschip(),
@@ -1377,7 +1874,7 @@ mod tests {
             .contract_factorized(source.as_view(), None, true)
             .unwrap();
         assert_eq!(
-            resolve(contracted).expand(),
+            contracted.root.expand(),
             source.expand().schoonschip().expand()
         );
         assert!(
@@ -1388,7 +1885,78 @@ mod tests {
     }
 
     #[test]
-    fn factorized_frontier_budget_retains_an_exact_unexpanded_remainder() {
+    fn polynomial_exponents_beyond_u16_remain_exact_and_complete() {
+        let contractor = setup();
+        let x = input("x");
+        let spectator = input("(y+z)^17");
+        let first = &spectator * x.pow(u16::MAX);
+        let second = x.clone();
+        let mut slots = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        let leaf = sum.input.leaf(InputLeaf::Scalar(x.as_view())).unwrap();
+        let power = sum.input.power(leaf, u32::from(u16::MAX)).unwrap();
+        let scalar = sum
+            .input
+            .leaf(InputLeaf::Scalar(spectator.as_view()))
+            .unwrap();
+        let weighted = sum.input.group([power, scalar].into_iter(), false).unwrap();
+        sum.opaque_factors = vec![
+            (
+                first.as_view(),
+                Vec::new(),
+                PartialStructure::from_logical_slots([]),
+            ),
+            (
+                second.as_view(),
+                Vec::new(),
+                PartialStructure::from_logical_slots([]),
+            ),
+        ];
+        sum.factor_roots = vec![Some(weighted.0), Some(leaf.0)];
+        let result = sum
+            .contract_states(
+                Remaining {
+                    factors: vec![(0, Vec::new()), (1, Vec::new())],
+                    residual: Vec::new(),
+                },
+                &[0, 1],
+                &mut |_, _| unreachable!("the two selected factors are already compiled"),
+            )
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(result.root, &spectator * x.pow(u32::from(u16::MAX) + 1));
+        assert!(result.observations.is_some());
+        assert!(sum.overrides.is_empty());
+    }
+
+    #[test]
+    fn skewed_frontier_counts_each_opaque_coefficient_once() {
+        let contractor = setup();
+        let scalar = Atom::add_many(
+            (0..512).map(|i| Atom::var(symbolica::symbol!(&format!("skewed_frontier::s{i}")))),
+        );
+        let source = (&scalar * input("p(mink(4,a))") + input("q(mink(4,a))"))
+            * input(
+                "(p(mink(4,b))+q(mink(4,b)))*(p(mink(4,c))+q(mink(4,c)))*t(mink(4,a),mink(4,b),mink(4,c))",
+            );
+        let result = contractor
+            .contract_factorized(source.as_view(), None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        let mut expected = Vec::new();
+        for a in ["p", "q"] {
+            for b in ["p", "q"] {
+                for c in ["p", "q"] {
+                    let tensor = input(&format!("t({a}(mink(4)),{b}(mink(4)),{c}(mink(4)))"));
+                    expected.push(if a == "p" { &scalar * tensor } else { tensor });
+                }
+            }
+        }
+        assert_eq!(result.root, Atom::add_many(expected));
+    }
+
+    #[test]
+    fn factorized_frontier_completes_all_selected_contractions() {
         let contractor = setup();
         let slots = (0..9).map(|i| format!("mink(4,a{i})")).collect::<Vec<_>>();
         let source = input(&format!(
@@ -1403,14 +1971,14 @@ mod tests {
         let contracted = contractor
             .contract_factorized(source.as_view(), None, true)
             .unwrap();
-        assert!(!contracted.aliases.is_empty());
-        assert!(contracted.status == ReductionStatus::Capped);
+        assert!(!contracted.root.is_zero());
+        assert_eq!(contracted.status, ReductionStatus::Complete);
         use spenso::network::parsing::AtomStructureExt;
         assert!(
-            contracted.root.has_repeated_explicit_indices(),
-            "the bounded frontier must keep its unprocessed contractions"
+            !contracted.root.has_repeated_explicit_indices(),
+            "all selected connections must be contracted"
         );
-        let result = resolve(contracted);
+        let result = contracted.root;
         assert_eq!(
             result.expand().schoonschip().expand(),
             source.expand().schoonschip().expand()
@@ -1427,7 +1995,6 @@ mod tests {
             .contract_factorized(source.as_view(), None, true)
             .unwrap();
         assert!(result.status == ReductionStatus::Complete);
-        assert!(result.aliases.is_empty());
         assert_eq!(result.root, source);
     }
 
@@ -1443,7 +2010,6 @@ mod tests {
                     .contract_factorized(source.as_view(), None, rank_one)
                     .unwrap();
                 assert!(result.status == ReductionStatus::Complete);
-                assert!(result.aliases.is_empty());
                 // An exact Atom comparison protects the factored scalar input;
                 // expanding both sides would hide this regression.
                 assert_eq!(result.root, source, "{scalar}, rank_one={rank_one}");
@@ -1457,9 +2023,8 @@ mod tests {
                 };
                 for settings in [settings, settings.with_order(&[0])] {
                     let result = tensor.contract(settings).unwrap();
-                    assert_eq!(result.root(), tensor);
-                    assert!(result.expression.get_aliases().is_empty());
-                    assert_eq!(result.resolved().unwrap().expression, source);
+                    assert_eq!(result, tensor);
+                    assert_eq!(result.expression, source);
                 }
             }
         }
@@ -1488,6 +2053,128 @@ mod lazy_tests {
             assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
             assert!(scope.opened.values().all(|entry| entry.get().is_none()));
         }
+    }
+
+    #[test]
+    fn selected_arithmetic_reuses_admission_without_nested_graphs() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let scalar = Atom::add_many(
+            (0..512).map(|i| Atom::var(symbolica::symbol!(&format!("selected_tape::s{i}")))),
+        );
+        let source = (&scalar * input("p(mink(4,a))") + input("q(mink(4,a))"))
+            * input("t(mink(4,a),mink(4,b))");
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root,
+            &scalar * input("t(p(mink(4)),mink(4,b))") + input("t(q(mink(4)),mink(4,b))")
+        );
+        assert!(
+            scope.opened.values().all(|entry| entry.get().is_none()),
+            "admitted arithmetic needs a tape traversal, not new port graphs"
+        );
+    }
+
+    #[test]
+    fn direct_selected_arithmetic_keeps_independent_dummy_scopes() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "(p(mink(4,a))*q(mink(4,a))*r(mink(4,b))+s(mink(4,b)))*(p(mink(4,a))*q(mink(4,a))*t(mink(4,b),mink(4,c))+u(mink(4,b),mink(4,c)))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        let dot = input("g(p(mink(4)),q(mink(4)))");
+        let expected = dot.pow(2) * input("t(r(mink(4)),mink(4,c))")
+            + &dot * input("t(s(mink(4)),mink(4,c))")
+            + &dot * input("u(r(mink(4)),mink(4,c))")
+            + input("u(s(mink(4)),mink(4,c))");
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(result.root.expand(), expected.expand());
+        assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+    }
+
+    #[test]
+    fn scalar_powers_in_selected_sums_do_not_rebuild_graphs() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "(m^4*p(mink(4,a))+m^2*g(q(mink(4)),s(mink(4)))^2*r(mink(4,a)))*t(mink(4,a),mink(4,b))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root,
+            input(
+                "m^4*t(p(mink(4)),mink(4,b))+m^2*g(q(mink(4)),s(mink(4)))^2*t(r(mink(4)),mink(4,b))",
+            )
+        );
+        assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+    }
+
+    #[test]
+    fn compact_tensor_sums_do_not_enter_the_scalar_coefficient_tape() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input("p(mink(4))+q(mink(4))");
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        assert_eq!(tensor.structure.logical_slots().len(), 1);
+        let contractor = setup.observed(tensor.reduction_observations());
+        let mut slots = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        let mut tape = TermTape::default();
+        contractor
+            .compile_arithmetic(source.as_view(), &mut tape, &mut sum)
+            .unwrap();
+        // The rank-one alternatives keep their tensor ports. Zero written
+        // indices does not establish the scalar interface required by a
+        // coefficient, even before unresolved ports have been materialized.
+        assert!(sum.scalar_interfaces.is_empty());
+        assert_eq!(tape.leaves().len(), 2);
+        assert!(
+            tape.leaves()
+                .iter()
+                .all(|leaf| matches!(leaf, InputLeaf::Atom(_)))
+        );
+    }
+
+    #[test]
+    fn indexed_powers_in_selected_sums_keep_the_scoped_graph() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "((p(mink(4,a))*q(mink(4,a))+x)^2*r(mink(4,b))+s(mink(4,b)))*t(mink(4,b),mink(4,c))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root.expand(),
+            input(
+                "(g(p(mink(4)),q(mink(4)))+x)^2*t(r(mink(4)),mink(4,c))+t(s(mink(4)),mink(4,c))",
+            )
+            .expand()
+        );
+        assert!(scope.opened.values().any(|entry| entry.get().is_some()));
     }
 
     #[test]
@@ -1531,11 +2218,7 @@ mod lazy_tests {
                 .contract_graph(&scope, scope.root, order, true)
                 .unwrap();
             assert!(result.status == ReductionStatus::Complete);
-            let mut resolved = symbolica::atom::AliasedAtom::from(result.root);
-            for (handle, body) in result.aliases {
-                resolved.register_alias(handle, body);
-            }
-            assert_eq!(resolved.into_inner(), expected);
+            assert_eq!(result.root, expected);
         }
     }
 
@@ -1586,7 +2269,6 @@ mod lazy_tests {
                 .contract_graph(&scope, scope.root, None, true)
                 .unwrap();
             assert!(result.status == ReductionStatus::Complete);
-            assert!(result.aliases.is_empty());
             assert_eq!(
                 result.root,
                 Atom::mul_many([parse("p(spenso::mink(4,b))"), first, second])

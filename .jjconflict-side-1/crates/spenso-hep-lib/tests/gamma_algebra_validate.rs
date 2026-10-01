@@ -194,8 +194,8 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, Atom>) {
         HepNet::<AbstractIndex>::try_from_view(expr.as_view(), &library, &settings).unwrap();
 
     println!("Expression: {}", expr);
-    let simplified = idenso::tensor::SymbolicTensor::infer(expr)
-        .unwrap()
+    let source = idenso::tensor::SymbolicTensor::infer(expr).unwrap();
+    let simplified = source
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
             epsilon: true,
@@ -209,25 +209,38 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, Atom>) {
         })
         .unwrap();
 
-    println!("Simplified to {}", simplified.root().expression());
-    // Keep the declared ports when simplification produces a typed zero.
-    let (mut net_simplified, scalar_definitions): (spenso_hep_lib::HepNet<AbstractIndex>, _) =
-        simplified
-            .to_network(
-                &library,
-                &*FUN_LIB,
-                &settings,
-                None,
-                |net| net.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB),
-                Ok,
-                |_| false,
-            )
-            .unwrap();
-    assert!(scalar_definitions.get_aliases().is_empty());
-
-    println!("{}", net_simplified.dot_pretty());
+    println!("Simplified to {}", simplified.expression());
+    assert_eq!(simplified.structure(), source.structure());
     net.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
         .unwrap();
+    if simplified.expression().is_zero() {
+        // A raw zero has no encoded ports. Check the original components directly
+        // instead of manufacturing a scalar network for the typed zero above.
+        match net.result_tensor(&library).unwrap() {
+            ExecutionResult::Zero => (),
+            ExecutionResult::One => panic!("The original tensor is not zero"),
+            ExecutionResult::Val(value) => {
+                let mut original = value.into_owned();
+                for (component, value) in &const_map {
+                    original = original
+                        .replace(component.to_pattern())
+                        .with(value.to_pattern());
+                }
+                original.to_param();
+                for (index, component) in original.try_into_parametric().unwrap().iter_flat() {
+                    assert!(component.is_zero(), "component {index}: {component}");
+                }
+            }
+        }
+        return;
+    }
+    let mut net_simplified = HepNet::<AbstractIndex>::try_from_view(
+        simplified.expression().as_view(),
+        &library,
+        &settings,
+    )
+    .unwrap();
+    println!("{}", net_simplified.dot_pretty());
     net_simplified
         .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
         .unwrap();

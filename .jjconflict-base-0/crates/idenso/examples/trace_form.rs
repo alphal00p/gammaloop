@@ -89,8 +89,6 @@ fn main() {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression();
             let cold = start.elapsed().as_secs_f64();
             let mut times = Vec::new();
@@ -112,8 +110,6 @@ fn main() {
                         collect_traces: false,
                         ..Default::default()
                     })
-                    .unwrap()
-                    .resolved()
                     .unwrap()
                     .into_expression(),
                 );

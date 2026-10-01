@@ -88,7 +88,8 @@ third-party = [
     { name = "arrayvec", version = "0.7" },
     { name = "indenter", version = "0.3" },
     # Symbolica and Numerica feature anchors are maintained below.
-    { name = "symbolica", version = "3.0.1" },
+    # Match the local Symbolica source selected by the workspace patch.
+    { name = "symbolica", path = "../../symbolica-lazy-formatting" },
     { name = "numerica", version = "3.0.1" },
     { name = "symbolica-typst-plugin", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.

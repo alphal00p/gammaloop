@@ -6,34 +6,48 @@ its notation-conversion contract are documented
 in `docs/products/idenso/content/api.typ`. The final source-qualified results,
 verification gates and remaining limitations are recorded below. Correctness and
 consolidation are the acceptance criteria; measured speedups are not required.
+Historical alias-enabled measurements below describe the implementation preserved
+on `tensor-aliases-preserved`. The current reduction API returns only `TensorExpression`.
 
 == API and consolidation
 
 The Rust reduction operations are `contract(ContractSettings)` and
 `simplify_algebra(AlgebraSettings)`, on the existing `SymbolicTensor` abstraction
-and its existing alias-capable owner. `contract_ports` remains the explicit
+returning the same typed carrier with an Atom payload. `contract_ports` remains the explicit
 binary or selected-port operation. `ContractSettings` carries representation
 filters, metric and rank-one permissions, chain/trace collection preferences,
-the existing optional contraction order, and a per-domain change budget.
+permission for local arithmetic distribution, the existing optional contraction
+order, and an opt-in per-domain change budget.
 `AlgebraSettings` independently carries optional `GammaSimplifySettings` and
 `ColorSimplifySettings`, the epsilon permission, `AlgebraContraction`, and its
-per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
-normalizes scalar-product notation, `Selected` limits additional connections by
-representation, and `None` retains identity prerequisites only. These lower to
+opt-in per-domain change budget. `AlgebraContraction` defaults to `Fully`; `Dots` also
+normalizes scalar-product notation, `Minimal` excludes distribution of independent
+sum alternatives, `Selected` limits additional connections by representation,
+and `None` retains identity prerequisites only. These lower to
 work in the same queue; they do not launch another whole-expression pipeline.
 Representation filters select the `LibraryRep` base family, including duals;
 for example, a Python `Representation.mink(4)` filter does not restrict permission
 to four-dimensional slots. Actual connections must still satisfy dimension,
 variance and positional port compatibility.
 Python exposes both operations through explicit keyword-only parameters on
-`TensorExpression` and `AliasedTensorExpression`. For example,
+`TensorExpression`. For example,
 `expr.contract(representations=[lorentz], collect_traces=False)` and
 `expr.simplify_algebra(gamma=True, gamma_ordering="canonical", color=True)`.
 The binding lowers those parameters into the existing Rust settings; it owns no
 planning or contraction logic. Family-specific options require the corresponding
 family to be enabled, and omitted options retain native defaults. The Python budget
-is named `max_steps_per_domain`; reusable configurations are ordinary dictionaries
+is named `max_steps_per_domain` and defaults to `None` (unlimited); reusable configurations are ordinary dictionaries
 passed with `**options`. Python settings classes are removed.
+
+Python's `expr.contract(expand=False)` sets the same distribution permission as
+Rust's `ContractSettings.expand=false`. Minimal contraction still substitutes boundary
+ports through existing sums and reduces their branches. A connection that needs
+a cross-product of independent sum alternatives remains exactly factored and is
+outside that request's capabilities, so it need not cause `Deferred`. Enabled
+identities retain their necessary prerequisites even under
+`simplify_algebra(contract="minimal")`; this option does not forbid identity-generated
+sums. The default permits necessary local distribution, and global arithmetic
+expansion remains a separate request.
 
 `AlgebraSettings` does not contain contraction settings. Algebra identities authorize their
 required structural dependencies, not unrelated identity families.
@@ -57,10 +71,9 @@ an explicit ambient structural contraction where the old family wrapper also
 performed that work. Former metric-only callers disable chain and trace
 collection so migration does not silently enable new transformations.
 
-Both public reductions lower into one domain queue. The root and each shared
-alias definition retain regional head multiplicities, boundary observations,
-and dependency edges from the existing candidate scanner. Actual replacements
-invalidate the affected observations and dependent call sites. Cached shallow
+Both public reductions lower into one domain queue. The expression retains
+regional head multiplicities and boundary observations from the existing
+candidate scanner. Actual replacements invalidate the affected observations. Cached shallow
 structural graphs and unchanged interfaces are reused. The existing contraction
 implementation handles structural work requested directly or needed by an
 identity. Family kernels retain their specialized algebra. Neither reduction
@@ -71,9 +84,8 @@ shared planning and contraction paths.
 == Invariant ownership and caller migration
 
 `SymbolicTensor` retains the expression, ordered partial interface, typed-zero
-metadata and trusted validation facts. Its existing `AliasInterfaces` plus
-`AliasedAtom` owner retains shared definitions, source/target port associations
-and definition proofs. Spenso's ordered structures, slot matcher and fast
+metadata and trusted validation facts. Reduction and collection return that
+same typed carrier without creating alias definitions. Spenso's ordered structures, slot matcher and fast
 syntactic inference own representation compatibility, variance and logical slot
 order. The shared depth-one parser builds planning boundaries and reuses those
 interfaces; it is not a second tensor carrier. `SimplificationCandidates` supplies
@@ -81,8 +93,8 @@ regional head counts and index observations in its existing traversal. The
 single Idenso domain queue owns eligibility, dependency invalidation, budgets
 and completion. The existing slot contractor owns metric/vector substitutions;
 shared collection primitives own dots, oriented chains and unevaluated traces.
-Family kernels own gamma, colour and epsilon identities. Explicit alias
-materialization and Python object wrapping remain separate boundaries.
+Family kernels own gamma, colour and epsilon identities. Explicit arithmetic
+expansion and Python object wrapping remain separate boundaries.
 
 The migration removes repeated whole-family scheduling, global epsilon
 permission inferred from registry presence, whole-alias-table progress comparison,
@@ -90,7 +102,7 @@ and contraction hidden inside a notation conversion. Trusted continuations pass
 observations and interfaces forward; callbacks that can change rank invalidate
 the affected proof. Initial domain scans and replacement-region observations are
 distinct: the latter are required for new syntax and do not rescan unchanged
-alias definitions. Fresh-name discovery also reuses the observed written indices,
+regions. Fresh-name discovery also reuses the observed written indices,
 including indices inside opaque metadata.
 
 The following caller inventory records permissions and required output, rather
@@ -115,7 +127,7 @@ than assuming that every historical method name meant the same work. Here
   [Resolved and reversibly uncooked numerator Atom; stage order retained],
   [GammaLoop evaluator preprocessing],
   [When `do_algebra`: gamma, colour with fundamental-dimension invariants, epsilon, ambient contraction; otherwise no reduction],
-  [Alias-capable tensor retained for the existing component-network evaluator],
+  [Plain typed tensor, reversibly uncooked at the existing component-network boundary],
   [UV analytic reduction before Vakint],
   [Canonical gamma plus epsilon, ambient contraction and pure dot conversion],
   [Resolved uncooked Atom with compact scalar products; unsupported sigma input remains rejected],
@@ -131,7 +143,7 @@ than assuming that every historical method name meant the same work. Here
   [Native reference/FORM examples],
   [Explicit gamma or epsilon settings and matching ambient contractions; notation conversion is a separately named phase],
   [Each example's original resolved, factored or explicitly expanded result],
-  [Notebook typed and shared-alias routes],
+  [Notebook typed tensor routes],
   [Explicit gamma/colour/epsilon settings per case; matching ambient contractions; no new global expansion],
   [Same requested scalar or tensor expression; designated cases explicitly expand, with unrelated scalar spectators retained],
 )
@@ -142,7 +154,124 @@ The detailed source-location inventory is retained in
 unrelated numerical network `ContractionSettings` is not the removed Idenso
 orchestration type and remains unchanged.
 
+== Current plain-tensor migration
+
+The tensor alias owner, definition registry, materializer, Python wrapper and
+alias display controls have been removed. Reduction and collection return the
+same typed carrier with an Atom payload, ordered interfaces, regional candidate
+observations and cached completed requests. `Complete`, `Deferred` and `Capped`
+remain distinct; unfinished results retain their exact expression.
+
+Both Python operations default to `max_steps_per_domain=None`; Rust uses
+`max_passes: None`. An explicit limit remains available and returns an exact
+`Capped` result when exhausted. Automatic term-count, workspace and recursion-depth
+cutoffs have been removed from the shared arithmetic tape and reduction paths.
+Checked machine-arithmetic failures and repeated callback states retain exact
+`Deferred` results. A separate memoization-size bound may decline a cache entry;
+it never stops computation.
+
+The performance audit uses the original generated four-loop numerators with
+fully resolved structured indices, their complete scalar prefactors, symbolic
+Lorentz dimension and spinor trace unit four. There is no preliminary contraction,
+dummy relabelling or global numerator expansion. Source fingerprints beginning
+`63aa5a69` (quark) and `00ade8fe` (gluon), full hashes, settings, binary fingerprints,
+scripts and phase records are retained in
+`crates/idenso/benches/data/plain-ladder-performance.json`. The exact edge-momentum
+quark oracle has 525 terms; subsequent notebook routing gives 1,386. The generated
+gluon oracle has 6,001 terms. These inputs do not exercise AUTO-index inference.
+
+The final Python release `afa62f3b` completes both inputs in one call, including
+with the unlimited default. Every run matches the exact oracle, preserves the
+readmitted interface and has a stable completed rerun. Timings below are seconds
+from an admitted, projected numerator; explicit expansion is the requested final
+output operation.
+
+#table(
+  columns: (1fr, 1.6fr, 1fr, 1fr, 1fr),
+  [Input], [Build], [Reduction], [Expansion], [Total],
+  [Quark], [Archived `344a7942`], [31.201], [0.593], [31.794],
+  [Quark], [Baseline `87425e2b`], [10.904], [0.043], [10.947],
+  [Quark], [Final `afa62f3b`], [0.1069], [0.0468], [0.1537],
+  [Gluon], [Archived `344a7942`], [0.199], [7.959], [8.158],
+  [Gluon], [Baseline `87425e2b`], [14.585], [0.869], [15.453],
+  [Gluon], [Final `afa62f3b`], [0.2473], [0.0072], [0.2545],
+)
+
+Thus the archived gluon's 0.2 s alias result was not its fully materialized result.
+The old plain gluon required an exact continuation after an estimated frontier
+bound; its 64 MiB estimate was not a measured resident-memory limit. That
+15.45 s complete-output regression motivated the correction. Final timings are
+means of two warmed samples following a first run; a fourth run checks the
+unlimited default. Archived timings use one sample. Final completed reruns took
+at most 0.13 ms. Input admission plus dimension assignment took 1.37 ms for
+quark and 3.96 ms for gluon. Independent result readmission checks, roughly
+53 ms and 75 ms, are outside computation timings. Peak process RSS was
+71,244 KiB and 74,456 KiB, including all four samples, setup, oracles and checks.
+
+A controlled quark comparison isolated an unnecessary index-label shape check:
+original labels took 11.028 s, or 11.021 s after preliminary contraction; atomic
+labels took 0.104 s, or 0.096 s after contraction. All four routes matched the same
+525-term result, and their preprocessing costs were recorded separately. The
+kernel now treats every admitted index label as an opaque identity. The
+intermediate `5b8c459e` build already reduced the original source in 0.116 s and
+expanded it in 0.048 s, without a notebook workaround.
+
+The contraction engine now collects generated scalar coefficients with the
+existing polynomial implementation while retaining unrelated sums as opaque
+leaves. It passes scalar-closure facts forward instead of rediscovering them in
+the emitted expression. A native run after removing automatic limits completed
+the original gluon in one call: 0.357 s, with a stable 44.9 microsecond rerun.
+Its 906,202-byte Atom prints as 2,858,500 characters and matches the exact oracle.
+The separate instrumented call took 349.9 ms, including 279.4 ms contraction,
+168.6 ms coefficient merging and 16.6 ms emission; these nested measurements
+overlap. It recorded 106 candidate-scanner calls taking 0.870 ms. The maximum
+estimated live workspace was 8,486,320 bytes, not a resident-memory measurement.
+This native build uses optimization level two for Idenso and Spenso; it is
+reported separately from Python release-module measurements.
+
+Whole notebook time also includes rendering and additional calculations. With
+the final installed module, quark `app.run()` took 7.90 s: diagram rendering
+accounted for 6.64 s, while its two `simplify_algebra` calls together took
+0.142 s. The gluon app took 2.92 s, including 2.39 s across three algebra calls:
+it retains the additional full-numerator calculation as well as the projected
+benchmark route. The notebook results contain 1,386 and 6,001 terms, with colour
+factors $-1/54$ and $81$. Compilation and process startup are excluded from the
+operation timings above; the final release build took 313.76 s. Runs used an
+unpinned shared host; sample counts and measurement boundaries are preserved in
+the dataset.
+The separate full rank-four gluon reduction takes about 2.1 s and completes
+without a limit. Its projection matches exactly $81$ times the 6,001-term
+spacetime oracle when `color_substitute_cof_dimension_invariants=True` supplies
+the oracle's colour convention; logical port order and Lorentz dimensions are
+preserved. The timing probe retains symbolic colour invariants, so the convention
+matched projection check is recorded separately. These notebook timings and
+checks precede the concurrent community change `nqpkrrvpulko`, which adds typed
+projector construction and display cells; they do not validate those later edits.
+No new FORM timing was performed for these generated source fingerprints; the
+historical comparisons below use different authored reference inputs.
+
+Current validation passed 803 ordinary Idenso tests, seven optimized axial and
+reference checks, 125 Rust binding tests, six shared-tape tests, 103 installed
+Python tests, eight Higgs/generated-ladder tests, 75 selected notebook/API checks,
+both ladder apps and four installed production examples. The optimized suite
+includes the axial oracle that exceeded the ordinary runner's timeout. Strict
+Clippy, formatting, typing, generated-stub checks, this report's Typst compilation
+and dataset validation passed. The full documentation builder stops on an
+unrelated pre-existing provenance mismatch for `gammaloop-api/src/python.rs`;
+the working file and parent blob are identical, and no owner attestation was
+changed. The dataset records that limitation and all test-log paths.
+
+The preceding plain-carrier migration's independent tensor-component and
+evaluator regression runs remain separate from these current checks. Python
+defaults enable gamma and colour; callers that isolate a family explicitly
+disable the other.
+
 == Source and environment
+
+The remaining sections record the historical alias-enabled implementation and
+its validation runs. Their source paths, phase measurements and completion
+claims refer to the named snapshots preserved on `tensor-aliases-preserved`,
+rather than the current plain-tensor implementation described above.
 
 The initial Git revision was `0f5a7d89789fa61b439808751bd3a7654c797cb0`, with
 preexisting user changes. Their full binary-diff SHA-256 is
@@ -947,3 +1076,321 @@ case and comparison limits above remain unchanged. Residual costs include
 interface discovery, ordinary planning and explicitly requested materialization;
 the initial global-registry reconstruction and latest-policy-only rerun costs
 are no longer present on these paths.
+
+== Massive routed fermion ladder: 2026-10-01
+
+This follow-up measures the complete four-loop fermion ladder with three gluon
+rungs: eight massive propagator numerators, expanded Standard Model couplings,
+LMB momentum routing, symbolic Lorentz dimension, and four open external ports.
+The bottom-quark mass, scalar prefactor and external Lorentz/colour indices are
+retained. It is a different workload from the older massless, projected,
+unrouted 525-term scalar benchmark. The request is
+`simplify_algebra(gamma=True, color=True, epsilon=False, contract="fully")`,
+with no work limit and no arithmetic expansion.
+
+The implementation keeps the shared carrier, planner, contractor and Dirac
+recurrence. Selected spinor factors are assembled before reducing a growing
+prefix. The recurrence requests occurrence-local pair contractions from the
+existing contraction owner and reuses each requested pair. Weighted routed
+vectors remain factored; equivalent vector bodies with different external dummy
+labels share their identity without identifying those dummy scopes. Selected
+collection can consume incident coefficient ports while checking the combined
+ordered boundary. Unrelated scalar and tensor spectators remain outside that
+work.
+
+Intrinsic replacements forward regional observations and interface proofs.
+Successful contraction of a connection does not itself justify rescanning a
+large emitted polynomial or revalidating unchanged spectators. Typed zero keeps
+its admitted interface, while callbacks and unsupported rewrites retain the
+checks needed for their actual result. These changes do not introduce aliases,
+a second trace recurrence, or another contraction implementation.
+
+#table(
+  columns: (2fr, 1fr, 1.3fr),
+  [Measurement], [Reduction seconds], [Completed rerun seconds],
+  [Historical Python extension], [23.710816], [Not captured in this sample],
+  [Candidate Python, sample 1], [0.848985], [0.025762],
+  [Candidate Python, sample 2], [0.740976], [0.003168],
+  [Candidate Python, sample 3], [0.681896], [0.009260],
+  [Installed Python, sample 1], [0.797951], [0.015423],
+  [Installed Python, sample 2], [0.768791], [0.003064],
+  [Installed Python, sample 3], [0.886420], [0.017785],
+  [Candidate native Rust runner], [0.777609], [0.001558],
+)
+
+The Python comparison uses the same admitted full input and requested settings;
+all three measured calls and completed reruns are retained. The median falls
+from the 23.71 s baseline sample to 0.798 s in the installed module, about 30 times
+faster. The earlier candidate's median is 0.741 s. Each call
+reports `Complete`, retains the exact logical port order, and reruns stably.
+The native row is a separate frontend measurement. The historical extension is
+identified by source revision `fe9263cf65e5c67259e010ccf2d01f9378c29453` and
+core hash `ccff4edd64869690c92eec7989d15e2bbc8418a671cf12856368383a23a0cb67`.
+The native receipt uses the release profile with LTO disabled on the same
+AMD EPYC 9754 host. Startup, compilation, text parsing, admission, formatting,
+and component materialization are outside the reduction clock.
+
+The older saved projected fermion control remains at 106.1 ms median over three
+calls; the saved projected gluon control takes 246.0 ms. Both match their exact
+525-term and 6001-term references by factor-preserving cancellation and report
+stable completion. Their settings are retained in the receipt; they are separate
+workloads from the full massive ladder.
+
+Native admission took 2.922 ms. A separate instrumented reduction took
+718.598 ms, including an inclusive gamma clock of 598.080 ms, contraction of
+131.272 ms, and candidate observations of 82.350 ms. Nested phase clocks overlap
+and must not be added. This diagnostic replay follows the timed call, so caches
+and observations can be warm. Regional candidate observations are included in
+its scan counter; that counter is not a count of initial domain scans.
+
+The small, source-controlled input is
+`crates/idenso/benches/data/massive-fermion-ladder.expr`. Its companion
+`massive-fermion-ladder-baseline.json` records exact hashes, build/environment
+metadata, settings, phase receipts and reproduction commands. The existing
+runner replays it without executing a notebook:
+
+```sh
+cargo build --release --locked -p idenso --features reference-cases \
+  --example contraction_phase_benchmark --config profile.release.lto=false
+
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-replay algebra
+```
+
+The release Idenso run passes 844 tests; 22 tests are ignored and the separately
+established baseline failure `tensor::tests::parsing::infinite_execution` is
+excluded. New regressions check massive routed sums, distinct compound dummy
+labels, repeated weighted vectors, coefficient consumption, untouched
+spectators, ordered ports and stable completion against independent exact
+Clifford components. The full fixture additionally agrees in all 1024 components
+at three momentum/mass points with explicit Weyl and Gell-Mann matrices.
+Its exact difference from the baseline factors to zero without explicit global
+expansion. The final output is byte-identical to that independently checked
+intermediate output, with SHA-256
+`07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab`;
+the receipt explicitly records reuse of those correctness certificates.
+
+The first rebuilt Python result was also checked directly at all three numerical
+points, including its actual carrier interface. All 1024 components agree,
+with relative maximum-norm error below 1.1e-15. The final installed result has the
+same exact plain and canonical output hashes; its carrier ports are checked
+again. Its exact difference from the saved baseline factors to zero in 3.65 s
+outside the timing window. The different serialization order is recorded
+separately from the native output hash.
+
+All 82 Python API tests pass in the actual notebook virtual environment,
+including the restored Expression inheritance, tensor-preserving operations,
+display, generated signatures and documentation examples. Idenso Clippy with
+warning denial and formatting of the modified sources pass. The generated
+stubs are synchronized into the bundled and live notebook packages. Both
+notebook servers restart with HTTP 200; no notebook source is executed or edited
+for this benchmark. The receipt records the loaded extension hash and verifies
+that its inode and contents stay unchanged during measurement. The optimized
+Idenso sources are unchanged across the display-related extension refreshes.
+
+This report compiles with Typst. The repository-wide documentation gate retains
+its preexisting GammaLoop API attestation failure for
+`crates/gammaloop-api/src/python.rs`; this check is not reported as passing.
+
+The output tradeoff is substantial: the candidate retains about 24.2 MB of Atom
+data in Python (23.4 MB in the native runner), compared with about 0.98 MB in the
+historical result, because the
+contraction polynomial is left factored differently. Atom byte counts also
+vary with process-local symbol IDs. The new representation is exact and complete,
+but rendering, evaluator construction and later materialization may have
+additional costs; those costs are not included in the reduction measurement.
+No fresh FORM comparison or FORM timing is claimed for this fixture.
+
+== Collected coefficients for the massive routed ladder
+
+`simplify_algebra(collect_coefficients=True)` collects generated exact
+coefficients by default; `False` retains the nested output. The option currently
+controls contracted Dirac traces and bound vector factors. Other identity
+families retain their existing coefficient normalization, and free traces retain
+their factorization. This output choice belongs to the shared reduction planner
+and does not authorize another identity family or a separate contraction engine.
+
+The existing `TraceAlgebra` recurrence accumulates the requested metric/vector
+pairings in Symbolica's exact polynomial representation. Its variable ordering
+and emitted sectors are reused while equivalent surviving tensor structures
+share a coefficient. Selected exterior coefficients participate in this
+collection, allowing terms from different generated sectors to cancel. The
+collector combines only certified terminal sectors with compatible ordered
+interfaces and no remaining identity candidates or uncontracted connections in
+their coefficients. Other sectors keep their existing processing path;
+unsupported coefficient domains retain the exact Atom arithmetic.
+
+Domain observations identify original scalar sums within vector weights, which
+remain opaque polynomial variables. Power bases keep that protection even when
+a contraction combines two source powers into a new power. The shared
+`PolynomialExpressionExt` emitter restores these original expressions and applies
+Symbolica's `expand_num()` to the generated coefficients: numerical factors are
+distributed, so `2*(x+y)-2*x-2*y` can cancel, while products and powers of unrelated
+scalar sums remain factorized. Unselected scalar spectators remain outside the
+collection. This does not request global numerator expansion.
+
+`DomainObservations::compose_terminal_product` now retains the observed nested
+scalar scopes of unchanged spectators when attaching a generated terminal
+region. Spectators from the same domain share their existing observation cache;
+independently admitted spectators contribute their cached exact-syntax facts.
+This requires no new candidate walk and lets later selected contractions
+recognize scalar powers without rediscovering their interiors. It leaves the
+contraction order and distribution policy unchanged. Collection uses the same
+contractor and trace recurrence, and the existing tensor carrier preserves
+ordered interfaces and typed zeros at emission.
+
+The preceding massive-ladder receipts predate this option and describe the
+nested output corresponding to today's `collect_coefficients=False`. Those
+historical receipts remain unchanged. New measurements must state the option
+explicitly and separate native and Python frontends, reduction and completed
+reruns, and computation from construction or rendering. The existing native
+runner selects either output form on the same fixture:
+
+```sh
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-collected algebra collected
+
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-nested algebra nested
+```
+
+The final native comparison uses release builds with LTO disabled and the
+`reference-cases` feature on the same AMD EPYC 9754 host. Collection work is
+recorded in change `qzkuotrv`, based on `5434864a`; the preceding reduction work is
+recorded in `ed14addf`. The companion JSON's `coefficient_collection` section
+records source and binary hashes, dependencies, every sample, and raw receipt
+hashes. Both modes enable gamma and colour identities with `contract="fully"`,
+disable epsilon identities, and retain symbolic Lorentz dimension `D` without a
+work limit. Gamma traces use a four-dimensional bispinor representation and
+repeated-pair ordering; colour uses the standard fundamental SU(3) normalization.
+Only `collect_coefficients` differs between the two modes.
+
+#table(
+  columns: (1.3fr, 1fr, 1fr, 1fr),
+  [Native output], [Reduction median (s)], [Rerun median (µs)], [Atom bytes],
+  [Collected], [1.062576], [49.311], [1,049,059],
+  [Nested], [0.809103], [1,584.035], [23,377,307],
+)
+
+Each mode has three independent process samples. Collected reduction ranges
+from 1.059142 to 1.101824 s; nested reduction ranges from 0.808023 to 0.868752 s.
+Every call completes in one step and reruns stably. Collection adds about 0.253 s
+to the median reduction while reducing Atom storage by a factor of 22.3.
+Its plain output occupies 3,137,180 bytes, compared with 63,632,701 bytes for
+nested output. Atom size depends on process-local symbol identities. These
+clocks exclude startup, compilation, parsing, admission, serialization,
+rendering and component evaluation; no isolated native peak-RSS measurement
+was captured.
+
+Admission medians are 1.431 ms collected and 1.417 ms nested. A separate
+instrumented replay follows each timed call; the instrumented reduction medians
+are 1.037457 s and 0.760196 s. Per-phase medians are:
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  [Phase], [Collected (ms)], [Nested (ms)],
+  [Interface discovery, outermost], [3.000], [2.892],
+  [Candidate observations], [83.209], [84.270],
+  [Shallow graph construction], [52.276], [51.890],
+  [Gamma kernel, inclusive], [1,010.254], [648.924],
+  [Colour kernel, inclusive], [13.920], [14.096],
+  [Contraction, inclusive], [133.914], [132.299],
+  [Output normalization, inclusive], [126.407], [96.066],
+  [Coefficient merge, inclusive], [41.929], [0.168],
+)
+
+Nested phase clocks overlap and cannot be added; replay observations and caches
+may be warm. The candidate counter includes affected-region observations, not
+only initial domain scans. Both modes record 645 structural-contraction
+frontiers per replay, with maxima of three states, three local terms, and four
+generated alternatives. Those frontiers do not measure the entire Dirac
+polynomial or global term count. Native reduction does no separate validation
+or materialization in these phase receipts.
+
+Both serialized results cancel exactly against the historical baseline using
+`collect_factors()` followed by `factor()`, without global arithmetic expansion.
+An independent contraction of the original factorized leaf components with
+explicit Weyl gamma and Gell-Mann matrices agrees at all 1024 components at each
+of the three saved mass/momentum points. These numerical checks specialize
+`D=4`, use metric signature `(+, -, -, -)` and coupling one; the maximum relative
+error is 1.071e-15 for either mode. Raw serialization does not certify the
+original carrier's logical port order: component axes are matched by exact
+representation and index identities, and carrier invariants are covered by the
+native regressions separately.
+
+The downstream comparison below uses existing Python core `81ef213c607c`,
+not the new reduction extension. It parses each native output, specializes its
+parameters and admits the result before constructing a direct one-core
+Symbolica evaluator, with no JIT or common-pair optimization. Medians cover the
+same three distinct physical points, each in a fresh process; startup, the
+independent oracle, and reduction are excluded.
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  [Downstream phase], [Collected (ms)], [Nested (ms)],
+  [Parse, specialize and admit], [173.544], [9,395.301],
+  [Construct evaluator], [0.715], [52.255],
+  [Construct component points], [13.006], [13.392],
+  [Evaluate 1024 components], [7.938], [33.200],
+  [Total median], [204.894], [9,503.508],
+)
+
+The 46.4-fold downstream difference is dominated by preparing the serialized
+expression. It is not an evaluator-only speedup or an end-to-end Python
+reduction measurement. Independently computed phase medians need not sum to
+the median total.
+
+The native release suite passes 853 tests, with 22 ignored tests and the known
+`tensor::tests::parsing::infinite_execution` failure excluded. The nine focused
+collection tests and four shared polynomial-emitter tests pass. Clippy passes
+with warning denial for `idenso`, `spynso3` and `symbolica-utils`; existing
+dependency warnings are recorded separately in the receipt. These native and
+independent native-output results remain separate from the installed Python
+measurements below. No fresh FORM comparison was made for this fixture.
+
+=== Installed Python result
+
+The Maturin release build with the `native` feature produces core
+`44b5f25f94de`, installed into both the source-host package and the notebook
+virtual environment. Its full hash, build command, dependency hashes and
+installation receipt are recorded in `coefficient_collection.python` in the
+companion JSON. Reduction sources stayed unchanged throughout the build.
+Concurrent graph and generator edits changed five other source files while
+compilation ran; the build receipt records those changes and does not certify
+that the extension includes their latest versions. The measured reduction uses
+the saved numerator fixture, without regenerating its graph.
+
+#table(
+  columns: (1.3fr, 1fr, 1fr, 1fr),
+  [Installed Python output], [Reduction median (s)], [Rerun median (ms)], [Atom bytes],
+  [Collected], [1.035185], [0.241491], [1,098,752],
+  [Nested], [0.779839], [19.237235], [24,213,378],
+)
+
+Each mode measures three calls on the same admitted tensor in one process,
+using the explicit settings from the native comparison. All six calls report
+`Complete`, preserve the exact ordered ports and return stable completed reruns.
+Collected times range from 1.034375 to 1.063405 s; nested times range from
+0.762212 to 0.827429 s. Collection adds 0.255 s to the median while reducing
+the Python Atom size by a factor of 22.0. Admission takes 1.487 ms and 1.519 ms
+respectively. Startup, model setup, admission, output conversion, serialization,
+rendering and exact comparison are outside the reduction clock.
+
+Each installed result independently cancels against the saved historical
+baseline with `collect_factors().factor()`. Those checks take 0.689 s collected
+and 3.735 s nested, outside the timing window. The loaded extension's inode and
+contents remain unchanged throughout both measurements. The JSON retains every
+wall and CPU sample, output hashes, logical slots and cumulative process peak
+RSS; that RSS includes repeated reductions, retained results and the exact
+comparison, and is not isolated reduction memory.
+
+All 83 API tests pass against both the candidate package and the actual installed
+notebook package, including inheritance, algebra, display, generated signatures
+and documentation examples. Canonical, bundled, source-host and installed
+tensor stubs share the recorded hash. Both notebook servers restart successfully
+and return HTTP 200 on ports 2726 and 2727. The ladder notebook's source hash is
+unchanged across the reload. These are runtime and server readiness checks;
+they do not constitute a fresh execution or visual audit of every notebook.

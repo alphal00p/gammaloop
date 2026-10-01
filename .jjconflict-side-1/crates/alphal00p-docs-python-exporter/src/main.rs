@@ -630,6 +630,21 @@ def validate(runtime_module, stub_source):
 
     #[cfg(feature = "spenso")]
     #[test]
+    fn spenso_stub_preserves_expression_inheritance() {
+        let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("class TensorExpression(Expression):")
+        );
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
     fn spenso_stub_preserves_typed_index_defaults_and_execution_semantics() {
         let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
         let module = stub_info

@@ -1,6 +1,11 @@
 mod api;
 pub mod geom;
 mod graph_api;
+mod label_placement;
+pub use label_placement::{
+    candidates_bytes as label_candidates_bytes, obstacle_boxes_bytes as label_obstacle_boxes_bytes,
+    search_bytes as label_search_bytes,
+};
 mod pin;
 mod streaming;
 pub use streaming::{ForceLayoutStream, LayoutFrame};
@@ -70,6 +75,24 @@ use wasm_minimal_protocol::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 initiate_protocol!();
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_candidates(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_candidates_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_obstacle_boxes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_obstacle_boxes_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_search(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
+    label_search_bytes(arg, math)
+}
 
 // Custom getrandom implementation for WASM
 #[cfg(feature = "custom")]

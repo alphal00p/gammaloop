@@ -83,7 +83,7 @@ impl TestReps {
     }
 }
 
-/// Admit a test expression and resolve the shared contraction result without
+/// Admit a test expression and return the shared contraction result without
 /// polynomial expansion. Tests requesting a polynomial call `expand` explicitly.
 pub(crate) fn contracted_atom(
     expression: symbolica::atom::AtomView<'_>,
@@ -91,8 +91,7 @@ pub(crate) fn contracted_atom(
     use crate::tensor::{SymbolicTensor, inference::InterfaceInference};
     let interface = InterfaceInference::replacement_interface(expression)?;
     SymbolicTensor::checked_parts(expression.to_owned(), interface)?
-        .contract(Default::default())?
-        .resolved()
+        .contract(Default::default())
         .map(SymbolicTensor::into_expression)
 }
 

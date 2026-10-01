@@ -13,6 +13,72 @@
   let path = curve.path(source, sink)
   let geometry-checks = ()
 
+  // Either single move raises the collision cost, but moving both lowers it.
+  // The host-certified annealing search must cross this barrier and retain
+  // the original candidate records, including their integer cost types.
+  let candidate(left, cost) = (
+    bounds: (left: left, right: left + 1, bottom: 0, top: 1), cost: cost,
+  )
+  let labels = (
+    (candidates: (candidate(0, 0.001), candidate(11.3495, 0))),
+    (candidates: (candidate(10, 0.001), candidate(1.3495, 0))),
+  )
+  assert.eq(
+    cbor.encode(drawing._relax-label-placements(labels, (), label-padding: 0)),
+    cbor.encode(labels.map(label => label.candidates.last())),
+    message: "annealing crosses an energy barrier without changing candidate records",
+  )
+
+  // The batched sampler must retain the exact arithmetic of scalar prefix
+  // trimming, including endpoint clamps, degenerate curves and mixed segments.
+  for sampled in (
+    path, curve.line((0, 0), (4, 2)), curve.line((0, 0), (0, 0)),
+    curve.line((0, 0), (1e-8, 0)),
+    curve.path(curve.move-to((1, 2)), curve.quad-to((3, 7), (5, -1)), curve.line-to((7, 3))),
+  ) {
+    let total = curve.length(sampled, accuracy: accuracy)
+    let shifts = (-total, -total / 2, -total / 3, 0, total / 3, total / 2, total)
+    let actual = curve.frames(sampled, shifts.map(shift => total / 2 + shift), accuracy: accuracy)
+    let expected = shifts.map(shift => drawing._path-mid-frame(sampled, accuracy, shift: shift))
+    assert.eq(actual, expected, message: "batched frames preserve scalar sampling")
+  }
+
+  // Native obstacle sampling retains the scalar Kurvst/CeTZ arithmetic and
+  // ordering, including empty paths, mixed curves and singular transforms.
+  for sampled in (
+    none, path, curve.line((0, 0), (4, 2)), curve.line((1, -2), (1, -2)),
+    curve.path(curve.move-to((1, 2)), curve.quad-to((3, 7), (5, -1)), curve.line-to((7, 3))),
+  ) {
+    let segments = if sampled == none { () } else { curve.segments(sampled) }
+    for transform in (
+      ((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1)),
+      ((2, 0.4, 0, 10), (-0.3, 1.5, 0, -4), (0.2, 0.7, 1, 3), (0, 0, 0, 1)),
+      ((0, 0, 0, 0), (0, -2, 0, 7), (0, 0, 1, 0), (0, 0, 0, 1)),
+    ) {
+      for (pad-x, pad-y) in ((0, 0), (0.03, 0.07)) {
+        let expected = ()
+        for segment in segments {
+          let points = range(13).map(step => cetz.matrix.mul4x4-vec3(
+            transform, (..curve.cubic-point(segment, step / 12), 0),
+          ))
+          for (start, end) in points.slice(0, 12).zip(points.slice(1)) {
+            expected.push((
+              left: calc.min(start.at(0), end.at(0)) - pad-x,
+              right: calc.max(start.at(0), end.at(0)) + pad-x,
+              bottom: calc.min(start.at(1), end.at(1)) - pad-y,
+              top: calc.max(start.at(1), end.at(1)) + pad-y,
+            ))
+          }
+        }
+        let actual = cbor(drawing._plugin.label_obstacle_boxes(cbor.encode((
+          segments: segments, transform: transform.map(row => row.map(float)),
+          pad-x: pad-x, pad-y: pad-y,
+        ))))
+        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "obstacle boxes preserve scalar sampling exactly")
+      }
+    }
+  }
+
   // Length, ratio and shift are measured on the offset path, not its centerline.
   for offset in (-0.35, 0.35) {
     let parallel = curve.parallel(path, distance: offset, accuracy: accuracy)
@@ -159,6 +225,42 @@
         shorten-to: auto,
       )
       let identity = cetz.matrix.ident(4)
+      // Batching path drawing preserves CeTZ primitives, including disconnected
+      // or empty subpaths and transforms that collapse distinct endpoints.
+      for (sampled, unit) in (
+        (path, 1), (straight, 1), (curved, 1),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close()), 1),
+        (curve.path(curve.move-to((0, 0)), curve.move-to((1, 1)), curve.line-to((2, 3))), 1),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.move-to((3, 2)), curve.line-to((4, 1))), 1),
+        (curve.path(curve.move-to((-0.0, 0.0)), curve.quad-to((1, 3), (2, 0))), 1.75),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.line-to((1, 1)), curve.close()), -0.25),
+        (curved, 1pt),
+      ) {
+        let primitives = {
+          for (origin, closed, segments) in curve.to-cetz-data(sampled, unit: unit) {
+            let current = origin
+            for (kind, ..args) in segments {
+              if kind == "l" { cetz.draw.line(current, args.last()) }
+              else { cetz.draw.bezier(current, args.last(), args.at(0), args.at(1)) }
+              current = args.last()
+            }
+            if closed and current != origin { cetz.draw.line(current, origin) }
+          }
+        }
+        for transform in (
+          identity, cetz.matrix.transform-scale((0, 0, 1)),
+          cetz.matrix.transform-shear-x(0.6),
+          cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
+        ) {
+          let local = ctx + (transform: transform)
+          let actual = curve.to-cetz(sampled, unit: unit).first()(local)
+          let expected = cetz.draw.merge-path(primitives).first()(local)
+          assert.eq(actual.drawables, expected.drawables, message: "batched path geometry")
+          assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+            cbor.encode(expected.drawables.map(d => d.segments)), message: "batched path coordinates")
+          assert.eq(actual.ctx.prev, expected.ctx.prev, message: "batched path context")
+        }
+      }
       let cases = ()
       let comparisons = ()
 
@@ -1147,3 +1249,71 @@
 }
 
 #curved-arrow-behavior
+
+#cetz.canvas({
+  cetz.draw.get-ctx(ctx => {
+    // Preserve exact coordinates and primitive callback types when the native
+    // pattern operation emits CeTZ tuples directly, including implicit origins.
+    let typed-coordinate(ctx, point) = if type(point) == array and type(point.at(0)) in (int, float) {
+      (point.at(0) + if type(point.at(0)) == int { 0.125 } else { 0.0 }, point.at(1))
+    } else { point }
+    let zero = curve.from-elements((curve.move-to((0, 0)), curve.close(), curve.line-to((0, 0))))
+    let cases = (
+      curve.path(), zero,
+      curve.quad((0, 0), (1e-18, 2e-18), (3e-18, 0)),
+      curve.line((-0.0, 0.0), (1.5, -0.5)),
+      curve.cubic((0, 0), (0.5, 1), (1, -0.5), (2, 0)),
+    )
+    for path in cases {
+      for unit in (1, -1, -0.0, 1.75, 1pt) {
+        for options in (
+          (pattern: "wave", samples-per-period: 4),
+          (pattern: "zigzag", samples-per-period: 4),
+          (pattern: "coil", samples-per-period: 4, anchor-start: false, anchor-end: false),
+        ) {
+          let generated = curve.pattern(path, wavelength: 2.5, amplitude: 0.04, ..options)
+          for variant in range(4) {
+            let local = ctx
+            let style = (stroke: black + 0.3pt)
+            if variant == 1 {
+              local.transform = cetz.matrix.transform-shear-x(0.3)
+              local.resolve-coordinate = (typed-coordinate,)
+            } else if variant == 2 { local.debug = true }
+            else if variant == 3 {
+              local.style.line.mark = (end: ">",)
+              local.style.bezier.mark = (end: ">",)
+            }
+            let actual = curve.pattern-to-cetz(path, unit: unit, style: style,
+              wavelength: 2.5, amplitude: 0.04, ..options)
+            let expected = curve.to-cetz(generated, unit: unit, ..style)
+            if expected.len() == 0 { assert.eq(actual, ()) }
+            else {
+              let actual = actual.first()(local)
+              let expected = expected.first()(local)
+              assert.eq(actual.drawables, expected.drawables, message: "fused pattern drawables")
+              assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+                cbor.encode(expected.drawables.map(d => d.segments)), message: "fused pattern coordinates")
+              assert.eq(cbor.encode(actual.ctx.prev), cbor.encode(expected.ctx.prev), message: "fused pattern context")
+            }
+          }
+        }
+      }
+    }
+    // A `unit` in an edge's drawing style remains a coordinate scale, rather
+    // than being accidentally forwarded as a CeTZ stroke-style property.
+    let path = curve.line((0, 0), (1.5, -0.5))
+    for unit in (-1, 1.75, 1pt, 9007199254740993) {
+      let style = (pattern: "wave", pattern-wavelength: 2.5, pattern-amplitude: 0.04,
+        pattern-samples-per-period: 4, unit: unit)
+      let actual = drawing._segments-elements(curve.segments(path), style, auto, true, true).elements
+      let generated = curve.pattern(drawing._segments-path(curve.segments(path)), pattern: "wave", wavelength: 2.5, amplitude: 0.04, samples-per-period: 4)
+      let expected = curve.to-cetz(generated, ..drawing._draw-style(style))
+      let actual = cetz.process.many(ctx, actual.flatten())
+      let expected = cetz.process.many(ctx, expected)
+      assert.eq(actual.drawables, expected.drawables, message: "patterned edge unit override")
+      assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+        cbor.encode(expected.drawables.map(d => d.segments)), message: "patterned edge scaled coordinates")
+    }
+    ()
+  })
+})

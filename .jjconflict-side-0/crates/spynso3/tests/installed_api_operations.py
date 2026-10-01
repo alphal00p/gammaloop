@@ -61,44 +61,27 @@ class TensorOperationsTests(unittest.TestCase):
 
     def test_transforms_preserve_interface_and_refresh_identity(self):
         a = self.A(self.x, self.rep("i"), self.rep("j"))
-        replaced = sp.TensorExpression(
-            a.to_expression().replace(self.x, self.y), structure=a.structure
-        )
+        replaced = a.replace(self.x, self.y)
         self.assertIsInstance(replaced, sp.TensorExpression)
         self.assertEqual(replaced.structure.arguments, (self.y,))
         self.assertEqual(replaced.structure.slots, a.structure.slots)
         self.assertEqual(
-            sp.TensorExpression(
-                a.to_expression().map(T().replace(self.x, self.y)),
-                structure=a.structure,
-            ),
+            a.map(T().replace(self.x, self.y)),
             replaced,
         )
         self.assertEqual(
-            sp.TensorExpression(
-                a.to_expression().replace_multiple([Replacement(self.x, self.y)]),
-                structure=a.structure,
-            ),
+            a.replace_multiple([Replacement(self.x, self.y)]),
             replaced,
         )
         # Formal derivatives of tensor-valued functions remain outside the
         # strict tensor grammar; scalar-prefactor derivatives preserve its ports.
-        with self.assertRaisesRegex(ValueError, "not tagged as a tensor"):
-            sp.TensorExpression(
-                (a.to_expression() * self.x).derivative(self.x),
-                structure=a.structure,
-            )
+        with self.assertRaisesRegex(ValueError, "formal tensor derivatives"):
+            (a * self.x).derivative(self.x)
         weighted = a * self.y
-        derivative = sp.TensorExpression(
-            weighted.to_expression().derivative(self.y),
-            structure=weighted.structure,
-        )
+        derivative = weighted.derivative(self.y)
         self.assertEqual(derivative.structure.slots, a.structure.slots)
         self.assertEqual(derivative.to_expression(), a.to_expression())
-        zero = sp.TensorExpression(
-            a.to_expression().derivative(S("api_operations::absent")),
-            structure=a.structure,
-        )
+        zero = a.derivative(S("api_operations::absent"))
         self.assertEqual(zero.rank, 2)
         self.assertEqual(zero.to_expression(), E("0"))
         with self.assertRaisesRegex(ValueError, "interface"):
@@ -108,6 +91,54 @@ class TensorOperationsTests(unittest.TestCase):
             sp.Tensor.dense(self.A(self.y, self.rep, self.rep), [5.0, 6.0, 7.0, 8.0])
         )
         self.assertEqual(replaced.to_tensor(library)[:], [5.0, 6.0, 7.0, 8.0])
+
+    def test_symbolica_rewrites_preserve_ordered_ports_and_reject_interface_changes(
+        self,
+    ):
+        source = self.A(self.x, self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        expected = self.A(self.y, self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        for changed, expected_result in (
+            (source.replace(self.x, self.y), expected),
+            (source.replace(self.x, lambda _: self.y), expected),
+            (source.replace_multiple([Replacement(self.x, self.y)]), expected),
+            (source.map(T().replace(self.x, self.y)), expected),
+            ((self.y * source).derivative(self.y), source),
+        ):
+            self.assertIsInstance(changed, sp.TensorExpression)
+            self.assertEqual(changed.structure.slots, source.structure.slots)
+            self.assertTrue(Expression.__eq__(changed, changed.to_expression()))
+            self.assertEqual(changed, expected_result)
+            self.assertEqual(
+                changed.structure.arguments, expected_result.structure.arguments
+            )
+
+        for replacement in (E("1"), self.A(self.rep("k"), self.rep("i"))):
+            for operation in (
+                lambda rhs: source.replace(source.to_expression(), rhs),
+                lambda rhs: source.replace_multiple([Replacement(source, rhs)]),
+                lambda rhs: source.map(T().replace(source, rhs)),
+            ):
+                with (
+                    self.subTest(replacement=replacement),
+                    self.assertRaisesRegex(ValueError, "interface"),
+                ):
+                    operation(replacement)
+        # An atomic data key follows its function head, so a zero no longer has
+        # that key. Explicit result metadata is retained across these rewrites.
+        self.assertEqual(
+            source.replace(source, 0).structure.slots, source.structure.slots
+        )
+        self.assertIsNone(source.replace(source, 0).structure.name)
+        source = source.with_name(sp.TensorName("api_operations::RewriteMetadata")(7))
+        for zero in (
+            source.replace(source.to_expression(), E("0")),
+            source.replace_multiple([Replacement(source, E("0"))]),
+            source.map(T().replace(source, E("0"))),
+            source.derivative(self.y),
+        ):
+            self.assertIsInstance(zero, sp.TensorExpression)
+            self.assertEqual(zero.to_expression(), E("0"))
+            self.assertEqual(zero.structure, source.structure)
 
     def test_reusable_tensor_rules_share_checked_replacement(self):
         source = self.A(self.rep("i"))
@@ -142,49 +173,176 @@ class TensorOperationsTests(unittest.TestCase):
                 )
             self.assertEqual(len(calls), expected_calls)
 
-    def test_typed_aliases_retain_order_metadata_and_callback_errors(self):
-        source = self.A(self.x, self.rep("j"), self.rep("i"))
-        value = sp.AliasedTensorExpression.from_expression(source)
-        self.assertEqual(value.root.structure.slots, source.structure.slots)
-        self.assertEqual(value.to_expression(), source)
-        handle, body = value.aliases[0]
-        self.assertEqual(body.structure.slots, source.structure.slots)
-        self.assertEqual(body.structure.arguments, (self.x,))
-        self.assertEqual(handle.structure.slots, source.structure.slots)
-        calls = []
-
-        def identity(body):
-            calls.append(body.structure.arguments)
-            return body
-
-        mapped = value.map_aliases(identity)
-        self.assertEqual(calls, [(self.x,)])
-        self.assertEqual(mapped.to_expression(), source)
-        self.assertEqual(mapped.aliases[0][1].structure.arguments, (self.x,))
-        zero = value.map_aliases(lambda body: 0 * body)
-        self.assertEqual(zero.to_expression().to_expression(), E("0"))
-        self.assertEqual(zero.to_expression().structure.slots, source.structure.slots)
-
-        def failing(_):
-            raise LookupError("alias callback sentinel")
-
-        with self.assertRaisesRegex(LookupError, "alias callback sentinel"):
-            value.map_aliases(failing)
-        with self.assertRaisesRegex(ValueError, "interface"):
-            value.map_aliases(lambda _: sp.TensorExpression(E("1")))
-
-    def test_nested_scalar_aliases_use_the_existing_symbolica_evaluator(self):
-        inner = sp.AliasedTensorExpression.from_expression(
-            sp.TensorExpression((self.x + 1) ** 3)
-        )
-        outer = sp.TensorExpression(S("api_operations::outer_alias"))
-        body = (inner.root + 2) ** 2
-        value = sp.AliasedTensorExpression(outer, inner.aliases + [(outer, body)])
+    def test_nested_scalar_expression_uses_the_existing_symbolica_evaluator(self):
+        value = sp.TensorExpression(((self.x + 1) ** 3 + 2) ** 2)
         expected = ((self.x + 1) ** 3 + 2) ** 2
-        self.assertEqual(value.to_expression().to_expression(), expected)
+        self.assertEqual(value.to_expression(), expected)
         self.assertEqual(value.expand().to_expression(), expected.expand())
         evaluator = value.evaluator([self.x], iterations=1, n_cores=1)
         self.assertEqual(evaluator.evaluate([[2.0]])[0][0], 841.0)
+
+    def test_symbolica_algebra_returns_tensors_with_exact_requested_forms(self):
+        x, y = self.x, self.y
+        tensor = self.A(self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        a = tensor.to_expression()
+        for method, arguments, source, expected in (
+            ("expand_num", (), 3 * (x + y) * tensor, (3 * x + 3 * y) * a),
+            ("collect_factors", (), x * tensor + y * tensor, (x + y) * a),
+            ("factor", (), (x**2 - 1) * tensor, (x - 1) * (x + 1) * a),
+            ("collect", (x,), x * tensor + y * x * tensor, x * (a + y * a)),
+            ("collect_num", (), (2 * x + 4 * y) * tensor, 2 * (x + 2 * y) * a),
+            (
+                "collect_by_coefficient",
+                (),
+                2 * x * tensor + 2 * y * tensor,
+                2 * (x * a + y * a),
+            ),
+            ("collect_symbol", (x,), x * tensor + y * x * tensor, x * (a + y * a)),
+            ("collect_horner", ([x, y],), (x**2 + x * y) * tensor, x * (x + y) * a),
+            ("together", (), tensor / x + tensor / y, (x * a + y * a) / (x * y)),
+            ("cancel", (), (x**2 - 1) / (x - 1) * tensor, (x + 1) * a),
+            ("apart", (x,), tensor / (x * (x + 1)), a / x - a / (x + 1)),
+        ):
+            with self.subTest(method=method):
+                source = source.with_name("api_operations::AlgebraResult")
+                before = source.to_expression()
+                result = getattr(source, method)(*arguments)
+                self.assertIsInstance(result, sp.TensorExpression)
+                self.assertEqual(result.to_expression(), expected)
+                self.assertEqual(result.structure, source.structure)
+                self.assertEqual(result.structure.slots, tensor.structure.slots)
+                self.assertEqual(source.to_expression(), before)
+
+    def test_symbolica_algebra_preserves_unresolved_ports_metadata_and_typed_zero(self):
+        tensor = self.A(7, self.rep("i"), self.other)
+        self.assertIsInstance(tensor.structure.slots[1], sp.Representation)
+        for source in (tensor, 0 * tensor):
+            source = source.with_name(
+                sp.TensorName("api_operations::AlgebraMetadata")(7)
+            )
+            self.assertEqual(source.structure.arguments, (E("7"),))
+            for method, arguments in (
+                ("factor", ()),
+                ("expand_num", ()),
+                ("collect", (self.x, self.y)),
+                ("collect_num", ()),
+                ("collect_factors", ()),
+                ("collect_by_coefficient", ()),
+                ("collect_symbol", (self.x,)),
+                ("collect_horner", ()),
+                ("together", ()),
+                ("cancel", ()),
+                ("apart", (self.x, self.y)),
+            ):
+                with self.subTest(method=method, zero=not bool(source)):
+                    result = getattr(source, method)(*arguments)
+                    self.assertIsInstance(result, sp.TensorExpression)
+                    self.assertEqual(result.to_expression(), source.to_expression())
+                    self.assertEqual(result.structure, source.structure)
+                    self.assertEqual(result.rank, 2)
+
+        opened = self.A(self.other, self.rep)
+        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        library = sp.TensorLibrary()
+        library.register(
+            sp.Tensor.dense(
+                self.A(self.other, self.rep), [E(str(i)) for i in range(1, 7)]
+            )
+        )
+        for source, method, coefficient in (
+            (self.x * opened + self.y * opened, "collect_factors", self.x + self.y),
+            ((self.x**2 - 1) * opened, "factor", self.x**2 - 1),
+        ):
+            with self.subTest(method=method, changed=True):
+                result = getattr(source, method)()
+                self.assertEqual(result.structure.slots, opened.structure.slots)
+                # Keep the declared component order as well as its shape.
+                for actual, component in zip(
+                    result.to_tensor(library)[:], range(1, 7), strict=True
+                ):
+                    self.assertEqual(
+                        (actual - coefficient * component).expand(), E("0")
+                    )
+
+    def test_collection_callbacks_check_the_actual_replacement_interface(self):
+        tensor = self.A(self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        source = (self.x * tensor).with_name("api_operations::CallbackResult")
+        for method in ("collect", "collect_symbol"):
+            with self.subTest(method=method):
+                mapped = getattr(source, method)(
+                    self.x, coeff_map=lambda value: 2 * value
+                )
+                self.assertEqual(mapped.to_expression(), 2 * source.to_expression())
+                self.assertEqual(mapped.structure, source.structure)
+                zero = getattr(source, method)(self.x, coeff_map=lambda value: E("0"))
+                self.assertEqual(zero.to_expression(), E("0"))
+                self.assertEqual(zero.structure, source.structure)
+                for replacement in (
+                    E("1"),
+                    self.A(self.rep("k"), self.rep("i")).to_expression(),
+                ):
+                    with (
+                        self.subTest(replacement=str(replacement)),
+                        self.assertRaises(ValueError),
+                    ):
+                        getattr(source, method)(
+                            self.x,
+                            coeff_map=lambda value, replacement=replacement: (
+                                replacement
+                            ),
+                        )
+                with self.assertRaises(ValueError):
+                    getattr(source, method)(
+                        self.x,
+                        key_map=lambda key: (
+                            key * self.A(self.other("mu")).to_expression()
+                        ),
+                    )
+
+        opened = self.A(self.other, self.rep)
+        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        source = self.x * opened
+        mapped = source.collect(self.x, coeff_map=lambda coefficient: 2 * coefficient)
+        self.assertEqual(mapped.structure, source.structure)
+        self.assertEqual(mapped.to_expression(), 2 * source.to_expression())
+
+    def test_unchanged_algebra_retains_completed_reduction_status(self):
+        source = sp.TensorExpression(7).simplify_algebra()
+        self.assertEqual(source.reduction_status, sp.ReductionStatus.Complete)
+        result = source.expand_num().collect_factors().factor().cancel()
+        self.assertEqual(result, source)
+        self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
+
+    def test_read_only_symbolica_inspection_preserves_tensor_value(self):
+        tensor = self.A(self.x, self.rep("i"))
+        value = (self.x + self.y) * tensor
+        expression, structure = value.to_expression(), value.structure
+        self.assertTrue(value.contains(self.x))
+        self.assertTrue(self.x in value)
+        self.assertFalse(S("api_operations::absent") in value)
+        for method, arguments in (
+            ("get_all_symbols", ()),
+            ("get_all_symbols", (False,)),
+            ("get_all_indeterminates", ()),
+            ("get_all_indeterminates", (False,)),
+            ("get_type", ()),
+            ("get_byte_size", ()),
+        ):
+            with self.subTest(method=method, arguments=arguments):
+                self.assertEqual(
+                    getattr(value, method)(*arguments),
+                    getattr(expression, method)(*arguments),
+                )
+        self.assertEqual(tensor.get_head(), self.A.to_expression())
+        self.assertEqual(tensor.get_name(), "api_operations::A")
+        self.assertTrue((0 * tensor).is_zero())
+        self.assertTrue(sp.TensorExpression(1).is_one())
+        self.assertFalse(value.is_expanded())
+        self.assertTrue(value.expand().is_expanded(self.x))
+        self.assertEqual(value.nterms(), 1)
+        self.assertEqual(value.expand().nterms(), 2)
+        self.assertEqual(value.to_expression(), expression)
+        self.assertEqual(value.structure, structure)
 
     def test_scalar_tensor_denominator_accepts_an_open_expression(self):
         tensor = self.A(self.rep("j"), self.rep("i"))
@@ -238,24 +396,18 @@ class TensorOperationsTests(unittest.TestCase):
                         else source.to_dots()
                     )
                     self.assertIsNot(result, source)
-                    typed = (
-                        result.to_expression()
-                        if method == "simplify_algebra"
-                        else result
-                    )
-                    self.assertEqual(typed.to_expression(), expression)
-                    self.assertEqual(typed.structure, structure)
+                    self.assertIsInstance(result, sp.TensorExpression)
+                    self.assertEqual(result.to_expression(), expression)
+                    self.assertEqual(result.structure, structure)
                     rerun = (
                         getattr(result, method)(gamma=True, epsilon=True)
                         if method == "simplify_algebra"
                         else result.to_dots()
                     )
                     self.assertIsNot(rerun, result)
-                    typed_rerun = (
-                        rerun.to_expression() if method == "simplify_algebra" else rerun
-                    )
-                    self.assertEqual(typed_rerun.to_expression(), expression)
-                    self.assertEqual(typed_rerun.structure, structure)
+                    self.assertIsInstance(rerun, sp.TensorExpression)
+                    self.assertEqual(rerun.to_expression(), expression)
+                    self.assertEqual(rerun.structure, structure)
                     self.assertEqual(source.structure, structure)
 
     def test_simultaneous_renaming_and_explicit_reindex(self):
@@ -497,15 +649,13 @@ class TensorOperationsTests(unittest.TestCase):
     def test_simplification_presets_and_expansion_control(self):
         a = self.A(self.rep("i"))
         expression = (self.x + 1) * (self.y + 1) * a
-        self.assertEqual(expression.simplify_algebra().to_expression(), expression)
+        self.assertEqual(expression.simplify_algebra(), expression)
         self.assertEqual(expression.simplify_algebra().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
         self.assertEqual(
             metric.simplify_algebra(contract="none").expand(), metric.expand()
         )
-        self.assertEqual(
-            metric.simplify_algebra().to_expression(), self.A(self.rep("j"))
-        )
+        self.assertEqual(metric.simplify_algebra(), self.A(self.rep("j")))
         gamma = sp.TensorExpression.dirac_gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         simplified = chain.simplify_algebra(gamma=True, color=True, epsilon=True)
@@ -513,13 +663,13 @@ class TensorOperationsTests(unittest.TestCase):
             simplified.expand(),
             simplified.simplify_algebra(gamma=True, color=True, epsilon=True).expand(),
         )
-        self.assertEqual(simplified.root.rank, 2)
+        self.assertEqual(simplified.rank, 2)
         d = S("api_operations::D")
         symbolic_metric = sp.TensorExpression.g(sp.Representation.mink(d))("mu", "mu")
         self.assertEqual(symbolic_metric.simplify_algebra().expand().to_expression(), d)
         capped = chain.simplify_algebra(gamma=True, max_steps_per_domain=0)
         self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
-        self.assertEqual(capped.to_expression(), chain)
+        self.assertEqual(capped, chain)
         bounded = chain.simplify_algebra(gamma=True, max_steps_per_domain=1)
         self.assertIn(
             bounded.reduction_status,
@@ -529,6 +679,51 @@ class TensorOperationsTests(unittest.TestCase):
             bounded.simplify_algebra(gamma=True, color=True, epsilon=True).expand(),
             simplified.expand(),
         )
+
+    def test_generated_coefficient_collection_keeps_scalar_spectators(self):
+        lorentz = sp.Representation.mink(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        p = sp.TensorName.vector("api_operations::coefficient_p")(lorentz)
+        q = sp.TensorName.vector("api_operations::coefficient_q")(lorentz)
+        spectator = (self.x + self.y) ** 12
+        source = (
+            spectator
+            * (p("rho") + q("rho"))
+            * gamma("a", "b", "rho")
+            * gamma("b", "c", "mu")
+            * (p("sigma") + q("sigma"))
+            * gamma("c", "d", "sigma")
+            * gamma("d", "a", "mu")
+        ).with_name("api_operations::CollectedTrace")
+        options = {"color": False, "contract": "dots"}
+        collected = source.simplify_algebra(**options)
+        nested = source.simplify_algebra(**options, collect_coefficients=False)
+        self.assertEqual(
+            collected, source.simplify_algebra(**options, collect_coefficients=True)
+        )
+        # Independent Clifford identity: Tr(r/ gamma_mu r/ gamma^mu) = -8 r^2.
+        expected = -8 * (sp.dot(p, p) + 2 * sp.dot(p, q) + sp.dot(q, q))
+        for result in (collected, nested):
+            self.assertIsInstance(result, sp.TensorExpression)
+            self.assertEqual(result.structure, source.structure)
+            self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
+            self.assertTrue(bool(result.contains(spectator)))
+            coefficient = result.to_expression().replace(spectator, E("1"))
+            self.assertEqual(
+                (coefficient - expected.to_expression()).collect_factors().factor(),
+                E("0"),
+            )
+        self.assertEqual(collected.simplify_algebra(**options), collected)
+        untouched = ((self.x + 1) * (self.y + 1) * self.A(self.rep("i"))).with_name(
+            "api_operations::UnrelatedCoefficient"
+        )
+        for collect in (False, True):
+            self.assertEqual(
+                untouched.simplify_algebra(
+                    gamma=False, color=False, collect_coefficients=collect
+                ),
+                untouched,
+            )
 
     def test_interpreted_and_compiled_batch_contract(self):
         for values in (

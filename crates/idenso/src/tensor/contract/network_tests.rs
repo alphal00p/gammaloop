@@ -40,7 +40,6 @@ fn callback_contraction(
             collect_traces: false,
             ..Default::default()
         })?
-        .resolved()?
         .into_expression();
     let value = SymbolicTensor {
         expression,

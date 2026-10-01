@@ -1,0 +1,2505 @@
+{
+  "schema_version": 1,
+  "capture_date": "2026-09-30",
+  "scope": "Generated four-loop quark and gluon ladders; fully resolved explicit index labels, no AUTO. Original scalar prefactors, symbolic Lorentz D, spinor trace unit 4. Reduction is measured before deliberate expansion; no automatic aliases or global preprocessing expansion in the plain route.",
+  "final_candidate": {
+    "status": "Verified final release candidate",
+    "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+    "default_max_steps_per_domain": null,
+    "automatic_work_caps": false,
+    "explicit_caller_limits_retained": true,
+    "completed_one_call": true,
+    "exact_original_oracles": true,
+    "shared_cache_bound_stops_computation": false
+  },
+  "measurement_conditions": {
+    "environment": {
+      "kernel": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "affinity": {
+        "first": 0,
+        "last": 383,
+        "count": 384
+      },
+      "mem_total": "MemTotal:       1188445388 kB",
+      "tools": {
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "python": "Python 3.11.16",
+        "maturin": "maturin 1.15.0"
+      },
+      "locks": {
+        "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "6d0e8d91d8d5c6a5e927d68ef4971460908403c3639c1590a6102f2336b86efe",
+        "/common/dev/symbolica-community/main/Cargo.lock": "206217e7632973462fa3236a3e90a0316dde054b9b88679830b2bf7ec36be4d6"
+      },
+      "compiler_flags": {
+        "RUSTFLAGS": "-C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc",
+        "CARGO_ENCODED_RUSTFLAGS": null,
+        "CARGO_BUILD_TARGET": null,
+        "CARGO_BUILD_JOBS": "4",
+        "CARGO_PROFILE_RELEASE_OPT_LEVEL": null,
+        "CARGO_PROFILE_RELEASE_LTO": null,
+        "CARGO_PROFILE_RELEASE_DEBUG": null
+      }
+    },
+    "environment_capture_note": "Captured during regression investigation. Current lock hashes identify current sources; baseline874 build did not record lock hashes and is not retrospectively assigned them.",
+    "affinity": "Unpinned inherited CPUs 0-383; shared host not reserved. Compiling and competing benchmark windows were coordinated, but background system load was uncontrolled.",
+    "timing": "Python time.perf_counter. Process startup and compilation excluded. Setup, admission, reduction, explicit expansion, and completed rerun recorded separately where measured. All exact comparisons occur outside timed regions.",
+    "rss": "Linux ru_maxrss in KiB, process cumulative; not isolated allocator peak per operation.",
+    "fresh_form_comparison": false,
+    "form_note": "Existing FORM comparisons concern authored reference fixtures, not these generated source hashes; no equivalent-input FORM timing was rerun in this investigation."
+  },
+  "inputs": {
+    "quark": {
+      "format_plain_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+      "serialized_bytes": 1616,
+      "generation": {
+        "model": "standard_model",
+        "incoming": [
+          "g"
+        ],
+        "outgoing": [
+          "g"
+        ],
+        "vertex_allow": [
+          "V_76"
+        ],
+        "loops": 4,
+        "max_vertices": 8,
+        "topology_filter": "generated_ladder_helpers.ladder_filter(outer_quark=True)"
+      },
+      "numerator": "expand couplings; set bottom mass to zero; edge momenta, not LMB routing",
+      "projection": "g_mu_nu delta_ab/8; separate colour and spacetime factors",
+      "dimension": "quark_loop_ladder::D",
+      "oracle_terms": 525,
+      "later_notebook_routing_terms": 1386,
+      "oracle": {
+        "path": "/tmp/plain-quark-plain-128.expr",
+        "sha256": "ffc113d8376ffcd6bc3d393b6c56c97736e9d514cac7587940c46b8c949a417f",
+        "bytes": 268474
+      },
+      "binary_snapshot": {
+        "path": "/tmp/alias-ladder/quark-matrix-20260930/original.bin",
+        "sha256": "4b1ec049431e4c0f2996303356129f5fc07a5f9cdc99de67ff770827798b8b62",
+        "bytes": 550
+      }
+    },
+    "gluon": {
+      "format_plain_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+      "generation": {
+        "model": "standard_model",
+        "incoming": [
+          "g"
+        ],
+        "outgoing": [
+          "g"
+        ],
+        "vertex_allow": [
+          "V_36"
+        ],
+        "loops": 4,
+        "max_vertices": 8,
+        "topology_filter": "generated_ladder_helpers.ladder_filter(outer_quark=False)"
+      },
+      "numerator": "expand couplings; LMB momentum routing before contraction",
+      "projection": "g_mu_nu delta_ab/8; separate colour and spacetime factors",
+      "dimension": "three_gluon_rung_ladder::D",
+      "oracle_terms": 6001,
+      "oracle": {
+        "path": "/tmp/plain-gluon-alias-expanded.bin",
+        "sha256": "8acf8feee289b1776506064c3fddefdc5fe56e5270d48de7b09a4d31528390df",
+        "bytes": 36956
+      },
+      "binary_snapshot": {
+        "path": "/tmp/alias-ladder/production-gluon.bin",
+        "sha256": "8e7fbc9a69b89727b036e46308747877f2978fc6d4edbacc39bc2d0d2d45c130",
+        "bytes": 897
+      },
+      "native_snapshot": {
+        "path": "/tmp/alias-ladder/production-gluon.raw",
+        "sha256": "97cd5ce7559ae6ed6e7cdc677a94dd52642794eb6b70594c8928014f475eafd9",
+        "bytes": 7702
+      }
+    },
+    "shared_generator_options": {
+      "allow_self_loops": false,
+      "self_energy": null,
+      "tadpoles": null,
+      "zero_snails": null,
+      "numerator_grouping": null,
+      "progress": null
+    },
+    "generator_helper": {
+      "path": "/common/dev/symbolica-community/main/examples/hep/generated_ladder_helpers.py",
+      "sha256": "1d926bd989b45018e8c2b5160f71626fd9d78d74164820d96d7ccf37af08c309",
+      "bytes": 4395
+    }
+  },
+  "builds": {
+    "archived_alias": {
+      "source_revision": "f1a1351271eba2d5f7900c4b5d44afccbba6f1f8",
+      "community_revision": "66a55d50a4bd5d60a4f76d4fd331da925aa7ebde",
+      "kernel": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "build_profile": "release",
+      "features": [
+        "native"
+      ],
+      "symbolica": "3.0.1",
+      "dimension": "symbolic D; spinor trace unit 4",
+      "core_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+      "cargo_lock_sha256": "2f6fc8a654e76e5d3eec21cb325d495462a3781cd1a1164322b042eb77a2987b"
+    },
+    "plain_baseline": {
+      "command": [
+        "/nix/store/z3qwljip4pf9nzyx7w5ri6942ifsrkys-maturin-1.15.0/bin/maturin",
+        "build",
+        "--release",
+        "--no-default-features",
+        "--features",
+        "native",
+        "--locked",
+        "--offline",
+        "--config",
+        "paths=[\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-core\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-order\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-feynkit\"]",
+        "--interpreter",
+        "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+        "--out",
+        "/tmp/alias-ladder/plain-extension/wheels"
+      ],
+      "cwd": "/common/dev/symbolica-community/main",
+      "started_utc": "2026-09-30T13:03:42.284719+00:00",
+      "jobs": 4,
+      "log": "/tmp/alias-ladder/plain-extension/build.log",
+      "exit_code": 0,
+      "seconds": 288.93071718886495,
+      "sources_changed": [],
+      "wheel": "/tmp/alias-ladder/plain-extension/wheels/symbolica-3.0.1-cp311-abi3-linux_x86_64.whl",
+      "wheel_sha256": "86abb03ff55356a577ce6a95cd180ac8844e2427157aad1ec7fff22ab185dc1a",
+      "core": "/tmp/alias-ladder/plain-extension/python/symbolica/core.abi3.so",
+      "core_sha256": "87425e2b51bfdeb87a785b0f1507976063522d442bb20dc5933cb297f2e265a3",
+      "source_manifest_sha256": "2cc64fca55c90841339fea1043572be57736fa71527896499be82eccb293a6c6",
+      "source_manifest": {
+        "path": "/tmp/alias-ladder/plain-extension/baseline-87425e2b-build.json",
+        "sha256": "bb062698080ea9bd8a9b1ce16ec84808fcd1cf27c9abdbb9d4a056afab166d81",
+        "bytes": 55766
+      }
+    },
+    "intermediate_label_fix": {
+      "command": [
+        "/nix/store/z3qwljip4pf9nzyx7w5ri6942ifsrkys-maturin-1.15.0/bin/maturin",
+        "build",
+        "--release",
+        "--no-default-features",
+        "--features",
+        "native",
+        "--locked",
+        "--offline",
+        "--config",
+        "paths=[\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-core\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-order\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-feynkit\"]",
+        "--interpreter",
+        "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+        "--out",
+        "/tmp/alias-ladder/plain-extension/wheels"
+      ],
+      "cwd": "/common/dev/symbolica-community/main",
+      "started_utc": "2026-09-30T13:45:13.223946+00:00",
+      "jobs": 4,
+      "log": "/tmp/alias-ladder/plain-extension/build.log",
+      "exit_code": 0,
+      "seconds": 265.8137361383997,
+      "sources_changed": [],
+      "wheel": "/tmp/alias-ladder/plain-extension/wheels/symbolica-3.0.1-cp311-abi3-linux_x86_64.whl",
+      "wheel_sha256": "e1a200a1537c730d7c771c93eb8bc3372e970c2cb93c494fbe0932bc3164d13b",
+      "core": "/tmp/alias-ladder/plain-extension/python/symbolica/core.abi3.so",
+      "core_sha256": "5b8c459e123079f14c8e4b2dc022bc5beffadb128b3d3210101930460a1634e3",
+      "source_manifest_sha256": "efed23d23cc286028bc38978e54dbb7d10b9ca27db9961c404f678f5cea04cfc",
+      "source_manifest": {
+        "path": "/tmp/alias-ladder/plain-extension/candidate-5b8c459e/build.json",
+        "sha256": "cc237402d2f2b4e179532f5c4f2a425ead745b8c73ed9d231a4a7f8f44186bb1",
+        "bytes": 55765
+      }
+    },
+    "python_profile": "Host workspace release profile (Rust release defaults, opt-level 3; root workspace release LTO setting does not apply to the host build). Features native; no default features; locked/offline; RustRed paths override recorded in build commands.",
+    "final_plain": {
+      "command": [
+        "/nix/store/z3qwljip4pf9nzyx7w5ri6942ifsrkys-maturin-1.15.0/bin/maturin",
+        "build",
+        "--release",
+        "--no-default-features",
+        "--features",
+        "native",
+        "--locked",
+        "--offline",
+        "--config",
+        "paths=[\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-core\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-order\",\"/tmp/simplify-algebra-rename/rustred-committed/crates/rustred-feynkit\"]",
+        "--interpreter",
+        "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+        "--out",
+        "/tmp/alias-ladder/plain-extension/wheels"
+      ],
+      "cwd": "/common/dev/symbolica-community/main",
+      "started_utc": "2026-09-30T14:57:01.972855+00:00",
+      "jobs": 4,
+      "log": "/tmp/alias-ladder/plain-extension/build.log",
+      "stub_sha256": {
+        "/common/dev/gammaloop/feynkit-rich-display/docs/api/python/spynso3.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab",
+        "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab",
+        "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab"
+      },
+      "lock_sha256": {
+        "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "6d0e8d91d8d5c6a5e927d68ef4971460908403c3639c1590a6102f2336b86efe",
+        "/common/dev/symbolica-community/main/Cargo.lock": "206217e7632973462fa3236a3e90a0316dde054b9b88679830b2bf7ec36be4d6"
+      },
+      "environment": {
+        "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "python": "Python 3.11.16",
+        "maturin": "maturin 1.15.0",
+        "cpu": "AMD EPYC 9754 128-Core Processor",
+        "profile": "release",
+        "features": [
+          "native"
+        ]
+      },
+      "exit_code": 0,
+      "seconds": 313.76486261514947,
+      "sources_changed": [],
+      "wheel": "/tmp/alias-ladder/plain-extension/wheels/symbolica-3.0.1-cp311-abi3-linux_x86_64.whl",
+      "wheel_sha256": "5f9435590cb036c5ced6341c287b751c39207489347f24067db0a23270c9bf3b",
+      "core": "/tmp/alias-ladder/plain-extension/python/symbolica/core.abi3.so",
+      "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+      "source_manifest_sha256": "3a07eb34f868bbeb02a545da9cfcf46f99c846727f48cf4b8c662226dc3a42f6",
+      "source_manifest": {
+        "path": "/tmp/alias-ladder/plain-extension/build.json",
+        "sha256": "5c4635b3258ae15e293441dfd047bac90d9e82962abf198aa46fc9e8a7661ffd",
+        "bytes": 57094
+      },
+      "post_build_audit": {
+        "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+        "build_started_utc": "2026-09-30T14:57:01.972855+00:00",
+        "root_rust_sources_changed": [],
+        "locks": {
+          "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": {
+            "before_sha256": "6d0e8d91d8d5c6a5e927d68ef4971460908403c3639c1590a6102f2336b86efe",
+            "after_sha256": "6d0e8d91d8d5c6a5e927d68ef4971460908403c3639c1590a6102f2336b86efe",
+            "equal": true
+          },
+          "/common/dev/symbolica-community/main/Cargo.lock": {
+            "before_sha256": "206217e7632973462fa3236a3e90a0316dde054b9b88679830b2bf7ec36be4d6",
+            "after_sha256": "206217e7632973462fa3236a3e90a0316dde054b9b88679830b2bf7ec36be4d6",
+            "equal": true
+          }
+        },
+        "manifests_and_host_rust": {
+          "/common/dev/gammaloop/feynkit-rich-display/Cargo.toml": {
+            "sha256": "46faba770c4b4b1478f3a4ca5872e291b39fa76051571165555458b5f4024114",
+            "mtime_utc": "2026-09-29T12:33:29.164198+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/Cargo.toml": {
+            "sha256": "f1705bf05bc635267417d7e7a7cebfca78385b7c4ef206a3230c6ff40ab28e20",
+            "mtime_utc": "2026-09-30T09:59:17.107151+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/pyproject.toml": {
+            "sha256": "bd0d12212f7d475ff50fa8f8165bdad8a3cc9d7f4691d1c314390e1bcf0934a9",
+            "mtime_utc": "2026-09-29T12:03:23.562957+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/src/bin/stub_gen.rs": {
+            "sha256": "73f2915cc3d4e5dcd47fd4750c19dbb0fa106a4ad9856f3edba63a314c65edf0",
+            "mtime_utc": "2026-09-29T14:54:15.982733+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/src/citations.rs": {
+            "sha256": "4ef8715b3ac099e01a9634d7c04c35473642e56de4dfe67d987ad5837c0a7a2e",
+            "mtime_utc": "2026-09-29T14:57:48.453326+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/src/hep.rs": {
+            "sha256": "42f255be3583d57367dad1af387e2b13b66d27930842ef2373b60a974cb842e2",
+            "mtime_utc": "2026-09-29T14:06:48.838105+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/src/lib.rs": {
+            "sha256": "af7f6d54b6660a5a97124d62f91702e2448fcb1a35a9866b51f02c1cb459209f",
+            "mtime_utc": "2026-09-29T14:57:48.452326+00:00",
+            "modified_after_build_started": false
+          },
+          "/common/dev/symbolica-community/main/src/oneloop.rs": {
+            "sha256": "e95d7bfa1a2e4349e32b9de2681f01ecaac09ba28e6db24d4061b06a847d4bef",
+            "mtime_utc": "2026-09-29T12:14:50.307954+00:00",
+            "modified_after_build_started": false
+          }
+        },
+        "host_dependency_file": "/common/dev/symbolica-community/main/target/release/libsymbolica_community.d",
+        "host_rust_in_dependency_file": {
+          "/common/dev/symbolica-community/main/src/bin/stub_gen.rs": false,
+          "/common/dev/symbolica-community/main/src/citations.rs": true,
+          "/common/dev/symbolica-community/main/src/hep.rs": true,
+          "/common/dev/symbolica-community/main/src/lib.rs": true,
+          "/common/dev/symbolica-community/main/src/oneloop.rs": true
+        },
+        "limitation": "Host source and manifest hashes were not captured at build start; modification times and dependency-file membership are recorded without claiming an unavailable before/after content comparison."
+      }
+    }
+  },
+  "archived_original_inputs": [
+    {
+      "case": "quark",
+      "source_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+      "settings": {
+        "gamma": true,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": 128
+      },
+      "core_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+      "phases": {
+        "model": 0.002981708850711584,
+        "generation": 0.17774793040007353,
+        "numerator": 0.002054455690085888,
+        "admission": 0.0011176341213285923,
+        "projection_split": 0.0030479487031698227,
+        "simplify_algebra": 31.200738267973065,
+        "explicit_expansion_to_scalar": 0.5930756242014468,
+        "continuous_reduction_to_expanded_scalar": 31.79383266204968,
+        "completed_rerun": 1.4950055629014969e-05
+      },
+      "terms": 525,
+      "exact_equal": true,
+      "status": "ReductionStatus.Complete",
+      "peak_rss_kib": 534120,
+      "dummy_relabels": 0,
+      "preliminary_contract": false,
+      "samples": 1,
+      "note": "Single sample, quark then gluon in one separate archived process; unpinned shared host. Launch/import excluded, explicit scalar expansion included. Peak RSS is process cumulative; raw alias materialization was not requested.",
+      "aliases_created": 8831,
+      "serialized_owner_bytes": 2535604,
+      "model_to_expanded_result_phase_sum": 31.98078233981505
+    },
+    {
+      "case": "gluon",
+      "source_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+      "settings": {
+        "gamma": false,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": 128
+      },
+      "core_sha256": "344a794264bf326871ff19648b8b78cbb91efcea0bce062ae366fd198f52be20",
+      "phases": {
+        "model": 0.003104418981820345,
+        "generation": 0.07783964090049267,
+        "numerator": 0.0045832740142941475,
+        "admission": 0.0041353520937263966,
+        "projection_split": 0.008410454727709293,
+        "simplify_algebra": 0.19946847716346383,
+        "explicit_expansion_to_scalar": 7.95866788411513,
+        "continuous_reduction_to_expanded_scalar": 8.158212292008102,
+        "completed_rerun": 5.35803847014904e-05
+      },
+      "terms": 6001,
+      "exact_equal": true,
+      "status": "ReductionStatus.Complete",
+      "peak_rss_kib": 790760,
+      "dummy_relabels": 0,
+      "preliminary_contract": false,
+      "samples": 1,
+      "note": "Single sample, quark then gluon in one separate archived process; unpinned shared host. Launch/import excluded, explicit scalar expansion included. Peak RSS is process cumulative; raw alias materialization was not requested.",
+      "aliases_created": 616,
+      "serialized_owner_bytes": 261717,
+      "model_to_expanded_result_phase_sum": 8.256285432726145
+    }
+  ],
+  "plain_baseline_quark": {
+    "source_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+    "core_sha256": "87425e2b51bfdeb87a785b0f1507976063522d442bb20dc5933cb297f2e265a3",
+    "settings": {
+      "gamma": true,
+      "color": false,
+      "epsilon": false,
+      "contract": "dots",
+      "max_steps_per_domain": 128
+    },
+    "phases": {
+      "imports": 0.005997678264975548,
+      "model_initialization": 0.0029180599376559258,
+      "diagram_generation": 0.17653983598574996,
+      "numerator_building": 0.0020571062341332436,
+      "admission_and_dimension": 0.0011372738517820835,
+      "projection_and_split": 0.0031621200032532215,
+      "reference_loading": 0.010246401187032461
+    },
+    "samples": [
+      {
+        "sample": 0,
+        "kind": "first",
+        "reduction_seconds": 10.991406957618892,
+        "explicit_expansion_seconds": 0.04264654219150543,
+        "combined_seconds": 11.034053499810398,
+        "status": "ReductionStatus.Complete",
+        "exact_equal": true,
+        "terms": 525
+      },
+      {
+        "sample": 1,
+        "kind": "warmed",
+        "reduction_seconds": 10.905386632774025,
+        "explicit_expansion_seconds": 0.04335145419463515,
+        "combined_seconds": 10.94873808696866,
+        "status": "ReductionStatus.Complete",
+        "exact_equal": true,
+        "terms": 525
+      },
+      {
+        "sample": 2,
+        "kind": "warmed",
+        "reduction_seconds": 10.902952136937529,
+        "explicit_expansion_seconds": 0.04268481209874153,
+        "combined_seconds": 10.94563694903627,
+        "status": "ReductionStatus.Complete",
+        "exact_equal": true,
+        "terms": 525
+      }
+    ],
+    "warmed_reduction_mean": 10.904169384855777,
+    "warmed_expansion_mean": 0.04301813314668834,
+    "full_scalar_prefactor": true,
+    "dummy_relabels": 0,
+    "preliminary_contract": false,
+    "numerical_routing": "original edge momenta; notebook routing follows the measured reduction/expansion",
+    "reference": "/tmp/plain-quark-plain-128.expr",
+    "note": "2 warmed samples after first operation; import/setup/admission separated; interpreter process launch excluded; ordinary system load uncontrolled"
+  },
+  "plain_baseline_gluon": {
+    "source_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+    "core_sha256": "87425e2b51bfdeb87a785b0f1507976063522d442bb20dc5933cb297f2e265a3",
+    "rows": [
+      {
+        "route": "original",
+        "iteration": 1,
+        "seconds": 0.22887526405975223,
+        "status": "ReductionStatus.Capped",
+        "same_as_previous": false,
+        "readmission_seconds": 0.0820449129678309,
+        "same_interface": true,
+        "bytes": 1562826
+      },
+      {
+        "route": "original",
+        "iteration": 2,
+        "seconds": 14.35569723509252,
+        "status": "ReductionStatus.Complete",
+        "same_as_previous": false,
+        "readmission_seconds": 1.113811647053808,
+        "same_interface": true,
+        "bytes": 70624820,
+        "expansion_seconds": 0.8687579641118646,
+        "term_count": 6001,
+        "matches_reference": true,
+        "peak_rss_kib": 891772,
+        "rerun_seconds": 0.0020819264464080334,
+        "rerun_same": true,
+        "rerun_complete": true
+      },
+      {
+        "route": "capped_continuation",
+        "iteration": 1,
+        "seconds": 14.420180710963905,
+        "status": "ReductionStatus.Complete",
+        "same_as_previous": false,
+        "readmission_seconds": 1.1126448139548302,
+        "same_interface": true,
+        "bytes": 70624820,
+        "expansion_seconds": 0.8198772626928985,
+        "term_count": 6001,
+        "matches_reference": true,
+        "peak_rss_kib": 1205292,
+        "rerun_seconds": 0.1043602810241282,
+        "rerun_same": true,
+        "rerun_complete": true
+      }
+    ],
+    "settings": {
+      "gamma": false,
+      "color": false,
+      "epsilon": false,
+      "contract": "dots",
+      "max_steps_per_domain": 128
+    },
+    "timing_note": "Sum original route iterations and final expansion for comparable computation. Readmission checks are independent verification, outside those timers. Capped continuation is an exact partial-result route, not a fresh original-input run.",
+    "original_reduction_plus_expansion_seconds": 15.453330463264138,
+    "frontier_note": "The cap was a 64 MiB estimated frontier bound, not a measured resident-memory limit.",
+    "bytes_field_note": "Rows.bytes is the number of characters in format_plain(), not serialized Atom bytes or resident memory."
+  },
+  "quark_controlled_matrix": {
+    "metadata": {
+      "source_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+      "core_sha256": "87425e2b51bfdeb87a785b0f1507976063522d442bb20dc5933cb297f2e265a3",
+      "settings": {
+        "gamma": true,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": 128
+      },
+      "setup_phases": {
+        "imports": 0.005805187858641148,
+        "model_initialization": 0.0028861393220722675,
+        "diagram_generation": 0.16268563270568848,
+        "numerator_building": 0.0023880470544099808,
+        "admission_and_dimension": 0.0013216841034591198,
+        "projection_and_split": 0.0034255306236445904,
+        "reference_loading": 0.010473321657627821
+      },
+      "index_mapping": [
+        [
+          "gammalooprs::hedge(0,1)",
+          "quark_matrix::index0"
+        ],
+        [
+          "gammalooprs::hedge(1,1)",
+          "quark_matrix::index1"
+        ],
+        [
+          "gammalooprs::hedge(10,1)",
+          "quark_matrix::index2"
+        ],
+        [
+          "gammalooprs::hedge(11,1)",
+          "quark_matrix::index3"
+        ],
+        [
+          "gammalooprs::hedge(12,1)",
+          "quark_matrix::index4"
+        ],
+        [
+          "gammalooprs::hedge(13,1)",
+          "quark_matrix::index5"
+        ],
+        [
+          "gammalooprs::hedge(14,1)",
+          "quark_matrix::index6"
+        ],
+        [
+          "gammalooprs::hedge(15,1)",
+          "quark_matrix::index7"
+        ],
+        [
+          "gammalooprs::hedge(16,1)",
+          "quark_matrix::index8"
+        ],
+        [
+          "gammalooprs::hedge(17,1)",
+          "quark_matrix::index9"
+        ],
+        [
+          "gammalooprs::hedge(18,1)",
+          "quark_matrix::index10"
+        ],
+        [
+          "gammalooprs::hedge(19,1)",
+          "quark_matrix::index11"
+        ],
+        [
+          "gammalooprs::hedge(2,1)",
+          "quark_matrix::index12"
+        ],
+        [
+          "gammalooprs::hedge(20,1)",
+          "quark_matrix::index13"
+        ],
+        [
+          "gammalooprs::hedge(21,1)",
+          "quark_matrix::index14"
+        ],
+        [
+          "gammalooprs::hedge(22,1)",
+          "quark_matrix::index15"
+        ],
+        [
+          "gammalooprs::hedge(23,1)",
+          "quark_matrix::index16"
+        ],
+        [
+          "gammalooprs::hedge(3,1)",
+          "quark_matrix::index17"
+        ],
+        [
+          "gammalooprs::hedge(4,1)",
+          "quark_matrix::index18"
+        ],
+        [
+          "gammalooprs::hedge(5,1)",
+          "quark_matrix::index19"
+        ],
+        [
+          "gammalooprs::hedge(6,1)",
+          "quark_matrix::index20"
+        ],
+        [
+          "gammalooprs::hedge(7,1)",
+          "quark_matrix::index21"
+        ],
+        [
+          "gammalooprs::hedge(8,1)",
+          "quark_matrix::index22"
+        ],
+        [
+          "gammalooprs::hedge(9,1)",
+          "quark_matrix::index23"
+        ]
+      ],
+      "after_contract_labels": [
+        "gammalooprs::hedge(1,1)",
+        "gammalooprs::hedge(11,1)",
+        "gammalooprs::hedge(21,1)",
+        "gammalooprs::hedge(23,1)"
+      ],
+      "contract_changes_expression": true,
+      "original_bytes": 1616,
+      "precontracted_bytes": 554,
+      "source_file": "/tmp/alias-ladder/quark-matrix-20260930/original.bin",
+      "full_prefactor": true,
+      "dimension": "quark_loop_ladder::D",
+      "no_expansion_before_reduction": true
+    },
+    "rows": [
+      {
+        "case": "pre0_atomic0",
+        "kind": "warmup",
+        "stages": {
+          "initial_readmission": 0.0006971019320189953,
+          "precontract": 0,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 11.21225243480876,
+          "expansion": 0.04194357991218567
+        },
+        "total_seconds": 11.254893116652966,
+        "input_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+        "input_bytes": 1616,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre0_atomic0",
+        "kind": "sample",
+        "stages": {
+          "initial_readmission": 0.0006074518896639347,
+          "precontract": 0,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 11.02825918700546,
+          "expansion": 0.0420114197768271
+        },
+        "total_seconds": 11.070878058671951,
+        "input_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+        "input_bytes": 1616,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre1_atomic0",
+        "kind": "warmup",
+        "stages": {
+          "initial_readmission": 0.0006120721809566021,
+          "precontract": 0.0019344962202012539,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 10.983431227970868,
+          "expansion": 0.04193534003570676
+        },
+        "total_seconds": 11.027913136407733,
+        "input_sha256": "e06f69e1f40087ac7ce83d4a3a2d52aaf308a970301b980cc60009207f69ba96",
+        "input_bytes": 554,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre1_atomic0",
+        "kind": "sample",
+        "stages": {
+          "initial_readmission": 0.0006136316806077957,
+          "precontract": 0.0019287560135126114,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 11.020664444193244,
+          "expansion": 0.04201114038005471
+        },
+        "total_seconds": 11.065217972267419,
+        "input_sha256": "e06f69e1f40087ac7ce83d4a3a2d52aaf308a970301b980cc60009207f69ba96",
+        "input_bytes": 554,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre0_atomic1",
+        "kind": "warmup",
+        "stages": {
+          "initial_readmission": 0.0006128819659352303,
+          "precontract": 0,
+          "relabel": 0.00041536102071404457,
+          "relabel_readmission": 0.0003684908151626587,
+          "reduction": 0.10313082858920097,
+          "expansion": 0.04719858570024371
+        },
+        "total_seconds": 0.15172614809125662,
+        "input_sha256": "f178fab0725b8cafba86b6a8e1be0f5d1dc419dedab78a205c2149edc83d2ffc",
+        "input_bytes": 1232,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre0_atomic1",
+        "kind": "sample",
+        "stages": {
+          "initial_readmission": 0.000578342005610466,
+          "precontract": 0,
+          "relabel": 0.0003938809968531132,
+          "relabel_readmission": 0.0003782208077609539,
+          "reduction": 0.10396847082301974,
+          "expansion": 0.047554886899888515
+        },
+        "total_seconds": 0.1528738015331328,
+        "input_sha256": "f178fab0725b8cafba86b6a8e1be0f5d1dc419dedab78a205c2149edc83d2ffc",
+        "input_bytes": 1232,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre1_atomic1",
+        "kind": "warmup",
+        "stages": {
+          "initial_readmission": 0.0005718818865716457,
+          "precontract": 0.0018870350904762745,
+          "relabel": 0.00012145098298788071,
+          "relabel_readmission": 0.00024055084213614464,
+          "reduction": 0.09676630888134241,
+          "expansion": 0.047215175814926624
+        },
+        "total_seconds": 0.14680240349844098,
+        "input_sha256": "859eea70665cefd7b88f7d1a831882990b65177ce8a3bfc823e58b0571fb6fa3",
+        "input_bytes": 490,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre1_atomic1",
+        "kind": "sample",
+        "stages": {
+          "initial_readmission": 0.0005829022265970707,
+          "precontract": 0.0018733763135969639,
+          "relabel": 0.00012223003432154655,
+          "relabel_readmission": 0.00022013112902641296,
+          "reduction": 0.09634306794032454,
+          "expansion": 0.0471663661301136
+        },
+        "total_seconds": 0.14630807377398014,
+        "input_sha256": "859eea70665cefd7b88f7d1a831882990b65177ce8a3bfc823e58b0571fb6fa3",
+        "input_bytes": 490,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      }
+    ],
+    "clock_boundary": "total_seconds sums initial readmission, optional preliminary contraction, optional relabel/readmission, reduction, and explicit expansion. Setup is separate.",
+    "label_note": "Atomic variant replaces all 24 admitted hedge(owner,local) labels. Preliminary contraction leaves 4 of those labels; historical ~95 ms demonstration relabelled those 4 after contraction.",
+    "conclusion": "Precontraction alone retains ~11 s cost; atomic labels remove it with or without precontraction. All routes preserve the complete scalar prefactor and match the same 525-term oracle."
+  },
+  "quark_profiles": {
+    "command": [
+      "/nix/store/7ccpnz8xkn5qsyw8nkz998vjmb6jpl49-perf-linux-6.19.6/bin/perf",
+      "record",
+      "-e",
+      "cpu-clock:u",
+      "-F",
+      "99",
+      "--call-graph",
+      "dwarf,65528",
+      "--delay=-1",
+      "--control=fifo:/tmp/alias-ladder/quark-matrix-20260930/pre0_atomic0.control,/tmp/alias-ladder/quark-matrix-20260930/pre0_atomic0.ack",
+      "-o",
+      "/tmp/alias-ladder/quark-matrix-20260930/pre0_atomic0.data",
+      "--",
+      "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+      "/tmp/alias-ladder/quark-matrix-20260930/profile-driver.py",
+      "pre0_atomic0",
+      "/tmp/alias-ladder/quark-matrix-20260930/pre0_atomic0.control",
+      "/tmp/alias-ladder/quark-matrix-20260930/pre0_atomic0.ack"
+    ],
+    "summary": {
+      "pre0_atomic0": {
+        "samples": 963,
+        "inclusive": {
+          "observation_updated": {
+            "samples": 437,
+            "percent": 45.37902388369678
+          },
+          "observation_scan_regions": {
+            "samples": 479,
+            "percent": 49.740394600207686
+          },
+          "observe_replacement": {
+            "samples": 437,
+            "percent": 45.37902388369678
+          },
+          "prerequisite_scopes": {
+            "samples": 280,
+            "percent": 29.075804776739357
+          },
+          "dirac_terminal": {
+            "samples": 3,
+            "percent": 0.3115264797507788
+          },
+          "dirac_generic_trace": {
+            "samples": 3,
+            "percent": 0.3115264797507788
+          },
+          "dirac_rewrite": {
+            "samples": 2,
+            "percent": 0.20768431983385255
+          },
+          "interface_inference": {
+            "samples": 147,
+            "percent": 15.264797507788161
+          },
+          "contract_factorized": {
+            "samples": 3,
+            "percent": 0.3115264797507788
+          },
+          "alpha_collection": {
+            "samples": 0,
+            "percent": 0.0
+          },
+          "dot_normalization": {
+            "samples": 20,
+            "percent": 2.0768431983385254
+          },
+          "all_observation": {
+            "samples": 645,
+            "percent": 66.97819314641744
+          }
+        }
+      },
+      "pre0_atomic1": {
+        "samples": 96,
+        "inclusive": {
+          "observation_updated": {
+            "samples": 1,
+            "percent": 1.0416666666666667
+          },
+          "observation_scan_regions": {
+            "samples": 1,
+            "percent": 1.0416666666666667
+          },
+          "observe_replacement": {
+            "samples": 1,
+            "percent": 1.0416666666666667
+          },
+          "prerequisite_scopes": {
+            "samples": 0,
+            "percent": 0.0
+          },
+          "dirac_terminal": {
+            "samples": 4,
+            "percent": 4.166666666666667
+          },
+          "dirac_generic_trace": {
+            "samples": 4,
+            "percent": 4.166666666666667
+          },
+          "dirac_rewrite": {
+            "samples": 0,
+            "percent": 0.0
+          },
+          "interface_inference": {
+            "samples": 0,
+            "percent": 0.0
+          },
+          "contract_factorized": {
+            "samples": 1,
+            "percent": 1.0416666666666667
+          },
+          "alpha_collection": {
+            "samples": 0,
+            "percent": 0.0
+          },
+          "dot_normalization": {
+            "samples": 80,
+            "percent": 83.33333333333333
+          },
+          "all_observation": {
+            "samples": 18,
+            "percent": 18.75
+          }
+        }
+      }
+    },
+    "note": "99 Hz CPU-clock userspace samples with DWARF callgraphs; only the reduction window sampled. Inclusive categories overlap and must not be added. The short atomic route repeats reduction to collect samples. Zero lost samples reported by perf."
+  },
+  "intermediate_quark_default_budget": {
+    "core_sha256": "5b8c459e123079f14c8e4b2dc022bc5beffadb128b3d3210101930460a1634e3",
+    "source_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+    "settings": {
+      "gamma": true,
+      "color": false,
+      "epsilon": false,
+      "contract": "dots"
+    },
+    "default_max_steps_per_domain": 16,
+    "setup_phases": {
+      "imports": 0.006116847973316908,
+      "model_initialization": 0.002999778836965561,
+      "diagram_generation": 0.1788821630179882,
+      "numerator_building": 0.0021081799641251564,
+      "admission_and_dimension": 0.001178199891000986,
+      "projection_and_split": 0.003238359000533819,
+      "reference_loading": 0.009844078216701746
+    },
+    "rows": [
+      {
+        "case": "pre0_atomic0",
+        "kind": "warmup",
+        "stages": {
+          "initial_readmission": 0.0006563998758792877,
+          "precontract": 0,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 0.11594400322064757,
+          "expansion": 0.04786805296316743
+        },
+        "total_seconds": 0.1644684560596943,
+        "input_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+        "input_bytes": 1616,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      },
+      {
+        "case": "pre0_atomic0",
+        "kind": "sample",
+        "stages": {
+          "initial_readmission": 0.0006060800515115261,
+          "precontract": 0,
+          "relabel": 0,
+          "relabel_readmission": 0,
+          "reduction": 0.11613272177055478,
+          "expansion": 0.04821669263765216
+        },
+        "total_seconds": 0.16495549445971847,
+        "input_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+        "input_bytes": 1616,
+        "status": "ReductionStatus.Complete",
+        "exact_reference_equal": true,
+        "terms": 525
+      }
+    ],
+    "status": "Verified intermediate candidate, not the final combined build. No preliminary contraction, dummy relabelling, or budget increase."
+  },
+  "historical_comparison_limits": [
+    "The ~0.2 s archived gluon figure stops at alias definitions; explicit final expansion adds ~7.96 s on this exact generated input.",
+    "The ~95 ms archived quark demonstration used preliminary contraction and atomic dummy relabelling, not the original structured labels.",
+    "Commit90f1a6e752161c243f0fe51d3294b21602fcce08 native trusted-gamma measurements exclude admission/final alias resolution and do not measure these generated ladders.",
+    "Authored GluonLadder and external-polarization fixtures use different labels, routing, scalar factors and final term counts; their sub-second FORM comparisons cannot be transferred to the generated6001-term case."
+  ],
+  "reproduction": {
+    "python": "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+    "licensed_environment_wrapper": "/tmp/hep-notebook-migration/run.py",
+    "archive_package_prefix": "/tmp/alias-ladder/facts-python/before-aliases",
+    "isolated_candidate_prefix": "/tmp/alias-ladder/plain-extension/python",
+    "steps": [
+      "Build the recorded source manifest and host dependency lock with the recorded maturin command before timing.",
+      "Use archived package prefix for the archived script; candidate scripts insert the isolated candidate prefix before importing symbolica. Never overwrite the installed module for a comparison.",
+      "Run the recorded script with the host Python and licensed environment wrapper; require both input format_plain SHA and exact output oracle before accepting a measurement.",
+      "For phase details inspect the script timers and profile command. Final notebook routing, display, independent output verification and cold compilation are excluded from reduction-plus-expansion totals."
+    ],
+    "scripts_and_results": [
+      {
+        "path": "/tmp/alias-ladder/matched-original-archive.py",
+        "sha256": "6162c62866b4ec0cf9141c928d19611e6ae27443be4583c7b8e5e67a86ca04be",
+        "bytes": 3467
+      },
+      {
+        "path": "/tmp/alias-ladder/matched-original-archive.json",
+        "sha256": "168de04b6a17ab9406d065b0ce901be8c6fddeb000ec2a70ca794130713decb1",
+        "bytes": 2450
+      },
+      {
+        "path": "/tmp/alias-ladder/plain-quark-production-timing.py",
+        "sha256": "1f85eb824ba9000fe62f066dc554671f1eea3086e48d7778414c46cabc6e236b",
+        "bytes": 3003
+      },
+      {
+        "path": "/tmp/alias-ladder/plain-quark-production-timing.json",
+        "sha256": "ed08b0d73ec40eb04410430441bc8bdbad7ec3a6414220c3d3b18e6e68e4cbd4",
+        "bytes": 2070
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-matrix-20260930/run.py",
+        "sha256": "07df31efe62186de3f2a837555cf0ca9efaa0cdf8591df51754f16afb15aa22d",
+        "bytes": 4492
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-matrix-20260930/metadata.json",
+        "sha256": "c533270204e8396370e93581b51245f200580e841c14bf7dd2e986db3042264a",
+        "bytes": 2960
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-matrix-20260930/results.json",
+        "sha256": "500f501e738cfb26ba3a4d6b95afe8d673c856c96792205ea1bfc789c78bb932",
+        "bytes": 4536
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-matrix-20260930/profile-summary.json",
+        "sha256": "09114ca8ad61e9b4c53566612de6ed13bb871365f1c73122f50199969f5396c0",
+        "bytes": 6800
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-candidate-default-5b8c459e/run.py",
+        "sha256": "5a9a9ac61d83602b2933831beabe407bd31d45f77b345c366a02fc20fe78de26",
+        "bytes": 4502
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-candidate-default-5b8c459e/metadata.json",
+        "sha256": "dbc2faef05301a993652133abc25087b5eed30063ceb0176bdf664df09bbd748",
+        "bytes": 2934
+      },
+      {
+        "path": "/tmp/alias-ladder/quark-candidate-default-5b8c459e/results.json",
+        "sha256": "85d52c2e28c6e2469ea81b401d556cdc21d93d4401d37d8e28dff35fe8afe420",
+        "bytes": 1078
+      },
+      {
+        "path": "/tmp/alias-ladder/plain-gluon-fixed.json",
+        "sha256": "19264e266aebe7ed02c22edac380bb05f4173b77a439ebf44094f51336dd86f2",
+        "bytes": 1508
+      }
+    ],
+    "artifacts_note": "Absolute artifact paths are retained on the capture host. The committed dataset preserves numeric records and hashes; large raw expression, binary, and perf artifacts are not vendored.",
+    "final_benchmark_script": {
+      "path": "/tmp/resolved-reduction/final_benchmark.py",
+      "sha256": "435bed157a09ade2e7ff49a42446e0c2a1274b3d3eb67a0f48867de48b77d7ca",
+      "bytes": 4796
+    },
+    "final_commands": [
+      [
+        "/nix/store/0r6k8xa2kgqyp3r4v2w7yrb80ma2iawm-python3-3.13.12/bin/python3",
+        "/tmp/hep-notebook-migration/run.py",
+        "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+        "/tmp/resolved-reduction/final_benchmark.py",
+        "quark"
+      ],
+      [
+        "/nix/store/0r6k8xa2kgqyp3r4v2w7yrb80ma2iawm-python3-3.13.12/bin/python3",
+        "/tmp/hep-notebook-migration/run.py",
+        "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+        "/tmp/resolved-reduction/final_benchmark.py",
+        "gluon"
+      ]
+    ]
+  },
+  "intermediate_quark_notebook": {
+    "seconds": 7.358536466956139,
+    "terms": 1386,
+    "color": "-1/54",
+    "core_sha256": "5b8c459e123079f14c8e4b2dc022bc5beffadb128b3d3210101930460a1634e3",
+    "notebook_sha256": "e0fbf01df10e7ff1c42757cd0a8188510d9aa8bfda22b2d7bcf14448b5ccf8c1",
+    "profiled_simplify_algebra_calls": 7,
+    "profiled_simplify_algebra_cumulative_seconds": 0.143,
+    "diagram_render_cumulative_seconds": 6.638,
+    "note": "Whole marimo app.run includes diagram rendering, prose/display construction, generation, colour, routing and explicit expansion. It is not the spacetime-reduction timing. Measurements used intermediate5b8 binary.",
+    "artifacts": [
+      {
+        "path": "/tmp/resolved-reduction/quark-notebook-profile.json",
+        "sha256": "5a0365717d7d249a7b4446e95272a0517e64117377c9337424e58ec9848d5c9e",
+        "bytes": 246
+      },
+      {
+        "path": "/tmp/resolved-reduction/quark-notebook-profile.log",
+        "sha256": "df3ec20c81bdfaee11df33a7882763368c4a908563925821da2e151208a9c1c4",
+        "bytes": 3904
+      }
+    ]
+  },
+  "native_streaming_before_limit_removal": {
+    "source_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+    "executable": "/common/dev/symbolica-community/main/target/debug/examples/contraction_phase_benchmark",
+    "executable_sha256": "b666fe6dbf9abdf4b17231a85161cba599e9518907461ec86474bb1d5ed49f8c",
+    "build_script": {
+      "path": "/tmp/alias-ladder/build-production-phase.py",
+      "sha256": "3d3cd07027de7e7a21ceb034dafe9c05bd230361622cce15a51df96d9e02c2b2",
+      "bytes": 1005
+    },
+    "profile": "dev, package idenso and spenso opt-level2; features reference-cases; locked offline with recorded RustRed path overrides",
+    "run_arguments": [
+      "--reduce-input",
+      "/tmp/alias-ladder/production-gluon.raw",
+      "/tmp/alias-ladder/gluon-native-final"
+    ],
+    "settings": {
+      "gamma": false,
+      "color": false,
+      "epsilon": false,
+      "contract": "dots",
+      "max_steps_per_domain": 128
+    },
+    "reduction_seconds": 0.343132771,
+    "status": "Complete",
+    "calls_to_completion": 1,
+    "atom_bytes": 906202,
+    "printed_characters": 2858500,
+    "explicit_expansion_seconds": 0.007568,
+    "terms": 6001,
+    "exact_saved_oracle_equal": true,
+    "stable_completed_rerun_seconds": 4.09e-05,
+    "instrumented_reduction": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 330186493,
+      "phases": {
+        "admission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "interface_discovery": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 106,
+          "inclusive_ns": 873585,
+          "outermost_ns": 873585
+        },
+        "planning": {
+          "calls": 1,
+          "inclusive_ns": 330185073,
+          "outermost_ns": 330185073
+        },
+        "shallow_graph": {
+          "calls": 121,
+          "inclusive_ns": 3228553,
+          "outermost_ns": 3228553
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 1,
+          "inclusive_ns": 259407182,
+          "outermost_ns": 259407182
+        },
+        "dummy_reservation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 4,
+          "inclusive_ns": 10962236,
+          "outermost_ns": 10962236
+        },
+        "contraction_states": {
+          "calls": 1,
+          "inclusive_ns": 258241951,
+          "outermost_ns": 258241951
+        },
+        "coefficient_merge": {
+          "calls": 17386,
+          "inclusive_ns": 156228665,
+          "outermost_ns": 156228665
+        },
+        "contraction_emission": {
+          "calls": 1,
+          "inclusive_ns": 15312019,
+          "outermost_ns": 15312019
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "simplify_algebra",
+          "status": "Complete"
+        }
+      ],
+      "frontiers": [
+        {
+          "selected": 10,
+          "states": 1,
+          "local_terms": 1,
+          "generated": 0,
+          "predicted_bytes": 6392,
+          "coefficient_bytes": 104,
+          "max_coefficient_bytes": 104,
+          "capped_by": null
+        },
+        {
+          "selected": 2,
+          "states": 1,
+          "local_terms": 6,
+          "generated": 1,
+          "predicted_bytes": 28144,
+          "coefficient_bytes": 104,
+          "max_coefficient_bytes": 104,
+          "capped_by": null
+        },
+        {
+          "selected": 11,
+          "states": 6,
+          "local_terms": 1,
+          "generated": 7,
+          "predicted_bytes": 38536,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104,
+          "capped_by": null
+        },
+        {
+          "selected": 12,
+          "states": 6,
+          "local_terms": 1,
+          "generated": 13,
+          "predicted_bytes": 31528,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104,
+          "capped_by": null
+        },
+        {
+          "selected": 3,
+          "states": 6,
+          "local_terms": 6,
+          "generated": 19,
+          "predicted_bytes": 101944,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104,
+          "capped_by": null
+        },
+        {
+          "selected": 13,
+          "states": 31,
+          "local_terms": 1,
+          "generated": 55,
+          "predicted_bytes": 137104,
+          "coefficient_bytes": 3688,
+          "max_coefficient_bytes": 472,
+          "capped_by": null
+        },
+        {
+          "selected": 14,
+          "states": 31,
+          "local_terms": 1,
+          "generated": 89,
+          "predicted_bytes": 132544,
+          "coefficient_bytes": 3592,
+          "max_coefficient_bytes": 472,
+          "capped_by": null
+        },
+        {
+          "selected": 5,
+          "states": 31,
+          "local_terms": 9,
+          "generated": 123,
+          "predicted_bytes": 572128,
+          "coefficient_bytes": 3592,
+          "max_coefficient_bytes": 472,
+          "capped_by": null
+        },
+        {
+          "selected": 18,
+          "states": 197,
+          "local_terms": 1,
+          "generated": 429,
+          "predicted_bytes": 780082,
+          "coefficient_bytes": 29096,
+          "max_coefficient_bytes": 952,
+          "capped_by": null
+        },
+        {
+          "selected": 20,
+          "states": 197,
+          "local_terms": 1,
+          "generated": 678,
+          "predicted_bytes": 749476,
+          "coefficient_bytes": 26858,
+          "max_coefficient_bytes": 888,
+          "capped_by": null
+        },
+        {
+          "selected": 8,
+          "states": 197,
+          "local_terms": 9,
+          "generated": 927,
+          "predicted_bytes": 727782,
+          "coefficient_bytes": 26858,
+          "max_coefficient_bytes": 888,
+          "capped_by": null
+        },
+        {
+          "selected": 16,
+          "states": 170,
+          "local_terms": 1,
+          "generated": 3168,
+          "predicted_bytes": 606546,
+          "coefficient_bytes": 82170,
+          "max_coefficient_bytes": 2468,
+          "capped_by": null
+        },
+        {
+          "selected": 4,
+          "states": 170,
+          "local_terms": 6,
+          "generated": 3792,
+          "predicted_bytes": 1606788,
+          "coefficient_bytes": 72068,
+          "max_coefficient_bytes": 2138,
+          "capped_by": null
+        },
+        {
+          "selected": 15,
+          "states": 712,
+          "local_terms": 1,
+          "generated": 7536,
+          "predicted_bytes": 2209544,
+          "coefficient_bytes": 386388,
+          "max_coefficient_bytes": 6884,
+          "capped_by": null
+        },
+        {
+          "selected": 9,
+          "states": 712,
+          "local_terms": 9,
+          "generated": 10890,
+          "predicted_bytes": 2113732,
+          "coefficient_bytes": 369512,
+          "max_coefficient_bytes": 6732,
+          "capped_by": null
+        },
+        {
+          "selected": 17,
+          "states": 356,
+          "local_terms": 1,
+          "generated": 41076,
+          "predicted_bytes": 2083848,
+          "coefficient_bytes": 838764,
+          "max_coefficient_bytes": 34784,
+          "capped_by": null
+        },
+        {
+          "selected": 7,
+          "states": 356,
+          "local_terms": 12,
+          "generated": 49216,
+          "predicted_bytes": 3279676,
+          "coefficient_bytes": 735986,
+          "max_coefficient_bytes": 32678,
+          "capped_by": null
+        },
+        {
+          "selected": 19,
+          "states": 143,
+          "local_terms": 1,
+          "generated": 146896,
+          "predicted_bytes": 4206202,
+          "coefficient_bytes": 2128238,
+          "max_coefficient_bytes": 62984,
+          "capped_by": null
+        },
+        {
+          "selected": 6,
+          "states": 143,
+          "local_terms": 12,
+          "generated": 170285,
+          "predicted_bytes": 6021408,
+          "coefficient_bytes": 1933538,
+          "max_coefficient_bytes": 61384,
+          "capped_by": null
+        },
+        {
+          "selected": 21,
+          "states": 26,
+          "local_terms": 1,
+          "generated": 450953,
+          "predicted_bytes": 4875214,
+          "coefficient_bytes": 2739390,
+          "max_coefficient_bytes": 339144,
+          "capped_by": null
+        }
+      ]
+    },
+    "instrumented_admission": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 5628133,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 5613114,
+          "outermost_ns": 5613114
+        },
+        "interface_discovery": {
+          "calls": 597,
+          "inclusive_ns": 11151932,
+          "outermost_ns": 4681333
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "planning": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "shallow_graph": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "dummy_reservation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 336,
+          "inclusive_ns": 176390,
+          "outermost_ns": 65000
+        },
+        "contraction_states": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "coefficient_merge": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction_emission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        }
+      },
+      "outcomes": [],
+      "frontiers": []
+    },
+    "timing_note": "The instrumented phase record is a separate second call on the same original input. Its nested inclusive phases overlap. Native opt-level2 timings are not Python release-module measurements. Explicit expansion/oracle check use a separate Python verification process, excluded from native reduction.",
+    "artifacts": [
+      {
+        "path": "/tmp/alias-ladder/gluon-native-final.log",
+        "sha256": "74b38cd98e0cdf140ada17b11383d516aca1ec0ab00e6e600279a593294a3831",
+        "bytes": 811
+      },
+      {
+        "path": "/tmp/alias-ladder/gluon-native-final/step-1.json",
+        "sha256": "f869eb731ad7b13813bce554b2456ce92a8111bbc2b44f0d7b594513fe24f84d",
+        "bytes": 4457
+      },
+      {
+        "path": "/tmp/alias-ladder/verify-native-gluon.py",
+        "sha256": "636eede7177b60b650e0e43c756942fa5d7425b32f07e09b1622f9d0cb4897bb",
+        "bytes": 1276
+      }
+    ],
+    "status_note": "Verified intermediate streaming-coefficient implementation, before removal of automatic work limits and widening shared tape exponents. Retained as phase evidence; not the final combined Python build."
+  },
+  "native_final_gluon": {
+    "source_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+    "executable": "/common/dev/symbolica-community/main/target/debug/examples/contraction_phase_benchmark",
+    "executable_sha256": "9eb835819bd95ec1e6e2d2c28a59e7eba96c9f928f2b7a7a28a20a8d1d0efc8e",
+    "build_script": {
+      "path": "/tmp/alias-ladder/build-production-phase.py",
+      "sha256": "3d3cd07027de7e7a21ceb034dafe9c05bd230361622cce15a51df96d9e02c2b2",
+      "bytes": 1005
+    },
+    "profile": "dev, package idenso and spenso opt-level2; features reference-cases; locked offline with recorded RustRed path overrides",
+    "run_arguments": [
+      "--reduce-input",
+      "/tmp/alias-ladder/production-gluon.raw",
+      "/tmp/alias-ladder/gluon-native-no-caps"
+    ],
+    "settings": {
+      "gamma": false,
+      "color": false,
+      "epsilon": false,
+      "contract": "dots",
+      "max_steps_per_domain": 128
+    },
+    "reduction_seconds": 0.356985789,
+    "status": "Complete",
+    "calls_to_completion": 1,
+    "atom_bytes": 906202,
+    "printed_characters": 2858500,
+    "explicit_expansion_seconds": 0.0079867328,
+    "terms": 6001,
+    "exact_saved_oracle_equal": true,
+    "stable_completed_rerun_seconds": 4.489e-05,
+    "instrumented_reduction": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 349858808,
+      "phases": {
+        "admission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "interface_discovery": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 106,
+          "inclusive_ns": 869822,
+          "outermost_ns": 869822
+        },
+        "planning": {
+          "calls": 1,
+          "inclusive_ns": 349857658,
+          "outermost_ns": 349857658
+        },
+        "shallow_graph": {
+          "calls": 121,
+          "inclusive_ns": 3890364,
+          "outermost_ns": 3890364
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 1,
+          "inclusive_ns": 279423055,
+          "outermost_ns": 279423055
+        },
+        "dummy_reservation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 4,
+          "inclusive_ns": 11218070,
+          "outermost_ns": 11218070
+        },
+        "contraction_states": {
+          "calls": 1,
+          "inclusive_ns": 277634842,
+          "outermost_ns": 277634842
+        },
+        "coefficient_merge": {
+          "calls": 17386,
+          "inclusive_ns": 168648223,
+          "outermost_ns": 168648223
+        },
+        "contraction_emission": {
+          "calls": 1,
+          "inclusive_ns": 16601259,
+          "outermost_ns": 16601259
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "simplify_algebra",
+          "status": "Complete"
+        }
+      ],
+      "frontiers": [
+        {
+          "selected": 10,
+          "states": 1,
+          "local_terms": 1,
+          "generated": 0,
+          "predicted_bytes": 6392,
+          "coefficient_bytes": 104,
+          "max_coefficient_bytes": 104
+        },
+        {
+          "selected": 2,
+          "states": 1,
+          "local_terms": 6,
+          "generated": 1,
+          "predicted_bytes": 28144,
+          "coefficient_bytes": 104,
+          "max_coefficient_bytes": 104
+        },
+        {
+          "selected": 11,
+          "states": 6,
+          "local_terms": 1,
+          "generated": 7,
+          "predicted_bytes": 38536,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104
+        },
+        {
+          "selected": 12,
+          "states": 6,
+          "local_terms": 1,
+          "generated": 13,
+          "predicted_bytes": 31528,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104
+        },
+        {
+          "selected": 3,
+          "states": 6,
+          "local_terms": 6,
+          "generated": 19,
+          "predicted_bytes": 101976,
+          "coefficient_bytes": 624,
+          "max_coefficient_bytes": 104
+        },
+        {
+          "selected": 13,
+          "states": 31,
+          "local_terms": 1,
+          "generated": 55,
+          "predicted_bytes": 137168,
+          "coefficient_bytes": 3720,
+          "max_coefficient_bytes": 504
+        },
+        {
+          "selected": 14,
+          "states": 31,
+          "local_terms": 1,
+          "generated": 89,
+          "predicted_bytes": 132608,
+          "coefficient_bytes": 3624,
+          "max_coefficient_bytes": 504
+        },
+        {
+          "selected": 5,
+          "states": 31,
+          "local_terms": 9,
+          "generated": 123,
+          "predicted_bytes": 572896,
+          "coefficient_bytes": 3624,
+          "max_coefficient_bytes": 504
+        },
+        {
+          "selected": 18,
+          "states": 197,
+          "local_terms": 1,
+          "generated": 429,
+          "predicted_bytes": 781476,
+          "coefficient_bytes": 29832,
+          "max_coefficient_bytes": 1080
+        },
+        {
+          "selected": 20,
+          "states": 197,
+          "local_terms": 1,
+          "generated": 678,
+          "predicted_bytes": 750792,
+          "coefficient_bytes": 27516,
+          "max_coefficient_bytes": 1000
+        },
+        {
+          "selected": 8,
+          "states": 197,
+          "local_terms": 9,
+          "generated": 927,
+          "predicted_bytes": 736264,
+          "coefficient_bytes": 27516,
+          "max_coefficient_bytes": 1000
+        },
+        {
+          "selected": 16,
+          "states": 170,
+          "local_terms": 1,
+          "generated": 3168,
+          "predicted_bytes": 620536,
+          "coefficient_bytes": 89828,
+          "max_coefficient_bytes": 3008
+        },
+        {
+          "selected": 4,
+          "states": 170,
+          "local_terms": 6,
+          "generated": 3792,
+          "predicted_bytes": 1659108,
+          "coefficient_bytes": 78360,
+          "max_coefficient_bytes": 2588
+        },
+        {
+          "selected": 15,
+          "states": 712,
+          "local_terms": 1,
+          "generated": 7536,
+          "predicted_bytes": 2298124,
+          "coefficient_bytes": 432376,
+          "max_coefficient_bytes": 9152
+        },
+        {
+          "selected": 9,
+          "states": 712,
+          "local_terms": 9,
+          "generated": 10890,
+          "predicted_bytes": 2363070,
+          "coefficient_bytes": 412064,
+          "max_coefficient_bytes": 8944
+        },
+        {
+          "selected": 17,
+          "states": 356,
+          "local_terms": 1,
+          "generated": 41076,
+          "predicted_bytes": 2457150,
+          "coefficient_bytes": 1039592,
+          "max_coefficient_bytes": 47864
+        },
+        {
+          "selected": 7,
+          "states": 356,
+          "local_terms": 12,
+          "generated": 49216,
+          "predicted_bytes": 4315800,
+          "coefficient_bytes": 908100,
+          "max_coefficient_bytes": 44948
+        },
+        {
+          "selected": 19,
+          "states": 143,
+          "local_terms": 1,
+          "generated": 146896,
+          "predicted_bytes": 5692172,
+          "coefficient_bytes": 2905668,
+          "max_coefficient_bytes": 87848
+        },
+        {
+          "selected": 6,
+          "states": 143,
+          "local_terms": 12,
+          "generated": 170285,
+          "predicted_bytes": 8486320,
+          "coefficient_bytes": 2638620,
+          "max_coefficient_bytes": 85608
+        },
+        {
+          "selected": 21,
+          "states": 26,
+          "local_terms": 1,
+          "generated": 450953,
+          "predicted_bytes": 7056796,
+          "coefficient_bytes": 3824636,
+          "max_coefficient_bytes": 474472
+        }
+      ]
+    },
+    "instrumented_admission": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 5801250,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 5776240,
+          "outermost_ns": 5776240
+        },
+        "interface_discovery": {
+          "calls": 597,
+          "inclusive_ns": 11155671,
+          "outermost_ns": 4685958
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "planning": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "shallow_graph": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "dummy_reservation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 336,
+          "inclusive_ns": 201859,
+          "outermost_ns": 84430
+        },
+        "contraction_states": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "coefficient_merge": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction_emission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        }
+      },
+      "outcomes": [],
+      "frontiers": []
+    },
+    "timing_note": "The instrumented phase record is a separate second call on the same original input. Its nested inclusive phases overlap. Native opt-level2 timings are not Python release-module measurements. Explicit expansion/oracle check use a separate Python verification process, excluded from native reduction.",
+    "artifacts": [
+      {
+        "path": "/tmp/alias-ladder/gluon-native-no-caps.log",
+        "sha256": "5c9e47942e1296478e73b3107cc616f0d3cac688cbfaaab642cdba22345f6a4b",
+        "bytes": 811
+      },
+      {
+        "path": "/tmp/alias-ladder/gluon-native-no-caps/step-1.json",
+        "sha256": "13fdde3ad4515b0d27796d8f071c910574cb68f420c90328c160942af8473e5d",
+        "bytes": 4121
+      },
+      {
+        "path": "/tmp/alias-ladder/verify-native-gluon.py",
+        "sha256": "636eede7177b60b650e0e43c756942fa5d7425b32f07e09b1622f9d0cb4897bb",
+        "bytes": 1276
+      }
+    ],
+    "maximum_estimated_workspace_bytes": 8486320,
+    "verifier_peak_rss_kib": 49932,
+    "rss_note": "This is the separate Python oracle verifier peak, not native contraction peak RSS."
+  },
+  "final_python": {
+    "quark": {
+      "case": "quark",
+      "source_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+      "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+      "settings": {
+        "gamma": true,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": 128
+      },
+      "phases": {
+        "imports": 0.021133361384272575,
+        "model_initialization": 0.0049085840582847595,
+        "diagram_generation": 0.17547000711783767,
+        "numerator_building": 0.004490673076361418,
+        "admission_and_dimension": 0.0013676043599843979,
+        "projection_and_split": 0.0037555210292339325,
+        "reference_loading": 0.0102653494104743
+      },
+      "samples": [
+        {
+          "sample": 0,
+          "kind": "first",
+          "reduction_seconds": 0.12119622016325593,
+          "expansion_seconds": 0.047609096858650446,
+          "combined_seconds": 0.16880531702190638,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 525,
+          "result_atom_bytes": 1387316,
+          "printed_characters": 3566135,
+          "rerun_seconds": 6.822077557444572e-05,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.05334618408232927,
+          "same_interface": true,
+          "peak_rss_kib": 64580
+        },
+        {
+          "sample": 1,
+          "kind": "warmed",
+          "reduction_seconds": 0.1088096140883863,
+          "expansion_seconds": 0.04657469503581524,
+          "combined_seconds": 0.15538430912420154,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 525,
+          "result_atom_bytes": 1387316,
+          "printed_characters": 3566135,
+          "rerun_seconds": 7.917964830994606e-05,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.05324407387524843,
+          "same_interface": true,
+          "peak_rss_kib": 68172
+        },
+        {
+          "sample": 2,
+          "kind": "warmed",
+          "reduction_seconds": 0.10492574190720916,
+          "expansion_seconds": 0.04712228709831834,
+          "combined_seconds": 0.1520480290055275,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 525,
+          "result_atom_bytes": 1387316,
+          "printed_characters": 3566135,
+          "rerun_seconds": 7.897987961769104e-05,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.05171884875744581,
+          "same_interface": true,
+          "peak_rss_kib": 71244
+        },
+        {
+          "sample": 3,
+          "kind": "default_budget",
+          "reduction_seconds": 0.10573640465736389,
+          "expansion_seconds": 0.04829628998413682,
+          "combined_seconds": 0.1540326946415007,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 525,
+          "result_atom_bytes": 1387316,
+          "printed_characters": 3566135,
+          "rerun_seconds": 8.381996303796768e-05,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.05363495461642742,
+          "same_interface": true,
+          "peak_rss_kib": 71244
+        }
+      ],
+      "warmed_reduction_mean": 0.10686767799779773,
+      "warmed_expansion_mean": 0.04684849106706679,
+      "full_scalar_prefactor": true,
+      "dummy_relabels": 0,
+      "preliminary_contract": false,
+      "note": "Identical generated source and settings to baseline; final extra sample uses default budget. Import/setup/admission separate. One process per case; peak RSS includes setup/oracle/checks. Shared-host load uncontrolled.",
+      "default_sample_settings": {
+        "gamma": true,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": null
+      },
+      "warmed_reduction_plus_expansion_mean": 0.15371616906486452,
+      "warmed_rerun_mean": 7.907976396381855e-05,
+      "model_to_expanded_result_phase_sum": 0.3437085587065667,
+      "phase_sum_note": "Sum of separately measured model/generation/numerator/admission/projection phases and warmed reduction+expansion. Not a contiguous full-app wall timer; diagram rendering and independent verification excluded.",
+      "result_record": {
+        "path": "/tmp/resolved-reduction/final-quark.json",
+        "sha256": "06d676130f8adc7287f1d79215203b853eff8eab6cef8a8610c0b336bf61079e",
+        "bytes": 3415
+      }
+    },
+    "gluon": {
+      "case": "gluon",
+      "source_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+      "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+      "settings": {
+        "gamma": false,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": 128
+      },
+      "phases": {
+        "imports": 0.006111667957156897,
+        "model_initialization": 0.003021299373358488,
+        "diagram_generation": 0.07793854270130396,
+        "numerator_building": 0.004352041985839605,
+        "admission_and_dimension": 0.003958251792937517,
+        "projection_and_split": 0.008330584038048983,
+        "reference_loading": 0.007365331053733826
+      },
+      "samples": [
+        {
+          "sample": 0,
+          "kind": "first",
+          "reduction_seconds": 0.25459770672023296,
+          "expansion_seconds": 0.007146331015974283,
+          "combined_seconds": 0.26174403773620725,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 6001,
+          "result_atom_bytes": 951622,
+          "printed_characters": 2858500,
+          "rerun_seconds": 6.313016638159752e-05,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.07534040464088321,
+          "same_interface": true,
+          "peak_rss_kib": 64568
+        },
+        {
+          "sample": 1,
+          "kind": "warmed",
+          "reduction_seconds": 0.24752280674874783,
+          "expansion_seconds": 0.007105989847332239,
+          "combined_seconds": 0.25462879659608006,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 6001,
+          "result_atom_bytes": 951622,
+          "printed_characters": 2858500,
+          "rerun_seconds": 0.00010963995009660721,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.07482178416103125,
+          "same_interface": true,
+          "peak_rss_kib": 71384
+        },
+        {
+          "sample": 2,
+          "kind": "warmed",
+          "reduction_seconds": 0.24700999492779374,
+          "expansion_seconds": 0.007331560831516981,
+          "combined_seconds": 0.2543415557593107,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 6001,
+          "result_atom_bytes": 951622,
+          "printed_characters": 2858500,
+          "rerun_seconds": 0.0001290612854063511,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.07455100305378437,
+          "same_interface": true,
+          "peak_rss_kib": 74456
+        },
+        {
+          "sample": 3,
+          "kind": "default_budget",
+          "reduction_seconds": 0.2436829749494791,
+          "expansion_seconds": 0.006974289659410715,
+          "combined_seconds": 0.2506572646088898,
+          "status": "ReductionStatus.Complete",
+          "exact_equal": true,
+          "terms": 6001,
+          "result_atom_bytes": 951622,
+          "printed_characters": 2858500,
+          "rerun_seconds": 0.0001238398253917694,
+          "rerun_same": true,
+          "rerun_complete": true,
+          "readmission_seconds": 0.07467816397547722,
+          "same_interface": true,
+          "peak_rss_kib": 74456
+        }
+      ],
+      "warmed_reduction_mean": 0.24726640083827078,
+      "warmed_expansion_mean": 0.00721877533942461,
+      "full_scalar_prefactor": true,
+      "dummy_relabels": 0,
+      "preliminary_contract": false,
+      "note": "Identical generated source and settings to baseline; final extra sample uses default budget. Import/setup/admission separate. One process per case; peak RSS includes setup/oracle/checks. Shared-host load uncontrolled.",
+      "default_sample_settings": {
+        "gamma": false,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots",
+        "max_steps_per_domain": null
+      },
+      "warmed_reduction_plus_expansion_mean": 0.2544851761776954,
+      "warmed_rerun_mean": 0.00011935061775147915,
+      "model_to_expanded_result_phase_sum": 0.35208589606918395,
+      "phase_sum_note": "Sum of separately measured model/generation/numerator/admission/projection phases and warmed reduction+expansion. Not a contiguous full-app wall timer; diagram rendering and independent verification excluded.",
+      "result_record": {
+        "path": "/tmp/resolved-reduction/final-gluon.json",
+        "sha256": "1b328f8a8de3a9fdbbb098126d62cb8b9145c80980e9d2666d7c725f43dbdf33",
+        "bytes": 3419
+      }
+    }
+  },
+  "validation": {
+    "binding_rust_tests": 125,
+    "shared_tape_tests": 6,
+    "installed_python_tests": 103,
+    "pyright": "passed",
+    "ruff": "passed",
+    "rustfmt": "passed",
+    "clippy_idenso_all_targets_reference_cases": "passed",
+    "clippy_spynso3_lib_tests": "passed",
+    "generated_stub_copies_identical": true,
+    "generated_stub_check": "passed",
+    "changed_report_typst_compile": "passed",
+    "benchmark_json_parse_and_final_result_assertions": "passed",
+    "docs_builder": {
+      "status": "blocked by pre-existing unrelated provenance drift",
+      "note": "The registered gammaloop-architecture developer note expects a different hash for crates/gammaloop-api/src/python.rs. The current file and HEAD blob have the same hash, so this mismatch predates this change; the owner attestation was not modified.",
+      "expected_git_blob": "b3398b339c6f52399406f3882ec4b9b67343a22d",
+      "actual_and_parent_git_blob": "46d2cf2c0e2ea99234caa6d07050640d66f0cfa1",
+      "log": "/tmp/resolved-reduction/docs-builder-check.log"
+    },
+    "optimized_axial_and_reference_tests": {
+      "passed": 7,
+      "failed": 0,
+      "log": "/tmp/alias-ladder/plain-performance-axial.log"
+    },
+    "ordinary_idenso_tests": {
+      "passed": 803,
+      "timed_out": 1,
+      "skipped": 24,
+      "note": "The timed-out long axial oracle and two expensive axial cases passed in the optimized seven-test suite; other skips are existing ignored tests.",
+      "log": "/tmp/alias-ladder/plain-performance-all.log",
+      "run_id": "7eef1a63"
+    },
+    "higgs_and_generated_ladder_tests": 8,
+    "selected_notebook_and_api_tests": 75,
+    "actual_ladder_notebooks": 2,
+    "installed_production_checks": 4,
+    "clippy_spenso": "passed",
+    "final_source_and_install_verification": {
+      "record": {
+        "installed_core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+        "expected_core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+        "rust_sources_changed_after_build": [],
+        "stub_sha256": {
+          "/common/dev/gammaloop/feynkit-rich-display/docs/api/python/spynso3.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab",
+          "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi": "a73c3f8410d1f8bd2914ef14a55ef705fa1ccb02dfc91be87766598462854fab"
+        }
+      },
+      "path": "/tmp/alias-ladder/plain-extension/final-verification.json",
+      "sha256": "5e0149827750ed56994ecd2c6be75bd74968e98ecb7b5f128cf926ade7a4d150"
+    }
+  },
+  "final_notebooks": {
+    "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+    "results": [
+      {
+        "check": [
+          "-m",
+          "pytest",
+          "tests/test_hep_higgs_diphoton.py",
+          "tests/test_hep_generated_ladders.py",
+          "-q"
+        ],
+        "status": 0,
+        "seconds": 55.34368599206209,
+        "log": "/tmp/resolved-reduction/installed-notebooks-0.log"
+      },
+      {
+        "check": [
+          "-m",
+          "pytest",
+          "tests/test_hep_notebooks.py",
+          "-q",
+          "-k",
+          "current_tensor_api or (notebook_runs_from_clean_session and (gamma_simplification or color_algebra or color_fierz or Higgs_diphoton_decay or compton or tensor_reduction))"
+        ],
+        "status": 0,
+        "seconds": 16.194334802683443,
+        "log": "/tmp/resolved-reduction/installed-notebooks-1.log"
+      },
+      {
+        "check": "quark_loop_ladder",
+        "status": 0,
+        "seconds": 7.901301357895136,
+        "profiled": true,
+        "native_calls": {
+          "<method 'expandtabs' of 'str' objects>": {
+            "calls": 98,
+            "seconds": 2.6462000000000002e-05
+          },
+          "<method 'expand' of 'symbolica.core.Expression' objects>": {
+            "calls": 3,
+            "seconds": 0.006178455
+          },
+          "<method 'expand' of 'symbolica.community.tensor.TensorExpression' objects>": {
+            "calls": 2,
+            "seconds": 0.089808965
+          },
+          "<method 'simplify_algebra' of 'symbolica.community.tensor.TensorExpression' objects>": {
+            "calls": 2,
+            "seconds": 0.141567845
+          },
+          "<method 'expand_couplings' of 'symbolica.community.feynkit.Model' objects>": {
+            "calls": 1,
+            "seconds": 0.000619662
+          },
+          "<method 'render' of 'symbolica.community.feynkit.FeynmanDiagram' objects>": {
+            "calls": 1,
+            "seconds": 6.6391585630000005
+          },
+          "<method 'generate_diagrams' of 'symbolica.community.feynkit.Process' objects>": {
+            "calls": 1,
+            "seconds": 0.16509431500000002
+          }
+        },
+        "terms": 1386,
+        "color": "-1/54"
+      },
+      {
+        "check": "three_gluon_rung_ladder",
+        "status": 0,
+        "seconds": 2.9206149228848517,
+        "profiled": true,
+        "native_calls": {
+          "<method 'expandtabs' of 'str' objects>": {
+            "calls": 84,
+            "seconds": 1.6748e-05
+          },
+          "<method 'expand' of 'symbolica.core.Expression' objects>": {
+            "calls": 3,
+            "seconds": 0.024530561000000003
+          },
+          "<method 'expand' of 'symbolica.community.tensor.TensorExpression' objects>": {
+            "calls": 1,
+            "seconds": 0.0117893
+          },
+          "<method 'simplify_algebra' of 'symbolica.community.tensor.TensorExpression' objects>": {
+            "calls": 3,
+            "seconds": 2.389062071
+          },
+          "<method 'expand_couplings' of 'symbolica.community.feynkit.Model' objects>": {
+            "calls": 1,
+            "seconds": 0.0008516530000000001
+          },
+          "<method 'generate_diagrams' of 'symbolica.community.feynkit.Process' objects>": {
+            "calls": 1,
+            "seconds": 0.08262599500000001
+          }
+        },
+        "terms": 6001,
+        "color": "81"
+      },
+      {
+        "check": "installed_color_conjugation",
+        "status": 0,
+        "seconds": 0.11193605978041887,
+        "log": "/tmp/resolved-reduction/installed-installed_color_conjugation.log"
+      },
+      {
+        "check": "installed_color_fierz",
+        "status": 0,
+        "seconds": 0.09826887678354979,
+        "log": "/tmp/resolved-reduction/installed-installed_color_fierz.log"
+      },
+      {
+        "check": "installed_feyncalc_quark_scattering",
+        "status": 0,
+        "seconds": 2.734478217549622,
+        "log": "/tmp/resolved-reduction/installed-installed_feyncalc_quark_scattering.log"
+      },
+      {
+        "check": "installed_feyncalc_higgs_gluons",
+        "status": 0,
+        "seconds": 0.3785369866527617,
+        "log": "/tmp/resolved-reduction/installed-installed_feyncalc_higgs_gluons.log"
+      }
+    ],
+    "source_record": {
+      "path": "/tmp/resolved-reduction/installed-notebook-results.json",
+      "sha256": "2b46c8a1379553f3d3ee6d0e6679249ab1f15e4c9ca0800e641ac072515738a7"
+    },
+    "note": "Actual apps ran with the installed final module and no automatic cap/retry helpers. The gluon app retains the user exploratory full-numerator reduction in addition to the projected benchmark route; app timing must not be compared with projected reduction alone.",
+    "executed_snapshot_note": "These runs preceded the concurrent community change nqpkrrvpulko / fbe2b428df31 (parent ysroplun / d8a8acac6e66), which adds typed projector construction and expression-display cells. Those later edits were preserved and are not covered by these timings or validation claims.",
+    "saved_migration_inputs": [
+      {
+        "path": "/tmp/resolved-reduction/generated_ladder_helpers.py.before",
+        "sha256": "1d926bd989b45018e8c2b5160f71626fd9d78d74164820d96d7ccf37af08c309",
+        "bytes": 4395
+      },
+      {
+        "path": "/tmp/resolved-reduction/quark_loop_ladder.py.before",
+        "sha256": "e0fbf01df10e7ff1c42757cd0a8188510d9aa8bfda22b2d7bcf14448b5ccf8c1",
+        "bytes": 8525
+      },
+      {
+        "path": "/tmp/resolved-reduction/three_gluon_rung_ladder.py.before",
+        "sha256": "c17ae37ac4b01d25ab5ef7752927c725aa7e752d8dd0da5378f71a49913023f6",
+        "bytes": 6626
+      },
+      {
+        "path": "/tmp/resolved-reduction/update_notebooks.py",
+        "sha256": "5d3db17e79ff0282d8478003b527abc44bf9f80a2dfb72b7c7315dc5f0485400",
+        "bytes": 3235
+      },
+      {
+        "path": "/tmp/resolved-reduction/notebook-edits.json",
+        "sha256": "ce6f725db3e15efda208b6e1f19b48d5227826a2318588a6af80f6b6b9c7f58f",
+        "bytes": 829
+      }
+    ],
+    "saved_migration_note": "The .before files and update script preserve the migration input and transformations; notebook-edits.json records pre-format edit hashes, not a claim about the later concurrent checkout."
+  },
+  "supplemental_full_rank_gluon": {
+    "timing": {
+      "source_sha256": "05831e4bd3c78cae601cdd9eaa0cd4951e8632b5bed9609f683f214ff7722919",
+      "core_sha256": "afa62f3b4b8d0a37be7c4b2bf16eab1af386cf0f7daa8b446ff6deee1fcb662e",
+      "settings": {
+        "color": true,
+        "gamma": true,
+        "epsilon": false,
+        "contract": "fully",
+        "max_steps_per_domain": null
+      },
+      "rows": [
+        {
+          "sample": 0,
+          "seconds": 2.166041655000299,
+          "status": "ReductionStatus.Complete",
+          "rank": 4,
+          "bytes": 3315315
+        },
+        {
+          "sample": 1,
+          "seconds": 2.092677100095898,
+          "status": "ReductionStatus.Complete",
+          "rank": 4,
+          "bytes": 3315315
+        },
+        {
+          "sample": 2,
+          "seconds": 2.070301823783666,
+          "status": "ReductionStatus.Complete",
+          "rank": 4,
+          "bytes": 3315315
+        }
+      ]
+    },
+    "warmed_reduction_mean": 2.081489461939782,
+    "projection_certificate": {
+      "full_status": "ReductionStatus.Complete",
+      "projected_contraction_status": "ReductionStatus.Complete",
+      "exact_projected_oracle_equal": true,
+      "color_substitute_cof_dimension_invariants": true,
+      "lorentz_dimensions_unchanged": true,
+      "preserved_logical_slots": true,
+      "verification_seconds": 1.1954577891156077
+    },
+    "expected_projected_result": "81 times the exact 6001-term gluon spacetime oracle",
+    "conventions_note": "The timing probe uses default symbolic colour invariants. The separate exact projection certificate explicitly sets color_substitute_cof_dimension_invariants=True to match the existing SU(3), T_R=1/2 oracle. The initially unequal comparison mixed these conventions; the matched comparison is exactly zero. No production code change was needed.",
+    "timing_note": "Full admitted rank-four numerator, retaining both Lorentz and colour external ports; this is additional work beyond the projected scalar benchmark. Verification occurs separately from reduction timing.",
+    "artifacts": [
+      {
+        "path": "/tmp/resolved-reduction/full-gluon-probe.json",
+        "sha256": "d713156cdd1871214d2b5f9a011e88c3c6746607760d110d42c949deb169927c",
+        "bytes": 786
+      },
+      {
+        "path": "/tmp/resolved-reduction/full-gluon-projection-check.json",
+        "sha256": "d7143fd5c67dd344974685a13e40d2a5cf26f360a32a847dd339a3757fa1b10b",
+        "bytes": 324
+      },
+      {
+        "path": "/tmp/resolved-reduction/full_gluon_probe.py",
+        "sha256": "b7f82167e1f7e5d7913a3e635216426e6380117b367c45af9267fd91daa95485",
+        "bytes": 2785
+      },
+      {
+        "path": "/tmp/resolved-reduction/full_gluon_projection_check.py",
+        "sha256": "4875da8ef27795c31b41bf29f92a3a64eb8548e8b0d6912f7865a9ca96f6330d",
+        "bytes": 3167
+      }
+    ]
+  }
+}

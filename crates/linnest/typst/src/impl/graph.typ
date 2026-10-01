@@ -79,22 +79,6 @@
   none
 }
 
-#let _get-native-data(native-data, kind, index) = {
-  if kind == "graph" {
-    native-data.graph
-  } else if kind == "node" {
-    _array-at(native-data.nodes, index)
-  } else if kind == "edge" {
-    _array-at(native-data.edges, index)
-  } else if kind == "hedge" {
-    _array-at(native-data.hedges, index)
-  } else {
-    none
-  }
-}
-
-#let _clean-statements(statements) = statements
-
 #let _with-build-payload(item, data-key) = {
   let result = item
   let payload = (data-key: data-key)
@@ -1153,13 +1137,10 @@
 
 #let _native-record-data(record, native-data, kind, index) = {
   let result = record
-  if result.at("statements", default: none) != none {
-    result.statements = _clean-statements(result.statements)
-  }
   if kind == "node" and result.at("name", default: none) != none {
     result.name = _name-label(result.name, "graph.nodes")
   }
-  result.data = _get-native-data(native-data, kind, index)
+  result.data = _array-at(native-data.at(kind + "s"), index)
   let origins = native-data.at("origins", default: (:))
   if kind + "s" in origins {
     result.origin = origins.at(kind + "s").at(index)
@@ -1209,12 +1190,11 @@
       subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
     ))
   }
-  records.map(record => _native-record-data(
-    record,
-    native-data,
-    "node",
-    record.node,
-  ))
+  let result = ()
+  for record in records {
+    result.push(_native-record-data(record, native-data, "node", record.node))
+  }
+  result
 }
 
 #let _edge-records(graph, subgraph) = {
@@ -1227,7 +1207,11 @@
       subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
     ))
   }
-  records.map(record => _native-edge-record(record, native-data))
+  let result = ()
+  for record in records {
+    result.push(_native-edge-record(record, native-data))
+  }
+  result
 }
 #let map(graph_, callbacks) = {
   let graph = callbacks.graph

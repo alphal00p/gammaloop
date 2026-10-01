@@ -13,18 +13,13 @@ pub(crate) struct SchoonschipWithSettings<'a> {
 }
 
 impl SchoonschipWithSettings<'_> {
-    pub(crate) fn run(
-        &self,
-        view: AtomView<'_>,
-        literal_relabellings: &mut Vec<(Atom, Atom)>,
-    ) -> Atom {
-        self.run_observed::<0>(view, literal_relabellings, None)
+    pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
+        self.run_observed::<0>(view, None)
     }
 
     pub(crate) fn run_observed<const N: usize>(
         &self,
         view: AtomView<'_>,
-        literal_relabellings: &mut Vec<(Atom, Atom)>,
         observed: Option<&SimplificationCandidates<N>>,
     ) -> Atom {
         let mut current = view.to_owned();
@@ -83,7 +78,6 @@ impl SchoonschipWithSettings<'_> {
                     normalized.as_view(),
                     self.settings.simplify_chain_like_functions,
                     self.settings.schoonschip_rank1_tensors,
-                    literal_relabellings,
                 );
                 if contracted != normalized {
                     let dotted = DotNormalizer::normalize_with_settings(
@@ -167,9 +161,9 @@ mod tests {
                 for source in sources {
                     let expression =
                         Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
-                    let result = owner.run(expression.as_view(), &mut Vec::new());
+                    let result = owner.run(expression.as_view());
                     assert_eq!(
-                        owner.run(result.as_view(), &mut Vec::new()),
+                        owner.run(result.as_view()),
                         result,
                         "{source}; rank_one={rank_one}, chain_like={chain_like}"
                     );
@@ -195,7 +189,7 @@ mod tests {
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             SCAN_COUNTS.with(|count| count.set(0));
-            let result = owner.run(expression.as_view(), &mut Vec::new());
+            let result = owner.run(expression.as_view());
             assert_eq!(SCAN_COUNTS.with(|count| count.get()), 1, "{source}");
             if expression.has_repeated_explicit_indices() {
                 assert_ne!(result, expression, "the tensor fixture must contract");
@@ -221,7 +215,7 @@ mod tests {
         assert_eq!(actual, expression);
         assert_eq!(SCAN_COUNTS.with(|count| count.get()), 1);
         assert_eq!(
-            SlotContraction::new().run(expression.as_view(), false, true, &mut Vec::new()),
+            SlotContraction::new().run(expression.as_view(), false, true),
             actual
         );
     }
@@ -324,7 +318,6 @@ mod tests {
                             normalized.as_view(),
                             settings.simplify_chain_like_functions,
                             settings.schoonschip_rank1_tensors,
-                            &mut Vec::new(),
                         )
                     } else {
                         normalized

@@ -97,8 +97,6 @@ impl ReferenceCase {
                 ..Default::default()
             })
             .expect("valid reference contractions")
-            .resolved()
-            .expect("valid reference aliases")
             .into_expression()
     }
 

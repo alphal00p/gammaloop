@@ -430,7 +430,7 @@ impl Process {
         }
         let states = self.outgoing_pdgs(model)?;
         Ok(model
-            .covariant_cut_multiplets
+            .covariant_cut_multiplets()
             .iter()
             .filter(|(physical, _)| states.iter().any(|state| state.contains(physical)))
             .flat_map(|(&physical, members)| members.iter().map(move |&member| (member, physical)))

@@ -26,15 +26,21 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
-`simplify_algebra(gamma=True)` returns an `AliasedTensorExpression`: both ordinary and axial
-trace identities retain factored definitions. `to_expression()` resolves the
-literal aliases, while `expand()` explicitly materializes the full polynomial.
-Rust uses the same shared result through `resolved()` and `expanded()`.
+`simplify_algebra(color=False)` selects gamma identities and returns a `TensorExpression`: both ordinary and axial
+trace identities retain factored sums. `to_expression()` exposes the ordinary Symbolica
+expression, while `expand()` explicitly materializes the full polynomial.
+Rust uses the same shared tensor result and explicit `expanded(...)` operation.
 Trace evaluation and chain output are settings of the gamma pass; expansion is
 an operation on its result. Scalar spectators and independent trace boundaries
-remain factorized during simplification. The current production implementation
-uses the common alias materializer; the older trace-specific sparse emitter is
+remain factorized during simplification. The trace-specific sparse emitter is
 retained only as a test oracle.
+
+Python enables gamma and colour identities by default, while epsilon identities
+remain opt-in. See the
+#product-link("idenso", page: "reference/interfaces/", label: "reduction API guide")
+for contraction modes, representation filters, family options and explicit
+notation conversions. Select the required work in one call; enabled identities
+include their necessary contractions.
 
 See #product-link("idenso", page: "reference/form-color-dirac/", label: "Shipped color and Dirac rules")
 for the conventions and #product-link("idenso", page: "guides/showcase/", label: "the tensor display showcase")
@@ -46,7 +52,7 @@ The measurements and implementation notes below record the revisions named in
 each cohort. Their former API spellings and expansion strategies describe those
 executables; they are not instructions for the current tensor API. In particular,
 `expand_traces`, `expand_contracted_sums`, and `replace_tensor` are historical.
-The current notebook uses explicit aliased-result materialization and certified
+The current notebook uses explicit polynomial expansion and certified
 `TensorRule` replacement. Final consolidation measurements are recorded only
 after the combined implementation passes its functional gates.
 
@@ -531,8 +537,12 @@ opaque scalar parameters, and the chain-like and rank-one settings are retained.
 The repeated-index scan still guards this work, and substitutions preserve sums
 and powers rather than distributing them.
 
-Epsilon cleanup remains a separate `simplify_algebra(epsilon=True)` operation. When epsilon
-is present, it retains one initial whole-expression Schoonschip pass. Candidate
+At this measured historical stage, epsilon cleanup ran as a separate operation.
+Current callers instead select `epsilon=True` together with their other required
+families in one `simplify_algebra(...)` call; see the
+#product-link("idenso", page: "reference/interfaces/", label: "reduction API guide").
+The historical epsilon pass retained one initial whole-expression Schoonschip
+pass when epsilon was present. Candidate
 selection directly distinguishes powers, products and epsilon function heads.
 It no longer runs Schoonschip at every visited node: another whole-expression
 pass runs only after an epsilon identity changed the expression, to consume the

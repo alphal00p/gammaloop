@@ -1,10 +1,19 @@
 """Static regressions: run `ty check` with the installed community Python environment."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Literal, assert_type
 
 import linnet
-from symbolica import Expression, S
+from symbolica import (
+    AtomType,
+    Condition,
+    Evaluator,
+    Expression,
+    FunctionDefinition,
+    Replacement,
+    S,
+    T,
+)
 from symbolica.community import tensor as sp
 
 
@@ -20,6 +29,9 @@ def check_types(
 ) -> None:
     settings = sp.DisplaySettings(tensor_view="matrix")
     assert_type(settings.tensor_view, Literal["interactive", "matrix"])
+    explicit = sp.DisplaySettings(invariant_style="explicit")
+    assert_type(explicit.invariant_style, Literal["compact", "explicit"])
+    assert_type(expression.to_latex(settings=explicit), str)
     assert_type(tensor.to_html(settings=settings), str)
     assert_type(representation("mu"), sp.Slot)
     assert_type(representation(1), sp.Slot)
@@ -86,8 +98,10 @@ def check_types(
         expression.compose(expression, left=(0, 1), right=(0, 1)), sp.TensorExpression
     )
     assert_type(expression.compose(tensor, left=(0, 1), right=(0, 1)), sp.TensorNetwork)
-    assert_type(expression.contract(), sp.AliasedTensorExpression)
+    assert_type(expression.contract(), sp.TensorExpression)
     assert_type(expression.contract().contraction_complete, bool)
+    assert_type(expression.contract().reduction_status, sp.ReductionStatus)
+    assert_type(expression.simplify_algebra().to_expression(), Expression)
     assert_type(expression.contract().expand(), sp.TensorExpression)
     assert_type(expression.trace(), sp.TensorExpression)
     assert_type(expression**2, sp.TensorExpression)
@@ -107,24 +121,75 @@ def check_types(
     assert_type(sp.chain(start, end, expression), sp.TensorExpression)
     assert_type(sp.chain(start, end, tensor, expression), sp.TensorNetwork)
     assert_type(sp.chain(start, end, expression, tensor), sp.TensorNetwork)
-    assert_type(expression.to_expression().factor(), Expression)
-    assert_type(expression.to_expression().collect_num(), Expression)
-    assert_type(expression.to_expression().collect_factors(), Expression)
+    assert_type(expression.factor(), sp.TensorExpression)
+    assert_type(expression.expand_num(), sp.TensorExpression)
+    assert_type(expression.collect(scalar), sp.TensorExpression)
+    assert_type(expression.collect_num(), sp.TensorExpression)
+    assert_type(expression.collect_factors(), sp.TensorExpression)
+    assert_type(expression.collect_by_coefficient(), sp.TensorExpression)
+    assert_type(expression.collect_symbol(scalar), sp.TensorExpression)
+    assert_type(expression.collect_horner([scalar]), sp.TensorExpression)
+    assert_type(expression.together(), sp.TensorExpression)
+    assert_type(expression.cancel(), sp.TensorExpression)
+    assert_type(expression.apart(scalar), sp.TensorExpression)
+    assert_type(
+        expression.collect(scalar, key_map=lambda key: key, coeff_map=lambda c: 2 * c),
+        sp.TensorExpression,
+    )
+    assert_type(expression.contains(scalar), Condition)
+    assert_type(scalar in expression, bool)
+    assert_type(expression.get_all_symbols(), Sequence[Expression])
+    assert_type(expression.get_all_indeterminates(False), Sequence[Expression])
+    assert_type(expression.get_type(), AtomType)
+    assert_type(expression.get_name(), str)
+    assert_type(expression.get_head(), Expression)
+    assert_type(expression.get_byte_size(), int)
+    assert_type(expression.is_zero(), bool)
+    assert_type(expression.is_one(), bool)
+    assert_type(expression.is_expanded(scalar), bool)
+    assert_type(expression.nterms(), int)
     assert_type(
         expression.simplify_algebra(gamma=True, epsilon=True, contract="dots"),
-        sp.AliasedTensorExpression,
+        sp.TensorExpression,
     )
+    assert_type(expression.simplify_algebra(contract="minimal"), sp.TensorExpression)
+    assert_type(
+        expression.simplify_algebra(collect_coefficients=False), sp.TensorExpression
+    )
+    assert_type(expression.contract(expand=False), sp.TensorExpression)
     assert_type(
         expression.simplify_algebra(
             color=True, contract="selected", representations=[representation]
         ),
-        sp.AliasedTensorExpression,
+        sp.TensorExpression,
     )
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
+    assert_type(expression.replace(scalar, scalar + 1), sp.TensorExpression)
+    assert_type(
+        expression.replace_multiple([Replacement(scalar, scalar + 1)]),
+        sp.TensorExpression,
+    )
+    assert_type(expression.map(T().replace(scalar, scalar + 1)), sp.TensorExpression)
+    assert_type(expression.derivative(scalar), sp.TensorExpression)
+    assert_type(expression.coefficient(scalar), Expression)
+    assert_type(expression.terms(), Iterator[Expression])
+    assert_type(expression.get_tags(), list[str])
+    # Tensor expressions are accepted anywhere Symbolica expects Expression.
+    assert_type(scalar.coefficient(expression), Expression)
+    assert_type(scalar(expression), Expression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
     assert_type(
+        expression.evaluator(
+            [scalar],
+            functions=[FunctionDefinition(S("typing::f"), [scalar], scalar**2)],
+            jit_compile=False,
+            n_cores=1,
+        ),
+        Evaluator,
+    )
+    assert_type(
         expression.simplify_algebra(gamma=True, color=True, epsilon=True),
-        sp.AliasedTensorExpression,
+        sp.TensorExpression,
     )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
     assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)
@@ -194,17 +259,22 @@ def check_types(
     assert_type(int(policy), int)
     assert_type(
         expression.simplify_algebra(
-            gamma=True, gamma_ordering="canonical", gamma0=True, gamma_conjugate=True
+            gamma=True,
+            gamma_ordering="canonical",
+            gamma0=True,
+            gamma_conjugate=True,
+            max_steps_per_domain=None,
         ),
-        sp.AliasedTensorExpression,
+        sp.TensorExpression,
     )
+    assert_type(expression.contract(max_steps_per_domain=None), sp.TensorExpression)
     assert_type(
         expression.contract(
             representations=[representation],
             collect_traces=False,
             max_steps_per_domain=8,
         ),
-        sp.AliasedTensorExpression,
+        sp.TensorExpression,
     )
     name = sp.TensorName("typing::Jbar", print={"typst": "macron(J)"})
     assert_type(name(representation), sp.TensorExpression)

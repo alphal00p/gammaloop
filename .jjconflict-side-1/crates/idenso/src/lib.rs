@@ -12,19 +12,17 @@ use spenso::{
         graph::{NetworkEdge, NetworkLeaf, NetworkNode},
         library::function_lib::INBUILTS,
         library::symbolic::ETS,
-        parsing::{AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         store::TensorScalarStore,
-        tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
-        HasName, OrderedStructure, TensorStructure, ToSymbolic,
+        HasName, TensorStructure,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
     symbol_set,
     symbolica_init::in_symbolica_initializer,
-    tensor_symbol,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
@@ -59,7 +57,7 @@ initialize!(|| {
         let _ = RS.force_in_initializer().a_;
         let _ = AGS.force_in_initializer().gamma;
         let _ = *EPSILON_SYMBOL.force_in_initializer();
-        let _ = CS.force_in_initializer().cf;
+        let _ = CS.force_in_initializer().cas;
         let _ = ETS.force_in_initializer().delta;
         let _ = ETS.force_in_initializer().metric;
     });
@@ -258,8 +256,6 @@ pub trait IndexTooling {
     fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Vec<Atom>, IndexToolingError>;
-
-    fn alias_subtensors(&self, tensor_name: &str) -> AliasedAtom;
 }
 
 impl IndexTooling for Atom {
@@ -268,10 +264,6 @@ impl IndexTooling for Atom {
         new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
         self.as_view().canonize(new_dummy)
-    }
-
-    fn alias_subtensors(&self, tensor_name: &str) -> AliasedAtom {
-        self.as_view().alias_subtensors(tensor_name)
     }
 
     fn spenso_print<'a>(&'a self, settings: &SpensoPrintSettings) -> AtomPrinter<'a> {
@@ -357,24 +349,6 @@ impl IndexTooling for AtomView<'_> {
     fn spenso_print(&self, settings: &SpensoPrintSettings) -> AtomPrinter<'_> {
         self.printer(settings.nice_symbolica())
     }
-    fn alias_subtensors(&self, tensor_name: &str) -> AliasedAtom {
-        let tensor_symbol = tensor_symbol!(&tensor_name);
-        self.alias_subexpressions(|a, _count, i| {
-            if a.has_attributes_of(SPENSO_TAG.rep_) || a.has_attributes_of(SPENSO_TAG.tensor_) {
-                None
-            } else {
-                match a.infer_structure::<OrderedStructure>() {
-                    Ok(a) => Some(a.to_symbolic_with(
-                        tensor_symbol,
-                        &[Atom::num(i), Atom::num(_count)],
-                        None,
-                    )),
-                    Err(_) => Some(function!(symbol!("se"), i, _count)),
-                }
-            }
-        })
-    }
-
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
@@ -721,9 +695,8 @@ impl IndexTooling for AtomView<'_> {
                     collect_traces: false,
                     ..Default::default()
                 })?
-                .resolved()?
         } else {
-            tensor.contract(Default::default())?.resolved()?
+            tensor.contract(Default::default())?
         };
         let expression = cooking.uncook(resolved.expression.as_view());
         if preserve_indices {
@@ -811,8 +784,6 @@ pub mod test {
                     collect_traces: false,
                     ..Default::default()
                 })
-                .unwrap()
-                .resolved()
                 .unwrap();
             assert_eq!(result.expression(), &expected);
         }

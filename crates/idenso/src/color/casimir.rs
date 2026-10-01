@@ -175,15 +175,6 @@ impl CofDimensionInvariantRewriter {
     }
 
     fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
-        if let AtomView::Var(var) = arg {
-            return self.rewrite_legacy_symbol(var.get_symbol());
-        }
-
-        if let AtomView::Pow(pow) = arg {
-            let (base, exponent) = pow.get_base_exp();
-            return self.rewrite_legacy_symbol_power(base, exponent);
-        }
-
         let AtomView::Fun(f) = arg else {
             return None;
         };
@@ -204,32 +195,6 @@ impl CofDimensionInvariantRewriter {
         }
 
         None
-    }
-
-    fn rewrite_legacy_symbol(&self, symbol: Symbol) -> Option<Atom> {
-        if symbol == CS.tr {
-            return Some(Atom::num(1) / Atom::num(2));
-        }
-        if symbol == CS.ca {
-            return Some(Atom::var(CS.nc));
-        }
-        if symbol == CS.cf {
-            return Some(Self::fundamental_quadratic_casimir(Atom::var(CS.nc)));
-        }
-        None
-    }
-
-    fn rewrite_legacy_symbol_power(
-        &self,
-        base: AtomView<'_>,
-        exponent: AtomView<'_>,
-    ) -> Option<Atom> {
-        let exponent = Self::integer(exponent)?;
-        let replacement = match base {
-            AtomView::Var(var) => self.rewrite_legacy_symbol(var.get_symbol())?,
-            _ => return None,
-        };
-        Some(Self::atom_integral_power(replacement, exponent))
     }
 
     fn rewrite_index(&self, degree: AtomView<'_>, rep: AtomView<'_>) -> Option<Atom> {
@@ -348,16 +313,6 @@ impl CofDimensionInvariantRewriter {
         (value > 0).then_some(value)
     }
 
-    fn integer(expr: AtomView<'_>) -> Option<i64> {
-        match expr {
-            AtomView::Num(number) => match number.get_coeff_view() {
-                CoefficientView::Natural(value, 1, 0, 1) => Some(value),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
     fn natural_number(expr: AtomView<'_>) -> Option<i64> {
         let AtomView::Num(number) = expr else {
             return None;
@@ -366,14 +321,6 @@ impl CofDimensionInvariantRewriter {
             return None;
         };
         Some(value)
-    }
-
-    fn atom_integral_power(base: Atom, exponent: i64) -> Atom {
-        match exponent {
-            0 => Atom::num(1),
-            1 => base,
-            _ => base.pow(Atom::num(exponent)),
-        }
     }
 }
 

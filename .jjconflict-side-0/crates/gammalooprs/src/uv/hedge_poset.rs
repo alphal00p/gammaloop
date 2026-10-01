@@ -1379,8 +1379,7 @@ impl Forests {
                             .with_representation_payloads(true, true);
                         let collected =
                             SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-                                .collect(color)?
-                                .resolved()?;
+                                .collect(color)?;
                         Ok(cooking.uncook(collected.expression().as_view()))
                     })?;
                 sum = Some(match sum {
@@ -1511,8 +1510,7 @@ impl Forests {
                     collect_traces: false,
                     ..Default::default()
                 })?
-                .to_dots()?
-                .resolved()?;
+                .to_dots()?;
             let atom = cooking.uncook(reduced.expression().as_view());
 
             debug!(
@@ -2125,8 +2123,7 @@ mod tests {
                 collect_traces: false,
                 ..Default::default()
             })?
-            .to_dots()?
-            .resolved()?;
+            .to_dots()?;
         let expected = cooking
             .uncook(expected.expression().as_view())
             .replace_multiple(&replacements)
@@ -2869,8 +2866,7 @@ mod tests {
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
-                })?
-                .resolved()?;
+                })?;
             Ok(cooking
                 .uncook(expression.expression().as_view())
                 .collect_factors())
@@ -3057,15 +3053,15 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let mixed_remainder =
-                SymbolicTensor::infer(cooking.try_cook(mixed_remainder.as_view())?)?
-                    .contract(ContractSettings {
-                        rank_one: false,
-                        collect_chains: false,
-                        collect_traces: false,
-                        ..Default::default()
-                    })?
-                    .resolved()?;
+            let mixed_remainder = SymbolicTensor::infer(
+                cooking.try_cook(mixed_remainder.as_view())?,
+            )?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
             let mixed_remainder = cooking
                 .uncook(mixed_remainder.expression().as_view())
                 .collect_factors();
@@ -3159,8 +3155,7 @@ mod tests {
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
-                })?
-                .resolved()?;
+                })?;
             Ok(cooking.uncook(expression.expression().as_view()))
         });
         let (actual, expected) = (actual?, expected?);

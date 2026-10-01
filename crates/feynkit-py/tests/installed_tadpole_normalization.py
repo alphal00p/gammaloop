@@ -89,12 +89,13 @@ for label, vertices, outgoing, mass, expected_trace, wick_weight in [
     )
     trace = (
         TensorExpression(numerator.expand())
-        .simplify_algebra(gamma=True, epsilon=True)
+        .simplify_algebra(gamma=True, color=False, epsilon=True)
         .contract(collect_chains=False, collect_traces=False)
         .expand()
-        .simplify_algebra(color=True, color_substitute_cof_dimension_invariants=True)
+        .simplify_algebra(
+            gamma=False, color=True, color_substitute_cof_dimension_invariants=True
+        )
         .contract(collect_chains=False, collect_traces=False)
-        .to_expression()
         .to_dots()
         .to_expression()
     )

@@ -533,8 +533,7 @@ struct ModelIndexes {
 /// A validated physics model with fallible, indexed lookups.
 #[derive(Clone, Debug)]
 pub struct Model {
-    /// Physical vector PDG -> [vector, Goldstone, ghost, antighost]. Equal masses do not infer a quartet.
-    pub covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
+    covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     name: String,
     restriction: Option<String>,
     orders: Vec<Order>,
@@ -548,6 +547,7 @@ pub struct Model {
     form_factors: Vec<ModelFormFactor>,
     indexes: ModelIndexes,
     coupling_replacement_rules: OnceLock<Vec<Replacement>>,
+    fingerprint: OnceLock<ModelFingerprint>,
 }
 
 // Model interchange contains symbolic expressions and validated name-based
@@ -809,9 +809,22 @@ impl Model {
             form_factors,
             indexes,
             coupling_replacement_rules: OnceLock::new(),
+            fingerprint: OnceLock::new(),
         };
         model.validate_covariant_cut_multiplets()?;
         Ok(model)
+    }
+
+    /// Physical vector PDG -> [vector, Goldstone, ghost, antighost]. Equal masses do not infer a quartet.
+    pub fn covariant_cut_multiplets(&self) -> &BTreeMap<i64, [i64; 4]> {
+        &self.covariant_cut_multiplets
+    }
+
+    /// Invalidate the model identity before editing its covariant partner declarations.
+    /// Call [`Self::validate_covariant_cut_multiplets`] after editing.
+    pub fn covariant_cut_multiplets_mut(&mut self) -> &mut BTreeMap<i64, [i64; 4]> {
+        self.fingerprint.take();
+        &mut self.covariant_cut_multiplets
     }
 
     pub fn validate_covariant_cut_multiplets(&self) -> Result<(), ModelError> {
@@ -1083,9 +1096,11 @@ impl Model {
     }
 
     pub fn fingerprint(&self) -> ModelFingerprint {
-        let bytes = serde_json::to_vec(&self.definition())
-            .expect("canonical model definitions are always JSON serializable");
-        ModelFingerprint(*blake3::hash(&bytes).as_bytes())
+        *self.fingerprint.get_or_init(|| {
+            let bytes = serde_json::to_vec(&self.definition())
+                .expect("canonical model definitions are always JSON serializable");
+            ModelFingerprint(*blake3::hash(&bytes).as_bytes())
+        })
     }
 
     /// Remove parameters and interactions that evaluate to zero, rebuilding
@@ -1561,6 +1576,7 @@ impl Model {
         if updates.is_empty() {
             return Ok(());
         }
+        self.fingerprint.take();
         for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal && parameter.expression.is_some() {
                 parameter.value = None;
@@ -1597,6 +1613,7 @@ impl Model {
             .map_err(RecomputeError::Evaluator)?;
         self.validate_evaluated_values(&evaluated, overrides)?;
 
+        self.fingerprint.take();
         for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal
                 && parameter.expression.is_some()
@@ -2294,6 +2311,65 @@ mod tests {
 
         assert_ne!(first.propagators(), second.propagators());
         assert_ne!(first.fingerprint(), second.fingerprint());
+    }
+
+    #[test]
+    fn fingerprints_follow_parameter_updates_and_recomputation() {
+        let original = Model::from_json(&model_json("GC1")).unwrap();
+        let original_fingerprint = original.fingerprint();
+        let mut updated = original.clone();
+        updated
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "mass".to_owned(),
+                ComplexValue::new(3.0, 0.0),
+            )]))
+            .unwrap();
+        let pending_fingerprint = updated.fingerprint();
+        assert_ne!(pending_fingerprint, original_fingerprint);
+        assert_eq!(
+            pending_fingerprint,
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+
+        updated
+            .recompute_with(&mut |_| {
+                Ok::<_, std::convert::Infallible>(EvaluatedValues {
+                    internal_parameters: BTreeMap::from([(
+                        "double_mass".to_owned(),
+                        ComplexValue::new(6.0, 0.0),
+                    )]),
+                    couplings: BTreeMap::from([("GC1".to_owned(), ComplexValue::new(6.0, 0.0))]),
+                })
+            })
+            .unwrap();
+        assert_ne!(updated.fingerprint(), pending_fingerprint);
+        assert_eq!(
+            updated.fingerprint(),
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+        assert_eq!(original.fingerprint(), original_fingerprint);
+    }
+
+    #[test]
+    fn fingerprints_follow_covariant_multiplet_edits() {
+        let original = Model::standard_model();
+        let original_fingerprint = original.fingerprint();
+        let mut updated = original.clone();
+        assert!(!updated.covariant_cut_multiplets().is_empty());
+        updated.covariant_cut_multiplets_mut().clear();
+        updated.validate_covariant_cut_multiplets().unwrap();
+        assert_ne!(updated.fingerprint(), original_fingerprint);
+        assert_eq!(
+            updated.fingerprint(),
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+        assert_eq!(original.fingerprint(), original_fingerprint);
     }
 
     #[test]

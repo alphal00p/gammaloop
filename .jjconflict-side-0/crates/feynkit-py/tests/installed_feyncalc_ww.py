@@ -100,7 +100,6 @@ transverse_test = (longitudinal * projection).replace(
 transverse_test = (
     TensorExpression(transverse_test)
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_dots()
 )
 transverse_test = (
@@ -130,7 +129,6 @@ for pdg, term in diagram_terms.items():
         )
         .contract(collect_chains=False, collect_traces=False)
         .to_expression()
-        .to_expression()
         .replace(conjugate(P(a, b)), P(a, b))
     )
     for real in (charge, sw, cw, mw, mz, mh, me, s, t, u, H):
@@ -148,14 +146,12 @@ for left, left_operator in operators.items():
         traced = (
             paired.simplify_algebra(gamma=True, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .simplify_algebra(epsilon=True)
+            .simplify_algebra(gamma=False, color=False, epsilon=True)
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
         )
         scalar = (
             TensorExpression(traced.to_expression() * density, intern="flattened")
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_dots()
         )
         assert scalar.is_scalar
@@ -173,9 +169,8 @@ for left, left_operator in operators.items():
         result = (
             kin.apply(
                 TensorExpression(conserved)
-                .simplify_algebra(epsilon=True)
+                .simplify_algebra(gamma=False, color=False, epsilon=True)
                 .contract(collect_chains=False, collect_traces=False)
-                .to_expression()
                 .to_dots()
                 .to_expression()
             )

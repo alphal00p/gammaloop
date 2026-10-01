@@ -2,12 +2,23 @@
 
 #import "@preview/cetz:0.5.1" as cetz
 
+// Geometry functions capture just the CeTZ operations they use. Capturing the
+// complete module makes Typst hash every exported drawing and utility function.
+#let _cetz-bezier = cetz.draw.bezier
+#let _cetz-line = cetz.draw.line
+#let _cetz-merge-path = cetz.draw.merge-path
+#let _cetz-apply-transform = cetz.drawable.apply-transform
+#let _cetz-drawable-path = cetz.drawable.path
+#let _cetz-check-mark = cetz.mark.check-mark
+#let _cetz-resolve-style = cetz.styles.resolve
+
 #let _plugin = plugin("../kurvst.wasm")
 
 #let _point-x(p) = p.at(0)
 #let _point-y(p) = p.at(1)
 #let _point-pair(p) = (_point-x(p), _point-y(p))
-#let _point(p, unit: 1) = (_point-x(p) * unit, _point-y(p) * unit)
+#let _point(p, unit: 1) = (p.at(0) * unit, p.at(1) * unit)
+#let _cetz-point(p, unit: 1) = (float(p.at(0) * unit), float(p.at(1) * unit), 0.0)
 
 /// Build a numeric point tuple.
 ///
@@ -479,30 +490,21 @@
 ///
 /// -> dictionary
 #let cubic-point(segment, t) = {
-  let ab = (
-    _lerp(_point-x(segment.start), _point-x(segment.control-start), t),
-    _lerp(_point-y(segment.start), _point-y(segment.control-start), t),
-  )
-  let bc = (
-    _lerp(_point-x(segment.control-start), _point-x(segment.control-end), t),
-    _lerp(_point-y(segment.control-start), _point-y(segment.control-end), t),
-  )
-  let cd = (
-    _lerp(_point-x(segment.control-end), _point-x(segment.end), t),
-    _lerp(_point-y(segment.control-end), _point-y(segment.end), t),
-  )
-  let abc = (
-    _lerp(_point-x(ab), _point-x(bc), t),
-    _lerp(_point-y(ab), _point-y(bc), t),
-  )
-  let bcd = (
-    _lerp(_point-x(bc), _point-x(cd), t),
-    _lerp(_point-y(bc), _point-y(cd), t),
-  )
-  (
-    _lerp(_point-x(abc), _point-x(bcd), t),
-    _lerp(_point-y(abc), _point-y(bcd), t),
-  )
+  let (ax, ay, ..) = segment.start
+  let (bx, by, ..) = segment.control-start
+  let (cx, cy, ..) = segment.control-end
+  let (dx, dy, ..) = segment.end
+  let abx = ax + (bx - ax) * t
+  let aby = ay + (by - ay) * t
+  let bcx = bx + (cx - bx) * t
+  let bcy = by + (cy - by) * t
+  let cdx = cx + (dx - cx) * t
+  let cdy = cy + (dy - cy) * t
+  let abcx = abx + (bcx - abx) * t
+  let abcy = aby + (bcy - aby) * t
+  let bcdx = bcx + (cdx - bcx) * t
+  let bcdy = bcy + (cdy - bcy) * t
+  (abcx + (bcdx - abcx) * t, abcy + (bcdy - abcy) * t)
 }
 
 /// Evaluate the tangent of a cubic segment at parameter `t`.
@@ -587,6 +589,10 @@
 }
 
 #let length(path, accuracy: 0.001) = _length(path, accuracy: accuracy)
+
+#let frames(path, distances, accuracy: 0.001) = cbor(_plugin.curve_path_frames(cbor.encode((
+  path: _path-value(path), distances: distances, accuracy: accuracy,
+))))
 
 /// Find transverse crossings between two paths.
 ///
@@ -778,6 +784,39 @@
   ))))
 }
 
+#let _pattern-spec(
+  path,
+  pattern: "wave",
+  amplitude: 0.1,
+  wavelength: 1.0,
+  phase: 0,
+  samples-per-period: 16,
+  coil-longitudinal-scale: 1.25,
+  anchor-start: true,
+  anchor-end: true,
+  endpoint-slope: 0,
+  accuracy: 0.001,
+) = {
+  let pattern = _resolve-pattern(
+    pattern,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+  )
+  (
+    path: _path-value(path),
+    pattern: pattern,
+    amplitude: amplitude,
+    wavelength: wavelength,
+    phase: phase,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
+    endpoint-slope: endpoint-slope,
+    accuracy: accuracy,
+  )
+}
+
 /// Generate a sampled 1D pattern along a path.
 ///
 /// `pattern` may be `wave()`, `zigzag()`, `coil()`, a compatible string name,
@@ -806,37 +845,8 @@
 /// ```
 ///
 /// -> dictionary
-#let pattern(
-  path,
-  pattern: "wave",
-  amplitude: 0.1,
-  wavelength: 1.0,
-  phase: 0,
-  samples-per-period: 16,
-  coil-longitudinal-scale: 1.25,
-  anchor-start: true,
-  anchor-end: true,
-  endpoint-slope: 0,
-  accuracy: 0.001,
-) = {
-  let pattern = _resolve-pattern(
-    pattern,
-    samples-per-period: samples-per-period,
-    coil-longitudinal-scale: coil-longitudinal-scale,
-  )
-  cbor(_plugin.curve_pattern_path(cbor.encode((
-    path: _path-value(path),
-    pattern: pattern,
-    amplitude: amplitude,
-    wavelength: wavelength,
-    phase: phase,
-    samples-per-period: samples-per-period,
-    coil-longitudinal-scale: coil-longitudinal-scale,
-    anchor-start: anchor-start,
-    anchor-end: anchor-end,
-    endpoint-slope: endpoint-slope,
-    accuracy: accuracy,
-  ))))
+#let pattern(path, ..options) = {
+  cbor(_plugin.curve_pattern_path(cbor.encode(_pattern-spec(path, ..options.named()))))
 }
 
 /// Generate a parallel path for a path.
@@ -997,7 +1007,7 @@
 /// line segments are `("l", end)` and cubics are `("c", control-start,
 /// control-end, end)`.
 /// -> array
-#let to-cetz-data(path, unit: 1) = {
+#let _to-cetz-data(path, unit: 1, point: _point, numeric: false) = {
   let subpaths = ()
   let origin = none
   let current = none
@@ -1007,7 +1017,7 @@
   for element in _elements(path) {
     if element.kind == "move" {
       if origin != none {
-        subpaths.push((_point(origin, unit: unit), closed, segments))
+        subpaths.push((point(origin, unit: unit), closed, segments))
       }
       origin = element.start
       current = element.start
@@ -1022,7 +1032,7 @@
       }
 
       if element.kind == "line" {
-        segments.push(("l", _point(element.end, unit: unit)))
+        segments.push(("l", point(element.end, unit: unit)))
         current = element.end
       } else if element.kind == "quad" {
         let cubic = _quad-cubic-segment(
@@ -1032,22 +1042,29 @@
         )
         segments.push((
           "c",
-          _point(cubic.control-start, unit: unit),
-          _point(cubic.control-end, unit: unit),
-          _point(cubic.end, unit: unit),
+          point(cubic.control-start, unit: unit),
+          point(cubic.control-end, unit: unit),
+          point(cubic.end, unit: unit),
         ))
         current = element.end
       } else if element.kind == "cubic" {
-        segments.push((
+        // Patterned paths contain many cubics; convert their control points
+        // directly to avoid a function call for each numeric coordinate pair.
+        segments.push(if numeric { (
           "c",
-          _point(element.control-start, unit: unit),
-          _point(element.control-end, unit: unit),
-          _point(element.end, unit: unit),
-        ))
+          (float(element.control-start.at(0) * unit), float(element.control-start.at(1) * unit), 0.0),
+          (float(element.control-end.at(0) * unit), float(element.control-end.at(1) * unit), 0.0),
+          (float(element.end.at(0) * unit), float(element.end.at(1) * unit), 0.0),
+        ) } else { (
+          "c",
+          point(element.control-start, unit: unit),
+          point(element.control-end, unit: unit),
+          point(element.end, unit: unit),
+        ) })
         current = element.end
       } else if element.kind == "close" {
         closed = true
-        subpaths.push((_point(origin, unit: unit), closed, segments))
+        subpaths.push((point(origin, unit: unit), closed, segments))
         current = origin
         origin = none
         segments = ()
@@ -1057,10 +1074,63 @@
   }
 
   if origin != none {
-    subpaths.push((_point(origin, unit: unit), closed, segments))
+    subpaths.push((point(origin, unit: unit), closed, segments))
   }
   subpaths
 }
+
+#let to-cetz-data(path, unit: 1) = _to-cetz-data(path, unit: unit)
+
+// Native pattern output contains float triples. Primitive coordinate hooks
+// receive the original scaled float pairs, just as pattern followed by to-cetz.
+#let _cetz-pairs(subpaths) = subpaths.map(((origin, closed, segments)) => (
+  origin.slice(0, 2), closed,
+  segments.map(((kind, ..points)) => (kind, ..points.map(p => p.slice(0, 2)))),
+))
+
+#let _draw-cetz(subpaths, style, numeric, pairs, ctx) = {
+  // Numeric paths need no per-segment coordinate resolution, anchors or
+  // bounds. Keep CeTZ's primitive processing when user hooks or inherited
+  // marks can change those segments before the final merge.
+  let custom = (not numeric
+    or ctx.debug
+    or subpaths.len() != 1 or subpaths.first().last().len() == 0
+    or (type(ctx.resolve-coordinate) == array and ctx.resolve-coordinate.len() > 0)
+    or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "line").mark)
+    or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "bezier").mark))
+  let body = if custom {
+    // Coordinate hooks and primitive processing receive the original pairs.
+    let subpaths = if numeric { pairs() } else { subpaths }
+    {
+      for (origin, closed, segments) in subpaths {
+        let current = origin
+        for (kind, ..args) in segments {
+          if kind == "l" {
+            _cetz-line(current, args.last())
+          } else if kind == "c" {
+            _cetz-bezier(current, args.last(), args.at(0), args.at(1))
+          }
+          current = args.last()
+        }
+        if closed and current != origin {
+          _cetz-line(current, origin)
+        }
+      }
+    }
+  } else {
+    let (origin, closed, joined) = subpaths.first()
+    let current = joined.last().last()
+    if closed and current != origin { joined.push(("l", origin)); current = origin }
+    (ctx => {
+      ctx.prev.pt = current
+      (ctx: ctx, drawables: _cetz-apply-transform(ctx.transform,
+        _cetz-drawable-path(((origin, false, joined),)),
+      ))
+    },)
+  }
+  (_cetz-merge-path(body, ..style).first())(ctx)
+}
+
 
 /// Draw a path dictionary through CeTZ.
 ///
@@ -1074,31 +1144,29 @@
 /// -> content
 #let to-cetz(path, unit: 1, ..style) = {
   let style = style.named()
-  let subpaths = to-cetz-data(path, unit: unit)
-  if subpaths.len() == 0 {
-    ()
-  } else {
-    cetz.draw.merge-path(
-      {
-        for (origin, closed, segments) in subpaths {
-          let current = origin
-          for (kind, ..args) in segments {
-            if kind == "l" {
-              cetz.draw.line(current, args.last())
-            } else if kind == "c" {
-              cetz.draw.bezier(current, args.last(), args.at(0), args.at(1))
-            }
-            current = args.last()
-          }
-          if closed and current != origin {
-            cetz.draw.line(current, origin)
-          }
-        }
-      },
-      ..style,
-    )
-  }
+  // Scale and coerce numeric coordinates in the same traversal.
+  let numeric = type(unit) in (int, float)
+  let subpaths = _to-cetz-data(path, unit: unit,
+    point: if numeric { _cetz-point } else { _point }, numeric: numeric)
+  if subpaths.len() == 0 { return () }
+  (_draw-cetz.with(subpaths, style, numeric, to-cetz-data.with(path, unit: unit)),)
 }
+
+// Convert native pattern geometry directly to the same CeTZ tuples that
+// to-cetz builds, without serializing and traversing an intermediate wire path.
+#let pattern-to-cetz(path, unit: 1, style: (:), ..options) = {
+  let spec = _pattern-spec(path, ..options.named())
+  if type(unit) not in (int, float) {
+    return to-cetz(cbor(_plugin.curve_pattern_path(cbor.encode(spec))), unit: unit, ..style)
+  }
+  let subpaths = cbor(_plugin.curve_pattern_cetz(cbor.encode((pattern: spec, unit: unit))))
+  // Degenerate command streams can synthesize integer origins; keep their
+  // original pair types for primitive hooks and signed-zero multiplication.
+  if type(subpaths) == dictionary { return to-cetz(subpaths, unit: unit, ..style) }
+  if subpaths.len() == 0 { return () }
+  (_draw-cetz.with(subpaths, style, true, _cetz-pairs.with(subpaths)),)
+}
+
 
 /// Split a path through a point sequence into per-span paths.
 ///
@@ -1150,4 +1218,14 @@
     parts: parts,
     curve: curve,
   )
+}
+
+/// Sample overlapping cubic targets in equal arc-length regions across parts.
+/// Parts contain cubic `segments` and a `visible` flag. Hidden parts contribute
+/// arc length; only visible parts produce `(region, points)` groups. Sampling
+/// retains both endpoints of each trimmed cubic, including shared endpoints.
+#let region-samples(parts, regions: 4, unit: 1, step: 4, accuracy: 0.001) = {
+  cbor(_plugin.curve_region_samples(cbor.encode((
+    parts: parts, regions: regions, unit: unit, step: step, accuracy: accuracy,
+  ))))
 }

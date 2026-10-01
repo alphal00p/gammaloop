@@ -34,11 +34,8 @@ fn assert_expanded(input: &Atom, expected: &Atom) {
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(
-        output.expanded().unwrap().into_expression(),
-        expected.expand()
-    );
-    assert_eq!(output.root().structure(), source.structure());
+    assert_eq!(output.expression().expand(), expected.expand());
+    assert_eq!(output.structure(), source.structure());
     let rerun = output
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(settings),
@@ -46,14 +43,7 @@ fn assert_expanded(input: &Atom, expected: &Atom) {
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(
-        rerun.expression().get_root(),
-        output.expression().get_root()
-    );
-    assert_eq!(
-        rerun.expression().get_aliases(),
-        output.expression().get_aliases()
-    );
+    assert_eq!(rerun.expression(), output.expression());
     assert_eq!(
         source
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
@@ -61,8 +51,6 @@ fn assert_expanded(input: &Atom, expected: &Atom) {
                 epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression(),
         idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
@@ -72,8 +60,6 @@ fn assert_expanded(input: &Atom, expected: &Atom) {
                 epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression(),
     );
@@ -106,8 +92,6 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression()
             .expand();
         let eb = idenso::tensor::SymbolicTensor::infer((b).as_atom_view().to_owned())
@@ -123,8 +107,6 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
                 collect_traces: false,
                 ..Default::default()
             })
-            .unwrap()
-            .resolved()
             .unwrap()
             .into_expression()
             .expand();
@@ -193,8 +175,6 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
             ..Default::default()
         })
         .unwrap()
-        .resolved()
-        .unwrap()
         .into_expression();
     assert_ne!(factored.expand(), factored);
     let vector = spenso::vector_symbol!(
@@ -256,8 +236,6 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
             ..Default::default()
         })
         .unwrap()
-        .resolved()
-        .unwrap()
         .into_expression()
         .replace(inner.to_pattern())
         .with(factored.clone())
@@ -303,8 +281,6 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
                 ..Default::default()
             })
             .unwrap()
-            .resolved()
-            .unwrap()
             .into_expression()
             .expand();
         assert_expanded(&(&spectator * input), &(&spectator * expected));
@@ -330,8 +306,6 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
             collect_traces: false,
             ..Default::default()
         })
-        .unwrap()
-        .resolved()
         .unwrap()
         .into_expression()
         .expand();

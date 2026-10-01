@@ -19,6 +19,7 @@ pyo3 = { workspace = true, features = ["eyre"] }
 
 itertools = "0.14.0"
 roxmltree = "0.21.1"
+ciborium = "0.2"
 linnet = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }

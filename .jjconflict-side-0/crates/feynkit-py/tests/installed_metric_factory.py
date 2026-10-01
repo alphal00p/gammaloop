@@ -22,7 +22,7 @@ for dimension in (2, 3, 5):
         assert metric("i", "i").is_scalar
         assert metric("i", "i").contract(
             collect_chains=False, collect_traces=False
-        ).to_expression().to_expression() == E(str(dimension))
+        ).to_expression() == E(str(dimension))
         network = indexed.to_network()
         network.execute()
         values = network.result_tensor()[:]
@@ -53,13 +53,12 @@ assert (
 )
 assert TensorExpression.g(mink)("mu", "mu").contract(
     collect_chains=False, collect_traces=False
-).to_expression().to_expression() == E("4")
+).to_expression() == E("4")
 n, m = S("metric_N", "metric_M")
 symbolic = Representation.cof(n)
 assert (
     TensorExpression.g(symbolic, symbolic.dual())("i", "i")
     .contract(collect_chains=False, collect_traces=False)
-    .to_expression()
     .to_expression()
     == n
 )

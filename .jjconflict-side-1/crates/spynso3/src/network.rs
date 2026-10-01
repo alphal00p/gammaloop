@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;
 
@@ -1431,7 +1431,7 @@ impl SpensoNet {
     }
 
     fn _repr_latex_(&self) -> String {
-        display::structured_to_latex(&self.structure, false, None)
+        display::structured_to_latex(&self.structure, &Default::default(), None)
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
@@ -1638,7 +1638,7 @@ impl SpensoNet {
         ))
     }
 
-    /// Create a rich display value for a notebook.
+    /// Create a lazy rich display value for a notebook.
     ///
     /// Parameters
     /// ----------
@@ -1654,12 +1654,14 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Symbolica display wrapper with text and available rich representations.
+    ///     Each requested backend renders the complete source expression once
+    ///     and caches it.
     ///
     /// Notes
     /// -----
     /// This formats the symbolic source expression, independent of execution
-    /// progress. Use render() or to_html() for the network graph.
+    /// progress, retaining a snapshot of that source. Use render() or to_html()
+    /// for the network graph.
     ///
     /// Examples
     /// --------
@@ -1674,17 +1676,15 @@ impl SpensoNet {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::format_structured_output_rich(
-            py,
-            &self.structure,
-            &settings,
-            notation_source.as_deref(),
+            Arc::new(self.structure.clone()),
+            settings,
+            notation_source,
         )
     }
 

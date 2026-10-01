@@ -831,7 +831,7 @@ mod tests {
             store::NetworkStore,
         },
         structure::{HasStructure, abstract_index::AbstractIndex},
-        tensors::data::GetTensorData,
+        tensors::data::{GetTensorData, SparseOrDense},
     };
     use symbolica::{
         atom::{Atom, Symbol},
@@ -883,14 +883,19 @@ mod tests {
         let RealOrComplexTensor::Complex(charge_conjugation) = concrete else {
             panic!("the Weyl library stores complex matrix components");
         };
-        let atom_library = hep_lib_atom::<AbstractIndex, i32>();
+        let charge_conjugation = charge_conjugation.to_dense();
+        let atom_library =
+            hep_lib_atom::<AbstractIndex, MixedTensor<i32, ExplicitKey<AbstractIndex>>>();
         let atom_matrix = atom_library
             .get_storage(key.canonical())
             .unwrap()
             .into_owned()
             .try_into_parametric()
-            .unwrap();
-        let gamma = gamma_data_weyl(AGS.gamma_strct::<AbstractIndex>(4), 1, 0).into_canonical();
+            .unwrap()
+            .to_dense();
+        let gamma = gamma_data_weyl(AGS.gamma_strct::<AbstractIndex>(4), 1, 0)
+            .into_canonical()
+            .to_dense();
 
         for row in 0..4 {
             for column in 0..4 {

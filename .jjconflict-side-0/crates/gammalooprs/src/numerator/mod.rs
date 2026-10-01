@@ -2,8 +2,8 @@
 
 use aind::Aind;
 use idenso::{
-    CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
-    tensor::SymbolicTensor,
+    CookMode, CookSettings, coad, cof, color::ColorSimplifySettings, color_cas, color_idx,
+    dirac::GammaSimplifySettings, tensor::SymbolicTensor,
 };
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
@@ -216,7 +216,11 @@ impl<S: NumeratorState> Numerator<S> {
             .unwrap();
 
         fn_map
-            .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
+            .add_aliases([
+                (color_idx!(2, cof!(3)), Atom::num(Rational::from((1, 2)))),
+                (color_cas!(2, cof!(3)), Atom::num(Rational::from((4, 3)))),
+                (color_cas!(2, coad!(8)), Atom::num(3)),
+            ])
             .unwrap();
     }
 }
@@ -716,8 +720,7 @@ impl Numerator<Global> {
                         collect_chains: false,
                         collect_traces: false,
                         ..Default::default()
-                    })?
-                    .resolved()?;
+                    })?;
                 cooking.uncook(result.expression().as_view())
             },
             state: Color::Fully,
@@ -841,8 +844,7 @@ impl Numerator<AppliedFeynmanRule> {
                         collect_chains: false,
                         collect_traces: false,
                         ..Default::default()
-                    })?
-                    .resolved()?;
+                    })?;
                 cooking.uncook(result.expression().as_view())
             },
             state: Color::Fully,
@@ -875,8 +877,7 @@ impl Numerator<ColorSimplified> {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            })?
-            .resolved()?;
+            })?;
         let expr = cooking.uncook(result.expression().as_view());
         crate::debug_tags!(#generation, #inspect, #dump;
             stage = "numerator_after_simplify_gamma",

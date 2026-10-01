@@ -143,7 +143,6 @@ for name, (particles, coupling_name) in vertices.items():
             TensorExpression(actual - coupling * color * momentum)
             .contract(collect_chains=False, collect_traces=False)
             .to_expression()
-            .to_expression()
             .collect_factors()
             .collect_num()
         )
@@ -192,7 +191,6 @@ for name in ("V_18", "V_19", "V_35"):
                 - coefficient * linearity[name, "P3"]
             )
             .contract(collect_chains=False, collect_traces=False)
-            .to_expression()
             .to_expression()
             .collect_factors()
             .collect_num()

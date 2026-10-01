@@ -1,5 +1,4 @@
 use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
-use std::sync::Arc;
 use symbolica::parse_lit;
 
 use crate::initialisation::test_initialise;
@@ -51,15 +50,8 @@ fn algebra() {
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
     let source = SymbolicTensor::infer(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
-    let contracted = Arc::new(source.contract(Default::default()).unwrap());
-    println!(
-        "{}",
-        contracted
-            .resolved()
-            .unwrap()
-            .expression()
-            .log_print(Some(120))
-    );
+    let contracted = source.contract(Default::default()).unwrap();
+    println!("{}", contracted.expression().log_print(Some(120)));
     let simplified = contracted
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::default()),
@@ -73,12 +65,5 @@ fn algebra() {
             ..Default::default()
         })
         .unwrap();
-    println!(
-        "{}",
-        simplified
-            .resolved()
-            .unwrap()
-            .expression()
-            .log_print(Some(120))
-    );
+    println!("{}", simplified.expression().log_print(Some(120)));
 }
