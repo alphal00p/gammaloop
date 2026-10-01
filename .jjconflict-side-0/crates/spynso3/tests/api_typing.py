@@ -56,6 +56,18 @@ def check_types(
         sp.FactorProjector[sp.TensorNetwork],
     )
     assert_type(expression.expand_projectors(), sp.TensorExpression)
+    assert_type(sp.TensorExpression.g(representation), sp.TensorExpression)
+    assert_type(sp.TensorExpression.g(representation("mu")), sp.TensorExpression)
+    assert_type(
+        sp.TensorExpression.g(representation, representation("nu")), sp.TensorExpression
+    )
+    assert_type(
+        sp.TensorExpression.g(representation("mu"), representation), sp.TensorExpression
+    )
+    assert_type(
+        sp.TensorExpression.g(representation("mu"), representation("nu")),
+        sp.TensorExpression,
+    )
     assert_type(sp.TensorExpression.gamma0(4), sp.TensorExpression)
     assert_type(sp.TensorExpression.charge_conjugation(4), sp.TensorExpression)
     assert_type(sp.TensorExpression.levi_civita(representation), sp.TensorExpression)

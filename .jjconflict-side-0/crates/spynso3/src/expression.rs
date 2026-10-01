@@ -57,6 +57,7 @@ use crate::{
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
         ConvertibleToSpensoName, SpensoIndices, SpensoName, SpensoRepresentation, SpensoSlot,
+        SpensoSlotOrArgOrRep,
     },
 };
 
@@ -830,47 +831,87 @@ impl TensorExpression {
         Ok(tensor.clone().into_initializer())
     }
 
-    /// Construct the metric pairing.
+    /// Construct the metric pairing, optionally with explicit indices.
     ///
     /// Parameters
     /// ----------
-    /// rep : Representation
-    ///     Space of the first axis.
-    /// other : Representation, optional
-    ///     Space of the second axis. Defaults to rep; it can also be rep.dual().
+    /// rep : Representation or Slot
+    ///     First axis. A representation leaves it unresolved; a slot supplies
+    ///     both its representation and its index.
+    /// other : Representation or Slot, optional
+    ///     Second axis. Defaults to an unresolved axis in the first axis's
+    ///     representation, even when the first argument is a slot.
     ///
     /// Returns
     /// -------
     /// TensorExpression
-    ///     A rank-2 symbolic tensor with distinct unresolved axes. Call the
-    ///     result with index labels to fill those axes in the order described below.
+    ///     The metric with supplied indices in argument order. Representations
+    ///     remain unresolved for later indexing. Matching compatible indices
+    ///     contract, just as when indexing an existing metric.
     ///
-    /// Notes
-    /// -----
-    /// The two spaces must be equal or dual partners.
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the two spaces are neither equal nor dual partners, including
+    ///     when their dimensions differ.
+    /// TypeError
+    ///     If an argument is not a Representation or Slot.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community.tensor import TensorExpression, Representation
-    /// >>> tensor = TensorExpression.g(Representation.euc(3))
-    /// >>> tensor.rank
+    /// >>> r = Representation.mink(4)
+    /// >>> metric = TensorExpression.g(r("mu"), r("nu"))
+    /// >>> metric == TensorExpression.g(r)("mu", "nu")
+    /// True
+    /// >>> partly_indexed = TensorExpression.g(r("mu"), r)
+    /// >>> partly_indexed("nu") == metric
+    /// True
+    /// >>> f = Representation.cof(3)
+    /// >>> identity = TensorExpression.g(f("i"), f.dual()("j"))
+    /// >>> identity.rank
     /// 2
     #[staticmethod]
     #[pyo3(signature = (rep, other = None))]
     fn g(
         py: Python<'_>,
-        rep: &SpensoRepresentation,
-        other: Option<&SpensoRepresentation>,
+        #[gen_stub(override_type(type_repr = "Representation | Slot"))] rep: SpensoSlotOrArgOrRep,
+        #[gen_stub(override_type(type_repr = "Representation | Slot | None"))] other: Option<
+            SpensoSlotOrArgOrRep,
+        >,
     ) -> PyResult<Py<TensorExpression>> {
-        let left = rep.representation;
-        let right = other.unwrap_or(rep).representation;
-        if left != right && left.dual() != right {
-            return Err(PyValueError::new_err(
-                "metric ports must belong to the same representation space (possibly dual)",
-            ));
+        let port = |argument, position| match argument {
+            SpensoSlotOrArgOrRep::Slot(slot) => Ok(slot
+                .slot
+                .rep()
+                .slot(PartialIndex::Explicit(slot.slot.aind()))),
+            SpensoSlotOrArgOrRep::Rep(rep) => {
+                Ok(rep.representation.slot(PartialIndex::open(position)))
+            }
+            SpensoSlotOrArgOrRep::Arg(_) => Err(PyTypeError::new_err(
+                "metric ports must be Representation or Slot objects",
+            )),
+        };
+        let left = port(rep, 0)?;
+        let right = other
+            .map(|other| port(other, 1))
+            .transpose()?
+            .unwrap_or_else(|| left.rep().slot(PartialIndex::open(1)));
+        if left.rep() != right.rep() && left.rep().dual() != right.rep() {
+            return Err(PyValueError::new_err(format!(
+                "metric ports must belong to the same representation space (possibly dual); got {} and {}",
+                left.rep().to_symbolic([]),
+                right.rep().to_symbolic([]),
+            )));
         }
-        let structure = ExplicitKey::<AbstractIndex>::from_iter([left, right], ETS.metric, None);
-        Self::from_structure(py, &structure)
+        let atom = ETS.metric(composition::port_atom(left), composition::port_atom(right));
+        Self::from_known_parts(
+            py,
+            atom,
+            PartialStructure::from_logical_slots([left, right]),
+            Some(ETS.metric),
+            Vec::new(),
+        )
     }
 
     /// Construct the metric map for raising or lowering an index.

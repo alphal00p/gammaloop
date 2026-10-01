@@ -4342,32 +4342,47 @@ class TensorExpression(Expression):
         1
         """
     @staticmethod
-    def g(rep: Representation, other: typing.Optional[Representation] = None) -> TensorExpression:
+    def g(rep: Representation | Slot, other: Representation | Slot | None = None) -> TensorExpression:
         r"""
-        Construct the metric pairing.
+        Construct the metric pairing, optionally with explicit indices.
 
         Parameters
         ----------
-        rep : Representation
-            Space of the first axis.
-        other : Representation, optional
-            Space of the second axis. Defaults to rep; it can also be rep.dual().
+        rep : Representation or Slot
+            First axis. A representation leaves it unresolved; a slot supplies
+            both its representation and its index.
+        other : Representation or Slot, optional
+            Second axis. Defaults to an unresolved axis in the first axis's
+            representation, even when the first argument is a slot.
 
         Returns
         -------
         TensorExpression
-            A rank-2 symbolic tensor with distinct unresolved axes. Call the
-            result with index labels to fill those axes in the order described below.
+            The metric with supplied indices in argument order. Representations
+            remain unresolved for later indexing. Matching compatible indices
+            contract, just as when indexing an existing metric.
 
-        Notes
-        -----
-        The two spaces must be equal or dual partners.
+        Raises
+        ------
+        ValueError
+            If the two spaces are neither equal nor dual partners, including
+            when their dimensions differ.
+        TypeError
+            If an argument is not a Representation or Slot.
 
         Examples
         --------
         >>> from symbolica.community.tensor import TensorExpression, Representation
-        >>> tensor = TensorExpression.g(Representation.euc(3))
-        >>> tensor.rank
+        >>> r = Representation.mink(4)
+        >>> metric = TensorExpression.g(r("mu"), r("nu"))
+        >>> metric == TensorExpression.g(r)("mu", "nu")
+        True
+        >>> partly_indexed = TensorExpression.g(r("mu"), r)
+        >>> partly_indexed("nu") == metric
+        True
+        >>> f = Representation.cof(3)
+        >>> identity = TensorExpression.g(f("i"), f.dual()("j"))
+        >>> identity.rank
         2
         """
     @staticmethod

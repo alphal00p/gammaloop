@@ -17,6 +17,84 @@ class TypedSurfaceTests(unittest.TestCase):
         cls.Q = sp.TensorName("typed_surface::Q")
         cls.x, cls.y = S("typed_surface::x", "typed_surface::y")
 
+    def test_metric_factory_accepts_slots_and_representations_in_both_positions(self):
+        fundamental = sp.Representation.cof(3)
+        pairs = [
+            (self.rep, self.rep),
+            (sp.Representation.mink(S("metric_slots::D")),) * 2,
+            (fundamental, fundamental.dual()),
+            (fundamental.dual(), fundamental),
+        ]
+        for left, right in pairs:
+            for index_left, index_right in (
+                (False, False),
+                (True, False),
+                (False, True),
+                (True, True),
+            ):
+                with self.subTest(
+                    left=left, right=right, indexed=(index_left, index_right)
+                ):
+                    first = left("i") if index_left else left
+                    second = right("j") if index_right else right
+                    metric = sp.TensorExpression.g(first, second)
+                    expected = sp.TensorExpression.g(left, right)(
+                        "i" if index_left else sp.AUTO, "j" if index_right else sp.AUTO
+                    )
+                    self.assertEqual(metric, expected)
+                    self.assertEqual(metric.axes, (first, second))
+                    self.assertEqual(
+                        metric.name.to_expression(), sp.TensorName.g().to_expression()
+                    )
+
+    def test_metric_single_slot_leaves_the_second_axis_unresolved(self):
+        r = self.rep
+        partial = sp.TensorExpression.g(r("i"))
+        self.assertEqual(partial.axes, (r("i"), r))
+        self.assertEqual(partial("j"), r.g("i", "j"))
+        self.assertEqual(sp.TensorExpression.g(r("i"), other=None), partial)
+
+    def test_metric_slot_contractions_and_components(self):
+        fundamental = sp.Representation.cof(3)
+        for left, right in ((self.rep, self.rep), (fundamental, fundamental.dual())):
+            trace = sp.TensorExpression.g(left("i"), right("i"))
+            self.assertTrue(trace.is_scalar)
+            self.assertIsNone(trace.name)
+            self.assertEqual(trace.contract(), sp.TensorExpression(3))
+        r = sp.Representation.mink(4)
+        metric = sp.TensorExpression.g(r("mu"), r("nu"))
+        tensor = metric.to_tensor(sp.TensorLibrary.hep_lib_atom())
+        self.assertEqual(tensor.axes, metric.axes)
+        self.assertEqual(tensor[:], [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1])
+
+    def test_metric_slots_reject_incompatible_spaces_and_invalid_arguments(self):
+        for left, right in (
+            (self.rep, sp.Representation.euc(4)),
+            (self.rep, sp.Representation.mink(3)),
+            (sp.Representation.bis(4), sp.Representation.mink(4)),
+            (sp.Representation.cof(3), sp.Representation.cof(4).dual()),
+            (
+                sp.Representation.mink(S("metric_slots::D")),
+                sp.Representation.mink(S("metric_slots::E")),
+            ),
+        ):
+            for first, second in (
+                (left("i"), right),
+                (left, right("j")),
+                (left("i"), right("j")),
+            ):
+                with self.subTest(first=first, second=second):
+                    with self.assertRaisesRegex(
+                        ValueError, "same representation space"
+                    ) as error:
+                        sp.TensorExpression.g(first, second)
+                    self.assertIn(str(left), str(error.exception))
+                    self.assertIn(str(right), str(error.exception))
+        for invalid in (3, E("metric_slots::x"), object()):
+            for first, second in ((invalid, self.rep), (self.rep, invalid)):
+                with self.assertRaises(TypeError):
+                    sp.TensorExpression.g(first, second)
+
     def test_expression_subclass_and_checked_reconstruction(self):
         source = self.P(self.x, self.rep("j"), self.rep("i")).permute_axes([1, 0])
         self.assertIsInstance(source, Expression)

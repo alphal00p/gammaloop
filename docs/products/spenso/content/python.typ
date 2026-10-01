@@ -218,10 +218,13 @@ types for indexing, arithmetic, composition, simplification, and evaluation.
 
 == Metrics and oriented identities
 
-`TensorExpression.g(left, right)` creates an unresolved metric with ports in the
+`TensorExpression.g(left, right)` accepts a `Representation` or `Slot` for either
+port. Slots supply their indices directly; representations leave ports unresolved.
+Omitting `right` leaves the second port unresolved in the first port's representation.
+For example, `TensorExpression.g(r("i"), r("j"))` constructs the indexed metric,
+and `TensorExpression.g(r("i"), r)` leaves one index to fill. Its ports follow the
 specified logical order. The representations must identify the same space and
 have exactly equal dimensions; either port may carry its dual orientation.
-Omitting `right` uses `left` for both ports, as in a Minkowski metric.
 For a fundamental color identity, pair the fundamental space with its dual:
 
 // docs-example: compile
@@ -231,7 +234,7 @@ from symbolica.community.tensor import Representation, TensorExpression
 
 fund = Representation.cof(3)
 identity = TensorExpression.g(fund, fund.dual())
-indexed_identity = identity("i", "j")
+indexed_identity = TensorExpression.g(fund("i"), fund.dual()("j"))
 assert identity("i", "i").contract().to_expression() == E("3")
 ```
 
