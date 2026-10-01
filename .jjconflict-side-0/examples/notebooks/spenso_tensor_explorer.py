@@ -28,7 +28,7 @@ def _(Representation, TensorExpression, TensorName):
     Jbar = TensorName("Jbar", print={"typst": "macron(J)", "latex": r"\bar{J}"})(spinor)
     J = TensorName("J")(spinor)
     gamma = TensorExpression.dirac_gamma(4)
-    current = Jbar(1) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) * J(4)
+    current = Jbar(1) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) 
     current
     return (current,)
 
