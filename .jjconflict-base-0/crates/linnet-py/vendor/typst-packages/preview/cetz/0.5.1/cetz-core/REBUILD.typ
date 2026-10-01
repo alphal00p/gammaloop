@@ -2,7 +2,7 @@
 
 The bundled binary is built from CeTZ `v0.5.1`, commit
 `100ea3c52342c8bf866e8f154589ce8cd309265c`, with
-`batched-bounds.patch` and `content-placement.patch` applied. The source remains under CeTZ's
+`batched-bounds.patch`, `content-placement.patch` and `sampled-curves.patch` applied. The source remains under CeTZ's
 LGPL-3.0-or-later license; see `../LICENSE`.
 
 The bounds patch adds one export that calls the existing cubic-extrema and AABB
@@ -15,6 +15,11 @@ The content patch adds a batch export for prepared rectangular content. It
 preserves the scalar transform, corner and frame arithmetic and line order.
 Nonfinite geometry is flagged so the caller retains Typst's scalar comparison
 behavior. Styles, measurements, wrapping and drawable templates remain in Typst.
+
+The sampled-curve patch moves CeTZ's existing fixed-sample cubic arc-length
+and distance-to-parameter loops into the native core. It retains the same
+sample counts, Bernstein evaluation order, vector dimensions, endpoint behavior
+and integer/float return types. It does not use adaptive curve measurements.
 
 The checked-in binary uses Rust 1.98.0 (`88d9e12ae`, LLVM 22.1.8), the upstream
 `cetz-core/Cargo.lock`, and the upstream release profile with `CARGO_PROFILE_RELEASE_OPT_LEVEL=3`
@@ -29,6 +34,7 @@ git clone --depth 1 --branch v0.5.1 https://github.com/cetz-package/cetz.git "$c
 test "$(git -C "$cetz_source" rev-parse HEAD)" = 100ea3c52342c8bf866e8f154589ce8cd309265c
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/batched-bounds.patch"
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/content-placement.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/sampled-curves.patch"
 (
   cd "$cetz_source" || exit
   unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS CARGO_TARGET_DIR
@@ -38,9 +44,12 @@ cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm"
 ```
 
 The resulting binary's SHA-256 is
-`fd5197c55f3160d260473c581f75eff7b1e0fb7f40559ce143c1a5661501a6e2`.
+`bb5548265e34ab0fa7521c90246843e88f9b5e1ec1828ad468ea5fdb543b5061`.
 The bounds behavior fixture compares batched results against the scalar CeTZ
 exports, including degenerate curves, mixed dimensions, signed zeros and
 nonfinite aggregation. It runs as part of the Clinnet public Typst fixture. The identity-target fixture
 also compares batched content against scalar placement across styles, transforms,
 coordinate hooks, degenerate frames and overflowing coordinates.
+
+The sampled-curve fixture compares exact CBOR results against the scalar loops
+across sample counts, signed zeros, mixed dimensions and forward/reverse distances.

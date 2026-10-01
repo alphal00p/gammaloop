@@ -1737,21 +1737,27 @@
                 calc.min(1, total / length)
               }
               let direction = if axis.first() < 0 { -1 } else { 1 }
-              let stations = (tip, back).map(p => (
-                at
-                  + if length == 0 { 0 } else {
-                    cetz.vector.dot(p, axis) / length * direction * compression
-                  }
-              ))
+              let stations = ()
+              for point in (tip, back) {
+                stations.push(at + if length == 0 { 0 } else {
+                  cetz.vector.dot(point, axis) / length * direction * compression
+                })
+              }
               let low = calc.min(..stations)
               let span = calc.abs(stations.last() - stations.first())
               let inward = calc.clamp(low, 0, calc.max(0, total - span)) - low
-              stations = stations.map(s => calc.clamp(s + inward, 0, total))
+              stations = (
+                calc.clamp(stations.first() + inward, 0, total),
+                calc.clamp(stations.last() + inward, 0, total),
+              )
               // Repeated controls need no special direction: only the two sampled points matter.
-              let contacts = stations.map(s => cetz.path-util.point-at(
-                carrier.segments,
-                if side == 1 { total - s } else { s },
-              ))
+              let contacts = ()
+              for station in stations {
+                contacts.push(cetz.path-util.point-at(
+                  carrier.segments,
+                  if side == 1 { total - station } else { station },
+                ))
+              }
               let chord = cetz.vector.sub(
                 contacts.last().point,
                 contacts.first().point,
@@ -2056,11 +2062,14 @@
     }
     for points in pieces {
       if points.len() == 0 { continue }
+      let xs = ()
+      let ys = ()
+      for point in points { xs.push(point.at(0)); ys.push(point.at(1)) }
       arrow-bounds.push((
-        left: calc.min(..points.map(p => p.at(0))) - radius,
-        right: calc.max(..points.map(p => p.at(0))) + radius,
-        bottom: calc.min(..points.map(p => p.at(1))) - radius,
-        top: calc.max(..points.map(p => p.at(1))) + radius,
+        left: calc.min(..xs) - radius,
+        right: calc.max(..xs) + radius,
+        bottom: calc.min(..ys) - radius,
+        top: calc.max(..ys) + radius,
       ))
     }
   }
@@ -2166,19 +2175,25 @@
     let frame = if sampled-frame != none { sampled-frame } else if fixed-position != none { frame } else {
       _path-mid-frame(candidate-path, accuracy, shift: at - total / 2)
     }
-    let tangent-length = _point-length(frame.tangent)
     let normal = if endpoint-direction != none {
       _point-scale(endpoint-direction, 1 / _point-length(endpoint-direction))
-    } else if tangent-length <= 1e-9 { (0, candidate-side) } else {
-      _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
+    } else if base != none {
+      base.normal
+    } else {
+      let tangent-length = _point-length(frame.tangent)
+      if tangent-length <= 1e-9 { (0, candidate-side) } else {
+        _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
+      }
     }
-    let outward = cetz.vector.sub(
+    let outward = if base != none and endpoint-direction == none { base.outward } else { cetz.vector.sub(
       cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
-    )
-    let normal-squared = cetz.vector.dot(outward, outward)
-    let nearest = if (clear-box or endpoint-direction != none) and normal-squared > 1e-18 {
-      calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
-    } else { 0 }
+    ) }
+    let nearest = if base != none and endpoint-direction == none { base.nearest } else {
+      let normal-squared = cetz.vector.dot(outward, outward)
+      if (clear-box or endpoint-direction != none) and normal-squared > 1e-18 {
+        calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
+      } else { 0 }
+    }
     let path-shift = at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift }
     let arrow-bounds = ()
     let attachment-lines = options.lines
@@ -2208,8 +2223,12 @@
     } else if fixed-position != none and endpoint-direction == none { frame.point } else {
       _point-add(frame.point, _point-scale(normal, normal-offset))
     }
-    let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
-    let bounds = corners.map(corner => cetz.vector.add(center, corner))
+    let bounds = if base != none and position == base.position { base.corners } else {
+      let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
+      let translated = ()
+      for corner in corners { translated.push(cetz.vector.add(center, corner)) }
+      translated
+    }
     (
       position: position,
       at: at,
@@ -2219,11 +2238,12 @@
       arrow-bounds: arrow-bounds,
       corners: bounds,
       bounds: if base != none and position == base.position { base.bounds } else {
+        let xs = ()
+        let ys = ()
+        for point in bounds { xs.push(point.at(0)); ys.push(point.at(1)) }
         (
-          left: calc.min(..bounds.map(p => p.at(0))),
-          right: calc.max(..bounds.map(p => p.at(0))),
-          bottom: calc.min(..bounds.map(p => p.at(1))),
-          top: calc.max(..bounds.map(p => p.at(1))),
+          left: calc.min(..xs), right: calc.max(..xs),
+          bottom: calc.min(..ys), top: calc.max(..ys),
         )
       },
       // Prefer the original side when both placements are otherwise equivalent.

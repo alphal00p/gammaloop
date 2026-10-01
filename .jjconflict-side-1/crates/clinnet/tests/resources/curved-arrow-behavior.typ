@@ -229,6 +229,74 @@
   6 * length / calc.max(1e-9, calc.min(width, height))
 }
 
+// Fixed-sample CeTZ measurements retain scalar arithmetic, sample counts and
+// integer/float endpoint types; these are distinct from adaptive Kurvst lengths.
+#let scalar-cubic-arclen(s, e, c1, c2, samples: 20) = {
+  let d = 0
+  for i in range(1, samples + 1) {
+    let t0 = (i - 1) / samples
+    let t1 = i / samples
+    d += cetz.vector.dist(
+      cetz.path-util.bezier.cubic-point(s, e, c1, c2, t0),
+      cetz.path-util.bezier.cubic-point(s, e, c1, c2, t1))
+  }
+  return d
+}
+
+#let scalar-cubic-t-for-distance(s, e, c1, c2, d, samples: 20) = {
+  let travel-forwards(s, e, c1, c2, d) = {
+    let sum = 0
+    for n in range(1, samples + 1) {
+      let t0 = (n - 1) / samples
+      let t1 = n / samples
+
+      let segment-dist = cetz.vector.dist(cetz.path-util.bezier.cubic-point(s, e, c1, c2, t0),
+                                     cetz.path-util.bezier.cubic-point(s, e, c1, c2, t1))
+      if sum <= d and d <= sum + segment-dist {
+        let lambda = (d - sum) / segment-dist
+        return (1 - lambda) * t0 + lambda * t1
+      }
+      sum += segment-dist
+    }
+    return 1
+  }
+
+  if d == 0 {
+    return 0
+  }
+
+  if d > 0 {
+    return travel-forwards(s, e, c1, c2, d)
+  } else {
+    return 1 - travel-forwards(e, s, c2, c1, -d)
+  }
+}
+
+#let curves = (
+  ((0, 0), (2, 0), (0, 0), (2, 0)),
+  ((-0.0, 0.0), (0.0, -0.0), (-0.0, -0.0), (0.0, 0.0)),
+  ((0, 0), (1, 1), (4, -2), (-3, 3)),
+  ((0, 0, 0), (1, 1, 3), (4, -2, 7), (-3, 3, 2)),
+  ((0, 0), (1, 1, 3), (4, -2), (-3, 3, 2)),
+  ((0, 0, 0, 1), (1, 1, 3, 2), (4, -2, 7, 9), (-3, 3, 2, 0)),
+  ((1, 2), (1, 2), (1, 2), (1, 2)),
+  ((0.000001, -0.000002), (0.000003, 0.000004), (-0.000005, 0.000007), (0.000011, -0.000013)),
+)
+#for (s, e, c1, c2) in curves {
+  for samples in (0, 1, 2, 7, 20, 25, 37) {
+    let expected = scalar-cubic-arclen(s, e, c1, c2, samples: samples)
+    let actual = cetz.path-util.bezier.cubic-arclen(s, e, c1, c2, samples: samples)
+    assert.eq(cbor.encode(actual), cbor.encode(expected),
+      message: "sampled length: " + repr((s, e, c1, c2, samples, actual, expected)))
+    for d in (0, -0.0, -100, 100, 0.05, 0.1, 0.25, 0.5, 1, 2, 10, -0.05, -0.1, -0.25, -0.5, -1, -2, -10) {
+      let expected = scalar-cubic-t-for-distance(s, e, c1, c2, d, samples: samples)
+      let actual = cetz.path-util.bezier.cubic-t-for-distance(s, e, c1, c2, d, samples: samples)
+      assert.eq(cbor.encode(actual), cbor.encode(expected),
+        message: "sampled parameter: " + repr((s, e, c1, c2, samples, d, actual, expected)))
+    }
+  }
+}
+
 // Include this file, or import and render this value: canvas assertions need layout.
 #let curved-arrow-behavior = {
   let accuracy = 1e-6

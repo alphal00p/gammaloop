@@ -392,7 +392,8 @@ impl ImpredLayout {
     }
 
     fn point_segments(&self, model: &Model) -> Vec<PointSegment> {
-        let mut result = Vec::new();
+        let mut result =
+            Vec::with_capacity(self.positions.len().saturating_sub(2) * model.segments.len());
         for point in 0..self.positions.len() {
             for (index, segment) in model.segments.iter().enumerate() {
                 if point == segment.a || point == segment.b {
@@ -445,13 +446,20 @@ impl ImpredLayout {
     ) -> Vec<Vector2<f64>> {
         let rep_exponent = 2.0 + 2.0 * progress;
         let mut force = vec![Vector2::zero(); self.positions.len()];
-        for (i, forces) in force.iter_mut().enumerate() {
-            for j in 0..self.positions.len() {
+        // Visit each symmetric pair once, while each point still accumulates
+        // neighbors in ascending order (including its original diagonal term).
+        for i in 0..self.positions.len() {
+            for j in i..self.positions.len() {
                 let difference = self.point(i) - self.point(j);
                 let coefficient = model.pair_weights[i][j]
                     * (config.target / difference.magnitude().max(config.target * 0.02))
                         .powf(rep_exponent);
-                *forces += config.repulsion * coefficient * difference;
+                force[i] += config.repulsion * coefficient * difference;
+                if i != j {
+                    // Recompute the reversed difference rather than negating:
+                    // equal coordinates can carry different signed zeros.
+                    force[j] += config.repulsion * coefficient * (self.point(j) - self.point(i));
+                }
             }
         }
         for (total, attraction) in
@@ -532,7 +540,8 @@ impl ImpredLayout {
             (lengths[lengths.len() / 2 - 1] + lengths[lengths.len() / 2]) * 0.5
         };
         let clearance = 1e-6 * median.max(1.0);
-        let mut rows = Vec::new();
+        let count = self.positions.len();
+        let mut rows = Vec::with_capacity(3 * pairs.len() + count * count.saturating_sub(1));
         for pair in pairs {
             let segment = model.segments[pair.segment];
             let vector = self.point(segment.b) - self.point(segment.a);
@@ -807,6 +816,11 @@ impl ImpredLayout {
         if model.segments.is_empty() {
             return Ok(report);
         }
+        let cap_normals: [[f64; 2]; 16] = std::array::from_fn(|i| {
+            let angle = (i as f64 + 0.5) * (2.0 * std::f64::consts::PI / 16.0);
+            [angle.cos(), angle.sin()]
+        });
+        let cap_apothem = (std::f64::consts::PI / 16.0).cos();
         for epoch in 0..config.steps {
             let u = epoch as f64 / config.steps.saturating_sub(1).max(1) as f64;
             let pairs = self.point_segments(&model);
@@ -822,13 +836,13 @@ impl ImpredLayout {
                 .filter(|row| row.bound < cap * (1.0 + 1e-12))
                 .cloned()
                 .collect();
+            rows.reserve(cap_normals.len() * self.positions.len());
             for point in 0..self.positions.len() {
-                for i in 0..16 {
-                    let angle = (i as f64 + 0.5) * (2.0 * std::f64::consts::PI / 16.0);
+                for &normal in &cap_normals {
                     rows.push(Halfplane {
                         point,
-                        normal: [angle.cos(), angle.sin()],
-                        bound: cap * (std::f64::consts::PI / 16.0).cos(),
+                        normal,
+                        bound: cap * cap_apothem,
                     });
                 }
             }
@@ -843,7 +857,9 @@ impl ImpredLayout {
                 .map(|&point| Vector2::from(point).magnitude() - cap)
                 .fold(0.0, f64::max);
             if separator_error > 2e-9 * cap || cap_error > 2e-9 * cap {
-                return Err(format!("ImPrEd movement geometry certificate failed: separators={separator_error},cap={cap_error}"));
+                return Err(format!(
+                    "ImPrEd movement geometry certificate failed: separators={separator_error},cap={cap_error}"
+                ));
             }
             report.max_primal_residual =
                 report.max_primal_residual.max(certificate.primal_residual);
@@ -1072,11 +1088,13 @@ mod tests {
         assert_eq!(layout.routes[0], vec![0, 2, 1]);
         assert_eq!(layout.positions[2], [4.0, 0.0]);
         let model = layout.model(&[true], 1.0);
-        assert!(model
-            .pair_weights
-            .iter()
-            .flatten()
-            .all(|&value| value == 0.0));
+        assert!(
+            model
+                .pair_weights
+                .iter()
+                .flatten()
+                .all(|&value| value == 0.0)
+        );
         let after = layout.segment_forces(&model, config, 1.0);
         assert_eq!(after[0], before[0] * 0.25);
         assert_eq!(after[2], Vector2::zero());

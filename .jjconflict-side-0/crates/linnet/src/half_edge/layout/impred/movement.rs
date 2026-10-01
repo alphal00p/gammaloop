@@ -222,8 +222,8 @@ impl MovementDofs {
             return Err("Nonfinite force or invalid movement scale".into());
         }
         let count = self.weights.len();
-        let mut matrix = Vec::new();
-        let mut bounds = Vec::new();
+        let mut matrix = Vec::with_capacity(rows.len());
+        let mut bounds = Vec::with_capacity(rows.len());
         let mut components = Components::new(count);
         for row in rows {
             if row.point >= self.index.len()
@@ -299,9 +299,33 @@ impl MovementDofs {
             }
             blocks.push((Vec::new(), Vec::new()));
         }
+        // Most late-epoch proposals are already feasible. Test the sparse
+        // rows in the same column order as the dense dot product, without
+        // allocating a dense block for those unconstrained optima.
+        let mut unconstrained = vec![true; groups.len()];
+        for (row, &bound) in matrix.iter().zip(&bounds) {
+            let &(column, _) = row.iter().find(|(_, value)| *value != 0.0).unwrap();
+            let group = locations[column].0;
+            if unconstrained[group] {
+                unconstrained[group] = groups[group]
+                    .iter()
+                    .map(|&column| {
+                        let coefficient = row
+                            .iter()
+                            .find(|(index, _)| *index == column)
+                            .map_or(0.0, |(_, value)| *value);
+                        coefficient * desired[column]
+                    })
+                    .sum::<f64>()
+                    <= bound;
+            }
+        }
         for (row, bound) in matrix.iter().zip(bounds) {
             let &(column, _) = row.iter().find(|(_, value)| *value != 0.0).unwrap();
             let group = locations[column].0;
+            if unconstrained[group] {
+                continue;
+            }
             let mut local = vec![0.0; groups[group].len()];
             for &(column, value) in row {
                 if value != 0.0 {
@@ -312,7 +336,15 @@ impl MovementDofs {
             blocks[group].1.push(bound);
         }
         let mut values = vec![0.0; count];
-        for (columns, (block, block_bounds)) in groups.iter().zip(blocks) {
+        for ((columns, (block, block_bounds)), unconstrained) in
+            groups.iter().zip(blocks).zip(unconstrained)
+        {
+            if unconstrained {
+                for &column in columns {
+                    values[column] = desired[column] * scale;
+                }
+                continue;
+            }
             let weights: Vec<_> = columns.iter().map(|&column| self.weights[column]).collect();
             let desired: Vec<_> = columns.iter().map(|&column| desired[column]).collect();
             let (candidate, local) =
@@ -383,9 +415,27 @@ impl ProjectedComponent<'_> {
                 .map(|(q, v)| -q * v / objective_scale)
                 .collect(),
         };
+        let mut candidate_residual = None;
         let (mut values, dual, mut status, iterations) = if desired.len() <= 2 {
-            let (values, dual) = problem.small_polygon()?;
-            (values, dual, "enumerated movement polygon".to_owned(), 0)
+            let candidate = (desired.len() == 2)
+                .then(|| problem.polygon_candidate())
+                .flatten()
+                .filter(|(values, dual)| {
+                    let residual = problem.certify(values, dual);
+                    if Self::certified(residual) {
+                        candidate_residual = Some(residual);
+                        true
+                    } else {
+                        false
+                    }
+                });
+            let (values, dual, status) = if let Some((values, dual)) = candidate {
+                (values, dual, "certified binary64 movement polygon")
+            } else {
+                let (values, dual) = problem.small_polygon()?;
+                (values, dual, "enumerated movement polygon")
+            };
+            (values, dual, status.to_owned(), 0)
         } else {
             let p = CscMatrix::new(
                 desired.len(),
@@ -440,7 +490,7 @@ impl ProjectedComponent<'_> {
                 solver.solution.iterations,
             )
         };
-        let mut residual = problem.certify(&values, &dual);
+        let mut residual = candidate_residual.unwrap_or_else(|| problem.certify(&values, &dual));
         if desired.len() > 2 && !Self::certified(residual) {
             if let Some((candidate, multipliers)) = problem.polish(&values, &dual) {
                 let refined = problem.certify(&candidate, &multipliers);
@@ -527,6 +577,108 @@ impl ProjectedComponent<'_> {
         let second = Wide::from(remainder.hi() / denominator.hi());
         let remainder = remainder - denominator * second;
         first + second + Wide::from(remainder.hi() / denominator.hi())
+    }
+
+    // Binary64 identifies a likely active face cheaply. This is only a
+    // proposal: the extended-precision KKT certificate checks every original
+    // halfplane and multiplier before it can replace the double-double solve.
+    fn polygon_candidate(&self) -> Option<(Vec<f64>, Vec<Wide>)> {
+        debug_assert_eq!(self.quadratic.len(), 2);
+        let desired = [
+            -self.linear[0] / self.quadratic[0],
+            -self.linear[1] / self.quadratic[1],
+        ];
+        struct Candidate {
+            cost: f64,
+            point: [f64; 2],
+            multipliers: [(usize, f64); 2],
+        }
+        let mut best: Option<Candidate> = None;
+        let mut consider = |point: [f64; 2], multipliers: [(usize, f64); 2]| {
+            if !point.iter().all(|x| x.is_finite())
+                || multipliers
+                    .iter()
+                    .any(|&(_, value)| !value.is_finite() || value < -2e-9)
+            {
+                return;
+            }
+            // A roundoff allowance finds boundary candidates; it does not
+            // relax acceptance, which uses the original wide certificate.
+            if self.matrix.iter().zip(self.bounds).any(|(row, &bound)| {
+                let dot = row.iter().zip(point).map(|(&a, x)| a * x).sum::<f64>();
+                let magnitude = row
+                    .iter()
+                    .zip(point)
+                    .map(|(&a, x)| (a * x).abs())
+                    .sum::<f64>();
+                dot - bound > 32.0 * f64::EPSILON * magnitude.max(bound.abs()).max(1.0)
+            }) {
+                return;
+            }
+            let cost = (0..2)
+                .map(|i| 0.5 * self.quadratic[i] * point[i] * point[i] + self.linear[i] * point[i])
+                .sum::<f64>();
+            if cost.is_finite() && best.as_ref().is_none_or(|candidate| cost < candidate.cost) {
+                best = Some(Candidate {
+                    cost,
+                    point,
+                    multipliers,
+                });
+            }
+        };
+        for (index, (row, &bound)) in self.matrix.iter().zip(self.bounds).enumerate() {
+            let distance = row.iter().zip(desired).map(|(&a, x)| a * x).sum::<f64>() - bound;
+            let denominator = row
+                .iter()
+                .zip(&self.quadratic)
+                .map(|(&a, &q)| a * a / q)
+                .sum::<f64>();
+            let multiplier = distance / denominator;
+            let point = [
+                desired[0] - multiplier * row[0] / self.quadratic[0],
+                desired[1] - multiplier * row[1] / self.quadratic[1],
+            ];
+            consider(point, [(index, multiplier), (index, 0.0)]);
+        }
+        for first in 0..self.matrix.len() {
+            for second in first + 1..self.matrix.len() {
+                let a = &self.matrix[first];
+                let b = &self.matrix[second];
+                let determinant = a[0] * b[1] - a[1] * b[0];
+                if determinant == 0.0 {
+                    continue;
+                }
+                let point = [
+                    (self.bounds[first] * b[1] - a[1] * self.bounds[second]) / determinant,
+                    (a[0] * self.bounds[second] - self.bounds[first] * b[0]) / determinant,
+                ];
+                let gradient = [
+                    -(self.quadratic[0] * point[0] + self.linear[0]),
+                    -(self.quadratic[1] * point[1] + self.linear[1]),
+                ];
+                consider(
+                    point,
+                    [
+                        (
+                            first,
+                            (gradient[0] * b[1] - b[0] * gradient[1]) / determinant,
+                        ),
+                        (
+                            second,
+                            (a[0] * gradient[1] - gradient[0] * a[1]) / determinant,
+                        ),
+                    ],
+                );
+            }
+        }
+        let Candidate {
+            point, multipliers, ..
+        } = best?;
+        let mut dual = vec![Wide::from(0.0); self.bounds.len()];
+        for (row, value) in multipliers {
+            dual[row] += Wide::from(value);
+        }
+        Some((point.to_vec(), dual))
     }
 
     fn small_polygon(&self) -> Result<(Vec<f64>, Vec<Wide>), String> {
@@ -1089,6 +1241,45 @@ mod tests {
             .is_err()
         );
         assert!(dofs.project(&[[0.0, 0.0]], &[], 0.0).is_err());
+    }
+
+    #[test]
+    fn binary64_polygon_requires_the_extended_certificate() {
+        let matrix = vec![
+            vec![1.0, 0.0],
+            vec![-1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![0.0, -1.0],
+        ];
+        let (values, certificate) =
+            ProjectedComponent::solve(&matrix, &[1.0; 4], &[2.0, 3.0], &[2.0, 3.0]).unwrap();
+        assert_eq!(values, [1.0, 1.0]);
+        assert_eq!(certificate.status, "certified binary64 movement polygon");
+        assert!(certificate.primal_residual <= 2e-9);
+        assert!(certificate.stationarity_residual <= 2e-8);
+        assert!(certificate.complementarity_residual <= 2e-8);
+    }
+
+    #[test]
+    fn nearly_parallel_polygon_escalates_precision_for_amplified_duals() {
+        let matrix = vec![vec![1.0, 1.0], vec![-1.0, -1.0 + 1e-10]];
+        let problem = ProjectedComponent {
+            matrix: &matrix,
+            bounds: &[0.0; 2],
+            quadratic: vec![1.0; 2],
+            linear: vec![-0.123, -1.0],
+        };
+        let (candidate, dual) = problem.polygon_candidate().unwrap();
+        assert!(!ProjectedComponent::certified(
+            problem.certify(&candidate, &dual)
+        ));
+        let (values, certificate) =
+            ProjectedComponent::solve(&matrix, &[0.0; 2], &[1.0; 2], &[0.123, 1.0]).unwrap();
+        assert_eq!(values, [0.0; 2]);
+        assert_eq!(certificate.status, "enumerated movement polygon");
+        assert!(certificate.primal_residual <= 2e-9);
+        assert!(certificate.stationarity_residual <= 2e-8);
+        assert!(certificate.complementarity_residual <= 2e-8);
     }
 
     #[test]

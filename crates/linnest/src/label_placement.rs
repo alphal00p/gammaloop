@@ -1020,6 +1020,10 @@ impl CollisionSpec {
 #[serde(rename_all = "kebab-case")]
 struct Candidate {
     position: [f64; 2],
+    normal: [f64; 2],
+    outward: [f64; 3],
+    nearest: f64,
+    corners: [[f64; 3]; 4],
     at: f64,
     side: f64,
     path_index: usize,
@@ -1067,10 +1071,14 @@ impl CandidateSpec {
                 let center = self.transform.point(position);
                 let bounds = self
                     .corners
-                    .map(|corner| [center[0] + corner[0], center[1] + corner[1]]);
+                    .map(|corner| std::array::from_fn(|i| center[i] + corner[i]));
                 let relative = (at - self.preferred) / self.total;
                 Candidate {
                     position,
+                    normal,
+                    outward,
+                    nearest,
+                    corners: bounds,
                     at,
                     side: self.side,
                     path_index: self.path_index,
@@ -1595,6 +1603,18 @@ mod tests {
         };
         let candidate = spec.candidates().unwrap().remove(0);
         assert_eq!(candidate.position, [1.0, 3.25]);
+        assert_eq!(candidate.normal, [0.0, 1.0]);
+        assert_eq!(candidate.outward, [0.0, 3.0, 0.0]);
+        assert_eq!(candidate.nearest, -1.0);
+        assert_eq!(
+            candidate.corners,
+            [
+                [10.0, 2.75, 0.0],
+                [14.0, 2.75, 0.0],
+                [14.0, 8.75, 0.0],
+                [10.0, 8.75, 0.0],
+            ]
+        );
         assert_eq!(
             (candidate.bounds.left, candidate.bounds.right),
             (10.0, 14.0)
