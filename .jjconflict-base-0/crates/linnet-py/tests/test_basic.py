@@ -3104,6 +3104,39 @@ class TestTypedTypstSurface(unittest.TestCase):
                 with self.assertRaises((TypeError, ValueError)):
                     lp.LayoutOptions().then(external_pull_balance=value)
 
+    def test_impred_step_scale_is_typed_and_preserved_across_passes(self):
+        layouts = lp.LayoutOptions(
+            algorithm=lp.LayoutAlgorithm.Impred, impred_steps=1500, impred_step_scale=1
+        ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=2)
+        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
+        source = graph.prepare_render().typst_source
+        self.assertEqual(layouts.pass_count, 2)
+        self.assertIn('("impred-steps"): 1500', source)
+        for value in (1, 2):
+            self.assertIn(f'("impred-step-scale"): {value}', source)
+        self.assertEqual(source.count('("impred-step-scale"):'), 2)
+        for constructor in (lp.LayoutOptions, lp.LayoutOptions.then):
+            self.assertIn(
+                "impred_step_scale", inspect.signature(constructor).parameters
+            )
+        for value in (-1, 1.5, "2", float("nan"), float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions(impred_step_scale=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions().then(impred_step_scale=value)
+
+    def test_impred_step_scale_zero_is_rejected_by_shared_solver(self):
+        graph, _, _, _ = sample_graph(
+            render_config=lp.RenderConfig(
+                layouts=lp.LayoutOptions(
+                    algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=0
+                )
+            )
+        )
+        with self.assertRaisesRegex(RuntimeError, "step.scale.*positive"):
+            graph.to_svg()
+
     def test_external_pull_attachment_is_validated_and_preserved_across_passes(self):
         layouts = (
             lp.LayoutOptions(external_pull_attachment=0)

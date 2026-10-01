@@ -1035,6 +1035,15 @@
   and graph annealing are not additional default passes. Hobby smoothing and
   decorative coils do not themselves carry the polyline crossing certificate.
 
+  `impred-steps` sets the nominal cooling budget. The first 20% uses fine
+  integration steps; afterward `impred-step-scale` permits a larger stride,
+  scaling both the force displacement and movement cap. Strides stop at the
+  original 25-tick geometry/refinement checkpoints and 100-tick progress
+  checkpoints. Every movement still passes the native constraint certificate.
+  The native report's `iterations` counts actual solves; progress callbacks use
+  nominal ticks. `impred-step-scale: 1` retains the reference schedule, while
+  the default `2` reduces work with small numerical layout differences.
+
   #table(
     columns: (auto, auto, 1fr),
     [Option], [Default], [Meaning],
@@ -1050,13 +1059,14 @@
     [`impred-contract-chord-ratio`], [`1.25`], [External contraction threshold; must be below the split threshold.],
     [`impred-edge-clearance`], [`0.4`], [Node-to-edge clearance scale.],
     [`impred-node-edge-strength`], [`4`], [Node-to-edge force multiplier.],
-    [`impred-steps`], [`1500`], [Number of relaxation iterations.],
+    [`impred-steps`], [`1500`], [Nominal cooling budget.],
+    [`impred-step-scale`], [`2`], [Positive maximum integration stride; `1` uses the reference schedule.],
   )
 
   The same names work through CLI input overrides:
 
   ```sh
-  just draw --input impred-parallel-balance=1 --input impred-pull=0.45
+  just draw --input impred-parallel-balance=1 --input impred-pull=0.45 --input impred-step-scale=1
   ```
 
   Explicit `"force"`, `"anneal"`, `"tree"`, `"dot"`, and `"stable-layered"`

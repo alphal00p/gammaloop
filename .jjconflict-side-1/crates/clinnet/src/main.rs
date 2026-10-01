@@ -913,6 +913,7 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
         "epochs",
         "seed",
         "impred-steps",
+        "impred-step-scale",
         "impred-external-max-points",
     ] {
         if let Some(value) = inputs.remove(key) {
@@ -1415,12 +1416,14 @@ mod tests {
         let mut inputs = vec![
             ("layout-algo".to_owned(), "impred".to_owned()),
             ("impred-steps".to_owned(), "1500".to_owned()),
+            ("impred-step-scale".to_owned(), "1".to_owned()),
             ("impred-external-max-points".to_owned(), "2".to_owned()),
             ("momentum-arrows".to_owned(), "true".to_owned()),
         ];
         let mut expected_layout = vec![
             ("layout-algo", TypstValue::String("impred".into())),
             ("impred-steps", TypstValue::Integer(1500)),
+            ("impred-step-scale", TypstValue::Integer(1)),
             ("impred-external-max-points", TypstValue::Integer(2)),
         ];
         for (key, value) in [
@@ -1472,6 +1475,7 @@ mod tests {
         );
         for (key, value) in [
             ("impred-steps", "1.5"),
+            ("impred-step-scale", "1.5"),
             ("impred-external-max-points", "2.5"),
             ("impred-pull", "blue"),
         ] {

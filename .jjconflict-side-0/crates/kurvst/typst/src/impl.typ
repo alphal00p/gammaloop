@@ -1093,6 +1093,13 @@
   segments.map(((kind, ..points)) => (kind, ..points.map(p => p.slice(0, 2)))),
 ))
 
+#let _cetz-carrier(origin, joined, current, ctx) = {
+  ctx.prev.pt = current
+  (ctx: ctx, drawables: _cetz-apply-transform(ctx.transform,
+    _cetz-drawable-path(((origin, false, joined),)),
+  ))
+}
+
 #let _draw-cetz(subpaths, style, numeric, pairs, ctx) = {
   // Numeric paths need no per-segment coordinate resolution, anchors or
   // bounds. Keep CeTZ's primitive processing when user hooks or inherited
@@ -1126,12 +1133,7 @@
     let (origin, closed, joined) = subpaths.first()
     let current = joined.last().last()
     if closed and current != origin { joined.push(("l", origin)); current = origin }
-    (ctx => {
-      ctx.prev.pt = current
-      (ctx: ctx, drawables: _cetz-apply-transform(ctx.transform,
-        _cetz-drawable-path(((origin, false, joined),)),
-      ))
-    },)
+    (_cetz-carrier.with(origin, joined, current),)
   }
   (_cetz-merge-path(body, ..style).first())(ctx)
 }

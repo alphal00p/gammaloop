@@ -590,7 +590,32 @@ impl ProjectedComponent<'_> {
             .map(|((&q, &v), &l)| Wide::from(q) * v + Wide::from(l))
             .collect();
         let mut residual = [0.0_f64; 4];
+        let terms = (self.quadratic.len() + 1) as f64;
+        let roundoff = 32.0 * f64::EPSILON * terms;
         for ((row, &bound), &multiplier) in self.matrix.iter().zip(self.bounds).zip(dual) {
+            if multiplier == Wide::from(0.0) {
+                // A zero dual contributes no stationarity or complementarity.
+                // Prove its primal slack negative with a conservative sequential
+                // dot-product error bound before using wide arithmetic. The
+                // absolute floor covers gradual underflow; the magnitude guard
+                // excludes overflow in the wide sum. Boundary or extreme rows
+                // retain the full-precision calculation below.
+                let mut approximate = -bound;
+                let mut magnitude = bound.abs();
+                for (&a, &x) in row.iter().zip(&values) {
+                    let product = a * x.hi();
+                    approximate += product;
+                    magnitude += product.abs();
+                }
+                let allowance = roundoff * magnitude + terms * f64::MIN_POSITIVE;
+                if roundoff < 0.125
+                    && magnitude < f64::MAX / 4.0
+                    && allowance.is_finite()
+                    && approximate < -allowance
+                {
+                    continue;
+                }
+            }
             let excess = row
                 .iter()
                 .zip(&values)
@@ -599,10 +624,12 @@ impl ProjectedComponent<'_> {
                 return [f64::INFINITY; 4];
             }
             residual[0] = residual[0].max(f64::from(excess));
-            residual[2] = residual[2].max(f64::from((multiplier * excess).abs()));
-            residual[3] = residual[3].max(f64::from(-multiplier));
-            for (stationarity, &a) in stationarity.iter_mut().zip(row) {
-                *stationarity += Wide::from(a) * multiplier;
+            if multiplier != Wide::from(0.0) {
+                residual[2] = residual[2].max(f64::from((multiplier * excess).abs()));
+                residual[3] = residual[3].max(f64::from(-multiplier));
+                for (stationarity, &a) in stationarity.iter_mut().zip(row) {
+                    *stationarity += Wide::from(a) * multiplier;
+                }
             }
         }
         residual[1] = stationarity
@@ -647,6 +674,17 @@ impl ProjectedComponent<'_> {
             {
                 return;
             }
+            let cost = (0..2)
+                .map(|i| 0.5 * self.quadratic[i] * point[i] * point[i] + self.linear[i] * point[i])
+                .sum::<f64>();
+            if !cost.is_finite()
+                || best
+                    .as_ref()
+                    .is_some_and(|candidate| cost >= candidate.cost)
+            {
+                return;
+            }
+
             // A roundoff allowance finds boundary candidates; it does not
             // relax acceptance, which uses the original wide certificate.
             if self.matrix.iter().zip(self.bounds).any(|(row, &bound)| {
@@ -660,16 +698,11 @@ impl ProjectedComponent<'_> {
             }) {
                 return;
             }
-            let cost = (0..2)
-                .map(|i| 0.5 * self.quadratic[i] * point[i] * point[i] + self.linear[i] * point[i])
-                .sum::<f64>();
-            if cost.is_finite() && best.as_ref().is_none_or(|candidate| cost < candidate.cost) {
-                best = Some(Candidate {
-                    cost,
-                    point,
-                    multipliers,
-                });
-            }
+            best = Some(Candidate {
+                cost,
+                point,
+                multipliers,
+            });
         };
         for (index, (row, &bound)) in self.matrix.iter().zip(self.bounds).enumerate() {
             let distance = row.iter().zip(desired).map(|(&a, x)| a * x).sum::<f64>() - bound;
@@ -1286,6 +1319,43 @@ mod tests {
             .is_err()
         );
         assert!(dofs.project(&[[0.0, 0.0]], &[], 0.0).is_err());
+    }
+
+    #[test]
+    fn inactive_certificate_rows_keep_full_precision_primal_residuals() {
+        // A nonzero dual disables the inactive-row filter without changing the
+        // primal calculation. Compare that wide reference across cancellation,
+        // subnormal products, signed zero, and overflow-risk scales.
+        let cases = [
+            ([1.0, 0.0], [1.0, 1.0], 2.0),
+            ([1.0, 0.0], [1.0, 1.0], 1.0 - 4e-9),
+            ([1e300, -1e300], [1.0, 1.0], 1e285),
+            ([1e300, -1e300], [1.0, 1.0], -1e285),
+            (
+                [f64::MIN_POSITIVE, 0.0],
+                [f64::MIN_POSITIVE, 1.0],
+                -f64::from_bits(1),
+            ),
+            ([-0.0, 0.0], [1.0, -1.0], -0.0),
+            ([f64::MAX / 2.0, -f64::MAX / 2.0], [1.0, 1.0], 1.0),
+            ([f64::MAX, 0.0], [2.0, 1.0], 1.0),
+        ];
+        for (row, values, bound) in cases {
+            let matrix = [row.to_vec()];
+            let bounds = [bound];
+            let problem = ProjectedComponent {
+                matrix: &matrix,
+                bounds: &bounds,
+                quadratic: vec![1.0; 2],
+                linear: values.map(|value| -value).to_vec(),
+            };
+            let filtered = problem.certify(&values, &[Wide::from(0.0)]);
+            let wide = problem.certify(&values, &[Wide::from(f64::from_bits(1))]);
+            assert_eq!(
+                filtered[0], wide[0],
+                "row={row:?}, values={values:?}, bound={bound}"
+            );
+        }
     }
 
     #[test]

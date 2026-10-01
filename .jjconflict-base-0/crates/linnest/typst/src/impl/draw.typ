@@ -191,10 +191,13 @@
   pattern-accuracy: 0.001,
 )
 
+#let _style-defaults = (_mark-defaults + _pattern-defaults + _edge-label-defaults
+  + _edge-routing-defaults + _edge-crossing-defaults + _edge-geometry-defaults)
+
 #let _without-keys(style, keys) = {
   let clean = style
   for key in keys {
-    if clean.keys().contains(key) {
+    if key in clean {
       let _ = clean.remove(key)
     }
   }
@@ -206,14 +209,7 @@
   _pattern-defaults.keys(),
 )
 
-#let _draw-style(style) = {
-  let clean = _without-pattern-style(style)
-  clean = _without-keys(clean, _edge-geometry-defaults.keys())
-  clean = _without-keys(clean, _edge-crossing-defaults.keys())
-  clean = _without-keys(clean, _edge-routing-defaults.keys())
-  clean = _without-keys(clean, _edge-label-defaults.keys())
-  _without-keys(clean, _mark-defaults.keys())
-}
+#let _draw-style(style) = _without-keys(style, _style-defaults.keys())
 
 #let _without-mark-style(style) = {
   let clean = style
@@ -253,23 +249,7 @@
   (start: _start-mark-entry(mark))
 }
 
-#let _style-value(style, key) = {
-  if _edge-geometry-defaults.keys().contains(key) {
-    style.at(key, default: _edge-geometry-defaults.at(key))
-  } else if _edge-crossing-defaults.keys().contains(key) {
-    style.at(key, default: _edge-crossing-defaults.at(key))
-  } else if _edge-routing-defaults.keys().contains(key) {
-    style.at(key, default: _edge-routing-defaults.at(key))
-  } else if _edge-label-defaults.keys().contains(key) {
-    style.at(key, default: _edge-label-defaults.at(key))
-  } else if _pattern-defaults.keys().contains(key) {
-    style.at(key, default: _pattern-defaults.at(key))
-  } else if _mark-defaults.keys().contains(key) {
-    style.at(key, default: _mark-defaults.at(key))
-  } else {
-    style.at(key, default: none)
-  }
-}
+#let _style-value(style, key) = style.at(key, default: _style-defaults.at(key, default: none))
 
 #let _edge-geometry(style) = _edge-geometry-defaults + style
 

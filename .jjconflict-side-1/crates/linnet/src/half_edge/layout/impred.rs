@@ -14,7 +14,10 @@ use movement::{AxisConstraint, Halfplane, MovementDofs, PointRecord};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ImpredConfig {
+    /// Nominal duration of the cooling schedule, in reference steps.
     pub steps: usize,
+    /// Maximum integration stride after the initial fine-step settling phase.
+    pub step_scale: usize,
     pub target: f64,
     pub repulsion: f64,
     pub attraction: f64,
@@ -32,6 +35,7 @@ impl Default for ImpredConfig {
     fn default() -> Self {
         Self {
             steps: 1500,
+            step_scale: 2,
             target: 2.4,
             repulsion: 2.5,
             attraction: 2.5,
@@ -49,6 +53,9 @@ impl Default for ImpredConfig {
 
 impl ImpredConfig {
     fn validate(self) -> Result<(), String> {
+        if self.step_scale == 0 {
+            return Err("ImPrEd step scale must be positive".into());
+        }
         for value in [
             self.repulsion,
             self.attraction,
@@ -79,6 +86,22 @@ impl ImpredConfig {
             return Err("External routes support at most three intermediate points".into());
         }
         Ok(())
+    }
+
+    fn integration_stride(self, epoch: usize) -> usize {
+        // Large early forces repeatedly hit the movement constraints. Settle
+        // with the reference step first, then advance the same cooling schedule
+        // faster. Land on every original refinement checkpoint and the final
+        // temperature instead of skipping route changes or truncating cooling.
+        // Checkpoints run after their update, so that update also stays fine.
+        let scale = if epoch < self.steps.div_ceil(5) || epoch.is_multiple_of(25) {
+            1
+        } else {
+            self.step_scale
+        };
+        scale
+            .min(25 - epoch % 25)
+            .min(self.steps.saturating_sub(epoch).saturating_sub(1).max(1))
     }
 }
 
@@ -111,6 +134,7 @@ pub struct ImpredLayout {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ImpredReport {
+    /// Actual force/projection iterations; cooling may advance multiple steps.
     pub iterations: usize,
     pub geometry_checks: usize,
     pub inserted_points: usize,
@@ -137,7 +161,13 @@ struct PointSegment {
     segment: usize,
     t: f64,
     distance: f64,
-    normal: Vector2<f64>,
+    difference: Vector2<f64>,
+}
+
+impl PointSegment {
+    fn normal(&self) -> Vector2<f64> {
+        self.difference / self.distance.max(1e-15)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -417,7 +447,7 @@ impl ImpredLayout {
                     segment: index,
                     t,
                     distance,
-                    normal: difference / distance.max(1e-15),
+                    difference,
                 });
             }
         }
@@ -499,7 +529,7 @@ impl ImpredLayout {
                     * (1.0 - pair.distance / clearance)
                         .max(0.0)
                         .powf(rep_exponent)
-                    * pair.normal;
+                    * pair.normal();
                 let segment = model.segments[pair.segment];
                 force[pair.point] += repulsion;
                 force[segment.a] -= (1.0 - pair.t) * repulsion;
@@ -578,12 +608,11 @@ impl ImpredLayout {
         for pair in pairs {
             let segment = model.segments[pair.segment];
             let perpendicular = perpendiculars[pair.segment];
-            let signed = (self.point(pair.point) - self.point(segment.a)).dot(perpendicular);
             let interior = pair.t > 0.0 && pair.t < 1.0;
-            let normal = if interior {
-                perpendicular * if signed >= 0.0 { 1.0 } else { -1.0 }
+            let signed = if interior {
+                (self.point(pair.point) - self.point(segment.a)).dot(perpendicular)
             } else {
-                pair.normal
+                0.0
             };
             let distance = if interior {
                 signed.abs()
@@ -595,11 +624,25 @@ impl ImpredLayout {
             // same certificate omits all three rows before endpoint arithmetic.
             if cap.is_finite()
                 && room >= 4.0 * cap
-                && normal.x.abs() <= 1.0
-                && normal.y.abs() <= 1.0
+                && if interior {
+                    perpendicular.x.abs() <= 1.0 && perpendicular.y.abs() <= 1.0
+                } else {
+                    // A finite positive divisor at least as large as either
+                    // component guarantees the rounded normal is bounded by
+                    // one, without evaluating either division.
+                    let divisor = pair.distance.max(1e-15);
+                    divisor.is_finite()
+                        && pair.difference.x.abs() <= divisor
+                        && pair.difference.y.abs() <= divisor
+                }
             {
                 continue;
             }
+            let normal = if interior {
+                perpendicular * if signed >= 0.0 { 1.0 } else { -1.0 }
+            } else {
+                pair.normal()
+            };
             rows.push(Halfplane {
                 point: pair.point,
                 normal: (-normal).into(),
@@ -624,15 +667,17 @@ impl ImpredLayout {
                 if i != j {
                     let difference = self.point(i) - self.point(j);
                     let distance = difference.magnitude();
-                    let normal = -difference / distance.max(1e-30);
                     let bound = 0.45 * (distance - clearance).max(0.0);
+                    let divisor = distance.max(1e-30);
                     if cap.is_finite()
                         && bound >= 4.0 * cap
-                        && normal.x.abs() <= 1.0
-                        && normal.y.abs() <= 1.0
+                        && divisor.is_finite()
+                        && difference.x.abs() <= divisor
+                        && difference.y.abs() <= divisor
                     {
                         continue;
                     }
+                    let normal = -difference / divisor;
                     rows.push(Halfplane {
                         point: i,
                         normal: normal.into(),
@@ -809,8 +854,8 @@ impl ImpredLayout {
         self.solve_with_progress(config, |_, _| Ok(()))
     }
 
-    /// The callback observes the same hundred-iteration snapshots as the
-    /// reference solver and can cancel by returning an error.
+    /// The callback observes the same hundred-step cooling snapshots as the
+    /// reference solver, reports nominal progress, and can cancel with an error.
     pub fn solve_with_progress(
         &mut self,
         config: ImpredConfig,
@@ -871,15 +916,17 @@ impl ImpredLayout {
             [angle.cos(), angle.sin()]
         });
         let cap_apothem = (std::f64::consts::PI / 16.0).cos();
-        for epoch in 0..config.steps {
+        let mut epoch = 0;
+        while epoch < config.steps {
+            let stride = config.integration_stride(epoch);
             let u = epoch as f64 / config.steps.saturating_sub(1).max(1) as f64;
             let pairs = self.point_segments(&model);
             let proposal: Vec<[f64; 2]> = self
                 .forces(&model, &pairs, config, u, &pull)
                 .into_iter()
-                .map(|force| (force * 0.045).into())
+                .map(|force| (force * (0.045 * stride as f64)).into())
                 .collect();
-            let cap = config.target * (0.10 * (1.0 - u) + 0.002);
+            let cap = config.target * (0.10 * (1.0 - u) + 0.002) * stride as f64;
             let separators = self.separators(&model, &pairs, cap);
             let mut rows: Vec<_> = separators
                 .iter()
@@ -930,7 +977,7 @@ impl ImpredLayout {
                 point[1] += delta[1];
             }
             dofs.validate(&self.positions)?;
-            report.iterations = epoch + 1;
+            report.iterations += 1;
             if epoch % 25 == 0 || epoch + 1 == config.steps {
                 self.geometry().certify(&initial)?;
                 report.geometry_checks += 1;
@@ -950,6 +997,7 @@ impl ImpredLayout {
                     }
                 }
             }
+            epoch += stride;
         }
         Ok(report)
     }
@@ -1155,6 +1203,109 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn larger_steps_preserve_routes_and_cooling_checkpoints() {
+        for (name, source) in FIXTURES {
+            let fixture: Fixture = serde_json::from_str(source).unwrap();
+            let mut reference = fixture.layout.clone();
+            let mut accelerated = fixture.layout;
+            let mut reference_progress = Vec::new();
+            let reference_report = reference
+                .solve_with_progress(fixture.config, |epoch, _| {
+                    reference_progress.push(epoch);
+                    Ok(())
+                })
+                .unwrap();
+            let mut accelerated_progress = Vec::new();
+            let report = accelerated
+                .solve_with_progress(
+                    ImpredConfig {
+                        step_scale: 2,
+                        ..fixture.config
+                    },
+                    |epoch, _| {
+                        accelerated_progress.push(epoch);
+                        Ok(())
+                    },
+                )
+                .unwrap();
+            assert!(
+                report.iterations < 3 * reference_report.iterations / 4,
+                "{name}"
+            );
+            assert_eq!(reference_progress, accelerated_progress, "{name}");
+            assert_eq!(
+                reference_report.geometry_checks, report.geometry_checks,
+                "{name}"
+            );
+            assert_eq!(reference.routes, accelerated.routes, "{name}");
+            assert_eq!(reference.geometry(), accelerated.geometry(), "{name}");
+
+            // Translation does not change the rendered shape. Retain a tight
+            // physical-distance bound on every vertex and route point, without
+            // permitting rotation, scaling, or a change of route correspondence.
+            let translation = reference
+                .node_points
+                .iter()
+                .fold(Vector2::zero(), |sum, &p| {
+                    sum + accelerated.point(p) - reference.point(p)
+                })
+                / reference.node_points.len() as f64;
+            for point in 0..reference.positions.len() {
+                let error =
+                    (accelerated.point(point) - translation - reference.point(point)).magnitude();
+                assert!(
+                    error < 0.01 * fixture.config.target,
+                    "{name}: point {point} moved {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn integration_stride_handles_small_budgets_and_rejects_zero_scale() {
+        let fixture: Fixture = serde_json::from_str(FIXTURES[0].1).unwrap();
+        let accelerated = ImpredConfig {
+            step_scale: 2,
+            ..fixture.config
+        };
+        assert_eq!(accelerated.integration_stride(750), 1);
+        assert_eq!(accelerated.integration_stride(751), 2);
+        assert_eq!(accelerated.integration_stride(774), 1);
+        assert_eq!(accelerated.integration_stride(775), 1);
+        for steps in [0, 1, 2, 24, 25, 26, 100, 101] {
+            let mut layout = fixture.layout.clone();
+            let mut progress = Vec::new();
+            let report = layout
+                .solve_with_progress(
+                    ImpredConfig {
+                        steps,
+                        step_scale: usize::MAX,
+                        ..fixture.config
+                    },
+                    |epoch, _| {
+                        progress.push(epoch);
+                        Ok(())
+                    },
+                )
+                .unwrap();
+            assert!(report.iterations <= steps);
+            if steps == 0 {
+                assert!(progress.is_empty());
+            } else {
+                assert_eq!(progress.last(), Some(&steps));
+            }
+        }
+        assert!(
+            ImpredConfig {
+                step_scale: 0,
+                ..fixture.config
+            }
+            .validate()
+            .is_err()
+        );
     }
 
     fn dangling(points: &[[f64; 2]]) -> ImpredLayout {

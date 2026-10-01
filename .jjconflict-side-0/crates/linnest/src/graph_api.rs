@@ -583,6 +583,7 @@ pub fn graph_impred_layout_bytes(
         serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
     for (option, field) in [
         ("steps", "steps"),
+        ("step-scale", "step_scale"),
         ("spacing", "target"),
         ("repulsion", "repulsion"),
         ("attraction", "attraction"),
