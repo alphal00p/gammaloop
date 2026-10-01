@@ -580,8 +580,111 @@ struct StrokeLine {
     radius: f64,
 }
 
+impl StrokeLine {
+    /// The stroke envelope tested by `edge_intersection`, with its exact roundings.
+    fn extent(&self) -> Bounds {
+        Bounds {
+            left: self.start.0.min(self.end.0) - self.radius,
+            right: self.start.0.max(self.end.0) + self.radius,
+            bottom: self.start.1.min(self.end.1) - self.radius,
+            top: self.start.1.max(self.end.1) + self.radius,
+        }
+    }
+}
+
+impl Bounds {
+    fn is_finite(self) -> bool {
+        [self.left, self.right, self.bottom, self.top]
+            .iter()
+            .all(|value| value.is_finite())
+    }
+}
+
+/// Uniform grid over stroke extents. A line that passes the bounding test in
+/// `edge_intersection` shares a cell with the query, because the cell index is
+/// monotone in each coordinate. Ascending indices keep every sum unchanged.
+struct LineGrid {
+    origin: Point,
+    cell: Point,
+    side: usize,
+    cells: Vec<Vec<usize>>,
+    /// Lines with non-finite extents are visited by every query.
+    always: Vec<usize>,
+    count: usize,
+}
+
+impl LineGrid {
+    fn new(lines: &[StrokeLine]) -> Self {
+        let side = (lines.len() as f64).sqrt().ceil().max(1.0) as usize;
+        let total = lines
+            .iter()
+            .map(StrokeLine::extent)
+            .filter(|extent| extent.is_finite())
+            .reduce(Bounds::union);
+        let (origin, cell) = total.map_or((Point(0.0, 0.0), Point(1.0, 1.0)), |total| {
+            let size = |span: f64| (span / side as f64).max(f64::MIN_POSITIVE);
+            (
+                Point(total.left, total.bottom),
+                Point(
+                    size(total.right - total.left),
+                    size(total.top - total.bottom),
+                ),
+            )
+        });
+        let mut grid = Self {
+            origin,
+            cell,
+            side,
+            cells: vec![Vec::new(); side * side],
+            always: Vec::new(),
+            count: lines.len(),
+        };
+        for (index, line) in lines.iter().enumerate() {
+            let extent = line.extent();
+            if !extent.is_finite() {
+                grid.always.push(index);
+                continue;
+            }
+            let ([left, right], [bottom, top]) = grid.span(extent);
+            for row in bottom..=top {
+                for column in left..=right {
+                    grid.cells[row * side + column].push(index);
+                }
+            }
+        }
+        grid
+    }
+
+    fn span(&self, bounds: Bounds) -> ([usize; 2], [usize; 2]) {
+        let index = |value: f64, origin: f64, size: f64| {
+            (((value - origin) / size).floor().max(0.0) as usize).min(self.side - 1)
+        };
+        (
+            [bounds.left, bounds.right].map(|x| index(x, self.origin.0, self.cell.0)),
+            [bounds.bottom, bounds.top].map(|y| index(y, self.origin.1, self.cell.1)),
+        )
+    }
+
+    /// Ascending indices of every line whose extent may meet `bounds`.
+    fn near(&self, bounds: Bounds) -> Vec<usize> {
+        if !bounds.is_finite() {
+            return (0..self.count).collect();
+        }
+        let ([left, right], [bottom, top]) = self.span(bounds);
+        let mut indices = self.always.clone();
+        for row in bottom..=top {
+            for column in left..=right {
+                indices.extend_from_slice(&self.cells[row * self.side + column]);
+            }
+        }
+        indices.sort_unstable();
+        indices.dedup();
+        indices
+    }
+}
+
 impl CollisionCandidate {
-    fn edge_intersection(&self, lines: &[StrokeLine]) -> Cost {
+    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> Cost {
         let Some(corners) = self.corners.filter(|_| !lines.is_empty()) else {
             return Cost::Integer(0);
         };
@@ -599,7 +702,11 @@ impl CollisionCandidate {
             [delta.cross(y) / determinant, x.cross(delta) / determinant]
         };
         let mut length = 0.0;
-        for line in lines {
+        for line in grid
+            .near(self.bounds)
+            .into_iter()
+            .map(|index| &lines[index])
+        {
             let bounds = self.bounds;
             if line.start.0.max(line.end.0) + line.radius < bounds.left
                 || line.start.0.min(line.end.0) - line.radius > bounds.right
@@ -1311,6 +1418,7 @@ impl CollisionSpec {
             arrows: Vec::with_capacity(self.placements.len()),
             coordinated: self.coordinated,
         };
+        let grid = LineGrid::new(&self.edge_lines);
         for label in &self.placements {
             let boxes: Vec<_> = label
                 .candidates
@@ -1341,7 +1449,7 @@ impl CollisionSpec {
                 let area = (raw.right - raw.left) * (raw.top - raw.bottom);
                 areas.push(area);
                 let initial = Cost::from_value(&candidate.cost)?
-                    .add(candidate.edge_intersection(&self.edge_lines))?;
+                    .add(candidate.edge_intersection(&self.edge_lines, &grid))?;
                 let mut cost = initial.float();
                 // Keep zero terms too: adding them converts integer costs to
                 // floats. Preserve both obstacle order and numeric types.
@@ -1689,6 +1797,104 @@ pub fn path_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: PathLinesSpec = ciborium::de::from_reader(arg)
         .map_err(|error| format!("Invalid label path geometry: {error}"))?;
     crate::graph_api::encode_cbor(&spec.lines())
+}
+
+/// Painted CeTZ strokes, flattened to the collision lines of `CollisionSpec`.
+#[derive(Deserialize)]
+struct StrokeLinesSpec {
+    strokes: Vec<PaintedStroke>,
+    #[serde(deserialize_with = "crate::deserialize_f64")]
+    accuracy: f64,
+}
+
+/// One drawable: CeTZ subpaths `(origin, closed, commands)`, whose commands
+/// are `("l", ..ends)` or `("c", control-start, control-end, end)`.
+#[derive(Deserialize)]
+struct PaintedStroke {
+    #[serde(deserialize_with = "crate::deserialize_f64")]
+    radius: f64,
+    segments: Vec<(ciborium::Value, bool, Vec<Vec<ciborium::Value>>)>,
+}
+
+#[derive(Serialize)]
+struct CollisionLine {
+    start: [f64; 2],
+    end: [f64; 2],
+    radius: f64,
+}
+
+impl StrokeLinesSpec {
+    fn vertex(value: &ciborium::Value) -> Result<Vec<f64>, String> {
+        let coordinates = value
+            .as_array()
+            .filter(|coordinates| coordinates.len() >= 2)
+            .ok_or("painted vertices need at least two coordinates")?;
+        coordinates
+            .iter()
+            .map(|coordinate| match coordinate {
+                ciborium::Value::Float(value) => Ok(*value),
+                ciborium::Value::Integer(value) => Ok(i128::from(*value) as f64),
+                _ => Err("painted coordinates must be numbers".to_owned()),
+            })
+            .collect()
+    }
+
+    /// Lines in drawable, subpath and command order, as the former Typst
+    /// traversal emitted them; cubics use the same identity-transform flattening.
+    fn lines(&self) -> Result<Vec<CollisionLine>, String> {
+        let identity = Transform(std::array::from_fn(|row| {
+            std::array::from_fn(|column| if row == column { 1.0 } else { 0.0 })
+        }));
+        let xy = |vertex: &[f64]| Point(vertex[0], vertex[1]);
+        let mut lines = Vec::new();
+        for stroke in &self.strokes {
+            let mut push = |start: Point, end: Point| {
+                lines.push(CollisionLine {
+                    start: [start.0, start.1],
+                    end: [end.0, end.1],
+                    radius: stroke.radius,
+                })
+            };
+            for (origin, closed, commands) in &stroke.segments {
+                let origin = Self::vertex(origin)?;
+                let mut start = origin.clone();
+                for command in commands {
+                    let kind = command.first().and_then(ciborium::Value::as_text);
+                    if kind == Some("l") {
+                        for end in &command[1..] {
+                            let end = Self::vertex(end)?;
+                            push(xy(&start), xy(&end));
+                            start = end;
+                        }
+                    } else if kind == Some("c") {
+                        if command.len() < 4 {
+                            return Err("painted cubics need two controls and an end".to_owned());
+                        }
+                        let segment = CubicSegment {
+                            start: xy(&start),
+                            control_start: xy(&Self::vertex(&command[1])?),
+                            control_end: xy(&Self::vertex(&command[2])?),
+                            end: xy(&Self::vertex(&command[3])?),
+                        };
+                        for [a, b] in segment.lines(&identity, self.accuracy) {
+                            push(Point(a[0], a[1]), Point(b[0], b[1]));
+                        }
+                        start = Self::vertex(command.last().expect("checked length"))?;
+                    }
+                }
+                if *closed && start != origin {
+                    push(xy(&start), xy(&origin));
+                }
+            }
+        }
+        Ok(lines)
+    }
+}
+
+pub fn stroke_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: StrokeLinesSpec = ciborium::de::from_reader(arg)
+        .map_err(|error| format!("Invalid painted stroke geometry: {error}"))?;
+    crate::graph_api::encode_cbor(&spec.lines()?)
 }
 
 #[cfg(test)]
@@ -2085,6 +2291,108 @@ mod tests {
         }
     }
 
+    /// Deterministic coordinates in [-span, span) for the grid invariant.
+    fn sampler(seed: u64) -> impl FnMut(f64) -> f64 {
+        let mut state = seed;
+        move |span| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            span * ((state >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0)
+        }
+    }
+
+    fn sample_box(next: &mut impl FnMut(f64) -> f64, span: f64) -> Bounds {
+        let (x, y) = (next(span), next(span));
+        let (width, height) = (next(1.0).abs(), next(1.0).abs());
+        Bounds {
+            left: x,
+            right: x + width,
+            bottom: y,
+            top: y + height,
+        }
+    }
+
+    #[test]
+    fn line_grid_returns_every_line_passing_the_bounding_test() {
+        let mut next = sampler(11);
+        let lines: Vec<_> = (0..400)
+            .map(|index| StrokeLine {
+                start: Point(next(5.0), next(5.0)),
+                end: if index % 7 == 0 {
+                    Point(f64::NAN, 0.0)
+                } else {
+                    Point(next(5.0), next(5.0))
+                },
+                radius: next(0.2).abs(),
+            })
+            .collect();
+        let grid = LineGrid::new(&lines);
+        for _ in 0..500 {
+            let bounds = sample_box(&mut next, 5.0);
+            let near = grid.near(bounds);
+            assert!(near.windows(2).all(|pair| pair[0] < pair[1]));
+            for (index, line) in lines.iter().enumerate() {
+                let extent = line.extent();
+                let rejected = extent.right < bounds.left
+                    || extent.left > bounds.right
+                    || extent.top < bounds.bottom
+                    || extent.bottom > bounds.top;
+                assert!(
+                    rejected || near.binary_search(&index).is_ok(),
+                    "line {index}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn painted_strokes_flatten_in_drawable_order_with_closures() {
+        use ciborium::Value;
+        let vertex = |x: f64, y: f64| {
+            Value::Array(vec![Value::Float(x), Value::Float(y), Value::Float(0.0)])
+        };
+        let command = |kind: &str, points: Vec<Value>| {
+            std::iter::once(Value::Text(kind.into()))
+                .chain(points)
+                .collect::<Vec<_>>()
+        };
+        let spec = StrokeLinesSpec {
+            strokes: vec![PaintedStroke {
+                radius: 0.25,
+                segments: vec![(
+                    vertex(0.0, 0.0),
+                    true,
+                    vec![
+                        command("l", vec![vertex(1.0, 0.0), vertex(1.0, 1.0)]),
+                        command("x", vec![vertex(9.0, 9.0)]),
+                        command(
+                            "c",
+                            vec![vertex(1.0, 2.0), vertex(0.0, 2.0), vertex(0.0, 1.0)],
+                        ),
+                    ],
+                )],
+            }],
+            accuracy: 0.005,
+        };
+        let lines = spec.lines().unwrap();
+        let cubic = CubicSegment {
+            start: Point(1.0, 1.0),
+            control_start: Point(1.0, 2.0),
+            control_end: Point(0.0, 2.0),
+            end: Point(0.0, 1.0),
+        };
+        let identity = Transform(std::array::from_fn(|row| {
+            std::array::from_fn(|column| if row == column { 1.0 } else { 0.0 })
+        }));
+        let mut expected = vec![[[0.0, 0.0], [1.0, 0.0]], [[1.0, 0.0], [1.0, 1.0]]];
+        expected.extend(cubic.lines(&identity, 0.005));
+        expected.push([[0.0, 1.0], [0.0, 0.0]]);
+        let actual: Vec<_> = lines.iter().map(|line| [line.start, line.end]).collect();
+        assert_eq!(actual, expected);
+        assert!(lines.iter().all(|line| line.radius == 0.25));
+    }
+
     #[test]
     fn finite_edge_intersection_preserves_cost_types_and_search_addition() {
         let mut candidate = CollisionCandidate {
@@ -2103,16 +2411,20 @@ mod tests {
             cost: ciborium::Value::Integer(2.into()),
             arrow_bounds: Vec::new(),
         };
-        assert!(matches!(candidate.edge_intersection(&[]), Cost::Integer(0)));
+        assert!(matches!(
+            candidate.edge_intersection(&[], &LineGrid::new(&[])),
+            Cost::Integer(0)
+        ));
         let lines = vec![StrokeLine {
             start: Point(-2.0, 0.0),
             end: Point(2.0, 0.0),
             radius: 0.0,
         }];
-        assert_eq!(candidate.edge_intersection(&lines).float(), 12.0);
+        let grid = LineGrid::new(&lines);
+        assert_eq!(candidate.edge_intersection(&lines, &grid).float(), 12.0);
         candidate.corners = Some([Point(0.0, 0.0); 4]);
         assert!(matches!(
-            candidate.edge_intersection(&lines),
+            candidate.edge_intersection(&lines, &grid),
             Cost::Integer(0)
         ));
         candidate.corners = None;

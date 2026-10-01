@@ -8,6 +8,7 @@ pub use label_placement::{
     candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
     obstacle_boxes_bytes as label_obstacle_boxes_bytes,
     path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
+    stroke_lines_bytes as label_stroke_lines_bytes,
 };
 mod pin;
 mod streaming;
@@ -95,6 +96,12 @@ pub fn label_obstacle_boxes(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn label_path_lines(arg: &[u8]) -> Result<Vec<u8>, String> {
     label_path_lines_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_stroke_lines(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_stroke_lines_bytes(arg)
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
