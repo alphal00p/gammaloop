@@ -1,0 +1,28 @@
+--- a/src/normalize.rs
++++ b/src/normalize.rs
+@@ -1249,7 +1249,24 @@
+                 let sort_antisymmetric = id.is_antisymmetric()
+                     && !out_f.to_fun_view().iter().any(|a| a.contains_wildcard());
+ 
+-                if id.is_symmetric() || sort_antisymmetric {
++                if id.is_symmetric() && !id.is_antisymmetric() {
++                    // Arguments are already normalized. Sort their borrowed views,
++                    // and retain the existing encoding when their order is canonical.
++                    if !out_f
++                        .to_fun_view()
++                        .iter()
++                        .is_sorted_by(|a, b| AtomView::cmp(a, b).is_le())
++                    {
++                        let mut args: SmallVec<[_; 20]> = out_f.to_fun_view().iter().collect();
++                        args.sort_by(AtomView::cmp);
++                        let mut sorted = workspace.new_atom();
++                        let sorted_fun = sorted.to_fun(id);
++                        sorted_fun.add_args(&args);
++                        sorted_fun.set_normalized(true);
++                        drop(args);
++                        std::mem::swap(sorted_fun, out_f);
++                    }
++                } else if id.is_symmetric() || sort_antisymmetric {
+                     let mut arg_buf: SmallVec<[(usize, _); 20]> = SmallVec::new();
+ 
+                     for (i, a) in out_f.to_fun_view().iter().enumerate() {

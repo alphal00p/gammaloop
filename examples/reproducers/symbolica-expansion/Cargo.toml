@@ -1,0 +1,42 @@
+[package]
+name = "symbolica-expansion-mre"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+symbolica = { version = "3.0.1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+
+[profile.release]
+opt-level = 2
+debug = 2
+lto = false
+
+[profile.release.package."*"]
+opt-level = 3
+
+[[bin]]
+name = "expansion"
+path = "expansion.rs"
+
+[[bin]]
+name = "polynomial_emission"
+path = "polynomial_emission.rs"
+
+[[bin]]
+name = "symmetric_construction"
+path = "symmetric_construction.rs"
+
+[[bin]]
+name = "scalar_expansion_routes"
+path = "scalar_expansion_routes.rs"
+
+[[bin]]
+name = "visitor_shortcircuit"
+path = "visitor_shortcircuit.rs"
+
+[[bin]]
+name = "polynomial_replacement"
+path = "polynomial_replacement.rs"
