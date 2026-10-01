@@ -787,12 +787,11 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                                     tree_dot: self.dot(&tree.tree_subgraph),
                                 }
                             })?;
-                            let cycle_dot = self.dot(&cycle.filter);
                             let signed =
-                                SignedCycle::from_cycle(cycle, source, self).ok_or_else(|| {
+                                SignedCycle::from_cycle(&cycle, source, self).ok_or_else(|| {
                                     LmbError::InvalidCycle {
                                         is_circuit: false,
-                                        cycle_dot,
+                                        cycle_dot: self.dot(&cycle.filter),
                                         cover_dot: self.dot(&external_cover),
                                     }
                                 })?;
@@ -875,12 +874,10 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                                         tree_dot: self.dot(&tree.tree_subgraph),
                                     }
                                 })?;
-                                let cycle_is_circuit = cycle.is_circuit(self);
-                                let cycle_dot = self.dot(&cycle.filter);
-                                SignedCycle::from_cycle(cycle, source, self).ok_or_else(|| {
+                                SignedCycle::from_cycle(&cycle, source, self).ok_or_else(|| {
                                     LmbError::InvalidCycle {
-                                        is_circuit: cycle_is_circuit,
-                                        cycle_dot,
+                                        is_circuit: cycle.is_circuit(self),
+                                        cycle_dot: self.dot(&cycle.filter),
                                         cover_dot: self.dot(&cover),
                                     }
                                 })?

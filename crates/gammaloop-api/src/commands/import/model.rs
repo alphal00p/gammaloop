@@ -604,8 +604,8 @@ mod tests {
         let (imported, _) = load_ufo_model(&assets.join("ufo/sm"), None, false)?;
         let canonical = Model::from_path(assets.join("json/sm/sm.json"))?;
         assert_eq!(
-            imported.covariant_cut_multiplets,
-            canonical.covariant_cut_multiplets
+            imported.covariant_cut_multiplets(),
+            canonical.covariant_cut_multiplets()
         );
         for name in [
             "W+", "W-", "Z", "G+", "G-", "G0", "ghWp", "ghWp~", "ghWm", "ghWm~", "ghZ", "ghZ~",

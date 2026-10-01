@@ -9,6 +9,7 @@ use linnet::{
     },
     permutation::Permutation,
 };
+use std::cell::LazyCell;
 use symbolica::atom::{AtomView, FunctionBuilder};
 
 #[derive(Clone)]
@@ -396,6 +397,22 @@ impl FeynmanDiagramBuilder {
                 },
             );
         }
+        // Resolve heads once per generated diagram. Imported diagrams bypass
+        // transport and should not initialize its symbols.
+        let translated_heads = LazyCell::new(|| {
+            [
+                (symbols::hedge_index(), 0),
+                (symbols::edge_index(), 2),
+                (symbols::vertex_index(), 3),
+                (momentum_symbol(), 4),
+                (symbols::u(), 5),
+                (symbols::ubar(), 5),
+                (symbols::v(), 5),
+                (symbols::vbar(), 5),
+                (symbols::epsilon(), 5),
+                (symbols::epsilonbar(), 5),
+            ]
+        });
         let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             if !generated {
                 return Ok(atom.clone());
@@ -411,27 +428,16 @@ impl FeynmanDiagramBuilder {
                         return;
                     };
                     let symbol = function.get_symbol();
-                    let arguments = function.iter().collect::<Vec<_>>();
-                    let kind = [
-                        (symbols::hedge_index(), 0),
-                        (symbols::edge_index(), 2),
-                        (symbols::vertex_index(), 3),
-                        (momentum_symbol(), 4),
-                        (symbols::u(), 5),
-                        (symbols::ubar(), 5),
-                        (symbols::v(), 5),
-                        (symbols::vbar(), 5),
-                        (symbols::epsilon(), 5),
-                        (symbols::epsilonbar(), 5),
-                    ]
-                    .into_iter()
-                    .find_map(|(head, kind)| (head == symbol).then_some(kind));
+                    let kind = translated_heads
+                        .iter()
+                        .find_map(|&(head, kind)| (head == symbol).then_some(kind));
                     let Some(kind) = kind else {
                         return;
                     };
                     if (kind >= 4) != carriers {
                         return;
                     }
+                    let arguments = function.iter().collect::<Vec<_>>();
                     let Some(raw_owner) = arguments
                         .first()
                         .and_then(|owner| usize::try_from(*owner).ok())
@@ -448,23 +454,18 @@ impl FeynmanDiagramBuilder {
                         failure = Some(format!("unknown expression index owner {owner}"));
                         return;
                     };
-                    let (head, index) = match kind {
-                        0 => (
-                            symbols::hedge_index(),
-                            half_edges[&DiagramHalfEdge {
-                                edge: EdgeId(owner),
-                                endpoint: if raw_owner % 2 == 0 {
-                                    DiagramEndpoint::Source
-                                } else {
-                                    DiagramEndpoint::Target
-                                },
-                            }]
-                                .0,
-                        ),
-                        2 => (symbols::edge_index(), mapped),
-                        3 => (symbols::vertex_index(), mapped),
-                        5 => (symbol, mapped),
-                        _ => (momentum_symbol(), mapped),
+                    let index = if kind == 0 {
+                        half_edges[&DiagramHalfEdge {
+                            edge: EdgeId(owner),
+                            endpoint: if raw_owner % 2 == 0 {
+                                DiagramEndpoint::Source
+                            } else {
+                                DiagramEndpoint::Target
+                            },
+                        }]
+                            .0
+                    } else {
+                        mapped
                     };
                     let local_arguments =
                         if kind <= 3 && arguments.len() == 2 && arguments[1].is_zero() {
@@ -472,7 +473,7 @@ impl FeynmanDiagramBuilder {
                         } else {
                             &arguments[1..]
                         };
-                    let value = FunctionBuilder::new(head)
+                    let value = FunctionBuilder::new(symbol)
                         .add_arg(index)
                         .add_args(local_arguments.iter().copied())
                         .finish();
