@@ -36,6 +36,7 @@ pub(crate) fn algebra_settings(
     epsilon: bool,
     contract: &str,
     representations: Option<Vec<Bound<'_, PyAny>>>,
+    collect_coefficients: bool,
     gamma_output: Option<&str>,
     gamma_ordering: Option<&str>,
     gamma_evaluate_traces: Option<bool>,
@@ -162,6 +163,7 @@ pub(crate) fn algebra_settings(
         color: color.then_some(color_settings),
         epsilon,
         contract,
+        collect_coefficients,
         max_passes: max_steps_per_domain,
     })
 }

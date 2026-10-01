@@ -46,11 +46,11 @@ thread_local! {
     pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-type CoefficientVisitor<'a> = dyn FnMut(
-        &[(
+type CollectionFinalizer<'a> = dyn FnMut(
+        &mut Vec<(
             SymbolicTensor<PartialStructure>,
             SymbolicTensor<PartialStructure>,
-        )],
+        )>,
         &[SymbolicTensor<PartialStructure>],
     ) -> Result<()>
     + 'a;
@@ -608,7 +608,7 @@ impl SymbolicTensor<PartialStructure> {
             Some(&mut |states, spectators| {
                 let spectator = Self::collection_product(spectators)?;
                 proof = ConditionResult::True;
-                for (selected, coefficient) in states {
+                for (selected, coefficient) in states.iter() {
                     if selected.expression.is_zero() {
                         continue;
                     }
@@ -681,9 +681,13 @@ impl SymbolicTensor<PartialStructure> {
     /// The boolean is true only when every selected factor has entered this
     /// frontier. A kernel may consume incident coefficient ports; the combined
     /// logical boundary remains invariant. Refused and capped frontiers remain exact.
+    /// The finalizer can combine complete selected states before materialization.
+    /// Like the kernel, it must publish trusted typed identity results preserving
+    /// the combined ordered boundary. Spectators remain immutable. With no selected
+    /// work it receives the original coefficient for inspection only.
     pub(crate) fn collect_with_map(
         &self,
-        mut coefficients: Option<&mut CoefficientVisitor<'_>>,
+        mut finalize: Option<&mut CollectionFinalizer<'_>>,
         mut select: impl FnMut(AtomView<'_>) -> bool,
         mut step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
     ) -> Result<Self> {
@@ -694,12 +698,12 @@ impl SymbolicTensor<PartialStructure> {
         let root = network.graph.graph.node_id(network.graph.head());
         let (owned, interfaces) = input.analyze(&network, &tree, root)?;
         if !owned[&root] {
-            if let Some(visit) = coefficients.as_mut() {
+            if let Some(finalize) = finalize.as_mut() {
                 let one = Self::from_validated_parts(
                     Atom::one(),
                     PartialStructure::from_logical_slots([]),
                 );
-                visit(&[(one, self.clone())], &[])?;
+                finalize(&mut vec![(one, self.clone())], &[])?;
             }
             return Ok(self.clone());
         }
@@ -932,12 +936,12 @@ impl SymbolicTensor<PartialStructure> {
                 break;
             }
         }
-        // Only complete coefficient rows can certify coefficient queries.
+        // Only complete coefficient rows can be finalized or certify queries.
         if remaining.is_empty()
             && frontier != super::simplification::ReductionStatus::Capped
-            && let Some(visit) = coefficients.as_mut()
+            && let Some(finalize) = finalize.as_mut()
         {
-            visit(&states, &spectators)?;
+            finalize(&mut states, &spectators)?;
         }
         let terms = states
             .into_iter()
@@ -1244,6 +1248,52 @@ mod tests {
             result.expression,
             spectator
                 * (tensor(head, &[spenso::p!(&compact)]) + tensor(head, &[spenso::q!(&compact)]))
+        );
+    }
+
+    #[test]
+    fn finalizer_combines_selected_states_before_materialization() {
+        crate::test_support::test_initialize();
+        let port = spenso::mink!(4, 98981);
+        let heads = [
+            spenso::tensor_symbol!("finalized_collection_a"),
+            spenso::tensor_symbol!("finalized_collection_b"),
+        ];
+        let foreign = tensor(
+            spenso::tensor_symbol!("finalized_collection_foreign"),
+            &[spenso::euc!(4, 98982)],
+        );
+        let spectator =
+            symbolica::parse_lit!((finalized_collection_x + finalized_collection_y) ^ 12);
+        let selected = tensor(heads[0], std::slice::from_ref(&port))
+            + Atom::num(2) * tensor(heads[1], &[port]);
+        let source = SymbolicTensor::infer(&selected * &foreign * &spectator).unwrap();
+        let mut calls = 0;
+        let result = source.collect_with_map(
+            Some(&mut |states, spectators| {
+                calls += 1;
+                assert_eq!(states.len(), 2);
+                assert!(spectators.iter().any(|value| value.expression == spectator));
+                assert!(spectators.iter().any(|value| value.expression == foreign));
+                let terms = states.iter().map(|(selected, coefficient)| {
+                    SymbolicTensor::collection_product(&[selected.clone(), coefficient.clone()])
+                }).collect::<Result<Vec<_>>>()?;
+                let combined = terms[0].with_identity_result(
+                    Atom::add_many(terms.iter().map(|term| &term.expression)), None,
+                )?;
+                *states = vec![(combined, SymbolicTensor::from_validated_parts(
+                    Atom::one(), PartialStructure::from_logical_slots([]),
+                ))];
+                Ok(())
+            }),
+            |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
+            |selected, _, _| Ok(selected),
+        ).unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(result.expression, source.expression);
+        assert_eq!(
+            result.structure.logical_slots(),
+            source.structure.logical_slots()
         );
     }
 

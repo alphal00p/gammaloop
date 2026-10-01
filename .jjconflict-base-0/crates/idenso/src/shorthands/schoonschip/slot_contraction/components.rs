@@ -24,6 +24,7 @@ use symbolica::{
     },
     poly::{PolyVariable, polynomial::MultivariatePolynomial},
 };
+use symbolica_utils::PolynomialExpressionExt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Argument<'a> {
@@ -348,27 +349,12 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     // Temporary polynomial variables are numeric scratch IDs; they never become
     // symbols, aliases or an intermediate expression exposed to a caller.
     fn emit_coefficient(&self, polynomial: &ScalarPolynomial) -> Option<Atom> {
-        let variables = polynomial
-            .variables()
-            .iter()
-            .map(|variable| {
-                let PolyVariable::Temporary(index) = variable else {
-                    unreachable!()
-                };
-                self.emit_variable(&self.variables[*index])
-            })
-            .collect::<Option<Vec<_>>>()?;
-        Some(Atom::add_many(polynomial.into_iter().map(|term| {
-            Atom::mul_many(
-                std::iter::once(Atom::num(term.coefficient.clone())).chain(
-                    variables
-                        .iter()
-                        .zip(term.exponents)
-                        .filter(|(_, exponent)| **exponent != 0)
-                        .map(|(variable, exponent)| variable.pow(*exponent)),
-                ),
-            )
-        })))
+        polynomial.to_expression_with_variables(|variable| {
+            let PolyVariable::Temporary(index) = variable else {
+                unreachable!()
+            };
+            self.emit_variable(&self.variables[*index])
+        })
     }
 
     fn new(contractor: &'b SlotContraction, intake: Intake, slots: &'b mut SlotMatcher) -> Self {

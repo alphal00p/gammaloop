@@ -153,6 +153,9 @@ def check_types(
         sp.TensorExpression,
     )
     assert_type(expression.simplify_algebra(contract="minimal"), sp.TensorExpression)
+    assert_type(
+        expression.simplify_algebra(collect_coefficients=False), sp.TensorExpression
+    )
     assert_type(expression.contract(expand=False), sp.TensorExpression)
     assert_type(
         expression.simplify_algebra(

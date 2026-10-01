@@ -2293,6 +2293,15 @@ impl TensorExpression {
     ///     dimensions. Each connection must still have compatible dimensions and
     ///     orientation. [] permits no additional index contractions or trace closure.
     ///     Identity prerequisites and existing constructor normalization are unaffected.
+    /// collect_coefficients : bool, default True
+    ///     Collect generated exact coefficients in contracted Dirac traces and
+    ///     their bound vector factors so equal terms combine and cancel. Includes
+    ///     Symbolica's expand_num() distribution of numerical factors over sums
+    ///     inside those generated coefficients. False retains their nested,
+    ///     factored output. Other family kernels retain their
+    ///     existing coefficient normalization. This is not global expansion:
+    ///     unrelated input sums and scalar prefactors remain factorized. It neither
+    ///     expands free Dirac traces nor reverses simplification already performed.
     /// gamma_output : {"reduced", "chains"}, optional
     ///     Defaults to "reduced": apply supported Clifford and trace identities.
     ///     "chains" collects Dirac chains/traces without Clifford reduction or
@@ -2406,6 +2415,12 @@ impl TensorExpression {
     /// >>> assert result.to_expression() == 4 * D
     /// >>> assert result.reduction_status == sp.ReductionStatus.Complete
     ///
+    /// Retain nested identity output when that form is preferable. Both requests
+    /// represent the same tensor and leave unrelated scalar prefactors factored.
+    ///
+    /// >>> nested = word.simplify_algebra(color=False, collect_coefficients=False)
+    /// >>> assert (nested - result).expand().to_expression() == 0
+    ///
     /// Color-only reduction with explicit SU(3) invariants gives T^a T^a = 4/3 I.
     /// Omit the invariant-substitution option to retain symbolic Casimirs.
     ///
@@ -2464,7 +2479,7 @@ impl TensorExpression {
     /// >>> assert pending.reduction_status == sp.ReductionStatus.Capped
     /// >>> assert pending == cycle
     /// >>> assert pending.simplify_algebra(**structural).to_expression() == 3
-    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None))]
+    #[pyo3(signature=(*, gamma=true, color=true, epsilon=false, contract="fully", representations=None, collect_coefficients=true, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None))]
     #[allow(clippy::too_many_arguments)]
     fn simplify_algebra(
         &self,
@@ -2476,6 +2491,7 @@ impl TensorExpression {
         contract: &str,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Sequence[Representation | RepresentationName]]", imports=("typing")))]
         representations: Option<Vec<Bound<'_, PyAny>>>,
+        collect_coefficients: bool,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['reduced', 'chains']]", imports=("typing")))]
         gamma_output: Option<&str>,
         #[gen_stub(override_type(type_repr="typing.Optional[typing.Literal['repeated_pairs', 'canonical']]", imports=("typing")))]
@@ -2495,6 +2511,7 @@ impl TensorExpression {
             epsilon,
             contract,
             representations,
+            collect_coefficients,
             gamma_output,
             gamma_ordering,
             gamma_evaluate_traces,

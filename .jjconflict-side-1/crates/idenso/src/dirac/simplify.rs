@@ -457,6 +457,7 @@ impl SymbolicTensor<PartialStructure> {
     pub(crate) fn simplify_gamma_parts(
         &self,
         settings: GammaSimplifySettings,
+        collect_coefficients: bool,
         settled: &mut crate::tensor::simplification::observation::SettledRegions,
         max_passes: Option<usize>,
     ) -> Result<Self, TensorInferenceError> {
@@ -467,6 +468,9 @@ impl SymbolicTensor<PartialStructure> {
         self.ensure_validated()?;
         let representation = Bispinor {}.into();
         let mut paired_metrics = HashMap::new();
+        let collected = std::cell::RefCell::new(trace_kernel::collected::CollectedOutput::new(
+            self.reduction_observations(),
+        ));
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
         let mut simplify = |selected: Self, complete: bool, coefficient: &mut Self| {
@@ -572,6 +576,7 @@ impl SymbolicTensor<PartialStructure> {
                             expression.as_view(),
                             coefficient,
                             &mut paired_metrics,
+                            collect_coefficients.then_some(&collected),
                         )?
                     {
                         return Ok(rewritten);
@@ -627,7 +632,12 @@ impl SymbolicTensor<PartialStructure> {
             )
         } else {
             self.collect_with_map(
-                None,
+                Some(&mut |states, _| {
+                    if collect_coefficients {
+                        collected.borrow_mut().collect(states)?;
+                    }
+                    Ok(())
+                }),
                 |atom| TensorCollectFilter::Reps([representation]).matches(atom),
                 simplify,
             )
@@ -915,6 +925,7 @@ impl<'settings> DiracSimplifier<'settings> {
         expression: AtomView<'_>,
         coefficient: &mut SymbolicTensor<PartialStructure>,
         paired: &mut HashMap<Atom, SymbolicTensor<PartialStructure>>,
+        collected: Option<&std::cell::RefCell<trace_kernel::collected::CollectedOutput<'_>>>,
     ) -> Result<Option<SymbolicTensor<PartialStructure>>, TensorInferenceError> {
         use crate::tensor::{ContractSettings, ReductionStatus, inference::InterfaceInference};
         use linnet::tree::child_vec::ChildVecStore;
@@ -1024,10 +1035,9 @@ impl<'settings> DiracSimplifier<'settings> {
             {
                 bindings.push((argument, factors.len(), *port));
             }
-            factors.push(SymbolicTensor::from_validated_parts(
-                body.clone(),
-                interface,
-            ));
+            let factor = SymbolicTensor::from_validated_parts(body.clone(), interface);
+            factor.observe_replacement(coefficient);
+            factors.push(factor);
         }
         if bindings.is_empty()
             || bindings
@@ -1086,11 +1096,13 @@ impl<'settings> DiracSimplifier<'settings> {
         };
         let mut terminal_pairs = true;
         let mut failure = None;
+        let mut collected = collected.map(|output| output.borrow_mut());
         let result = trace_kernel::evaluate_generic_with_metrics(
             &argument_views,
             trace_unit.as_view(),
             true,
             self.output,
+            collected.as_deref_mut(),
             |left, right| {
                 let mut bound = Vec::new();
                 let mut original = [left, right];
@@ -1136,6 +1148,7 @@ impl<'settings> DiracSimplifier<'settings> {
                     let interface =
                         InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
                     let input = SymbolicTensor::from_validated_parts(body.clone(), interface);
+                    input.observe_replacement(coefficient);
                     input.contract_parts(ContractSettings {
                         collect_chains: false,
                         collect_traces: false,
@@ -1186,6 +1199,9 @@ impl<'settings> DiracSimplifier<'settings> {
         } else {
             result
         };
+        if terminal_pairs && let Some(collected) = collected.as_deref_mut() {
+            collected.retain_product(&expression);
+        }
         let rewritten = SymbolicTensor::from_validated_parts(expression, interface);
         let _ = rewritten.proofs.intrinsic.set(true);
         if terminal_pairs {
@@ -2409,6 +2425,7 @@ mod tests {
     use crate::{gamma, gamma5, test_support::test_initialize};
     use spenso::slot;
 
+    mod collected_trace;
     mod contracted_trace;
 
     #[test]

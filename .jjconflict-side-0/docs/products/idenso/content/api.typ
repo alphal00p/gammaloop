@@ -212,6 +212,18 @@ Use `contract()` or `contract="fully"` when the remaining sum-product connection
 should also be contracted. Minimal structural work is not a promise that enabled
 gamma or colour identities cannot introduce sums.
 
+`collect_coefficients=True` collects exact coefficients produced in contracted
+Dirac traces and their bound vector factors, combining equal terms and exposing
+cancellations. It includes Symbolica's `expand_num()` numerical distribution
+within those generated coefficients, such as $2(x+y) = 2x + 2y$.
+Set `collect_coefficients=False` to retain the nested output of
+those identities. This option does not expand unrelated input sums, scalar
+prefactors, or free Dirac traces. Other identity kernels retain their existing
+coefficient normalization; disabling collection cannot undo earlier reduction.
+For example, `numerator.simplify_algebra(collect_coefficients=False)` requests
+the nested form without changing the enabled identity families or contraction
+mode. Global arithmetic expansion remains an explicit `expand()` call.
+
 === Gamma output and conventions
 
 Optional family keywords default to `None`, meaning the native family default
@@ -377,7 +389,8 @@ canonicalization, inspection and tensor conjugation remain separate operations.
 Rust calls the same operations with `ContractSettings` and `AlgebraSettings`.
 `ContractSettings::default()` enables structural work without filters or a limit.
 `AlgebraSettings::default()` instead has `gamma=None`, `color=None`,
-`epsilon=false`, `contract=AlgebraContraction::Fully` and `max_passes=None`.
+`epsilon=false`, `contract=AlgebraContraction::Fully`, `collect_coefficients=true`
+and `max_passes=None`.
 This differs from Python's enabled gamma/colour default. Enable a native family
 with `Some(GammaSimplifySettings::default())` or
 `Some(ColorSimplifySettings::default())`; `AlgebraSettings::hep()` enables all

@@ -680,6 +680,51 @@ class TensorOperationsTests(unittest.TestCase):
             simplified.expand(),
         )
 
+    def test_generated_coefficient_collection_keeps_scalar_spectators(self):
+        lorentz = sp.Representation.mink(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        p = sp.TensorName.vector("api_operations::coefficient_p")(lorentz)
+        q = sp.TensorName.vector("api_operations::coefficient_q")(lorentz)
+        spectator = (self.x + self.y) ** 12
+        source = (
+            spectator
+            * (p("rho") + q("rho"))
+            * gamma("a", "b", "rho")
+            * gamma("b", "c", "mu")
+            * (p("sigma") + q("sigma"))
+            * gamma("c", "d", "sigma")
+            * gamma("d", "a", "mu")
+        ).with_name("api_operations::CollectedTrace")
+        options = {"color": False, "contract": "dots"}
+        collected = source.simplify_algebra(**options)
+        nested = source.simplify_algebra(**options, collect_coefficients=False)
+        self.assertEqual(
+            collected, source.simplify_algebra(**options, collect_coefficients=True)
+        )
+        # Independent Clifford identity: Tr(r/ gamma_mu r/ gamma^mu) = -8 r^2.
+        expected = -8 * (sp.dot(p, p) + 2 * sp.dot(p, q) + sp.dot(q, q))
+        for result in (collected, nested):
+            self.assertIsInstance(result, sp.TensorExpression)
+            self.assertEqual(result.structure, source.structure)
+            self.assertEqual(result.reduction_status, sp.ReductionStatus.Complete)
+            self.assertTrue(bool(result.contains(spectator)))
+            coefficient = result.to_expression().replace(spectator, E("1"))
+            self.assertEqual(
+                (coefficient - expected.to_expression()).collect_factors().factor(),
+                E("0"),
+            )
+        self.assertEqual(collected.simplify_algebra(**options), collected)
+        untouched = ((self.x + 1) * (self.y + 1) * self.A(self.rep("i"))).with_name(
+            "api_operations::UnrelatedCoefficient"
+        )
+        for collect in (False, True):
+            self.assertEqual(
+                untouched.simplify_algebra(
+                    gamma=False, color=False, collect_coefficients=collect
+                ),
+                untouched,
+            )
+
     def test_interpreted_and_compiled_batch_contract(self):
         for values in (
             [self.x, self.y, self.x * self.y, E("0")],

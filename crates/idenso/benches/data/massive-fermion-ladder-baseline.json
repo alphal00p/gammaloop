@@ -802,5 +802,1235 @@
     "report_typst_compilation": "pass",
     "repository_docs_gate": "Blocked by pre-existing gammaloop-architecture attestation mismatch for crates/gammaloop-api/src/python.rs (b3398b339c6f52399406f3882ec4b9b67343a22d versus 46d2cf2c0e2ea99234caa6d07050640d66f0cfa1).",
     "new_form_comparison": false
+  },
+  "coefficient_collection": {
+    "capture_date": "2026-10-01",
+    "scope": "Native release collection-mode comparison, independent validation and downstream evaluation of its serialized outputs using the previous core, plus separately identified rebuilt and installed Python reduction measurements.",
+    "provenance": {
+      "development_change": "qzkuotrvroqz",
+      "source_base_revision": "5434864aa19a458a9133fc17c9f638955590a430",
+      "previous_reduction_revision": "ed14addf5eb57367a1c26eb271871d9f136a088f",
+      "history_note": "Collection work was isolated into qzkuotrv after a concurrent Git commit; the earlier uxlvosnw working-change identity is superseded.",
+      "source_hashes_at_report": {
+        "crates/idenso/src/dirac/simplify.rs": "9ca66486762a3b3026e7035b3b461575df65b923c75bc2d30efab08a4f666aa4",
+        "crates/idenso/src/dirac/simplify/trace_kernel.rs": "a42713be69b386ca0764190b9ca6f6e0dce12273a7f2324b11f6d4ce0b6572b0",
+        "crates/idenso/src/dirac/simplify/trace_kernel/collected.rs": "f4d2722e5dc7196c5d5da444da0a900a447430051e44a00ee594ad2698291958",
+        "crates/idenso/src/shorthands/schoonschip/slot_contraction/components.rs": "3adc7dad6eab9fcc5be588b649c98dcae79c09a1dec4c16d0f6f54b657be9a30",
+        "crates/idenso/src/shorthands/schoonschip/slot_contraction/components/factorized.rs": "d04e8c0d3db2fd7beb99a40eadb65bc7d34cb648990b2b5bc2bd0678b9deb126",
+        "crates/idenso/src/tensor/simplification.rs": "8d3be1ce218a6534c7643f6f778ae1a8d0bb4ea07d39dbd15456d2b12a7cccb0",
+        "crates/idenso/src/tensor/collection.rs": "843bf58190802b23aea8a1421755000705363495b28f0c41ce2db6354c10d1d6",
+        "crates/symbolica-utils/src/lib.rs": "b4f99680e6fdf8ffbbf44b077e242a3c0285cf7e91fbcf60d94ca8749efa3d05",
+        "crates/idenso/examples/contraction_phase_benchmark.rs": "b9f71c1ce500f399d2f7c13d126a17e4ddd93e232b6b58da6c1317b56fe4beae",
+        "crates/idenso/src/tensor/simplification/observation.rs": "1b3ab1d05713dcb6d873d4583d94beccec6fae5c663c9260ded690ec6b34c1db"
+      },
+      "workspace_lock_sha256": "be9b9e655871c7608600a3cce2029585cf9bbe7c424be279521947d36c23e1ba",
+      "binary": "target/coefficient-collection-cache/release/examples/contraction_phase_benchmark",
+      "binary_sha256": "0b5912a92ad7a6fbfdeb584a6b24d8d87c251a9d60a42f5aabdd48f98a34bcdc",
+      "local_runner": "/tmp/fermion-ladder-collection/run-native.py",
+      "local_runner_sha256": "1f7bd81f299e8f9527adddb100146b77f69cb37dbed6c780ec0540cecd9d1601"
+    },
+    "environment": {
+      "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "build_profile": "release",
+      "profile_override": {
+        "lto": false
+      },
+      "features": [
+        "reference-cases"
+      ],
+      "host_patches_sha256": "d8c614969682e0254f04d411948f1a5e1c745157614175e4a6bb2d6d2895d0a4",
+      "host_patches_local_path": "/tmp/fermion-ladder-collection/host-patches.toml",
+      "measurement": "Same shared unpinned host, three separate runner processes per mode. Startup, compilation, parsing, admission, serialization, rendering and component evaluation are outside the reduction clock."
+    },
+    "settings": {
+      "gamma": true,
+      "color": true,
+      "epsilon": false,
+      "contract": "fully",
+      "max_steps_per_domain": null,
+      "collect_coefficients": "True for collected; False for nested",
+      "automatic_aliases": false,
+      "gamma_settings": {
+        "output": "Reduced",
+        "chain_ordering": "RepeatedPairs",
+        "evaluate_traces": true,
+        "conjugate": false,
+        "gamma0": false,
+        "expand_three_gamma_epsilon": false
+      },
+      "color_settings": {
+        "evaluate_traces": true,
+        "expand_cross_chain_fierz": true,
+        "substitute_cof_dimension_invariants": false
+      },
+      "conventions": "Symbolic Lorentz D retained in reduction; bispinor dimension 4; standard fundamental SU(3), Tr(Ta Tb)=delta_ab/2. Independent component checks specialize D=4 with metric diag(1,-1,-1,-1), explicit Weyl gamma and Gell-Mann matrices, coupling=1, and the same three mass/momentum points recorded in correctness.full_fixture_oracle.",
+      "output_scope": "Exact completed tensor, no automatic aliases or global arithmetic expansion. Collected mode normalizes coefficients generated in selected contracted traces and bound vector factors, including expand_num numerical-factor distribution; unrelated scalar spectators and scalar-weight power bases remain factored."
+    },
+    "phase_measurement": {
+      "aggregation": "Per-field medians over the three instrumented receipts for each mode; all raw receipt hashes and uninstrumented samples are retained above.",
+      "clock": "same_thread_wall_nested_inclusive",
+      "scope": "Separate instrumented replay follows each uninstrumented timed reduction; process caches and observations may be warm. Inclusive phases overlap and must not be summed. Admission follows text parsing. Candidate-scan counters include affected-region observations and are not initial-domain-scan counts.",
+      "peak_memory": "No isolated native reduction peak-RSS measurement captured. Output Atom bytes are not peak memory; the exact-comparison process RSS below belongs to downstream validation."
+    },
+    "native_modes": {
+      "collected": {
+        "collect_coefficients": true,
+        "samples": [
+          {
+            "sample": 1,
+            "wall_seconds": 1.101824194,
+            "status": "Complete",
+            "output_atom_bytes": 1049059,
+            "completed_rerun_seconds": 4.334e-05,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 4444683,
+            "instrumented_reduction_elapsed_ns": 1033097597,
+            "local_log": "/tmp/fermion-ladder-collection/final-collected-1.log",
+            "local_log_sha256": "b19e8d842a0da143ddb71d7a3c55136da84b6827b44f5c2f7aa0201efc44cb70",
+            "admission_receipt_sha256": "ae3bcb1e2d66e5f702731d4d735a0fa01e7832d4435e953e30bbf8b37423ff91",
+            "phase_receipt_sha256": "e1e3c96fda4bb3cfa96581440157ba1f948d4fd654804a1f10f641bbb52fd00a",
+            "output_plain_sha256": "78d693b505da60729a97f4475811fa349376c0df6726170d17c46efcb59743bd"
+          },
+          {
+            "sample": 2,
+            "wall_seconds": 1.062576136,
+            "status": "Complete",
+            "output_atom_bytes": 1049059,
+            "completed_rerun_seconds": 4.9311e-05,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 1415284,
+            "instrumented_reduction_elapsed_ns": 1037456730,
+            "local_log": "/tmp/fermion-ladder-collection/final-collected-2.log",
+            "local_log_sha256": "5facca87ab3595efee677c5f7f657f391ff300cdab254ca8ab1ab3486d8eaa1e",
+            "admission_receipt_sha256": "d520a6e3b38b9e0eba3c58ac0c68df4e38f7f94efb072b57532cf96c2b9ce6fb",
+            "phase_receipt_sha256": "44d3c4d302cc85c11b886943b47869b2ffe3c4aedbb9c7bc757e9b6750b8dbc3",
+            "output_plain_sha256": "78d693b505da60729a97f4475811fa349376c0df6726170d17c46efcb59743bd"
+          },
+          {
+            "sample": 3,
+            "wall_seconds": 1.059142205,
+            "status": "Complete",
+            "output_atom_bytes": 1049059,
+            "completed_rerun_seconds": 4.991e-05,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 1430884,
+            "instrumented_reduction_elapsed_ns": 1112094453,
+            "local_log": "/tmp/fermion-ladder-collection/final-collected-3.log",
+            "local_log_sha256": "10c8b93a666a741fee3871a8a82dbb92fd4e4204fd2ece46c142ca580a03c73c",
+            "admission_receipt_sha256": "4a10fb64a859ad36aa4f869520b4c20b19da3a6f0d204ed8a20f6f7db99f5424",
+            "phase_receipt_sha256": "4627386eb0eacbc5d75c1b7a6d6a1a7b2711f51daf3638665e20cc1d828f242d",
+            "output_plain_sha256": "78d693b505da60729a97f4475811fa349376c0df6726170d17c46efcb59743bd"
+          }
+        ],
+        "median_wall_seconds": 1.062576136,
+        "median_completed_rerun_seconds": 4.9311e-05,
+        "output_atom_bytes": 1049059,
+        "output_text_bytes": 3137180,
+        "output_plain_sha256": "78d693b505da60729a97f4475811fa349376c0df6726170d17c46efcb59743bd",
+        "median_admission_elapsed_ns": 1430884,
+        "median_admission_phases": {
+          "admission": {
+            "calls": 1,
+            "inclusive_ns": 1426004,
+            "outermost_ns": 1426004
+          },
+          "interface_discovery": {
+            "calls": 165,
+            "inclusive_ns": 2348238,
+            "outermost_ns": 1193294
+          },
+          "validation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "candidate_scan": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "planning": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "shallow_graph": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "gamma_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "color_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "epsilon_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "dummy_reservation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "materialization": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "output_normalization": {
+            "calls": 109,
+            "inclusive_ns": 35890,
+            "outermost_ns": 14880
+          },
+          "contraction_states": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "coefficient_merge": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction_emission": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          }
+        },
+        "median_instrumented_reduction_elapsed_ns": 1037456730,
+        "median_reduction_phases": {
+          "admission": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "interface_discovery": {
+            "calls": 631,
+            "inclusive_ns": 6900613,
+            "outermost_ns": 2999628
+          },
+          "validation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "candidate_scan": {
+            "calls": 15083,
+            "inclusive_ns": 83209249,
+            "outermost_ns": 83209249
+          },
+          "planning": {
+            "calls": 1,
+            "inclusive_ns": 1037455561,
+            "outermost_ns": 1037455561
+          },
+          "shallow_graph": {
+            "calls": 771,
+            "inclusive_ns": 52275984,
+            "outermost_ns": 52275984
+          },
+          "gamma_kernel": {
+            "calls": 1,
+            "inclusive_ns": 1010253628,
+            "outermost_ns": 1010253628
+          },
+          "color_kernel": {
+            "calls": 5,
+            "inclusive_ns": 13920350,
+            "outermost_ns": 13920350
+          },
+          "epsilon_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction": {
+            "calls": 455,
+            "inclusive_ns": 133913525,
+            "outermost_ns": 132701582
+          },
+          "dummy_reservation": {
+            "calls": 130,
+            "inclusive_ns": 1669431,
+            "outermost_ns": 1669431
+          },
+          "materialization": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "output_normalization": {
+            "calls": 1376,
+            "inclusive_ns": 126407485,
+            "outermost_ns": 126387787
+          },
+          "contraction_states": {
+            "calls": 564,
+            "inclusive_ns": 6392498,
+            "outermost_ns": 6392498
+          },
+          "coefficient_merge": {
+            "calls": 235,
+            "inclusive_ns": 41928868,
+            "outermost_ns": 41928868
+          },
+          "contraction_emission": {
+            "calls": 35,
+            "inclusive_ns": 448484,
+            "outermost_ns": 448484
+          }
+        },
+        "contraction_frontiers": {
+          "samples_per_run": [
+            645,
+            645,
+            645
+          ],
+          "maxima_across_runs": {
+            "selected": 13,
+            "states": 3,
+            "local_terms": 3,
+            "generated": 4,
+            "predicted_bytes": 5024,
+            "coefficient_bytes": 312,
+            "max_coefficient_bytes": 104
+          },
+          "scope": "Recorded structural-contraction frontiers; not a count of the complete Dirac polynomial, global terms, or process peak memory."
+        }
+      },
+      "nested": {
+        "collect_coefficients": false,
+        "samples": [
+          {
+            "sample": 1,
+            "wall_seconds": 0.809103407,
+            "status": "Complete",
+            "output_atom_bytes": 23377307,
+            "completed_rerun_seconds": 0.001584035,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 1417084,
+            "instrumented_reduction_elapsed_ns": 733696620,
+            "local_log": "/tmp/fermion-ladder-collection/final-nested-1.log",
+            "local_log_sha256": "9720f19abc72b6d146cd2634be40e7afb158ba91fa92e6762e16380044d52a1b",
+            "admission_receipt_sha256": "d20e95c72ec2a94a7af330a23832da3f9a86f6cf536646452cb187f62309509b",
+            "phase_receipt_sha256": "6854cdc74fdff6dbb01c6202a57f85359b83ddddceb3bcc46e188230a4505d6a",
+            "output_plain_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab"
+          },
+          {
+            "sample": 2,
+            "wall_seconds": 0.808022803,
+            "status": "Complete",
+            "output_atom_bytes": 23377307,
+            "completed_rerun_seconds": 0.001603965,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 1414884,
+            "instrumented_reduction_elapsed_ns": 760196259,
+            "local_log": "/tmp/fermion-ladder-collection/final-nested-2.log",
+            "local_log_sha256": "575702b192385a1d635ceff3bbe986408cbaf7f7d932f7db315e6d0ba09be5d1",
+            "admission_receipt_sha256": "3c707b0a7942508d9f365e215b150add64280ccf027e14bb442f5ecbf4a2e336",
+            "phase_receipt_sha256": "6331cc8555e324640ab1ddba8e9ddfddb28c9dc561174cc130bae1c2e1b81f75",
+            "output_plain_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab"
+          },
+          {
+            "sample": 3,
+            "wall_seconds": 0.868752344,
+            "status": "Complete",
+            "output_atom_bytes": 23377307,
+            "completed_rerun_seconds": 0.001470935,
+            "completed_rerun_stable": true,
+            "admission_elapsed_ns": 1628785,
+            "instrumented_reduction_elapsed_ns": 811440622,
+            "local_log": "/tmp/fermion-ladder-collection/final-nested-3.log",
+            "local_log_sha256": "ed8c73dbb900ec8a6d6c4742f217d66d9d0e41eba24808d894a490e04d632968",
+            "admission_receipt_sha256": "b565408cb72e27197ccf5a1a73ba504ca9e79027e8885c1d68b680d481f881e9",
+            "phase_receipt_sha256": "a749e2aefe0c105cace9bb9bd53a878aed921bd68ffc15c79f82ecb2f077e7b1",
+            "output_plain_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab"
+          }
+        ],
+        "median_wall_seconds": 0.809103407,
+        "median_completed_rerun_seconds": 0.001584035,
+        "output_atom_bytes": 23377307,
+        "output_text_bytes": 63632701,
+        "output_plain_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab",
+        "median_admission_elapsed_ns": 1417084,
+        "median_admission_phases": {
+          "admission": {
+            "calls": 1,
+            "inclusive_ns": 1416464,
+            "outermost_ns": 1416464
+          },
+          "interface_discovery": {
+            "calls": 165,
+            "inclusive_ns": 2329011,
+            "outermost_ns": 1180694
+          },
+          "validation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "candidate_scan": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "planning": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "shallow_graph": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "gamma_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "color_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "epsilon_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "dummy_reservation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "materialization": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "output_normalization": {
+            "calls": 109,
+            "inclusive_ns": 35980,
+            "outermost_ns": 15160
+          },
+          "contraction_states": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "coefficient_merge": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction_emission": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          }
+        },
+        "median_instrumented_reduction_elapsed_ns": 760196259,
+        "median_reduction_phases": {
+          "admission": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "interface_discovery": {
+            "calls": 605,
+            "inclusive_ns": 6742493,
+            "outermost_ns": 2891910
+          },
+          "validation": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "candidate_scan": {
+            "calls": 15051,
+            "inclusive_ns": 84270304,
+            "outermost_ns": 84270304
+          },
+          "planning": {
+            "calls": 1,
+            "inclusive_ns": 760195299,
+            "outermost_ns": 760195299
+          },
+          "shallow_graph": {
+            "calls": 771,
+            "inclusive_ns": 51889705,
+            "outermost_ns": 51889705
+          },
+          "gamma_kernel": {
+            "calls": 1,
+            "inclusive_ns": 648924346,
+            "outermost_ns": 648924346
+          },
+          "color_kernel": {
+            "calls": 5,
+            "inclusive_ns": 14095672,
+            "outermost_ns": 14095672
+          },
+          "epsilon_kernel": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "contraction": {
+            "calls": 455,
+            "inclusive_ns": 132298537,
+            "outermost_ns": 131050752
+          },
+          "dummy_reservation": {
+            "calls": 130,
+            "inclusive_ns": 1670587,
+            "outermost_ns": 1670587
+          },
+          "materialization": {
+            "calls": 0,
+            "inclusive_ns": 0,
+            "outermost_ns": 0
+          },
+          "output_normalization": {
+            "calls": 1251,
+            "inclusive_ns": 96066027,
+            "outermost_ns": 96046183
+          },
+          "contraction_states": {
+            "calls": 564,
+            "inclusive_ns": 6378162,
+            "outermost_ns": 6378162
+          },
+          "coefficient_merge": {
+            "calls": 234,
+            "inclusive_ns": 167894,
+            "outermost_ns": 167894
+          },
+          "contraction_emission": {
+            "calls": 35,
+            "inclusive_ns": 468331,
+            "outermost_ns": 468331
+          }
+        },
+        "contraction_frontiers": {
+          "samples_per_run": [
+            645,
+            645,
+            645
+          ],
+          "maxima_across_runs": {
+            "selected": 13,
+            "states": 3,
+            "local_terms": 3,
+            "generated": 4,
+            "predicted_bytes": 5024,
+            "coefficient_bytes": 312,
+            "max_coefficient_bytes": 104
+          },
+          "scope": "Recorded structural-contraction frontiers; not a count of the complete Dirac polynomial, global terms, or process peak memory."
+        }
+      }
+    },
+    "independent_validation": {
+      "summary_sha256": "95fd0cb8efbf2f24597b999afd7c9b5c8f9288bf77c402a5eb029e6cb47c23cd",
+      "provenance": "/tmp/fermion-ladder-collection/independent-final-2026-10-01/provenance.json",
+      "method": "Exact baseline cancellation uses collect_factors then factor, with no arithmetic expansion. Independent finite-component contraction uses original factorized input, built-in Weyl gamma matrices and explicit standard Gell-Mann matrices. Each mode checked at the same three mass/momentum points, all 1024 components, double precision.",
+      "timing_scope": "Medians across the same three distinct momentum/mass points, one sample per point, each in a fresh Python process. Startup and independent oracle excluded from downstream totals. Output preparation includes text parsing, numerical substitutions and admission. Evaluator is direct translation, one core, no JIT/CPE optimization.",
+      "modes": {
+        "collected": {
+          "result_source": "/tmp/fermion-ladder-collection/final-collected-1/step-1.expr",
+          "text_bytes": 3137180,
+          "result_sha256": "78d693b505da60729a97f4475811fa349376c0df6726170d17c46efcb59743bd",
+          "all_components_passed_at_all_three_points": true,
+          "components_per_point": 1024,
+          "max_relative_error": 1.070677227418332e-15,
+          "max_absolute_error": 1.0186340659856796e-10,
+          "exact_difference_zero": true,
+          "exact_receipt": {
+            "candidate_source": "/tmp/fermion-ladder-collection/final-collected-1/step-1.expr",
+            "same_atom": false,
+            "difference_bytes": 2081883,
+            "collect_factors": {
+              "seconds": 0.04518092283979058,
+              "bytes": 2079895,
+              "zero": false
+            },
+            "factor": {
+              "seconds": 0.6363010676577687,
+              "bytes": 3,
+              "zero": true
+            },
+            "max_rss_kib": 60796
+          },
+          "downstream_total_seconds": [
+            0.195197444409132,
+            0.2048941422253847,
+            0.22408604808151722
+          ],
+          "downstream_median_seconds": 0.2048941422253847,
+          "median_phases_seconds": {
+            "prepare_seconds": 0.17354350024834275,
+            "evaluator_construction_seconds": 0.0007148622535169125,
+            "point_construction_seconds": 0.013006247580051422,
+            "evaluate_1024_components_seconds": 0.007937903050333261
+          },
+          "core_sha256": [
+            "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846"
+          ],
+          "startup_and_fixture_setup_seconds": [
+            0.09658293379470706,
+            0.17327961884438992,
+            0.09086185693740845
+          ],
+          "actual_carrier_port_preservation": "Not certified by raw output text. Numerical axes matched by exact representation/index identity; source carrier order is separately covered by Rust regressions and Python carrier receipts."
+        },
+        "nested": {
+          "result_source": "/tmp/fermion-ladder-collection/final-nested-1/step-1.expr",
+          "text_bytes": 63632701,
+          "result_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab",
+          "all_components_passed_at_all_three_points": true,
+          "components_per_point": 1024,
+          "max_relative_error": 1.070677227418332e-15,
+          "max_absolute_error": 1.0186340659856796e-10,
+          "exact_difference_zero": true,
+          "exact_receipt": {
+            "candidate_source": "/tmp/fermion-ladder-collection/final-nested-1/step-1.expr",
+            "same_atom": false,
+            "difference_bytes": 25197723,
+            "collect_factors": {
+              "seconds": 0.6813226197846234,
+              "bytes": 25195735,
+              "zero": false
+            },
+            "factor": {
+              "seconds": 3.4360679569654167,
+              "bytes": 3,
+              "zero": true
+            },
+            "max_rss_kib": 506256
+          },
+          "downstream_total_seconds": [
+            9.591519149020314,
+            9.503508059773594,
+            9.101123938336968
+          ],
+          "downstream_median_seconds": 9.503508059773594,
+          "median_phases_seconds": {
+            "prepare_seconds": 9.395300681702793,
+            "evaluator_construction_seconds": 0.05225508287549019,
+            "point_construction_seconds": 0.01339186867699027,
+            "evaluate_1024_components_seconds": 0.033200097270309925
+          },
+          "core_sha256": [
+            "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846"
+          ],
+          "startup_and_fixture_setup_seconds": [
+            0.14635317912325263,
+            0.1764741069637239,
+            0.1209846050478518
+          ],
+          "actual_carrier_port_preservation": "Not certified by raw output text. Numerical axes matched by exact representation/index identity; source carrier order is separately covered by Rust regressions and Python carrier receipts."
+        }
+      },
+      "downstream_median_ratio_nested_over_collected": 46.38252688219696,
+      "python_core_role": "Existing core 81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846 only parses, specializes, admits and evaluates native serialized output. It does not run the new simplify_algebra implementation. These downstream costs are not end-to-end Python reduction timings.",
+      "phase_aggregation_note": "Downstream totals are medians of per-point totals; independently computed phase medians need not sum to the median total."
+    },
+    "validation": {
+      "idenso_release_tests": {
+        "passed": 853,
+        "ignored": 22,
+        "excluded_baseline_failure": "tensor::tests::parsing::infinite_execution",
+        "run_id": "bd912767-fb4a-4505-b2db-d6f3942c6595",
+        "log_sha256": "6466c8c24cefe3e145492f0780b702008aed2b4a532df25705110c2696b2a87c"
+      },
+      "focused_collection_tests": {
+        "passed": 9,
+        "run_id": "7faf7de5-a59f-4fef-8e10-8132ab0f1ec8",
+        "log_sha256": "47a828cebaabac3447b2bc7ba33daa8182a8dbecaa0375c012c4df4170254944"
+      },
+      "symbolica_utils_mapped_polynomial_tests": {
+        "passed": 4,
+        "log_sha256": "df42362c151c4d52c8b2d77e14362996b9b72e4e3438d195ad981fded67047f3"
+      },
+      "clippy": {
+        "status": "pass",
+        "packages": [
+          "spynso3",
+          "idenso",
+          "symbolica-utils"
+        ],
+        "options": "--release --lib --tests --no-deps -- -D warnings",
+        "log_sha256": "ceb183abd9267f3f3a506568ea38a1883c25da700b1c35bea526415582c14631",
+        "dependency_note": "Existing Symbolica unused_must_use warning and proc-macro-error2 future-compatibility warning remain outside --no-deps warning denial."
+      },
+      "scope_note": "Native tests, independent native-output checks, rebuilt candidate and installed Python runtime checks, synchronized tensor stubs and notebook-server readiness are recorded separately. Full notebook execution/visual audit and a new FORM comparison are not claimed.",
+      "new_form_comparison": false,
+      "generated_stubs": {
+        "status": "canonical, bundled, source-host and installed tensor stubs synchronized; runtime surface/signature/documentation checks pass",
+        "sha256": "e2d96c56a5cc4b1514eb186e787d25480c9e381f560a75384d4ff1fe8616ce78"
+      }
+    },
+    "reproduction": {
+      "build": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "-p",
+        "idenso",
+        "--features",
+        "reference-cases",
+        "--example",
+        "contraction_phase_benchmark",
+        "--config",
+        "profile.release.lto=false"
+      ],
+      "run_modes": {
+        "collected": [
+          "target/release/examples/contraction_phase_benchmark",
+          "--reduce-input",
+          "crates/idenso/benches/data/massive-fermion-ladder.expr",
+          "/tmp/massive-fermion-ladder-collected",
+          "algebra",
+          "collected"
+        ],
+        "nested": [
+          "target/release/examples/contraction_phase_benchmark",
+          "--reduce-input",
+          "crates/idenso/benches/data/massive-fermion-ladder.expr",
+          "/tmp/massive-fermion-ladder-nested",
+          "algebra",
+          "nested"
+        ]
+      },
+      "local_target_note": "Saved receipts used target/coefficient-collection-cache. CARGO_TARGET_DIR or --target-dir changes the executable path; build flags and requested output mode remain the same."
+    },
+    "python": {
+      "scope": "Installed Python TensorExpression.simplify_algebra reduction on the saved full fixture. Separate from native-runner reduction and previous-core evaluation of native serialized output.",
+      "build": {
+        "command": [
+          "/nix/store/z3qwljip4pf9nzyx7w5ri6942ifsrkys-maturin-1.15.0/bin/maturin",
+          "build",
+          "--release",
+          "--no-default-features",
+          "--features",
+          "native",
+          "--locked",
+          "--offline",
+          "--config",
+          "/tmp/fermion-ladder-collection/host-patches.toml",
+          "--interpreter",
+          "/common/dev/symbolica-community/main/.venv-feynkit/bin/python",
+          "--out",
+          "/tmp/fermion-ladder-collection/wheels"
+        ],
+        "cwd": "/common/dev/symbolica-community/main",
+        "started_utc": "2026-10-01T09:51:48.262751+00:00",
+        "jobs": 4,
+        "log": "/tmp/fermion-ladder-collection/build.log",
+        "stub_sha256": {
+          "/common/dev/gammaloop/feynkit-rich-display/docs/api/python/spynso3.pyi": "e2d96c56a5cc4b1514eb186e787d25480c9e381f560a75384d4ff1fe8616ce78",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": "e2d96c56a5cc4b1514eb186e787d25480c9e381f560a75384d4ff1fe8616ce78",
+          "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi": "e2d96c56a5cc4b1514eb186e787d25480c9e381f560a75384d4ff1fe8616ce78"
+        },
+        "lock_sha256": {
+          "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "be9b9e655871c7608600a3cce2029585cf9bbe7c424be279521947d36c23e1ba",
+          "/common/dev/symbolica-community/main/Cargo.lock": "4a92c34e0b0d32a106f4d450278077edfc7abc42b399f33e206b4cf7f1b4b8ae"
+        },
+        "environment": {
+          "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+          "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+          "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+          "python": "Python 3.11.16",
+          "maturin": "maturin 1.15.0",
+          "cpu": "AMD EPYC 9754 128-Core Processor",
+          "profile": "release",
+          "features": [
+            "native"
+          ]
+        },
+        "exit_code": 0,
+        "seconds": 561.0766367772594,
+        "manifests_changed": [],
+        "sources_changed": [
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-generator/examples/four_loop_numerator.rs",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-generator/src/generation.rs",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/finalization.rs",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/lib.rs",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/subgraph.rs"
+        ],
+        "wheel": "/tmp/fermion-ladder-collection/wheels/symbolica-3.0.1-cp311-abi3-linux_x86_64.whl",
+        "wheel_sha256": "9b9675573e2f6dd07fbfdd7f93a12b9df3de33a7ee6ea4e7b82a34464290f9be",
+        "core": "/tmp/fermion-ladder-collection/python/symbolica/core.abi3.so",
+        "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+        "local_receipt": "/tmp/fermion-ladder-collection/build.json",
+        "receipt_sha256": "b73609a6936a6cc7d7da1b6e72610159bcc7e3ff28b01420ca0d388ea8fccc36",
+        "stable_reduction_and_binding_source_hashes": {
+          "crates/idenso/src/dirac/simplify.rs": "9ca66486762a3b3026e7035b3b461575df65b923c75bc2d30efab08a4f666aa4",
+          "crates/idenso/src/dirac/simplify/trace_kernel.rs": "a42713be69b386ca0764190b9ca6f6e0dce12273a7f2324b11f6d4ce0b6572b0",
+          "crates/idenso/src/dirac/simplify/trace_kernel/collected.rs": "f4d2722e5dc7196c5d5da444da0a900a447430051e44a00ee594ad2698291958",
+          "crates/idenso/src/shorthands/schoonschip/slot_contraction/components.rs": "3adc7dad6eab9fcc5be588b649c98dcae79c09a1dec4c16d0f6f54b657be9a30",
+          "crates/idenso/src/shorthands/schoonschip/slot_contraction/components/factorized.rs": "d04e8c0d3db2fd7beb99a40eadb65bc7d34cb648990b2b5bc2bd0678b9deb126",
+          "crates/idenso/src/tensor/simplification.rs": "8d3be1ce218a6534c7643f6f778ae1a8d0bb4ea07d39dbd15456d2b12a7cccb0",
+          "crates/idenso/src/tensor/collection.rs": "843bf58190802b23aea8a1421755000705363495b28f0c41ce2db6354c10d1d6",
+          "crates/symbolica-utils/src/lib.rs": "b4f99680e6fdf8ffbbf44b077e242a3c0285cf7e91fbcf60d94ca8749efa3d05",
+          "crates/idenso/examples/contraction_phase_benchmark.rs": "b9f71c1ce500f399d2f7c13d126a17e4ddd93e232b6b58da6c1317b56fe4beae",
+          "crates/idenso/src/tensor/simplification/observation.rs": "1b3ab1d05713dcb6d873d4583d94beccec6fae5c663c9260ded690ec6b34c1db",
+          "crates/spynso3/src/expression.rs": "4a59f34477c6c4ed1ad6ab83a8246847097e6fcf5bd9f7a3b932a0dfdaa63e2f",
+          "crates/spynso3/src/simplification/pipeline.rs": "5c35a81943c85ca338d7671e4f0f8c6e59f1b1919a717d7c0424b7f43d17efd7",
+          "crates/spynso3/src/simplification.rs": "4daebf4dc1b6a5299184cfed8e9f2828eb63fb45a4365d525ea17d96208ee5f4"
+        },
+        "source_provenance_note": "All recorded reduction sources and bindings stayed unchanged during compilation. Concurrent graph/generator files listed in sources_changed changed during the build; their latest versions are not certified as included. Benchmark reduction uses a saved fixture rather than regenerated graph output.",
+        "changed_source_hashes": {
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-generator/examples/four_loop_numerator.rs": {
+            "before": "660d96dc8f7a23a55fa766b0f5ae251e3e76185e5f1f20b4f705879ee9290d01",
+            "after": "887e3273cf4d194fd8db21a0fee650a1a14a72d8777185a0dc57b46dc6759e26"
+          },
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-generator/src/generation.rs": {
+            "before": "f37be31c33c32c919c188c6e23782cd9e34649d8d3a419f1ee1277f612d6eb03",
+            "after": "c5dcb86ebdb5b0b7ef0824fc044355041f9b21add06e4f270ed8c6dfef8f011a"
+          },
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/finalization.rs": {
+            "before": "ddc606b8f75b551813fad1b632f40b2f158b47e46b7a6951f33c87d31fdc51cf",
+            "after": "cc6ff0492361cb7840586eac8854c6fa741c34dc6001780e036f7cb0a20f85ef"
+          },
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/lib.rs": {
+            "before": "f998587b2086502164354b1a6733da4cb33c59a198ee77a73ccc4e024095bdff",
+            "after": "766e1e9d97e2732ebdd7323bf44878ecd79db7e821483f5fb561042fa7793f7d"
+          },
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/src/subgraph.rs": {
+            "before": "5a8f545bfed83be36ac440be8b846fa36352b2db3ffcf49d489840947a97c4f2",
+            "after": "673cd50e8fba046056faed4df7531693805e3365e85e6db8c97b988c4fe52bd6"
+          }
+        },
+        "manifest_hashes": {
+          "/common/dev/symbolica-lazy-formatting/Cargo.toml": "c59b1346d45dd71d4b5639ea170552f7fe85b4297939cd9af03a90e9393d1578",
+          "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "be9b9e655871c7608600a3cce2029585cf9bbe7c424be279521947d36c23e1ba",
+          "/common/dev/gammaloop/feynkit-rich-display/Cargo.toml": "0ed26b68e17868324d1af28329f83d74a3948cfbdedef35eccf780cd55dd39a9",
+          "/common/dev/symbolica-community/main/Cargo.lock": "4a92c34e0b0d32a106f4d450278077edfc7abc42b399f33e206b4cf7f1b4b8ae",
+          "/common/dev/symbolica-community/main/Cargo.toml": "39df154516a322c4248d96bfeb10ac9b5dfe34f7bc6e88759b9646354b6271d1",
+          "/common/dev/symbolica-community/main/pyproject.toml": "9b6dd57daa0927d12ace7dbca96dc90561ae6128f6dab3200b4fc02ec6e1bfd7",
+          "/common/dev/symbolica-community/main/src/bin/stub_gen.rs": "73f2915cc3d4e5dcd47fd4750c19dbb0fa106a4ad9856f3edba63a314c65edf0",
+          "/common/dev/symbolica-community/main/src/citations.rs": "4ef8715b3ac099e01a9634d7c04c35473642e56de4dfe67d987ad5837c0a7a2e",
+          "/common/dev/symbolica-community/main/src/hep.rs": "42f255be3583d57367dad1af387e2b13b66d27930842ef2373b60a974cb842e2",
+          "/common/dev/symbolica-community/main/src/lib.rs": "af7f6d54b6660a5a97124d62f91702e2448fcb1a35a9866b51f02c1cb459209f",
+          "/common/dev/symbolica-community/main/src/oneloop.rs": "e95d7bfa1a2e4349e32b9de2681f01ecaac09ba28e6db24d4061b06a847d4bef",
+          "/common/dev/symbolica-community/main/python/symbolica/__init__.py": "1fa8e2d52346d4280a99e65c928516055c2133848a8fe7465cc9dcb0a892a610",
+          "/common/dev/symbolica-community/main/python/symbolica/community/__init__.py": "f48a3f77d26c891c80261a80b4bef5e87119e05b70fff22ba7ebd48a62c9a972",
+          "/common/dev/symbolica-community/main/python/symbolica/community/hep/__init__.py": "219fd074335751d07abf425c19b5960534df8b88fb60bc9369d51587cceeae8f",
+          "/common/dev/symbolica-community/main/python/symbolica/community/hep/vakint/__init__.py": "e58cefe2e1e30b9a2263a98e4aa5709254f818141fdb05c1a789c0c1fe5d7881",
+          "/common/dev/symbolica-community/main/python/symbolica/community/spenso/__init__.py": "0b8729378cb458101eb7907ab0778f9a2f96f95dcd5a12f91fe0275813ccc2b1",
+          "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.py": "6d5a13a7f435a9e05eb571bf0134d6433fa79db0a3b484bcbde6a14b78abe4a6",
+          "/common/dev/symbolica-community/main/python/symbolica/community/vakint/__init__.py": "87f34afe1250a85caee0ddadb933e3034e53dff155adf43545a9f1c47c130009",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/idenso/Cargo.toml": "fc0743b1d13d5fa9fe73c38cb83f33f392a33de1fbb8643378fce451d83228c6",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/spenso/Cargo.toml": "67f47ec46651647434729100c607330d55e3102baf06e5f0cc88fc6d64663946",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/spynso3/Cargo.toml": "d5337ed171196ff7d7715771529e4dd748b7d408571fbac83c5ae00fb6be6d1b",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-py/Cargo.toml": "3ca23d858afbf0873ec50683d63123a086162c2fda6db36c10fcfe5d26376f2a",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/symbolica-utils/Cargo.toml": "4b9eb19b70a05fb4bc204e3a6ca27e615b03142df8710f652479738c6c34491d",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-generator/Cargo.toml": "7148318ad33dcdc521eb33d4ce1cb0f665127de6f0404de876b526bc29263891",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-graph/Cargo.toml": "21714b4e587613f542dc74cc818b5bd77fb487e26823ec8abf092df97d138af0",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-model/Cargo.toml": "5b11b7af18120c860a42e3a3e945cf14d64a29bc3bee162086016a7ff8e604fa",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-amplitude/Cargo.toml": "1c5faa80a0a9cff377d9e645e11809789dda57fbc67434b63e1789a8b99ce02a",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-tensor/Cargo.toml": "d07e9fd38f1ede10a8a6874072eb909a0731dd24e3fc627e854694d14aa882e7",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-kinematics/Cargo.toml": "e6b05c294f57c327eb6df7ac12dcbcfe6192490a4fd4cf9dae645da1ebc95d5b",
+          "/common/dev/gammaloop/feynkit-rich-display/crates/feynkit-cff/Cargo.toml": "dafe3cd924c43f5032c87c1507ec63337f499e99e5a6c89df0568df7ac8906be"
+        }
+      },
+      "installation": {
+        "installed_utc": "2026-10-01T10:03:47.100701+00:00",
+        "target": "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+        "previous_sha256": "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846",
+        "backup": "/tmp/fermion-ladder-collection/previous-core.abi3.so",
+        "backup_sha256": "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846",
+        "sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+        "venv_target": "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so",
+        "venv_previous_sha256": "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846",
+        "venv_backup": "/tmp/fermion-ladder-collection/previous-venv-core.abi3.so",
+        "venv_stub": "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/community/tensor/__init__.pyi",
+        "stub": "/common/dev/symbolica-community/main/python/symbolica/community/tensor/__init__.pyi",
+        "stub_sha256": "e2d96c56a5cc4b1514eb186e787d25480c9e381f560a75384d4ff1fe8616ce78",
+        "probe_exit_code": 0,
+        "probe_output": "contract: Contract compatible indices without applying tensor-algebra identities.\nsimplify_algebra: Reduce enabled tensor identities and their required index contractions.\n/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so\nLoaded core SHA-256: 44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4\nTensorExpression",
+        "local_receipt": "/tmp/fermion-ladder-collection/installed.json",
+        "receipt_sha256": "e332a36ac99e7ec43bbae14c412255778d006a3f247e511854881a2524fbae53"
+      },
+      "timing_scope": "Three reduction calls on the same admitted input in one process per mode, with exact settings retained per mode. Startup, model setup, admission, result-to-expression conversion, serialization, rendering and exact comparison are excluded from reduction time. Source observations and process caches may be reused between calls. These are not three independent-process samples.",
+      "measurement_script": {
+        "local_path": "/tmp/fermion-ladder-collection/candidate-timings.py",
+        "sha256": "0f6f1f4873364427e8d784d270a2a5b1a97fff7dcb456f9e2ecafdd7d8185255"
+      },
+      "installed_modes": {
+        "collected": {
+          "core": "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so",
+          "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+          "input": {
+            "slots": [
+              "mink(D,hedge(1,1))",
+              "mink(D,hedge(0,1))",
+              "coad(8,hedge(0,1))",
+              "coad(8,hedge(1,1))"
+            ],
+            "canonical_sha256": "e92ce6158e1f0de931afc74e58e297814ec40cd61a277a7341a29af82412df2f"
+          },
+          "admission_seconds": 0.001486504916101694,
+          "settings": {
+            "gamma": true,
+            "color": true,
+            "epsilon": false,
+            "contract": "fully",
+            "collect_coefficients": true
+          },
+          "samples": [
+            {
+              "seconds": 1.0634046508930624,
+              "cpu_seconds": 1.054137458,
+              "rerun_seconds": 0.00013700034469366074,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            },
+            {
+              "seconds": 1.0343752610497177,
+              "cpu_seconds": 1.02384162,
+              "rerun_seconds": 0.0003239409998059273,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            },
+            {
+              "seconds": 1.0351848141290247,
+              "cpu_seconds": 1.0226063490000001,
+              "rerun_seconds": 0.00024149101227521896,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            }
+          ],
+          "output": {
+            "bytes": 1098752,
+            "slots": [
+              "mink(D,hedge(1,1))",
+              "mink(D,hedge(0,1))",
+              "coad(8,hedge(0,1))",
+              "coad(8,hedge(1,1))"
+            ],
+            "rank": 4,
+            "canonical_sha256": "4b2e7483a27c7da2c34fe176bc8a2c279cbbdcb80d27af736e8a27932be567f1",
+            "plain_sha256": "69daac7a7eb57f22a0621169decc237c2d9a82b7beae0499df3fbe83ba9d2029"
+          },
+          "exact_comparison_seconds": 0.6887056306004524,
+          "max_rss_kib": 285800,
+          "loaded_binary_stable": true,
+          "local_receipt": "/tmp/fermion-ladder-collection/installed-collected-timings.json",
+          "receipt_sha256": "22db9d828347893591dec6ae62351e6bac8f597f7e7c01edb28ff8563b77f0c0",
+          "median_wall_seconds": 1.0351848141290247,
+          "median_cpu_seconds": 1.02384162,
+          "median_completed_rerun_seconds": 0.00024149101227521896,
+          "exact_difference_zero": true,
+          "exact_comparison_method": "The measurement script asserts (result - historical_baseline).collect_factors().factor() == 0; no global arithmetic expansion.",
+          "rss_scope": "Cumulative process peak after model/input setup, three reductions and completed reruns, retained output, serialization and exact baseline comparison. Not isolated reduction memory."
+        },
+        "nested": {
+          "core": "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so",
+          "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+          "input": {
+            "slots": [
+              "mink(D,hedge(1,1))",
+              "mink(D,hedge(0,1))",
+              "coad(8,hedge(0,1))",
+              "coad(8,hedge(1,1))"
+            ],
+            "canonical_sha256": "e92ce6158e1f0de931afc74e58e297814ec40cd61a277a7341a29af82412df2f"
+          },
+          "admission_seconds": 0.0015192851424217224,
+          "settings": {
+            "gamma": true,
+            "color": true,
+            "epsilon": false,
+            "contract": "fully",
+            "collect_coefficients": false
+          },
+          "samples": [
+            {
+              "seconds": 0.8274292363785207,
+              "cpu_seconds": 0.817463781,
+              "rerun_seconds": 0.024521063081920147,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            },
+            {
+              "seconds": 0.779838893096894,
+              "cpu_seconds": 0.7716375799999997,
+              "rerun_seconds": 0.019237234722822905,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            },
+            {
+              "seconds": 0.7622116031125188,
+              "cpu_seconds": 0.7531845160000001,
+              "rerun_seconds": 0.014607219956815243,
+              "status": "ReductionStatus.Complete",
+              "stable_rerun": true,
+              "ordered_ports_preserved": true
+            }
+          ],
+          "output": {
+            "bytes": 24213378,
+            "slots": [
+              "mink(D,hedge(1,1))",
+              "mink(D,hedge(0,1))",
+              "coad(8,hedge(0,1))",
+              "coad(8,hedge(1,1))"
+            ],
+            "rank": 4,
+            "canonical_sha256": "aa8d2be931d38cc050cd73fb76c6ccc562d0ceb04116313abb97d7b6398bdfda",
+            "plain_sha256": "e0c49589cc1efe79255538ff34031f6b792676c6405acdff105dcae375d45c96"
+          },
+          "exact_comparison_seconds": 3.735263526905328,
+          "max_rss_kib": 1187760,
+          "loaded_binary_stable": true,
+          "local_receipt": "/tmp/fermion-ladder-collection/installed-nested-timings.json",
+          "receipt_sha256": "d2aa66c28312f8e58e31ebb7fb9a173ee5b04a30028bcc4daa5850e72b27cfa3",
+          "median_wall_seconds": 0.779838893096894,
+          "median_cpu_seconds": 0.7716375799999997,
+          "median_completed_rerun_seconds": 0.019237234722822905,
+          "exact_difference_zero": true,
+          "exact_comparison_method": "The measurement script asserts (result - historical_baseline).collect_factors().factor() == 0; no global arithmetic expansion.",
+          "rss_scope": "Cumulative process peak after model/input setup, three reductions and completed reruns, retained output, serialization and exact baseline comparison. Not isolated reduction memory."
+        }
+      },
+      "candidate_runtime_checks": {
+        "passed": 83,
+        "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+        "local_receipt": "/tmp/fermion-ladder-collection/candidate-check-receipts/runtime-checks.json",
+        "receipt_sha256": "a6a32f0c3861165b42e5c2ba0c6e21cb85a9f42c044576a5b222a965ef3d53b6",
+        "suites": [
+          {
+            "test": "installed_api_operations",
+            "exit_code": 0,
+            "seconds": 1.6187328370288014,
+            "log": "/tmp/fermion-ladder-collection/installed_api_operations.log",
+            "passed": 25,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_api_operations.log",
+            "log_sha256": "399c61b377cfa60d931aad327b5eec2d28415d9ce15ffa58cb14c2448188c64c"
+          },
+          {
+            "test": "installed_typed_surface",
+            "exit_code": 0,
+            "seconds": 0.16519962484017015,
+            "log": "/tmp/fermion-ladder-collection/installed_typed_surface.log",
+            "passed": 13,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_typed_surface.log",
+            "log_sha256": "8d1117874c74f42b7cb7285a60dba79efd56d5a78570a03c42e53833ac5f4b78"
+          },
+          {
+            "test": "installed_subclass_components",
+            "exit_code": 0,
+            "seconds": 0.06485469592735171,
+            "log": "/tmp/fermion-ladder-collection/installed_subclass_components.log",
+            "passed": 4,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_subclass_components.log",
+            "log_sha256": "9a361b3b7b04d769f3516b4b507c72f8feb264d42a4776876618d9385e6ca8e6"
+          },
+          {
+            "test": "installed_open_port_display",
+            "exit_code": 0,
+            "seconds": 0.9165008622221649,
+            "log": "/tmp/fermion-ladder-collection/installed_open_port_display.log",
+            "passed": 8,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_open_port_display.log",
+            "log_sha256": "5120486f9ce8ce7a36e1cfd1643ee311e514e19786dcc5f0f707c7ae86120f5f"
+          },
+          {
+            "test": "installed_tensor_print",
+            "exit_code": 0,
+            "seconds": 0.46549837104976177,
+            "log": "/tmp/fermion-ladder-collection/installed_tensor_print.log",
+            "passed": 8,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_tensor_print.log",
+            "log_sha256": "4e4cb3a7677af4a1dd4176c5341a795d0fbc72eee8cc0f02c48fa696e6d02be5"
+          },
+          {
+            "test": "installed_api_contract",
+            "exit_code": 0,
+            "seconds": 0.2149513578042388,
+            "log": "/tmp/fermion-ladder-collection/installed_api_contract.log",
+            "passed": 11,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_api_contract.log",
+            "log_sha256": "1adf5ea9c0e9191437c1bfbd4985f6b4e6be80300c305a087109ca09c3d64f26"
+          },
+          {
+            "test": "installed_api_invariants",
+            "exit_code": 0,
+            "seconds": 0.6654381970874965,
+            "log": "/tmp/fermion-ladder-collection/installed_api_invariants.log",
+            "passed": 5,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_api_invariants.log",
+            "log_sha256": "b4e7b03f26aca564e8ac2be56f4a455eb495d1b13da66514da8a6d417f269adc"
+          },
+          {
+            "test": "installed_api_surface",
+            "exit_code": 0,
+            "seconds": 2.169218612834811,
+            "log": "/tmp/fermion-ladder-collection/installed_api_surface.log",
+            "passed": 6,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_api_surface.log",
+            "log_sha256": "40f4aedea7e913065d720419be99ac0014b37699f63f651090df1b537c4d0f3b"
+          },
+          {
+            "test": "installed_documentation",
+            "exit_code": 0,
+            "seconds": 8.936385910958052,
+            "log": "/tmp/fermion-ladder-collection/installed_documentation.log",
+            "passed": 3,
+            "preserved_log": "/tmp/fermion-ladder-collection/candidate-check-receipts/installed_documentation.log",
+            "log_sha256": "35ce9ad55c96fefac54453c8ef7f46de8e85489801cfaf7275cbd918efdbe785"
+          }
+        ]
+      },
+      "installed_runtime_checks": {
+        "passed": 83,
+        "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+        "local_receipt": "/tmp/fermion-ladder-collection/runtime-checks.json",
+        "receipt_sha256": "e1b53e7f09597b456345634ea8310a9a2237315bab9245d761b63de0b59dd6e9",
+        "suites": [
+          {
+            "test": "installed_api_operations",
+            "exit_code": 0,
+            "seconds": 1.568713699001819,
+            "log": "/tmp/fermion-ladder-collection/installed_api_operations.log",
+            "passed": 25,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_api_operations.log",
+            "log_sha256": "18cca4a765bcc357f10749c9faa03e16f0b2da6ced3438d02d2feda6aa1f703d"
+          },
+          {
+            "test": "installed_typed_surface",
+            "exit_code": 0,
+            "seconds": 0.16548663796857,
+            "log": "/tmp/fermion-ladder-collection/installed_typed_surface.log",
+            "passed": 13,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_typed_surface.log",
+            "log_sha256": "3cbb73f0a63811f4488e6666d118c328ac3799e4aa2a56a362004d83068e6a7f"
+          },
+          {
+            "test": "installed_subclass_components",
+            "exit_code": 0,
+            "seconds": 0.06474784202873707,
+            "log": "/tmp/fermion-ladder-collection/installed_subclass_components.log",
+            "passed": 4,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_subclass_components.log",
+            "log_sha256": "d28956287fe11ef4a14b8f73045ebc3af9ac7f90d6799dafedc3ef9a7e51e498"
+          },
+          {
+            "test": "installed_open_port_display",
+            "exit_code": 0,
+            "seconds": 0.8163091102614999,
+            "log": "/tmp/fermion-ladder-collection/installed_open_port_display.log",
+            "passed": 8,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_open_port_display.log",
+            "log_sha256": "642370e347fa561071d4457854888f8492e3abd8eb94d2b6aa3b7a51b64e1520"
+          },
+          {
+            "test": "installed_tensor_print",
+            "exit_code": 0,
+            "seconds": 0.5153463967144489,
+            "log": "/tmp/fermion-ladder-collection/installed_tensor_print.log",
+            "passed": 8,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_tensor_print.log",
+            "log_sha256": "b46904ce856efff0ba7be495aa9104b1fbfdf9443ac4120d32099598761ae9ee"
+          },
+          {
+            "test": "installed_api_contract",
+            "exit_code": 0,
+            "seconds": 0.2146942256949842,
+            "log": "/tmp/fermion-ladder-collection/installed_api_contract.log",
+            "passed": 11,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_api_contract.log",
+            "log_sha256": "b4a55daadd16ac9aeb306c4671eb74080a52c6f1f5039d2900e65c0ec461ae7b"
+          },
+          {
+            "test": "installed_api_invariants",
+            "exit_code": 0,
+            "seconds": 0.6656939131207764,
+            "log": "/tmp/fermion-ladder-collection/installed_api_invariants.log",
+            "passed": 5,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_api_invariants.log",
+            "log_sha256": "8dc2cfe57d3fdc5efee19ab4b0c39d39c6d67f05f150d4901bb01a5d4c3375d8"
+          },
+          {
+            "test": "installed_api_surface",
+            "exit_code": 0,
+            "seconds": 1.9685822296887636,
+            "log": "/tmp/fermion-ladder-collection/installed_api_surface.log",
+            "passed": 6,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_api_surface.log",
+            "log_sha256": "903f961506bc66fb6cdb772f67f43b781f27d33491333bb776c7c6c0873ede2b"
+          },
+          {
+            "test": "installed_documentation",
+            "exit_code": 0,
+            "seconds": 8.834614071063697,
+            "log": "/tmp/fermion-ladder-collection/installed_documentation.log",
+            "passed": 3,
+            "preserved_log": "/tmp/fermion-ladder-collection/installed_documentation.log",
+            "log_sha256": "e6bedb1902816622c9140f3ec280e821cfeb157eac5dad327a42ee57bd5b6ee0"
+          }
+        ]
+      },
+      "notebook_reload": {
+        "core_sha256": "44b5f25f94de6fa950aa4c592c88e3234bb0cf413e6c60f678dfd3c4a8e2a2b4",
+        "servers": [
+          {
+            "port": "2726",
+            "source": "examples/hep_showcase.py",
+            "previous_pid": 3849708,
+            "pid": 3154434,
+            "log": "/tmp/fermion-ladder-collection/notebook-server-2726.log",
+            "http_status": 200
+          },
+          {
+            "port": "2727",
+            "source": "examples/",
+            "previous_pid": 3850040,
+            "pid": 3154453,
+            "log": "/tmp/fermion-ladder-collection/notebook-server-2727.log",
+            "http_status": 200
+          }
+        ],
+        "local_receipt": "/tmp/fermion-ladder-collection/notebook-servers.json",
+        "receipt_sha256": "c85fe2a1f32cdd40c0343bead997ffb882b986255de3534291b6c1c59f6e82ed",
+        "source_preservation": {
+          "path": "/common/dev/symbolica-community/main/examples/hep/three_gluon_rung_ladder.py",
+          "sha256": "745c3a90ede0443d5d368e9e971e8a5f4916ff161cf8fb5fac61985ab0177bc5",
+          "sha256_after": "745c3a90ede0443d5d368e9e971e8a5f4916ff161cf8fb5fac61985ab0177bc5",
+          "unchanged": true
+        },
+        "source_preservation_receipt_sha256": "4a344d4bcd4cf3e622f438a90f1190887248b9c0156f13e10c97390e1133b971",
+        "scope": "Server restart and HTTP readiness; not execution or a visual audit of every notebook."
+      }
+    }
   }
 }

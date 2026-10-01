@@ -5243,7 +5243,7 @@ class TensorExpression(Expression):
         >>> gamma.shape[:2]
         (4, 4)
         """
-    def simplify_algebra(self, *, gamma: builtins.bool = True, color: builtins.bool = True, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'minimal', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
+    def simplify_algebra(self, *, gamma: builtins.bool = True, color: builtins.bool = True, epsilon: builtins.bool = False, contract: typing.Literal['fully', 'minimal', 'dots', 'selected', 'none'] = "fully", representations: typing.Optional[typing.Sequence[Representation | RepresentationName]] = None, collect_coefficients: builtins.bool = True, gamma_output: typing.Optional[typing.Literal['reduced', 'chains']] = None, gamma_ordering: typing.Optional[typing.Literal['repeated_pairs', 'canonical']] = None, gamma_evaluate_traces: typing.Optional[builtins.bool] = None, gamma0: typing.Optional[builtins.bool] = None, gamma_conjugate: typing.Optional[builtins.bool] = None, gamma_expand_three_gamma_epsilon: typing.Optional[builtins.bool] = None, color_evaluate_traces: typing.Optional[builtins.bool] = None, color_expand_fierz: typing.Optional[builtins.bool] = None, color_substitute_cof_dimension_invariants: typing.Optional[builtins.bool] = None, max_steps_per_domain: typing.Optional[builtins.int] = None) -> TensorExpression:
         r"""
         Reduce enabled tensor identities and their required index contractions.
 
@@ -5290,6 +5290,15 @@ class TensorExpression(Expression):
             dimensions. Each connection must still have compatible dimensions and
             orientation. [] permits no additional index contractions or trace closure.
             Identity prerequisites and existing constructor normalization are unaffected.
+        collect_coefficients : bool, default True
+            Collect generated exact coefficients in contracted Dirac traces and
+            their bound vector factors so equal terms combine and cancel. Includes
+            Symbolica's expand_num() distribution of numerical factors over sums
+            inside those generated coefficients. False retains their nested,
+            factored output. Other family kernels retain their
+            existing coefficient normalization. This is not global expansion:
+            unrelated input sums and scalar prefactors remain factorized. It neither
+            expands free Dirac traces nor reverses simplification already performed.
         gamma_output : {"reduced", "chains"}, optional
             Defaults to "reduced": apply supported Clifford and trace identities.
             "chains" collects Dirac chains/traces without Clifford reduction or
@@ -5402,6 +5411,12 @@ class TensorExpression(Expression):
         >>> result = word.simplify_algebra(color=False, contract="none")
         >>> assert result.to_expression() == 4 * D
         >>> assert result.reduction_status == sp.ReductionStatus.Complete
+
+        Retain nested identity output when that form is preferable. Both requests
+        represent the same tensor and leave unrelated scalar prefactors factored.
+
+        >>> nested = word.simplify_algebra(color=False, collect_coefficients=False)
+        >>> assert (nested - result).expand().to_expression() == 0
 
         Color-only reduction with explicit SU(3) invariants gives T^a T^a = 4/3 I.
         Omit the invariant-substitution option to retain symbolic Casimirs.

@@ -512,7 +512,27 @@ impl DomainObservations {
             traversal_complete: false,
             intrinsic: true,
         };
-        let mut result = Self::from_regions(candidates, regions, Arc::default(), false);
+        // Keep nested scalar-interface proofs when a later contraction opens
+        // one of these unchanged spectators. The usual same-domain case shares
+        // its cache outright; independently admitted spectators contribute only
+        // their existing exact-syntax facts, without another candidate walk.
+        let scopes = observed
+            .first()
+            .map(|(_, facts)| Arc::clone(&facts.scopes))
+            .unwrap_or_default();
+        for (_, facts) in observed.iter().skip(1) {
+            if !Arc::ptr_eq(&scopes, &facts.scopes) {
+                let inherited = facts
+                    .scopes
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .map(|(expression, region)| (expression.clone(), Arc::clone(region)))
+                    .collect::<Vec<_>>();
+                scopes.write().unwrap().extend(inherited);
+            }
+        }
+        let mut result = Self::from_regions(candidates, regions, scopes, false);
         result.identity_inventory_complete = terminal.identity_inventory_complete
             && observed
                 .iter()
@@ -1223,6 +1243,62 @@ mod tests {
             Some(super::super::COLOR)
         );
         assert!(!updated.excludes_internal_connections());
+        assert_eq!(
+            scans,
+            (
+                INITIAL_SCANS.with(|count| count.get()),
+                REPLACEMENT_SCANS.with(|count| count.get())
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_product_retains_nested_scalar_scopes_without_rescanning() {
+        crate::test_support::test_initialize();
+        let [a, b, c, d] =
+            [99101, 99102, 99103, 99104].map(|index| spenso::mink!(4, Atom::num(index)));
+        let first_weight = symbolica::parse_lit!((scope_weight_x + scope_weight_y) ^ 10);
+        let second_weight = symbolica::parse_lit!((scope_weight_z + scope_weight_t) ^ 9);
+        let spectators = [
+            SymbolicTensor::infer(&first_weight * spenso::p!(&a) + spenso::q!(&a)).unwrap(),
+            SymbolicTensor::infer(&second_weight * spenso::p!(&c) + spenso::q!(&c)).unwrap(),
+        ];
+        let selected = SymbolicTensor::infer(
+            spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d),
+        )
+        .unwrap();
+        let terminal = DomainObservations::terminal_polynomial(&selected.structure, false);
+        let combined = SymbolicTensor::infer(
+            &selected.expression * &spectators[0].expression * &spectators[1].expression,
+        )
+        .unwrap();
+        let source_scopes = Arc::clone(&spectators[0].reduction_observations().scopes);
+        let weights = [first_weight, second_weight];
+        let source_regions = std::array::from_fn::<_, 2, _>(|i| {
+            spectators[i]
+                .reduction_observations()
+                .region(weights[i].as_view())
+                .unwrap()
+        });
+        let scans = (
+            INITIAL_SCANS.with(|count| count.get()),
+            REPLACEMENT_SCANS.with(|count| count.get()),
+        );
+        let observed = DomainObservations::compose_terminal_product(
+            combined.expression.as_view(),
+            &combined.structure,
+            selected.expression.as_view(),
+            &terminal,
+            &spectators,
+        )
+        .unwrap();
+        assert!(Arc::ptr_eq(&source_scopes, &observed.scopes));
+        assert!(!observed.excludes_internal_connections());
+        for (weight, source) in weights.iter().zip(source_regions) {
+            let retained = observed.region(weight.as_view()).unwrap();
+            assert!(retained.certifies_scalar_interface_syntax());
+            assert!(Arc::ptr_eq(&source, &retained));
+        }
         assert_eq!(
             scans,
             (

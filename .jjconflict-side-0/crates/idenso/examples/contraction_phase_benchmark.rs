@@ -303,7 +303,7 @@ fn main() {
 }
 
 /// Diagnose an exact production input without distributing its numerator.
-/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra]` records admission and
+/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra] [collected|nested]` records admission and
 /// each exact continuation separately. `algebra` matches the public gamma/colour
 /// defaults with full contraction; `gamma` retains the trace-only diagnostic.
 fn reduce_input(arguments: &[String]) {
@@ -338,9 +338,12 @@ fn reduce_input(arguments: &[String]) {
     std::fs::write(output.join("admission.json"), clocks.to_string()).unwrap();
     let mode = arguments.get(2).map(String::as_str);
     assert!(matches!(mode, None | Some("gamma" | "algebra")));
+    let coefficients = arguments.get(3).map(String::as_str);
+    assert!(matches!(coefficients, None | Some("collected" | "nested")));
     let settings = AlgebraSettings {
         gamma: mode.map(|_| Default::default()),
         color: (mode == Some("algebra")).then(Default::default),
+        collect_coefficients: coefficients != Some("nested"),
         contract: if mode == Some("algebra") {
             AlgebraContraction::Fully
         } else {

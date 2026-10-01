@@ -421,6 +421,12 @@ with their existing dimension and gamma5 conventions. Python enables gamma and
 colour by default, while epsilon is opt-in;
 `simplify_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
 contractions. No nested contraction settings or implicit global expansion is involved.
+The default `collect_coefficients=True` combines generated coefficients in
+contracted Dirac traces and their bound vector factors, revealing cancellations
+and applying `expand_num()` numerical distribution inside those generated
+coefficients while preserving unrelated input sums and scalar prefactors. Set it to `False`
+to retain nested identity output; free traces remain factorized in either mode.
+Other identity kernels keep their existing coefficient normalization.
 The result is a `TensorExpression` and reports `Complete`, `Deferred`, or `Capped` through
 `reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
 remaining expression. Explicit `expand()` requests polynomial materialization.

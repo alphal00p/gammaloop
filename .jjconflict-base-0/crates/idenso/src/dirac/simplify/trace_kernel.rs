@@ -19,6 +19,7 @@ use super::is_four_dimension;
 use super::{THREE_GAMMA_METRIC_TERMS, is_minkowski_slot};
 use crate::epsilon::epsilon4;
 
+pub(super) mod collected;
 mod factored;
 #[cfg(test)]
 mod sparse;
@@ -377,7 +378,6 @@ where
             .metric_product(metric.as_view(), coefficient, value)
     }
 
-    #[cfg(test)]
     fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other, Metric> {
         debug_assert!(self.subwords.is_empty());
         PairingTrace {
@@ -622,9 +622,14 @@ pub(super) fn evaluate_generic(
     canonical_arguments: bool,
     _output: TraceOutput,
 ) -> Atom {
-    evaluate_generic_with_metrics(indices, trace_unit, canonical_arguments, _output, |a, b| {
-        Some(g!(a, b))
-    })
+    evaluate_generic_with_metrics(
+        indices,
+        trace_unit,
+        canonical_arguments,
+        _output,
+        None,
+        |a, b| Some(g!(a, b)),
+    )
     .expect("intrinsic trace metrics cannot refuse evaluation")
 }
 
@@ -636,6 +641,7 @@ pub(super) fn evaluate_generic_with_metrics<'a>(
     trace_unit: AtomView<'a>,
     canonical_arguments: bool,
     _output: TraceOutput,
+    collect: Option<&mut collected::CollectedOutput<'_>>,
     metric_value: impl FnMut(AtomView<'a>, AtomView<'a>) -> Option<Atom>,
 ) -> Option<Atom> {
     if indices.len() % 2 == 1 {
@@ -691,6 +697,14 @@ pub(super) fn evaluate_generic_with_metrics<'a>(
             let result = trace.evaluate(&word);
             (!trace.metric_refused).then(|| result.expand())
         };
+    }
+    if let Some(output) = collect {
+        output.begin_trace();
+        let mut trace = trace.with_output(output);
+        let result = trace.evaluate(&word);
+        return (!trace.metric_refused)
+            .then(|| collected::CollectedOutput::finish(trace.output, result))
+            .flatten();
     }
     let result = trace.evaluate(&word);
     (!trace.metric_refused).then_some(result)
@@ -851,6 +865,7 @@ pub(super) mod tests {
                 unit.as_view(),
                 true,
                 TraceOutput::Factored,
+                None,
                 |a, b| {
                     let a = labels
                         .iter()
@@ -888,6 +903,7 @@ pub(super) mod tests {
             unit.as_view(),
             true,
             TraceOutput::Factored,
+            None,
             |left, right| {
                 calls += 1;
                 assert_eq!(
@@ -907,6 +923,7 @@ pub(super) mod tests {
             unit.as_view(),
             false,
             TraceOutput::Factored,
+            None,
             |_, _| {
                 calls += 1;
                 None

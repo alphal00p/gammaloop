@@ -297,7 +297,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
                     py.get_type::<TensorExpression>()
                         .getattr("simplify_algebra")
                         .unwrap(),
-                    "($self, *, gamma=True, color=True, epsilon=False, contract=\"fully\", representations=None, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None)",
+                    "($self, *, gamma=True, color=True, epsilon=False, contract=\"fully\", representations=None, collect_coefficients=True, gamma_output=None, gamma_ordering=None, gamma_evaluate_traces=None, gamma0=None, gamma_conjugate=None, gamma_expand_three_gamma_epsilon=None, color_evaluate_traces=None, color_expand_fierz=None, color_substitute_cof_dimension_invariants=None, max_steps_per_domain=None)",
                 ),
             ] {
                 let name = class.getattr("__name__").unwrap();

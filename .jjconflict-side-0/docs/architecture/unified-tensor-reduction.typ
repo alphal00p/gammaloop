@@ -1201,3 +1201,196 @@ vary with process-local symbol IDs. The new representation is exact and complete
 but rendering, evaluator construction and later materialization may have
 additional costs; those costs are not included in the reduction measurement.
 No fresh FORM comparison or FORM timing is claimed for this fixture.
+
+== Collected coefficients for the massive routed ladder
+
+`simplify_algebra(collect_coefficients=True)` collects generated exact
+coefficients by default; `False` retains the nested output. The option currently
+controls contracted Dirac traces and bound vector factors. Other identity
+families retain their existing coefficient normalization, and free traces retain
+their factorization. This output choice belongs to the shared reduction planner
+and does not authorize another identity family or a separate contraction engine.
+
+The existing `TraceAlgebra` recurrence accumulates the requested metric/vector
+pairings in Symbolica's exact polynomial representation. Its variable ordering
+and emitted sectors are reused while equivalent surviving tensor structures
+share a coefficient. Selected exterior coefficients participate in this
+collection, allowing terms from different generated sectors to cancel. The
+collector combines only certified terminal sectors with compatible ordered
+interfaces and no remaining identity candidates or uncontracted connections in
+their coefficients. Other sectors keep their existing processing path;
+unsupported coefficient domains retain the exact Atom arithmetic.
+
+Domain observations identify original scalar sums within vector weights, which
+remain opaque polynomial variables. Power bases keep that protection even when
+a contraction combines two source powers into a new power. The shared
+`PolynomialExpressionExt` emitter restores these original expressions and applies
+Symbolica's `expand_num()` to the generated coefficients: numerical factors are
+distributed, so `2*(x+y)-2*x-2*y` can cancel, while products and powers of unrelated
+scalar sums remain factorized. Unselected scalar spectators remain outside the
+collection. This does not request global numerator expansion.
+
+`DomainObservations::compose_terminal_product` now retains the observed nested
+scalar scopes of unchanged spectators when attaching a generated terminal
+region. Spectators from the same domain share their existing observation cache;
+independently admitted spectators contribute their cached exact-syntax facts.
+This requires no new candidate walk and lets later selected contractions
+recognize scalar powers without rediscovering their interiors. It leaves the
+contraction order and distribution policy unchanged. Collection uses the same
+contractor and trace recurrence, and the existing tensor carrier preserves
+ordered interfaces and typed zeros at emission.
+
+The preceding massive-ladder receipts predate this option and describe the
+nested output corresponding to today's `collect_coefficients=False`. Those
+historical receipts remain unchanged. New measurements must state the option
+explicitly and separate native and Python frontends, reduction and completed
+reruns, and computation from construction or rendering. The existing native
+runner selects either output form on the same fixture:
+
+```sh
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-collected algebra collected
+
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-nested algebra nested
+```
+
+The final native comparison uses release builds with LTO disabled and the
+`reference-cases` feature on the same AMD EPYC 9754 host. Collection work is
+recorded in change `qzkuotrv`, based on `5434864a`; the preceding reduction work is
+recorded in `ed14addf`. The companion JSON's `coefficient_collection` section
+records source and binary hashes, dependencies, every sample, and raw receipt
+hashes. Both modes enable gamma and colour identities with `contract="fully"`,
+disable epsilon identities, and retain symbolic Lorentz dimension `D` without a
+work limit. Gamma traces use a four-dimensional bispinor representation and
+repeated-pair ordering; colour uses the standard fundamental SU(3) normalization.
+Only `collect_coefficients` differs between the two modes.
+
+#table(
+  columns: (1.3fr, 1fr, 1fr, 1fr),
+  [Native output], [Reduction median (s)], [Rerun median (µs)], [Atom bytes],
+  [Collected], [1.062576], [49.311], [1,049,059],
+  [Nested], [0.809103], [1,584.035], [23,377,307],
+)
+
+Each mode has three independent process samples. Collected reduction ranges
+from 1.059142 to 1.101824 s; nested reduction ranges from 0.808023 to 0.868752 s.
+Every call completes in one step and reruns stably. Collection adds about 0.253 s
+to the median reduction while reducing Atom storage by a factor of 22.3.
+Its plain output occupies 3,137,180 bytes, compared with 63,632,701 bytes for
+nested output. Atom size depends on process-local symbol identities. These
+clocks exclude startup, compilation, parsing, admission, serialization,
+rendering and component evaluation; no isolated native peak-RSS measurement
+was captured.
+
+Admission medians are 1.431 ms collected and 1.417 ms nested. A separate
+instrumented replay follows each timed call; the instrumented reduction medians
+are 1.037457 s and 0.760196 s. Per-phase medians are:
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  [Phase], [Collected (ms)], [Nested (ms)],
+  [Interface discovery, outermost], [3.000], [2.892],
+  [Candidate observations], [83.209], [84.270],
+  [Shallow graph construction], [52.276], [51.890],
+  [Gamma kernel, inclusive], [1,010.254], [648.924],
+  [Colour kernel, inclusive], [13.920], [14.096],
+  [Contraction, inclusive], [133.914], [132.299],
+  [Output normalization, inclusive], [126.407], [96.066],
+  [Coefficient merge, inclusive], [41.929], [0.168],
+)
+
+Nested phase clocks overlap and cannot be added; replay observations and caches
+may be warm. The candidate counter includes affected-region observations, not
+only initial domain scans. Both modes record 645 structural-contraction
+frontiers per replay, with maxima of three states, three local terms, and four
+generated alternatives. Those frontiers do not measure the entire Dirac
+polynomial or global term count. Native reduction does no separate validation
+or materialization in these phase receipts.
+
+Both serialized results cancel exactly against the historical baseline using
+`collect_factors()` followed by `factor()`, without global arithmetic expansion.
+An independent contraction of the original factorized leaf components with
+explicit Weyl gamma and Gell-Mann matrices agrees at all 1024 components at each
+of the three saved mass/momentum points. These numerical checks specialize
+`D=4`, use metric signature `(+, -, -, -)` and coupling one; the maximum relative
+error is 1.071e-15 for either mode. Raw serialization does not certify the
+original carrier's logical port order: component axes are matched by exact
+representation and index identities, and carrier invariants are covered by the
+native regressions separately.
+
+The downstream comparison below uses existing Python core `81ef213c607c`,
+not the new reduction extension. It parses each native output, specializes its
+parameters and admits the result before constructing a direct one-core
+Symbolica evaluator, with no JIT or common-pair optimization. Medians cover the
+same three distinct physical points, each in a fresh process; startup, the
+independent oracle, and reduction are excluded.
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  [Downstream phase], [Collected (ms)], [Nested (ms)],
+  [Parse, specialize and admit], [173.544], [9,395.301],
+  [Construct evaluator], [0.715], [52.255],
+  [Construct component points], [13.006], [13.392],
+  [Evaluate 1024 components], [7.938], [33.200],
+  [Total median], [204.894], [9,503.508],
+)
+
+The 46.4-fold downstream difference is dominated by preparing the serialized
+expression. It is not an evaluator-only speedup or an end-to-end Python
+reduction measurement. Independently computed phase medians need not sum to
+the median total.
+
+The native release suite passes 853 tests, with 22 ignored tests and the known
+`tensor::tests::parsing::infinite_execution` failure excluded. The nine focused
+collection tests and four shared polynomial-emitter tests pass. Clippy passes
+with warning denial for `idenso`, `spynso3` and `symbolica-utils`; existing
+dependency warnings are recorded separately in the receipt. These native and
+independent native-output results remain separate from the installed Python
+measurements below. No fresh FORM comparison was made for this fixture.
+
+=== Installed Python result
+
+The Maturin release build with the `native` feature produces core
+`44b5f25f94de`, installed into both the source-host package and the notebook
+virtual environment. Its full hash, build command, dependency hashes and
+installation receipt are recorded in `coefficient_collection.python` in the
+companion JSON. Reduction sources stayed unchanged throughout the build.
+Concurrent graph and generator edits changed five other source files while
+compilation ran; the build receipt records those changes and does not certify
+that the extension includes their latest versions. The measured reduction uses
+the saved numerator fixture, without regenerating its graph.
+
+#table(
+  columns: (1.3fr, 1fr, 1fr, 1fr),
+  [Installed Python output], [Reduction median (s)], [Rerun median (ms)], [Atom bytes],
+  [Collected], [1.035185], [0.241491], [1,098,752],
+  [Nested], [0.779839], [19.237235], [24,213,378],
+)
+
+Each mode measures three calls on the same admitted tensor in one process,
+using the explicit settings from the native comparison. All six calls report
+`Complete`, preserve the exact ordered ports and return stable completed reruns.
+Collected times range from 1.034375 to 1.063405 s; nested times range from
+0.762212 to 0.827429 s. Collection adds 0.255 s to the median while reducing
+the Python Atom size by a factor of 22.0. Admission takes 1.487 ms and 1.519 ms
+respectively. Startup, model setup, admission, output conversion, serialization,
+rendering and exact comparison are outside the reduction clock.
+
+Each installed result independently cancels against the saved historical
+baseline with `collect_factors().factor()`. Those checks take 0.689 s collected
+and 3.735 s nested, outside the timing window. The loaded extension's inode and
+contents remain unchanged throughout both measurements. The JSON retains every
+wall and CPU sample, output hashes, logical slots and cumulative process peak
+RSS; that RSS includes repeated reductions, retained results and the exact
+comparison, and is not isolated reduction memory.
+
+All 83 API tests pass against both the candidate package and the actual installed
+notebook package, including inheritance, algebra, display, generated signatures
+and documentation examples. Canonical, bundled, source-host and installed
+tensor stubs share the recorded hash. Both notebook servers restart successfully
+and return HTTP 200 on ports 2726 and 2727. The ladder notebook's source hash is
+unchanged across the reload. These are runtime and server readiness checks;
+they do not constitute a fresh execution or visual audit of every notebook.
