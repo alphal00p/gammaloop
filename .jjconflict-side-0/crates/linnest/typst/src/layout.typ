@@ -706,8 +706,7 @@
       graph-module.graph-bytes(graph),
       cbor.encode(settings),
     )
-    let embedding-plugin = plugin("../ec-layout.wasm")
-    let seed = embedding-plugin.initialize(bytes(json.encode((
+    let seed = _plugin.graph_impred_seed(bytes(json.encode((
       diagram: json(_plugin.graph_impred_diagram(snapshot)),
       scale: impred-spacing,
       external_sides: true,

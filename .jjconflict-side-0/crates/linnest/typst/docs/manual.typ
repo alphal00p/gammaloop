@@ -1017,11 +1017,12 @@
   ```
 
   This runs EC-constrained planarization, then constrained ImPrEd relaxation.
-  Both stages execute inside the bundled native WASM plugins. No Python process
-  or external layout service is needed. The seed keeps incoming and outgoing
-  exterior groups consecutive; individually optimal edge insertions introduce
-  necessary crossings. Their sequence is a heuristic for the complete graph's
-  crossing number. All-incoming and all-outgoing diagrams use radial placement.
+  Both stages execute inside the bundled `linnest.wasm` plugin. No Python
+  process or external layout service is needed. The seed keeps incoming and
+  outgoing exterior groups consecutive; individually optimal edge insertions
+  introduce necessary crossings. Their sequence is a heuristic for the complete
+  graph's crossing number. All-incoming and all-outgoing diagrams use radial
+  placement.
 
   Relaxation preserves the carrier's crossing configuration while respecting
   native pins and coordinate groups. Topology-normalized outward pull can

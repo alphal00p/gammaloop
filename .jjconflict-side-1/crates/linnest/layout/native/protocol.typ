@@ -8,11 +8,12 @@ Python reference implementation.
 
 == Runtime and build
 
-Direct Typst, Python rendering and CLI drawings use the bundled
-`ec-layout.wasm` plugin. Its only host imports are the two Typst plugin protocol
-functions; it requires no Python worker, JavaScript runtime, filesystem or
-network access. ImPrEd relaxation runs in the separate native `linnest.wasm`
-plugin after constrained seed generation.
+Direct Typst, Python rendering and CLI drawings call `graph_impred_seed` in
+`linnest.wasm`: a Rust port of this engine (`crates/linnest/src/ec_seed`) with
+the same request and result protocol, whose own SPQR decomposition replaces
+OGDF. This native engine remains the reference: given its SPQR
+decompositions, the port reproduces its seeds bit for bit. The standalone
+`ec-layout.wasm` plugin imports only the two Typst plugin protocol functions.
 
 `build.py` downloads checksum-verified pinned dependencies and builds a native
 JSON-lines executable at `target/ec-planarity-native/ec-spqr`. It needs Python

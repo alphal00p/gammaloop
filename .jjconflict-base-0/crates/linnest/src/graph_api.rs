@@ -557,12 +557,21 @@ impl TypstGraph {
     }
 }
 
-/// Return the physical incidence passed to the EC seed plugin.
+/// Return the physical incidence passed to `graph_impred_seed`.
 pub fn graph_impred_diagram_bytes(snapshot: &[u8]) -> Result<Vec<u8>, String> {
     let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
     let graph = TypstGraph::from_layout_snapshot(&snapshot)?;
     let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
     serde_json::to_vec(&diagram).map_err(|error| error.to_string())
+}
+
+/// Embedding-constrained seed for the JSON request `{diagram, scale,
+/// external_sides}` built from `graph_impred_diagram`.
+pub fn graph_impred_seed_bytes(request: &[u8]) -> Result<Vec<u8>, String> {
+    let request: crate::SeedRequest = serde_json::from_slice(request)
+        .map_err(|error| format!("Invalid embedding request JSON: {error}"))?;
+    let seed = request.initialize()?;
+    serde_json::to_vec(&seed).map_err(|error| error.to_string())
 }
 
 /// Relax a certified EC carrier while retaining native graph ownership.

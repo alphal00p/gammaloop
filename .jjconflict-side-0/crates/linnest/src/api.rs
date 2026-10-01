@@ -182,6 +182,12 @@ pub fn graph_impred_diagram(snapshot: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 #[wasm_func]
+pub fn graph_impred_seed(request: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_impred_seed_bytes(request)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
 pub fn graph_impred_layout(
     snapshot: &[u8],
     seed: &[u8],
