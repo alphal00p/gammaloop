@@ -770,7 +770,7 @@ fn custom_dual_metrics_still_reject_incompatible_ports() {
 }
 
 #[test]
-fn compact_dots_keep_explicit_spectators_and_reject_ambiguous_axes() {
+fn compact_metrics_keep_spectators_while_dots_require_rank_one() {
     crate::test_support::test_initialize();
     let rep = LibraryRep::from(Minkowski {}).new_rep(4);
     let spin = LibraryRep::from(Bispinor {}).new_rep(4);
@@ -797,6 +797,10 @@ fn compact_dots_keep_explicit_spectators_and_reject_ambiguous_axes() {
                 .add_arg(&left)
                 .add_arg(&right)
                 .finish();
+            if dot_head == SPENSO_TAG.dot {
+                assert!(SymbolicTensor::<PartialStructure>::infer(expression).is_err());
+                continue;
+            }
             let value = SymbolicTensor::infer(expression.clone()).unwrap();
             let expected = if right_start == 1 {
                 vec![slots[0], slots[3]]
@@ -853,7 +857,7 @@ fn compact_dots_keep_explicit_spectators_and_reject_ambiguous_axes() {
             .add_arg(lorentz.to_symbolic([]))
             .finish()
     };
-    let expression = FunctionBuilder::new(SPENSO_TAG.dot)
+    let expression = FunctionBuilder::new(ETS.metric)
         .add_arg(gamma(slots[0].to_atom(), slots[1].to_atom()))
         .add_arg(gamma(slots[1].to_atom(), slots[3].to_atom()))
         .finish();
@@ -869,7 +873,7 @@ fn compact_dots_keep_explicit_spectators_and_reject_ambiguous_axes() {
 }
 
 #[test]
-fn compact_dot_tensor_spectators_preserve_materialization_and_observation_callbacks() {
+fn compact_metric_tensor_spectators_preserve_materialization_and_observation_callbacks() {
     use std::sync::{Arc, Mutex};
     crate::test_support::test_initialize();
     let calls = Arc::new(Mutex::new(Vec::new()));
@@ -889,7 +893,7 @@ fn compact_dot_tensor_spectators_preserve_materialization_and_observation_callba
     let other = FunctionBuilder::new(spenso::vector_symbol!("compact_dot_plain_vector"))
         .add_arg(rep.to_symbolic([]))
         .finish();
-    let dot = FunctionBuilder::new(SPENSO_TAG.dot)
+    let metric = FunctionBuilder::new(ETS.metric)
         .add_arg(&compact)
         .add_arg(other)
         .finish();
@@ -898,24 +902,27 @@ fn compact_dot_tensor_spectators_preserve_materialization_and_observation_callba
         leaf_inference: LeafInference::Observe,
         ..Default::default()
     };
-    let interface = observer.infer_validated(dot.as_view()).unwrap();
+    let interface = observer.infer_validated(metric.as_view()).unwrap();
     assert_eq!(
         interface.logical_slots(),
         vec![rep.slot(PartialIndex::Explicit(spectator.aind()))]
     );
-    assert_eq!(observer.infer_validated(dot.as_view()).unwrap(), interface);
+    assert_eq!(
+        observer.infer_validated(metric.as_view()).unwrap(),
+        interface
+    );
     assert!(calls.lock().unwrap().is_empty());
     // Ordinary tensor operands retain their existing constructor schedule;
     // only tagged rank-one consumed vectors use observation-only admission.
     let mut constructor = InterfaceInference::default();
     assert_eq!(
-        constructor.infer_validated(dot.as_view()).unwrap(),
+        constructor.infer_validated(metric.as_view()).unwrap(),
         interface
     );
     let first = calls.lock().unwrap().len();
     assert!(first > 0);
     assert_eq!(
-        constructor.infer_validated(dot.as_view()).unwrap(),
+        constructor.infer_validated(metric.as_view()).unwrap(),
         interface
     );
     assert!(calls.lock().unwrap().len() > first);

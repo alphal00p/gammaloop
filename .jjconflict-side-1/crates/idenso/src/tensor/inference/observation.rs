@@ -256,7 +256,7 @@ impl InterfaceInference {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
-                scope.validate &= !symbol.is_scalar();
+                scope.validate &= !SPENSO_TAG.is_scalar_metadata(symbol);
                 if scope.validate {
                     scope.owner = ChainNestingError::enter(scope.owner, symbol, &SPENSO_TAG)
                         .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;

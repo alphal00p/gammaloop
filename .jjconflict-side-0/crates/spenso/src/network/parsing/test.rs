@@ -857,7 +857,7 @@ fn parsing_preserves_compact_and_explicit_tensors_in_an_opaque_argument() {
 }
 
 #[test]
-fn compact_inner_product_preserves_explicit_spectator_slots() {
+fn compact_metric_preserves_spectators_while_dot_rejects_them() {
     let compact = mink4();
     let spectators = [Lorentz {}.new_rep(4).to_lib(), compact.to_lib()];
     for spectator in spectators {
@@ -871,6 +871,12 @@ fn compact_inner_product_preserves_explicit_spectator_slots() {
         let right = tensor!(compact_right, &slots[2], &slots[3], compact.to_symbolic([]));
         for head in [SPENSO_TAG.dot, ETS.metric] {
             let expr = function!(head, &left, &right);
+            if head == SPENSO_TAG.dot {
+                for settings in [ParseSettings::default(), opaque_settings()] {
+                    assert!(expr.parse_to_atom_net::<AbstractIndex>(&settings).is_err());
+                }
+                continue;
+            }
             let parsed = expr
                 .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
                 .unwrap();
@@ -886,13 +892,13 @@ fn compact_inner_product_preserves_explicit_spectator_slots() {
 }
 
 #[test]
-fn compact_inner_product_contracts_only_repeated_spectators() {
+fn compact_metric_contracts_only_repeated_spectators() {
     let rep = mink4();
     let a = slot!(rep, a).to_atom();
     let b = slot!(rep, b).to_atom();
     let c = slot!(rep, c).to_atom();
     let expr = function!(
-        SPENSO_TAG.dot,
+        ETS.metric,
         tensor!(compact_left, &a, &b, rep.to_symbolic([])),
         tensor!(compact_right, &b, &c, rep.to_symbolic([]))
     );

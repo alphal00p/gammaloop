@@ -271,7 +271,7 @@ impl TensorialSyntax {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
-                if symbol.is_scalar() {
+                if tags.is_scalar_metadata(symbol) {
                     return Ok(());
                 }
                 let owner = ChainNestingError::enter(owner, symbol, tags)?;
@@ -290,7 +290,7 @@ impl TensorialSyntax {
         matcher: &SlotMatcher,
     ) -> bool {
         let symbol = fun.get_symbol();
-        if symbol.is_scalar() {
+        if matcher.tags().is_scalar_metadata(symbol) {
             return false;
         }
         // Public bundle access probes Symbolica initialization. Reuse the
@@ -604,6 +604,14 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         fun: FunView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
+        if fun.get_symbol() == matcher.tags().dot {
+            if matcher.compact_inner_product_parts::<Aind>(fun).is_none() {
+                return Err(StructureError::ParsingError(
+                    "dot requires two compatible rank-one operands; use a metric or explicit contraction for partial contractions".to_owned(),
+                ));
+            }
+            return Ok(Canonicalized::identity(OrderedStructure::empty()));
+        }
         if fun.get_symbol().is_scalar() {
             return Ok(Canonicalized::identity(OrderedStructure::empty()));
         }
@@ -1162,6 +1170,7 @@ mod tests {
 
     #[test]
     fn opaque_inner_product_preserves_explicit_spectators_and_chain_boundaries() {
+        use crate::network::library::symbolic::ETS;
         let rep = Minkowski {}.new_rep(4);
         let compact = rep.to_symbolic([]);
         let left = rep.to_symbolic([Atom::num(91201)]);
@@ -1169,12 +1178,12 @@ mod tests {
         let right = rep.to_symbolic([Atom::num(91203)]);
         let head = tensor_symbol!("opaque_inner_product_word");
         let direct = function!(
-            SPENSO_TAG.dot,
+            ETS.metric,
             function!(head, &left, &inner, &compact),
             function!(head, &inner, &right, &compact)
         );
         let chained = function!(
-            SPENSO_TAG.dot,
+            ETS.metric,
             chain!(
                 &left,
                 &inner,
@@ -1196,6 +1205,19 @@ mod tests {
                 .unwrap(),
         ];
         for input in [direct, chained] {
+            let AtomView::Fun(function) = input.as_view() else {
+                unreachable!()
+            };
+            let dot = FunctionBuilder::new(SPENSO_TAG.dot)
+                .add_args(function.iter())
+                .finish();
+            assert!(
+                OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
+                    dot.as_view(),
+                    &mut matcher,
+                )
+                .is_err()
+            );
             let structure = OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
                 input.as_view(),
                 &mut matcher,

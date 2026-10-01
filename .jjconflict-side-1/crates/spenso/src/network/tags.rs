@@ -80,6 +80,7 @@ pub struct SpensoTags {
     pub index: String,
     pub representation: String,
     pub i_: Symbol,
+    /// Scalar inner product of two compatible rank-one tensors.
     pub dot: Symbol,
     pub rep_: Symbol,
     pub self_dual: String,
@@ -1526,6 +1527,14 @@ macro_rules! broadcast_symbol {
 }
 
 impl SpensoTags {
+    /// Whether a scalar function owns opaque metadata rather than tensor operands.
+    ///
+    /// `dot` is scalar-valued, but its operands must still be validated and
+    /// materialized by the tensor parser.
+    pub fn is_scalar_metadata(&self, symbol: Symbol) -> bool {
+        symbol.is_scalar() && symbol != self.dot
+    }
+
     fn print_chain_factor(value: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
         fn without_visible_placeholders(value: AtomView<'_>, opt: &PrintOptions) -> Option<Atom> {
             let mut output = String::new();
@@ -1891,7 +1900,7 @@ impl SpensoTags {
             ),
             pure_scalar: symbol!("pure_scalar"),
             scalar: symbol!("scalar"),
-            dot: symbol!("dot";Symmetric,Linear; print = Self::print_dot),
+            dot: symbol!("dot";Symmetric,Linear,Scalar; print = Self::print_dot),
             tensor_: symbol!("tensor_", tag = tensor, print = tensor_print),
             tensor_display: symbol!(
                 "tensor_display",
@@ -2889,10 +2898,13 @@ mod tests {
             left.printer(options.clone()).to_string(),
             r#"p class("normal", dot) q"#
         );
-        assert_eq!(
-            product.printer(options.clone()).to_string(),
+        // The scalar factors commute; their printer spacing does not depend on order.
+        let printed = product.printer(options.clone()).to_string();
+        assert!(matches!(
+            printed.as_str(),
             r#"p class("normal", dot) q #h(0.12em) r class("normal", dot) s #h(0.12em)"#
-        );
+                | r#"r class("normal", dot) s #h(0.12em) p class("normal", dot) q #h(0.12em)"#
+        ));
         // Spacing must not become the base to which an exponent attaches.
         assert!(
             !left

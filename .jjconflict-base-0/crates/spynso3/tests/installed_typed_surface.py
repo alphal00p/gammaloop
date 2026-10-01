@@ -95,6 +95,48 @@ class TypedSurfaceTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     sp.TensorExpression.g(first, second)
 
+    def test_four_vector_product_normalizes_scalar_dots(self):
+        r = sp.Representation.mink(4)
+        k = sp.TensorName.vector("scalar_dots::k")
+        p = sp.TensorName.vector("scalar_dots::p")
+        a, b, c, d = k(1, r), p(r), k(2, r), p(2, r)
+        product = a * b * c * d
+        grouped = (a * b) * (c * d)
+        self.assertEqual(product, grouped)
+        self.assertTrue(product.is_scalar)
+        self.assertTrue(product.to_expression().is_scalar())
+        self.assertNotIn('op("dot")', product.to_typst())
+        self.assertNotIn("square.stroked", product.to_typst())
+        library = sp.TensorLibrary()
+        for vector, data in zip(
+            (a, b, c, d),
+            (
+                [1.0, 2.0, 3.0, 4.0],
+                [5.0, 6.0, 7.0, 8.0],
+                [2.0, 3.0, 5.0, 7.0],
+                [11.0, 13.0, 17.0, 19.0],
+            ),
+            strict=True,
+        ):
+            library.register(sp.Tensor.dense(vector, data))
+        self.assertEqual(product.to_tensor(library)[0], 14100.0)
+        self.assertEqual(grouped.to_tensor(library)[0], 14100.0)
+
+    def test_raw_dot_rejects_partial_contractions(self):
+        r = sp.Representation.mink(4)
+        A, B = sp.TensorName("scalar_dot_A"), sp.TensorName("scalar_dot_B")
+        # Register both tensor heads before parsing their raw calls.
+        A(r, r), B(r, r)
+        raw = E(
+            "spenso::dot(scalar_dot_A(spenso::mink(4,a),spenso::mink(4)),scalar_dot_B(spenso::mink(4,b),spenso::mink(4)))"
+        )
+        self.assertTrue(raw.is_scalar())
+        with self.assertRaisesRegex(ValueError, "dot requires rank-one"):
+            sp.TensorExpression(raw)
+        # Explicit partial contractions still retain their external slots.
+        partial = A(r("a"), r("mu")) * B(r("b"), r("mu"))
+        self.assertEqual(partial.rank, 2)
+
     def test_expression_subclass_and_checked_reconstruction(self):
         source = self.P(self.x, self.rep("j"), self.rep("i")).permute_axes([1, 0])
         self.assertIsInstance(source, Expression)

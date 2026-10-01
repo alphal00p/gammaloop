@@ -566,7 +566,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compact_dot_chainifies_mixed_gamma_vector_operands() {
+    fn compact_metric_chainifies_mixed_gamma_vector_operands() {
         use crate::{dirac::GammaSimplifySettings, tensor::SymbolicTensor};
         use spenso::structure::partial::PartialStructure;
 
@@ -585,8 +585,8 @@ mod tests {
                         gamma!(start.as_view(), end.as_view(), &compact)
                     }
                 };
-                let expression = function!(T.dot, gamma(&left, &inner), &momentum)
-                    * function!(T.dot, &momentum, gamma(&inner, &right));
+                let expression = function!(ETS.metric, gamma(&left, &inner), &momentum)
+                    * function!(ETS.metric, &momentum, gamma(&inner, &right));
                 let source = SymbolicTensor::<PartialStructure>::infer(expression.clone()).unwrap();
                 assert_eq!(source.rank(), 2);
                 assert_eq!(
@@ -671,7 +671,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_dot_chainification_preserves_weighted_scalar_dot_coefficients() {
+    fn compact_metric_chainification_preserves_weighted_scalar_dot_coefficients() {
         use std::sync::{Arc, Mutex};
 
         let reps = test_initialize();
@@ -686,7 +686,7 @@ mod tests {
             * (Atom::var(symbol!("compact_weight_x")) + Atom::var(symbol!("compact_weight_y")))
                 .pow(3);
         let input = function!(
-            T.dot,
+            ETS.metric,
             &coefficient * gamma!(bis!(4, 93731), bis!(4, 93732), &compact),
             spenso::p!(&compact)
         );
@@ -711,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_dot_chain_words_retain_explicit_spectators() {
+    fn compact_metric_chain_words_retain_explicit_spectators() {
         use crate::{dirac::GammaSimplifySettings, tensor::SymbolicTensor};
         use spenso::structure::partial::PartialStructure;
 
@@ -724,8 +724,8 @@ mod tests {
             let momentum = spenso::p!(&compact);
             let forward = chain!(&left, &right, gamma!(&compact), gamma!(&spectator));
             let reverse = chain!(&left, &right, gamma!(&spectator), gamma!(&compact));
-            let expression =
-                function!(T.dot, forward, &momentum) + function!(T.dot, &momentum, reverse);
+            let expression = function!(ETS.metric, forward, &momentum)
+                + function!(ETS.metric, &momentum, reverse);
             let source = SymbolicTensor::<PartialStructure>::infer(expression.clone()).unwrap();
             assert_eq!(source.rank(), 3);
             let chained = expression.chainify(Bispinor {}.into());

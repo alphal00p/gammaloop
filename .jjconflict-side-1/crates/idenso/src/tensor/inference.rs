@@ -1614,7 +1614,7 @@ impl InterfaceInference {
                 let symbol = function.get_symbol();
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
-                if symbol.is_scalar()
+                if SPENSO_TAG.is_scalar_metadata(symbol)
                     || symbol == SPENSO_TAG.scalar
                     || symbol == SPENSO_TAG.pure_scalar
                 {
@@ -2191,6 +2191,13 @@ impl InterfaceInference {
                 };
                 let left = operand_interface(*left)?;
                 let right = operand_interface(*right)?;
+                if symbol == SPENSO_TAG.dot
+                    && (left.logical_slots().len() != 1 || right.logical_slots().len() != 1)
+                {
+                    return Err(TensorInferenceError::invalid(
+                        "dot requires rank-one operands; use a metric or explicit contraction for partial contractions",
+                    ));
+                }
                 let reusable = arguments
                     .iter()
                     .all(|argument| self.reusable_interfaces.contains_key(argument.get_data()));
@@ -2670,7 +2677,7 @@ impl InterfaceInference {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
-                if symbol.is_scalar() {
+                if SPENSO_TAG.is_scalar_metadata(symbol) {
                     return Ok(None);
                 }
                 let arguments = function

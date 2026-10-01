@@ -110,11 +110,19 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
             return false;
         };
 
-        !fun.get_symbol().is_scalar()
-            && (self.is_compact_inner_product(fun)
-                || fun
-                    .iter()
-                    .any(|value| self.contains_schoonschip_shorthand_arg(value)))
+        if self
+            .state
+            .matcher
+            .borrow()
+            .tags()
+            .is_scalar_metadata(fun.get_symbol())
+        {
+            return false;
+        }
+        self.is_compact_inner_product(fun)
+            || fun
+                .iter()
+                .any(|value| self.contains_schoonschip_shorthand_arg(value))
     }
 
     /// Materialize an expandable shorthand expression, or return it unchanged.
@@ -144,7 +152,13 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
 
         // Scalar payloads are opaque metadata even when they contain compact
         // vectors or scalar products. Hoisting their factors changes the function.
-        if fun.get_symbol().is_scalar() {
+        if self
+            .state
+            .matcher
+            .borrow()
+            .tags()
+            .is_scalar_metadata(fun.get_symbol())
+        {
             return None;
         }
 
@@ -493,8 +507,8 @@ impl SlotMatcher {
     }
 
     /// Recognize one inner product's unique compact axis on each operand.
-    /// Explicit spectator ports are not consumed. This observation does not
-    /// allocate indices or construct tensor components.
+    /// Metrics may retain explicit spectator ports; scalar dots require rank-one
+    /// operands. This observation does not allocate indices or construct components.
     #[allow(clippy::type_complexity)]
     pub fn compact_inner_product_parts<'node, Aind: AbsInd + ParseableAind>(
         &mut self,
@@ -517,7 +531,11 @@ impl SlotMatcher {
 
         let lhs_rep = self.compact_vector_rep::<Aind>(lhs)?;
         let rhs_rep = self.compact_vector_rep::<Aind>(rhs)?;
-        if !lhs_rep.matches(&rhs_rep) {
+        if !lhs_rep.matches(&rhs_rep)
+            || (value.get_symbol() == self.tags().dot
+                && (!self.is_structured_scalar::<Aind>(lhs)
+                    || !self.is_structured_scalar::<Aind>(rhs)))
+        {
             return None;
         }
 
@@ -1341,21 +1359,21 @@ mod tests {
         let right = rep.to_symbolic([Atom::num(91002)]);
         let compact = rep.to_symbolic([]);
         let head = SPENSO_TAG.tensor_symbol("compact_inner_product_matrix");
-        let dot = function!(
-            SPENSO_TAG.dot,
+        let metric = function!(
+            ETS.metric,
             function!(head, &left, &compact),
             function!(head, &right, &compact)
         );
         let vector =
             compact_vector(SPENSO_TAG.rank_one_tensor_symbol("compact_inner_product_vector"));
         let mut matcher = SlotMatcher::default();
-        assert!(!matcher.is_structured_scalar::<AbstractIndex>(dot.as_view()));
+        assert!(!matcher.is_structured_scalar::<AbstractIndex>(metric.as_view()));
         assert!(
             matcher
-                .compact_vector_rep::<AbstractIndex>((&dot * &vector).as_view())
+                .compact_vector_rep::<AbstractIndex>((&metric * &vector).as_view())
                 .is_none()
         );
-        let projected = function!(*shadowing::SYM, &dot, &vector);
+        let projected = function!(*shadowing::SYM, &metric, &vector);
         assert!(
             matcher
                 .compact_vector_rep::<AbstractIndex>(projected.as_view())
@@ -1371,16 +1389,20 @@ mod tests {
     }
 
     #[test]
-    fn selected_inner_product_keeps_nested_scalar_dots_opaque() {
+    fn scalar_inner_product_coefficients_normalize_before_materialization() {
         let p = compact_vector(SPENSO_TAG.rank_one_tensor_symbol("selected_inner_p"));
         let q = compact_vector(SPENSO_TAG.rank_one_tensor_symbol("selected_inner_q"));
+        let r = compact_vector(SPENSO_TAG.rank_one_tensor_symbol("selected_inner_r"));
         let coefficient = function!(SPENSO_TAG.dot, &p, &q);
-        let value = function!(SPENSO_TAG.dot, &coefficient * &p, &q);
+        let inner = function!(SPENSO_TAG.dot, &p, &r);
+        let value = function!(SPENSO_TAG.dot, &coefficient * &p, &r);
+        assert!(coefficient.is_scalar().is_true());
+        assert_eq!(value, &coefficient * &inner);
         let state = ParseState::<AbstractIndex>::default();
-        let AtomView::Fun(function) = value.as_view() else {
+        let AtomView::Fun(function) = inner.as_view() else {
             unreachable!()
         };
-        let opened = state.materialize_inner_product(function).unwrap();
+        let opened = &coefficient * state.materialize_inner_product(function).unwrap();
         let AtomView::Mul(product) = opened.as_view() else {
             panic!("weighted inner product remains factored")
         };
@@ -1430,7 +1452,7 @@ mod tests {
         let rep = mink4();
         let compact = rep.to_symbolic([]);
         let input = function!(
-            SPENSO_TAG.dot,
+            ETS.metric,
             function!(head, rep.to_symbolic([Atom::num(91101)]), &compact),
             function!(head, rep.to_symbolic([Atom::num(91102)]), &compact)
         );

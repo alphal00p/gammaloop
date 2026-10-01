@@ -926,7 +926,14 @@ where
         let _span = profile::span(Timer::ParseFun);
         let symbol = value.get_symbol();
 
-        if symbol == state.matcher.borrow().tags().dot && value.get_nargs() != 2 {
+        let dot = state.matcher.borrow().tags().dot;
+        if symbol == dot
+            && state
+                .matcher
+                .borrow_mut()
+                .compact_inner_product_parts::<Aind>(value)
+                .is_none()
+        {
             return Err(TensorNetworkError::InvalidDotFunction(
                 value.as_view().to_plain_string(),
             ));

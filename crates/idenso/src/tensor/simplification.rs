@@ -623,7 +623,10 @@ mod tests {
     #[test]
     fn compact_inner_product_gamma_reduces_both_raw_and_chain_operands() {
         use crate::gamma;
-        use spenso::{chain, network::tags::SPENSO_TAG};
+        use spenso::{
+            chain,
+            network::{library::symbolic::ETS, tags::SPENSO_TAG},
+        };
         use symbolica::function;
         let reps = crate::test_support::test_initialize();
         let left = reps.bis4.to_symbolic([Atom::num(91301)]);
@@ -643,12 +646,12 @@ mod tests {
                 &dimension
             );
             let direct = function!(
-                SPENSO_TAG.dot,
+                ETS.metric,
                 gamma!(&left, &inner, &compact),
                 gamma!(&inner, &right, &compact)
             );
             let chained = function!(
-                SPENSO_TAG.dot,
+                ETS.metric,
                 chain!(&left, &inner, gamma!(&compact)),
                 chain!(&inner, &right, gamma!(&compact))
             );
