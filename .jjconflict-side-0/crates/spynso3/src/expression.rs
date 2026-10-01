@@ -40,12 +40,11 @@ use spenso::{
 };
 use symbolica::{
     api::python::{
-        ConvertibleToExpression, ConvertibleToOpenPattern, FormattedOutputBackend, PythonAtomType,
-        PythonCondition, PythonExpression, PythonExpressionEvaluator, PythonFormattedOutput,
+        ConvertibleToExpression, ConvertibleToPatternRestriction, ConvertibleToReplaceWith,
+        FormattedOutputBackend, PythonExpression, PythonFormattedOutput, PythonReplacement,
+        PythonTransformer,
     },
     atom::{Atom, AtomCore, AtomView, Symbol},
-    domains::float::Complex,
-    evaluate::{EvaluatorBuilder, OptimizationSettings},
 };
 
 use crate::{
@@ -117,7 +116,10 @@ impl AutoIndex {
 /// Reductions preserve this tensor type and keep unrelated sums factorized.
 /// Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
 /// ``factor()``, also returns a tensor expression with its ordered interface.
-/// Use ``to_expression()`` to access the underlying Symbolica expression.
+/// This is a Symbolica ``Expression`` subclass: inspection, matching, evaluators,
+/// and other unoverridden methods are inherited directly. Inherited transformations
+/// return ordinary expressions; the tensor-aware overrides retain the interface.
+/// Use ``to_expression()`` to explicitly drop the tensor interface.
 ///
 /// Pass ``intern="indices"`` to reversibly encode compound index labels, or
 /// ``intern="flattened"`` to create readable names. Both modes operate only on
@@ -136,6 +138,7 @@ impl AutoIndex {
 #[pyclass(
     frozen,
     from_py_object,
+    extends = PythonExpression,
     name = "TensorExpression",
     module = "symbolica.community.tensor"
 )]
@@ -263,39 +266,19 @@ impl TensorExpression {
                 value,
                 name,
                 name_args,
-            },
+            }
+            .into_initializer(),
         )
     }
 
-    /// Build a scalar evaluator with Symbolica's shared state and options.
-    pub(crate) fn build_evaluator(
-        py: Python<'_>,
-        builder: EvaluatorBuilder<'_>,
-        iterations: usize,
-        n_cores: usize,
-    ) -> PyResult<PythonExpressionEvaluator> {
-        let settings = OptimizationSettings::new()
-            .horner_iterations(iterations)
-            .cores(n_cores);
-        let evaluator = py
-            .detach(|| builder.optimization_settings(settings).build())
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Ok(PythonExpressionEvaluator {
-            rational_constants: evaluator.get_constants().to_vec(),
-            eval_complex: evaluator.map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64())),
-            eval_real: None,
-            #[cfg(feature = "native")]
-            jit_real: None,
-            #[cfg(feature = "native")]
-            jit_complex: None,
-            eval_double_float: None,
-            eval_double_float_complex: None,
-            eval_arb_prec: None,
-            eval_arb_prec_complex: None,
-            jit_compile: false,
-            #[cfg(feature = "native")]
-            jit_settings: symbolica::evaluate::JITCompilationSettings::new(),
-        })
+    /// Initialize the inherited immutable expression from the shared tensor owner.
+    /// All typed results use this boundary, keeping inherited Symbolica methods
+    /// on exactly the same atom without re-inferring the tensor interface.
+    pub(crate) fn into_initializer(self) -> PyClassInitializer<Self> {
+        let expression = PythonExpression {
+            expr: self.atom().clone(),
+        };
+        (self, expression).into()
     }
 
     pub(crate) fn atom(&self) -> &Atom {
@@ -374,7 +357,7 @@ impl TensorExpression {
         atom: Atom,
     ) -> PyResult<Py<Self>> {
         if atom == self_.atom() {
-            return Py::new(py, Self::clone(self_));
+            return Py::new(py, Self::clone(self_).into_initializer());
         }
         let value = self_
             .value
@@ -393,7 +376,7 @@ impl TensorExpression {
 
     fn promoted_network(self_: &PyRef<'_, Self>, py: Python<'_>) -> PyResult<SpensoNet> {
         SpensoNet::from_arithmetic(
-            ArithmeticStructure::Tensor(Py::new(py, Self::clone(self_))?),
+            ArithmeticStructure::Tensor(Py::new(py, Self::clone(self_).into_initializer())?),
             None,
         )
     }
@@ -791,7 +774,7 @@ impl TensorExpression {
         expression: &Bound<'_, PyAny>,
         structure: Option<&crate::metadata::SpensoTensorStructure>,
         intern: Option<Intern>,
-    ) -> PyResult<Self> {
+    ) -> PyResult<PyClassInitializer<Self>> {
         if let Some(structure) = structure {
             let atom = if let Ok(value) = expression.extract::<PyRef<'_, Self>>() {
                 value.atom().clone()
@@ -812,7 +795,7 @@ impl TensorExpression {
                 atom
             };
             let checked = Self::from_atom_interface(py, atom, Some(structure.interface.clone()))?;
-            return Ok(checked.borrow(py).clone());
+            return Ok(checked.borrow(py).clone().into_initializer());
         }
         let tensor = if let Some(settings) = intern {
             if let Ok(expression) = expression.extract::<PyRef<'_, Self>>() {
@@ -834,7 +817,7 @@ impl TensorExpression {
             as_tensor(py, expression)?
         };
         let tensor = tensor.borrow(py);
-        Ok(tensor.clone())
+        Ok(tensor.clone().into_initializer())
     }
 
     /// Construct the metric pairing.
@@ -1466,8 +1449,9 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Keep the TensorExpression when using tensor operations. Conversion is
-    /// useful for raw Symbolica matching or algorithms that require an Expression.
+    /// TensorExpression already inherits Expression. Convert when deliberately
+    /// requesting ordinary Symbolica behavior, including replacements that change
+    /// the tensor interface, rather than its tensor-aware overrides.
     ///
     /// Examples
     /// --------
@@ -1479,152 +1463,6 @@ impl TensorExpression {
         PythonExpression {
             expr: self.atom().clone(),
         }
-    }
-
-    /// Test literal symbolic containment, with the same Condition semantics as Expression.contains.
-    /// Use bool(result) for a Boolean answer, or combine it with other Symbolica conditions.
-    /// This inspects the stored expression without contracting or expanding tensors.
-    ///
-    /// Parameters
-    /// ----------
-    /// s : Expression or pattern
-    ///     Symbolic subexpression to find literally, with Expression.contains semantics.
-    ///
-    /// Returns
-    /// -------
-    /// Condition
-    ///     Containment condition, convertible to bool.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x, y = S("x", "y")
-    /// >>> assert TensorExpression(x + y).contains(x)
-    fn contains(&self, s: ConvertibleToOpenPattern) -> PyResult<PythonCondition> {
-        self.to_expression().contains(s)
-    }
-
-    /// Test whether an ordinary Expression occurs literally in this tensor expression.
-    fn __contains__(&self, expression: &PythonExpression) -> bool {
-        self.to_expression().__contains__(expression)
-    }
-
-    /// Return symbols in Symbolica's internal order, including function heads by default.
-    /// Index labels and representation symbols are included when present in the syntax.
-    ///
-    /// Parameters
-    /// ----------
-    /// include_function_symbols : bool, default True
-    ///     Include function heads as well as variables.
-    ///
-    /// Returns
-    /// -------
-    /// list of Expression
-    ///     Symbols, without duplicate occurrences.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x, f = S("x", "f")
-    /// >>> assert x in TensorExpression(f(x)).get_all_symbols(False)
-    #[pyo3(signature = (include_function_symbols = true))]
-    fn get_all_symbols(&self, include_function_symbols: bool) -> Vec<PythonExpression> {
-        self.to_expression()
-            .get_all_symbols(include_function_symbols)
-    }
-
-    /// Return variables and function calls in Symbolica's internal order.
-    /// Set enter_functions=False to treat function calls, including tensor leaves, as opaque.
-    ///
-    /// Parameters
-    /// ----------
-    /// enter_functions : bool, default True
-    ///     Inspect function arguments as well as complete function calls.
-    ///
-    /// Returns
-    /// -------
-    /// list of Expression
-    ///     Symbolic indeterminates, without duplicate occurrences.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x, f = S("x", "f")
-    /// >>> assert TensorExpression(f(x)).get_all_indeterminates(False) == [f(x)]
-    #[pyo3(signature = (enter_functions = true))]
-    fn get_all_indeterminates(&self, enter_functions: bool) -> Vec<PythonExpression> {
-        self.to_expression().get_all_indeterminates(enter_functions)
-    }
-
-    /// Return the Symbolica atom type of the stored expression.
-    ///
-    /// Returns
-    /// -------
-    /// AtomType
-    ///     Whether the stored expression is a number, variable, function, sum, product, or power.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x = S("x")
-    /// >>> assert TensorExpression(x).get_type() == x.get_type()
-    fn get_type(&self) -> PythonAtomType {
-        self.to_expression().get_type()
-    }
-
-    /// Return the underlying function head or variable as an ordinary Expression.
-    /// Raise TypeError for a sum, product, power, or number.
-    ///
-    /// Returns
-    /// -------
-    /// Expression
-    ///     Function symbol or variable, without the tensor interface.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.tensor import TensorName, Representation
-    /// >>> A = TensorName("A")(Representation.euc(3))("i")
-    /// >>> assert A.get_head() == A.to_expression().get_head()
-    fn get_head(&self) -> PyResult<PythonExpression> {
-        self.to_expression().get_head()
-    }
-
-    /// Return the underlying variable or function name, independently of tensor data metadata.
-    /// Raise TypeError for a sum, product, power, or number.
-    ///
-    /// Returns
-    /// -------
-    /// str
-    ///     Symbolica's name for the underlying variable or function.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.tensor import TensorName, Representation
-    /// >>> A = TensorName("A")(Representation.euc(3))("i")
-    /// >>> assert A.get_name() == A.to_expression().get_name()
-    fn get_name(&self) -> PyResult<String> {
-        self.to_expression().get_name()
-    }
-
-    /// Return the stored symbolic expression's size in bytes, excluding tensor metadata.
-    ///
-    /// Returns
-    /// -------
-    /// int
-    ///     Number of bytes in the symbolic payload.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x = S("x")
-    /// >>> assert TensorExpression(x).get_byte_size() == x.get_byte_size()
-    fn get_byte_size(&self) -> usize {
-        self.atom().as_view().get_byte_size()
     }
 
     /// Test whether the expression is exactly zero, including zeros with nonzero tensor rank.
@@ -1707,49 +1545,235 @@ impl TensorExpression {
         self.atom().nterms()
     }
 
-    /// Apply one rule or an ordered list of whole-tensor replacement rules.
+    /// Replace symbolic patterns or apply whole-tensor replacement rules.
     ///
     /// Parameters
     /// ----------
-    /// rules : TensorRule or list of TensorRule
-    ///     Rules in priority order. The first match at a source tensor is used;
-    ///     newly produced replacements are not matched again during this call.
+    /// pattern : Expression, TensorRule, or list of TensorRule
+    ///     Symbolica pattern when rhs is supplied. Without rhs, apply prepared
+    ///     TensorRules in priority order, leaving scalar key arguments opaque.
+    /// rhs : Expression, HeldExpression, or callable, optional
+    ///     Symbolica replacement, including callbacks. The result must preserve
+    ///     the tensor's ordered interface. Use reindex() to change external labels.
+    /// cond : PatternRestriction or Condition, optional
+    ///     Restriction on a symbolic match.
+    /// non_greedy_wildcards : list of Expression, optional
+    ///     Wildcards whose matches should be selected non-greedily.
+    /// min_level, max_level : int, optional
+    ///     Inclusive traversal bounds, starting at zero.
+    /// level_is_tree_depth : bool, default False
+    ///     Count expression-tree levels rather than function nesting.
+    /// partial : bool, default True
+    ///     Allow matches inside larger expressions.
+    /// allow_new_wildcards_on_rhs : bool, default False
+    ///     Allow wildcard symbols that do not occur in the pattern.
+    /// rhs_cache_size : int, optional
+    ///     Cache repeated symbolic replacements; zero disables caching.
+    /// repeat, once, bottom_up, nested : bool, default False
+    ///     Symbolica's replacement traversal controls. Prepared TensorRules own
+    ///     their conditions and cache settings and do not accept these options.
     ///
     /// Returns
     /// -------
     /// TensorExpression
-    ///     Rewritten value with a checked external interface.
-    ///
-    /// Notes
-    /// -----
-    /// The traversal follows tensor sums and products, leaving scalar key
-    /// arguments opaque. Matched tensors need explicit axes; unsupported tensor
-    /// powers and unresolved interfaces are rejected. Normalization/evaluation
-    /// callbacks remaining in a replacement are not supported. For scalar
-    /// component substitutions in a network, use TensorNetwork.replace instead.
+    ///     Rewritten value retaining its checked tensor interface and metadata.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(2)
-    /// >>> A = TensorName("M")(space, space)
-    /// >>> from symbolica.community.tensor import TensorRule
-    /// >>> indexed = A("i", "j")
-    /// >>> rule = TensorRule(indexed, 2 * indexed)
-    /// >>> replaced = indexed.replace(rule)
-    #[pyo3(signature = (rules))]
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorRule
+    /// >>> A = TensorName("M")(Representation.euc(2))("i")
+    /// >>> x, y = S("x", "y")
+    /// >>> assert (x * A).replace(x, y) == y * A
+    /// >>> assert A.replace(TensorRule(A, 2 * A)) == 2 * A
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (pattern, rhs=None, cond=None, non_greedy_wildcards=None, min_level=0, max_level=None, level_is_tree_depth=false, partial=true, allow_new_wildcards_on_rhs=false, rhs_cache_size=None, repeat=false, once=false, bottom_up=false, nested=false))]
     fn replace(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        rules: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Union[symbolica.core.Expression, int, float, complex, TensorRule, list[TensorRule]]"
+        ))]
+        pattern: &Bound<'_, PyAny>,
+        rhs: Option<ConvertibleToReplaceWith>,
+        cond: Option<ConvertibleToPatternRestriction>,
+        non_greedy_wildcards: Option<Vec<PythonExpression>>,
+        min_level: usize,
+        max_level: Option<usize>,
+        level_is_tree_depth: bool,
+        partial: bool,
+        allow_new_wildcards_on_rhs: bool,
+        rhs_cache_size: Option<usize>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
     ) -> PyResult<Py<Self>> {
-        let rules = crate::tensor_rule::PyTensorRule::extract_rules(rules)?;
+        if let Some(rhs) = rhs {
+            let result = self_.as_super().replace(
+                pattern.extract()?,
+                rhs,
+                cond,
+                non_greedy_wildcards,
+                min_level,
+                max_level,
+                level_is_tree_depth,
+                partial,
+                allow_new_wildcards_on_rhs,
+                rhs_cache_size,
+                repeat,
+                once,
+                bottom_up,
+                nested,
+            )?;
+            return Self::preserving_interface(&self_, py, result.expr);
+        }
+        if cond.is_some()
+            || non_greedy_wildcards.is_some()
+            || min_level != 0
+            || max_level.is_some()
+            || level_is_tree_depth
+            || !partial
+            || allow_new_wildcards_on_rhs
+            || rhs_cache_size.is_some()
+            || repeat
+            || once
+            || bottom_up
+            || nested
+        {
+            return Err(PyTypeError::new_err(
+                "TensorRules own their replacement settings; traversal options require a symbolic pattern and rhs",
+            ));
+        }
+        let rules = crate::tensor_rule::PyTensorRule::extract_rules(pattern)?;
         let value = self_
             .value
             .replace_rules(&rules)
             .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
         Self::from_shared(py, Arc::new(value), name, args)
+    }
+
+    /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
+    ///
+    /// Parameters
+    /// ----------
+    /// replacements : list of Replacement
+    ///     Symbolica replacements, including their conditions and callbacks.
+    /// repeat, once, bottom_up, nested : bool, default False
+    ///     Traversal controls with the same meaning as Expression.replace_multiple.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Rewritten value preserving ordered ports, metadata, and typed zeros.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, Replacement
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x, y = S("x", "y")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (x*A).replace_multiple([Replacement(x, y)]) == y*A
+    #[pyo3(signature = (replacements, repeat=false, once=false, bottom_up=false, nested=false))]
+    fn replace_multiple(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        replacements: Vec<PythonReplacement>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
+    ) -> PyResult<Py<Self>> {
+        let result =
+            self_
+                .as_super()
+                .replace_multiple(replacements, repeat, once, bottom_up, nested)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Apply a Symbolica Transformer and retain the validated tensor interface.
+    ///
+    /// Parameters
+    /// ----------
+    /// op : Transformer
+    ///     Transformations to apply, including user callbacks.
+    /// n_cores : int, optional
+    ///     Number of cores for Symbolica's term mapping.
+    /// stats_to_file : str, optional
+    ///     JSON output file for the transformer's statistics.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Transformed expression with its original ordered tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S, T
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> result = ((x + 1)**2 * A).map(T().expand())
+    /// >>> assert result == ((x + 1)**2 * A).expand()
+    #[pyo3(signature = (op, n_cores=None, stats_to_file=None))]
+    fn map(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        op: PythonTransformer,
+        n_cores: Option<usize>,
+        stats_to_file: Option<String>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().map(op, py, n_cores, stats_to_file)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Differentiate scalar coefficients, preserving tensor zeros and ports.
+    /// Formal derivatives of unknown tensor functions are not supported by the
+    /// network executor. Differentiate their component expressions with
+    /// Tensor.map_components() instead, or supply a TensorName derivative callback.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : Expression
+    ///     Scalar differentiation variable.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Derivative with the same ordered external ports, even when zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(Representation.euc(3))("i")
+    /// >>> assert (x**2 * A).derivative(x) == 2*x*A
+    /// >>> assert A.derivative(x).rank == A.rank
+    fn derivative(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        x: ConvertibleToExpression,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().derivative(x)?;
+        let mut formal_tensor_derivative = false;
+        result.expr.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value
+                && function.get_symbol() == Symbol::DERIVATIVE
+                && function.get_nargs() % 2 == 1
+                && matches!(function.iter().nth(function.get_nargs() / 2), Some(AtomView::Var(head)) if head.get_symbol().has_tag(&SPENSO_TAG.tensor))
+            {
+                formal_tensor_derivative = true;
+            }
+            !formal_tensor_derivative
+        });
+        if formal_tensor_derivative {
+            return Err(PyValueError::new_err(
+                "formal tensor derivatives are not supported; differentiate component expressions with Tensor.map_components()",
+            ));
+        }
+        Self::preserving_interface(&self_, py, result.expr)
     }
 
     /// Distribute scalar products and powers over sums.
@@ -1798,7 +1822,7 @@ impl TensorExpression {
             )
             .map_err(Self::inference_error)?;
         if value.expression() == self_.atom() {
-            return Py::new(py, self_.clone());
+            return Py::new(py, self_.clone().into_initializer());
         }
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
         Self::from_shared(py, Arc::new(value), name, args)
@@ -1834,7 +1858,7 @@ impl TensorExpression {
         complex: bool,
         extension: Option<Vec<ConvertibleToExpression>>,
     ) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().factor(complex, extension)?;
+        let result = self_.as_super().factor(complex, extension)?;
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -1855,7 +1879,7 @@ impl TensorExpression {
     /// >>> result = (2 * (x + y) * A).expand_num()
     /// >>> assert result == (2*x + 2*y) * A
     fn expand_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().expand_num();
+        let result = self_.as_super().expand_num();
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -1898,7 +1922,7 @@ impl TensorExpression {
         coeff_map: Option<Py<PyAny>>,
     ) -> PyResult<Py<Self>> {
         let has_callbacks = key_map.is_some() || coeff_map.is_some();
-        let result = self_.to_expression().collect(x, key_map, coeff_map)?;
+        let result = self_.as_super().collect(x, key_map, coeff_map)?;
         if has_callbacks {
             Self::preserving_interface(&self_, py, result.expr)
         } else {
@@ -1922,7 +1946,7 @@ impl TensorExpression {
     /// >>> A = TensorName("A")(Representation.euc(3))("i")
     /// >>> assert ((2*x + 4*y)*A).collect_num() == 2*(x + 2*y)*A
     fn collect_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().collect_num();
+        let result = self_.as_super().collect_num();
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -1943,7 +1967,7 @@ impl TensorExpression {
     /// >>> result = (x*A + y*A).collect_factors()
     /// >>> assert result == (x+y)*A
     fn collect_factors(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().collect_factors();
+        let result = self_.as_super().collect_factors();
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -1962,7 +1986,7 @@ impl TensorExpression {
     /// >>> result = TensorExpression(2*x + 2*y).collect_by_coefficient()
     /// >>> assert result.to_expression() == 2*(x + y)
     fn collect_by_coefficient(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().collect_by_coefficient();
+        let result = self_.as_super().collect_by_coefficient();
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -2004,9 +2028,7 @@ impl TensorExpression {
         coeff_map: Option<Py<PyAny>>,
     ) -> PyResult<Py<Self>> {
         let has_callbacks = key_map.is_some() || coeff_map.is_some();
-        let result = self_
-            .to_expression()
-            .collect_symbol(x, key_map, coeff_map)?;
+        let result = self_.as_super().collect_symbol(x, key_map, coeff_map)?;
         if has_callbacks {
             Self::preserving_interface(&self_, py, result.expr)
         } else {
@@ -2039,7 +2061,7 @@ impl TensorExpression {
         py: Python<'_>,
         vars: Option<Vec<PythonExpression>>,
     ) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().collect_horner(vars)?;
+        let result = self_.as_super().collect_horner(vars)?;
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -2058,7 +2080,7 @@ impl TensorExpression {
     /// >>> x, y = S("x", "y")
     /// >>> assert TensorExpression(1/x + 1/y).together().to_expression() == (x + y)/(x*y)
     fn together(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().together()?;
+        let result = self_.as_super().together()?;
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -2078,7 +2100,7 @@ impl TensorExpression {
     /// >>> A = TensorName("A")(Representation.euc(3))("i")
     /// >>> assert ((x**2 - 1)/(x - 1)*A).cancel() == (x + 1)*A
     fn cancel(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.to_expression().cancel()?;
+        let result = self_.as_super().cancel()?;
         Self::from_algebra_atom(&self_, py, result.expr)
     }
 
@@ -2114,53 +2136,10 @@ impl TensorExpression {
         // Zero has no partial fractions; Symbolica's multivariate path cannot
         // lift an empty numerator polynomial into its coefficient ring.
         if self_.atom().is_zero() {
-            return Py::new(py, self_.clone());
+            return Py::new(py, self_.clone().into_initializer());
         }
-        let result = self_.to_expression().apart(variables)?;
+        let result = self_.as_super().apart(variables)?;
         Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Prepare numerical evaluation of the symbolic algebra without component expansion.
-    ///
-    /// Parameters
-    /// ----------
-    /// params : sequence of Expression
-    ///     Symbolic leaves to treat as numerical inputs, in input-row order.
-    /// iterations : int, default 1
-    ///     Horner-optimization iterations.
-    /// n_cores : int, default 1
-    ///     Number of optimization cores.
-    ///
-    /// Returns
-    /// -------
-    /// symbolica.Evaluator
-    ///     Evaluator for the symbolic expression.
-    ///
-    /// Notes
-    /// -----
-    /// This does not resolve tensor components from a TensorLibrary. To evaluate
-    /// component formulas, first use to_tensor() and then Tensor.evaluator().
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> x = S("x")
-    /// >>> expression = TensorExpression(x**2 + 1)
-    /// >>> evaluator = expression.evaluator([x])
-    #[pyo3(signature = (params, *, iterations=1, n_cores=1))]
-    fn evaluator(
-        &self,
-        py: Python<'_>,
-        params: Vec<PythonExpression>,
-        iterations: usize,
-        n_cores: usize,
-    ) -> PyResult<PythonExpressionEvaluator> {
-        let params = params
-            .into_iter()
-            .map(|value| value.expr)
-            .collect::<Vec<_>>();
-        Self::build_evaluator(py, self.value.evaluator(&params), iterations, n_cores)
     }
 
     /// Copy the expression and its tensor metadata.
@@ -2179,7 +2158,52 @@ impl TensorExpression {
     /// >>> copy.copy(A).shape
     /// (2, 2)
     fn __copy__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        Py::new(py, self_.clone())
+        Py::new(py, self_.clone().into_initializer())
+    }
+
+    /// Copy the tensor's immutable expression, ordered axes, and data metadata.
+    ///
+    /// Parameters
+    /// ----------
+    /// memo : dict
+    ///     Copy bookkeeping maintained by Python's copy module.
+    ///
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     Independent Python wrapper sharing the immutable tensor value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import copy
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> A = TensorName("A")(Representation.euc(3))
+    /// >>> zero = 0 * A
+    /// >>> assert copy.deepcopy(zero).structure == zero.structure
+    #[pyo3(signature = (memo))]
+    fn __deepcopy__(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        memo: &Bound<'_, PyDict>,
+    ) -> PyResult<Py<Self>> {
+        let pointer = self_.as_ptr() as usize;
+        let copied = Self::__copy__(self_, py)?;
+        memo.set_item(pointer, copied.bind(py))?;
+        Ok(copied)
+    }
+
+    /// Reject pickling that would silently discard the ordered tensor interface.
+    /// Use to_expression() when explicitly serializing only the symbolic algebra.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     Tensor metadata serialization is not supported.
+    #[gen_stub(override_return_type(type_repr = "typing.NoReturn"))]
+    fn __reduce__(&self) -> PyResult<()> {
+        Err(PyTypeError::new_err(
+            "TensorExpression pickling is not supported; use to_expression() to serialize only its symbolic algebra",
+        ))
     }
 
     /// Replace four-dimensional Minkowski index spaces by a supplied dimension.
@@ -3441,18 +3465,13 @@ impl TensorExpression {
     /// Parameters
     /// ----------
     /// other : object
-    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
-    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
-            return Ok(py.NotImplemented());
-        };
-        Ok(self
-            .value
-            .same_value(&other.value)
-            .into_pyobject(py)?
-            .to_owned()
-            .into_any()
-            .unbind())
+    ///     TensorExpression to compare. Values without an ordered tensor interface are unequal.
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        // Returning NotImplemented lets Expression's reflected comparison ignore
+        // ordered tensor ports, violating equality transitivity and our hash.
+        other
+            .extract::<PyRef<'_, Self>>()
+            .is_ok_and(|other| self.value.same_value(&other.value))
     }
 
     /// Test whether normalized expressions or their ordered tensor interfaces differ.
@@ -3467,16 +3486,9 @@ impl TensorExpression {
     /// Parameters
     /// ----------
     /// other : object
-    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
-    fn __ne__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
-            return Ok(py.NotImplemented());
-        };
-        Ok((!self.value.same_value(&other.value))
-            .into_pyobject(py)?
-            .to_owned()
-            .into_any()
-            .unbind())
+    ///     TensorExpression to compare. Values without an ordered tensor interface are unequal.
+    fn __ne__(&self, other: &Bound<'_, PyAny>) -> bool {
+        !self.__eq__(other)
     }
 
     /// Hash the immutable tensor value for use in dictionaries and sets.
@@ -4226,7 +4238,7 @@ impl TensorExpression {
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
     if let Ok(expression) = expression.extract::<PyRef<'_, TensorExpression>>() {
-        return Py::new(py, expression.clone());
+        return Py::new(py, expression.clone().into_initializer());
     }
     let expression = expression
         .extract::<ConvertibleToExpression>()
@@ -6351,6 +6363,11 @@ mod tests {
             let constructed = constructed.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(constructed.interface(), tensor.borrow(py).interface());
             assert_eq!(constructed.name, tensor.borrow(py).name);
+            assert_eq!(&constructed.as_super().expr, constructed.atom());
+            assert!(tensor.bind(py).is_instance_of::<PythonExpression>());
+            let inherited = tensor.bind(py).call_method0("get_all_symbols")?;
+            let inherited = inherited.extract::<Vec<PythonExpression>>()?;
+            assert!(inherited == tensor.borrow(py).to_expression().get_all_symbols(true));
             let ordinary = tensor.borrow(py).to_expression().into_pyobject(py)?;
             let inferred = py.get_type::<TensorExpression>().call1((&ordinary,))?;
             assert_eq!(
@@ -6377,6 +6394,7 @@ mod tests {
                 .call_method1("collect", (&x,))?
                 .extract::<Py<TensorExpression>>()?;
             let collected = collected.borrow(py);
+            assert_eq!(&collected.as_super().expr, collected.atom());
             assert_eq!(collected.interface(), expression.borrow(py).interface());
             assert_eq!(collected.name, expression.borrow(py).name);
             assert_eq!(collected.name_args, vec![Atom::num(7)]);

@@ -30,7 +30,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.core import AtomType, Condition, Evaluator, Expression, FormattedOutput, HeldExpression, PatternRestriction, Transformer
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
 Nc: Expression
@@ -4081,7 +4081,7 @@ class TensorEvaluator:
         """
 
 @typing.final
-class TensorExpression:
+class TensorExpression(Expression):
     r"""
     A symbolic tensor expression with an ordered set of external axes.
 
@@ -4097,7 +4097,10 @@ class TensorExpression:
     Reductions preserve this tensor type and keep unrelated sums factorized.
     Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
     ``factor()``, also returns a tensor expression with its ordered interface.
-    Use ``to_expression()`` to access the underlying Symbolica expression.
+    This is a Symbolica ``Expression`` subclass: inspection, matching, evaluators,
+    and other unoverridden methods are inherited directly. Inherited transformations
+    return ordinary expressions; the tensor-aware overrides retain the interface.
+    Use ``to_expression()`` to explicitly drop the tensor interface.
 
     Pass ``intern="indices"`` to reversibly encode compound index labels, or
     ``intern="flattened"`` to create readable names. Both modes operate only on
@@ -4689,8 +4692,9 @@ class TensorExpression:
 
         Notes
         -----
-        Keep the TensorExpression when using tensor operations. Conversion is
-        useful for raw Symbolica matching or algorithms that require an Expression.
+        TensorExpression already inherits Expression. Convert when deliberately
+        requesting ordinary Symbolica behavior, including replacements that change
+        the tensor interface, rather than its tensor-aware overrides.
 
         Examples
         --------
@@ -4698,141 +4702,6 @@ class TensorExpression:
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> raw = A.to_expression()
-        """
-    def contains(self, s: _ScalarInput | HeldExpression | Transformer) -> Condition:
-        r"""
-        Test literal symbolic containment, with the same Condition semantics as Expression.contains.
-        Use bool(result) for a Boolean answer, or combine it with other Symbolica conditions.
-        This inspects the stored expression without contracting or expanding tensors.
-
-        Parameters
-        ----------
-        s : Expression or pattern
-            Symbolic subexpression to find literally, with Expression.contains semantics.
-
-        Returns
-        -------
-        Condition
-            Containment condition, convertible to bool.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x, y = S("x", "y")
-        >>> assert TensorExpression(x + y).contains(x)
-        """
-    def __contains__(self, expression: Expression) -> builtins.bool:
-        r"""
-        Test whether an ordinary Expression occurs literally in this tensor expression.
-        """
-    def get_all_symbols(self, include_function_symbols: builtins.bool = True) -> builtins.list[Expression]:
-        r"""
-        Return symbols in Symbolica's internal order, including function heads by default.
-        Index labels and representation symbols are included when present in the syntax.
-
-        Parameters
-        ----------
-        include_function_symbols : bool, default True
-            Include function heads as well as variables.
-
-        Returns
-        -------
-        list of Expression
-            Symbols, without duplicate occurrences.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x, f = S("x", "f")
-        >>> assert x in TensorExpression(f(x)).get_all_symbols(False)
-        """
-    def get_all_indeterminates(self, enter_functions: builtins.bool = True) -> builtins.list[Expression]:
-        r"""
-        Return variables and function calls in Symbolica's internal order.
-        Set enter_functions=False to treat function calls, including tensor leaves, as opaque.
-
-        Parameters
-        ----------
-        enter_functions : bool, default True
-            Inspect function arguments as well as complete function calls.
-
-        Returns
-        -------
-        list of Expression
-            Symbolic indeterminates, without duplicate occurrences.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x, f = S("x", "f")
-        >>> assert TensorExpression(f(x)).get_all_indeterminates(False) == [f(x)]
-        """
-    def get_type(self) -> AtomType:
-        r"""
-        Return the Symbolica atom type of the stored expression.
-
-        Returns
-        -------
-        AtomType
-            Whether the stored expression is a number, variable, function, sum, product, or power.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x = S("x")
-        >>> assert TensorExpression(x).get_type() == x.get_type()
-        """
-    def get_head(self) -> Expression:
-        r"""
-        Return the underlying function head or variable as an ordinary Expression.
-        Raise TypeError for a sum, product, power, or number.
-
-        Returns
-        -------
-        Expression
-            Function symbol or variable, without the tensor interface.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import TensorName, Representation
-        >>> A = TensorName("A")(Representation.euc(3))("i")
-        >>> assert A.get_head() == A.to_expression().get_head()
-        """
-    def get_name(self) -> builtins.str:
-        r"""
-        Return the underlying variable or function name, independently of tensor data metadata.
-        Raise TypeError for a sum, product, power, or number.
-
-        Returns
-        -------
-        str
-            Symbolica's name for the underlying variable or function.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import TensorName, Representation
-        >>> A = TensorName("A")(Representation.euc(3))("i")
-        >>> assert A.get_name() == A.to_expression().get_name()
-        """
-    def get_byte_size(self) -> builtins.int:
-        r"""
-        Return the stored symbolic expression's size in bytes, excluding tensor metadata.
-
-        Returns
-        -------
-        int
-            Number of bytes in the symbolic payload.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x = S("x")
-        >>> assert TensorExpression(x).get_byte_size() == x.get_byte_size()
         """
     def is_zero(self) -> builtins.bool:
         r"""
@@ -4908,38 +4777,126 @@ class TensorExpression:
         >>> assert value.nterms() == 1
         >>> assert value.expand().nterms() == 3
         """
-    def replace(self, rules: TensorRule | list[TensorRule]) -> TensorExpression:
+    def replace(self, pattern: TensorRule | list[TensorRule] | _ScalarInput, rhs: typing.Optional[_ReplacementInput] = None, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, min_level: builtins.int = 0, max_level: typing.Optional[builtins.int] = None, level_is_tree_depth: builtins.bool = False, partial: builtins.bool = True, allow_new_wildcards_on_rhs: builtins.bool = False, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
         r"""
-        Apply one rule or an ordered list of whole-tensor replacement rules.
+        Replace symbolic patterns or apply whole-tensor replacement rules.
 
         Parameters
         ----------
-        rules : TensorRule or list of TensorRule
-            Rules in priority order. The first match at a source tensor is used;
-            newly produced replacements are not matched again during this call.
+        pattern : Expression, TensorRule, or list of TensorRule
+            Symbolica pattern when rhs is supplied. Without rhs, apply prepared
+            TensorRules in priority order, leaving scalar key arguments opaque.
+        rhs : Expression, HeldExpression, or callable, optional
+            Symbolica replacement, including callbacks. The result must preserve
+            the tensor's ordered interface. Use reindex() to change external labels.
+        cond : PatternRestriction or Condition, optional
+            Restriction on a symbolic match.
+        non_greedy_wildcards : list of Expression, optional
+            Wildcards whose matches should be selected non-greedily.
+        min_level, max_level : int, optional
+            Inclusive traversal bounds, starting at zero.
+        level_is_tree_depth : bool, default False
+            Count expression-tree levels rather than function nesting.
+        partial : bool, default True
+            Allow matches inside larger expressions.
+        allow_new_wildcards_on_rhs : bool, default False
+            Allow wildcard symbols that do not occur in the pattern.
+        rhs_cache_size : int, optional
+            Cache repeated symbolic replacements; zero disables caching.
+        repeat, once, bottom_up, nested : bool, default False
+            Symbolica's replacement traversal controls. Prepared TensorRules own
+            their conditions and cache settings and do not accept these options.
 
         Returns
         -------
         TensorExpression
-            Rewritten value with a checked external interface.
-
-        Notes
-        -----
-        The traversal follows tensor sums and products, leaving scalar key
-        arguments opaque. Matched tensors need explicit axes; unsupported tensor
-        powers and unresolved interfaces are rejected. Normalization/evaluation
-        callbacks remaining in a replacement are not supported. For scalar
-        component substitutions in a network, use TensorNetwork.replace instead.
+            Rewritten value retaining its checked tensor interface and metadata.
 
         Examples
         --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(2)
-        >>> A = TensorName("M")(space, space)
-        >>> from symbolica.community.tensor import TensorRule
-        >>> indexed = A("i", "j")
-        >>> rule = TensorRule(indexed, 2 * indexed)
-        >>> replaced = indexed.replace(rule)
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorRule
+        >>> A = TensorName("M")(Representation.euc(2))("i")
+        >>> x, y = S("x", "y")
+        >>> assert (x * A).replace(x, y) == y * A
+        >>> assert A.replace(TensorRule(A, 2 * A)) == 2 * A
+        """
+    def replace_multiple(self, replacements: typing.Sequence[Replacement], repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
+        r"""
+        Apply simultaneous Symbolica replacements and validate the resulting tensor.
+
+        Parameters
+        ----------
+        replacements : list of Replacement
+            Symbolica replacements, including their conditions and callbacks.
+        repeat, once, bottom_up, nested : bool, default False
+            Traversal controls with the same meaning as Expression.replace_multiple.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten value preserving ordered ports, metadata, and typed zeros.
+
+        Examples
+        --------
+        >>> from symbolica import S, Replacement
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (x*A).replace_multiple([Replacement(x, y)]) == y*A
+        """
+    def map(self, op: Transformer, n_cores: typing.Optional[builtins.int] = None, stats_to_file: typing.Optional[builtins.str] = None) -> TensorExpression:
+        r"""
+        Apply a Symbolica Transformer and retain the validated tensor interface.
+
+        Parameters
+        ----------
+        op : Transformer
+            Transformations to apply, including user callbacks.
+        n_cores : int, optional
+            Number of cores for Symbolica's term mapping.
+        stats_to_file : str, optional
+            JSON output file for the transformer's statistics.
+
+        Returns
+        -------
+        TensorExpression
+            Transformed expression with its original ordered tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S, T
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = ((x + 1)**2 * A).map(T().expand())
+        >>> assert result == ((x + 1)**2 * A).expand()
+        """
+    def derivative(self, x: _ScalarInput) -> TensorExpression:
+        r"""
+        Differentiate scalar coefficients, preserving tensor zeros and ports.
+        Formal derivatives of unknown tensor functions are not supported by the
+        network executor. Differentiate their component expressions with
+        Tensor.map_components() instead, or supply a TensorName derivative callback.
+
+        Parameters
+        ----------
+        x : Expression
+            Scalar differentiation variable.
+
+        Returns
+        -------
+        TensorExpression
+            Derivative with the same ordered external ports, even when zero.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (x**2 * A).derivative(x) == 2*x*A
+        >>> assert A.derivative(x).rank == A.rank
         """
     def expand(self, var: typing.Optional[_ScalarInput] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
         r"""
@@ -5207,37 +5164,6 @@ class TensorExpression:
         >>> A = TensorName("A")(Representation.euc(3))("i")
         >>> assert (A/(x*(x + 1))).apart(x) == A/x - A/(x + 1)
         """
-    def evaluator(self, params: typing.Sequence[Expression], *, iterations: builtins.int = 1, n_cores: builtins.int = 1) -> Evaluator:
-        r"""
-        Prepare numerical evaluation of the symbolic algebra without component expansion.
-
-        Parameters
-        ----------
-        params : sequence of Expression
-            Symbolic leaves to treat as numerical inputs, in input-row order.
-        iterations : int, default 1
-            Horner-optimization iterations.
-        n_cores : int, default 1
-            Number of optimization cores.
-
-        Returns
-        -------
-        symbolica.Evaluator
-            Evaluator for the symbolic expression.
-
-        Notes
-        -----
-        This does not resolve tensor components from a TensorLibrary. To evaluate
-        component formulas, first use to_tensor() and then Tensor.evaluator().
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import TensorExpression
-        >>> x = S("x")
-        >>> expression = TensorExpression(x**2 + 1)
-        >>> evaluator = expression.evaluator([x])
-        """
     def __copy__(self) -> TensorExpression:
         r"""
         Copy the expression and its tensor metadata.
@@ -5255,6 +5181,38 @@ class TensorExpression:
         >>> import copy
         >>> copy.copy(A).shape
         (2, 2)
+        """
+    def __deepcopy__(self, memo: dict) -> TensorExpression:
+        r"""
+        Copy the tensor's immutable expression, ordered axes, and data metadata.
+
+        Parameters
+        ----------
+        memo : dict
+            Copy bookkeeping maintained by Python's copy module.
+
+        Returns
+        -------
+        TensorExpression
+            Independent Python wrapper sharing the immutable tensor value.
+
+        Examples
+        --------
+        >>> import copy
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> A = TensorName("A")(Representation.euc(3))
+        >>> zero = 0 * A
+        >>> assert copy.deepcopy(zero).structure == zero.structure
+        """
+    def __reduce__(self) -> typing.NoReturn:
+        r"""
+        Reject pickling that would silently discard the ordered tensor interface.
+        Use to_expression() when explicitly serializing only the symbolic algebra.
+
+        Raises
+        ------
+        TypeError
+            Tensor metadata serialization is not supported.
         """
     def with_lorentz_dimension(self, dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
@@ -5917,7 +5875,7 @@ class TensorExpression:
         >>> transposed.shape
         (2, 2)
         """
-    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
+    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Assign labels to the unresolved external axes.
 
@@ -5967,7 +5925,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> negated = -A
         """
-    def __pow__(self, exponent: TensorExpression | _ScalarInput, modulo: typing.Optional[typing.Any] = None) -> TensorExpression:
+    def __pow__(self, exponent: TensorExpression | _ScalarInput, modulo: typing.Optional[typing.Any] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Raise tensor algebra to a scalar power.
 
@@ -6015,7 +5973,7 @@ class TensorExpression:
         >>> result.to_expression() == 8
         True
         """
-    def __eq__(self, other: typing.Any) -> typing.Any:
+    def __eq__(self, other: typing.Any) -> builtins.bool:
         r"""
         Compare normalized expressions and their ordered tensor interfaces for equality.
         For a comparison to a plain Symbolica expression, first use `.to_expression()`.
@@ -6030,9 +5988,9 @@ class TensorExpression:
         Parameters
         ----------
         other : object
-            TensorExpression to compare. Other types can provide their own reverse comparison.
+            TensorExpression to compare. Values without an ordered tensor interface are unequal.
         """
-    def __ne__(self, other: typing.Any) -> typing.Any:
+    def __ne__(self, other: typing.Any) -> builtins.bool:
         r"""
         Test whether normalized expressions or their ordered tensor interfaces differ.
 
@@ -6046,7 +6004,7 @@ class TensorExpression:
         Parameters
         ----------
         other : object
-            TensorExpression to compare. Other types can provide their own reverse comparison.
+            TensorExpression to compare. Values without an ordered tensor interface are unequal.
         """
     def __hash__(self) -> builtins.int:
         r"""
@@ -6327,7 +6285,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> source = A.to_latex()
         """
-    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Produce static Typst math source.
 
@@ -6358,7 +6316,7 @@ class TensorExpression:
         >>> A = TensorName("M")(space, space)
         >>> output = A.to_typst()
         """
-    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Create a lazy rich display value for a notebook.
 
@@ -6481,7 +6439,7 @@ class TensorExpression:
         >>> text = str(A)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...  # type: ignore[override]  # ty: ignore[invalid-method-override]
     def _repr_latex_(self) -> builtins.str: ...
     @typing.overload
     def __add__(self, rhs: TensorExpression | _ScalarInput) -> TensorExpression:

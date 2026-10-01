@@ -204,8 +204,10 @@ access as `Expression | float | complex`. For variadic `chain` and `trace`, symb
 arguments retain `TensorExpression`; a concrete first or second factor selects
 `TensorNetwork`. General mixed argument sequences retain the union return type. This avoids
 unresolved types from overlapping variadic-tuple overloads in current type checkers.
-`TensorExpression` wraps the shared symbolic tensor rather than inheriting from
-`Expression`. Its algebraic methods retain the tensor interface. Tensor-specific methods
+`TensorExpression` subclasses Symbolica's `Expression` and retains the shared symbolic
+tensor's ordered interface. Ordinary Symbolica inspection, matching, conversion, and
+evaluation methods are inherited. Tensor algebra and checked rewrite overrides return
+`TensorExpression`; other inherited methods retain Symbolica's return types. Tensor-specific methods
 include `dirac_gamma`, which constructs a Dirac tensor, and `__getitem__`, which translates
 between logical flat indices and coordinates.
 
@@ -316,7 +318,7 @@ extracts factors common to terms in sums, including nested sums.
 
 // docs-example: compile
 ```python
-from symbolica import S
+from symbolica import Expression, S
 from symbolica.community.tensor import Representation, TensorName
 
 x, y = S("x", "y")
@@ -326,6 +328,11 @@ expanded = expression.expand_num()
 factored = expanded.collect_factors()
 assert factored.structure.slots == expression.structure.slots
 assert (factored - expression).expand().to_expression() == 0
+assert isinstance(expression, Expression)
+assert expression.replace(x, y).structure.slots == expression.structure.slots
+assert expression.derivative(x) == 2 * A
+# Coefficient extraction inherits Symbolica's ordinary Expression return type.
+assert type(expanded.coefficient(x)) is Expression
 ```
 
 These operations use Symbolica's algebra implementation. Trusted rearrangements reuse
@@ -333,12 +340,20 @@ the established interface; user-supplied collection callbacks require checking t
 A callback that removes or changes external ports raises an error. Label unresolved axes
 before a transformation if their occurrence identities cannot be tracked through the result.
 
-`replace(TensorRule(...))` applies checked whole-tensor replacement rules. For unrestricted
-Symbolica matching, `map`, or differentiation, first call `to_expression()`. The returned
-`Expression` carries no tensor metadata. When intentionally rebuilding a tensor after a
-structure-preserving raw operation, pass `structure=original.structure` to the
-`TensorExpression` constructor; the constructor checks the declared interface. To transform
-stored component data, use `Tensor.map_components`.
+`replace(TensorRule(...))` applies checked whole-tensor replacement rules. The same method
+accepts Symbolica's `replace(pattern, rhs, ...)` form, including callbacks and traversal
+options. `replace_multiple`, `map`, and `derivative` also return tensors and check that the
+result preserves the ordered interface. Derivatives of scalar coefficients retain typed
+zeros; formal derivatives of unknown tensor functions require component differentiation
+with `Tensor.map_components` or a tensor-name derivative callback.
+
+Inherited operations such as `coefficient` and `terms` return ordinary `Expression`
+values, which carry no tensor interface metadata. Tensor expressions are accepted directly
+by Symbolica functions and matching APIs. Use `to_expression()` when deliberately selecting
+the base expression behavior, for example to make a rewrite that changes tensor rank.
+To rebuild a tensor after a structure-preserving raw operation, pass
+`structure=original.structure` to the `TensorExpression` constructor; the constructor checks
+the declared interface.
 
 All three tensor forms expose `structure`, `rank`, `shape`, and `is_scalar`.
 `index(...)` (also `obj(...)`) fills only unresolved ports. `reindex(...)` assigns every

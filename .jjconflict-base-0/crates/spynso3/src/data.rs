@@ -1,6 +1,7 @@
 //! Python component access in logical axis order.
 use crate::{
-    AtomsOrFloats, SliceOrIntOrExpanded, Spensor, TensorDataDescriptor, tensor_data_layout,
+    AtomsOrFloats, SliceOrIntOrExpanded, Spensor, TensorDataDescriptor, TensorElements,
+    tensor_data_layout,
 };
 use pyo3::{
     exceptions::{PyIndexError, PyTypeError, PyValueError},
@@ -351,17 +352,24 @@ impl Spensor {
         };
         let tensor = if dtype.is(py.get_type::<PyFloat>()) {
             ParamOrConcrete::Concrete(RealOrComplexTensor::Real(mapped_storage(
-                values.map_data_ref_result(|v| v.extract::<f64>(py))?,
+                values.map_data_ref_result(|v| {
+                    TensorElements::validate_scalar(v.bind(py))?;
+                    v.extract::<f64>(py)
+                })?,
                 |v| *v == 0.0,
             )))
         } else if dtype.is(py.get_type::<PyComplex>()) {
             ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(mapped_storage(
-                values.map_data_ref_result(|v| v.extract::<Complex<f64>>(py))?,
+                values.map_data_ref_result(|v| {
+                    TensorElements::validate_scalar(v.bind(py))?;
+                    v.extract::<Complex<f64>>(py)
+                })?,
                 |v| v.re == 0.0 && v.im == 0.0,
             )))
         } else {
             ParamOrConcrete::Param(ParamTensor::from(mapped_storage(
                 values.map_data_ref_result(|v| {
+                    TensorElements::validate_scalar(v.bind(py))?;
                     v.extract::<ConvertibleToExpression>(py)
                         .map(|e| e.to_expression().expr)
                 })?,

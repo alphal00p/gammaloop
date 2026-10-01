@@ -292,8 +292,8 @@ def _(mo):
 
     - `dot(p, q)`, `chain(start, end, *factors)` and `trace(rep, *factors)` construct tensor operations.
       Symbolic operands return `TensorExpression`; a concrete `Tensor` or `TensorNetwork` operand gives a `TensorNetwork`.
-    - `outer`, `contract_ports`, `compose`, arithmetic and `trace` are methods on tensor expressions. `contract` performs graph contraction and returns a typed alias DAG.
-    - `replace` applies a reusable `TensorRule` or an ordered rule list.
+    - `outer`, `contract_ports`, `compose`, arithmetic and `trace` are methods on tensor expressions. `contract` performs structural contraction and returns a `TensorExpression`.
+    - `replace` accepts Symbolica patterns and replacements, a reusable `TensorRule`, or an ordered rule list, preserving the tensor interface.
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
     - Symbolic tensor operations return a `TensorExpression`. Its `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
     - Dirac algebra: `simplify_algebra`, with `gamma=True, gamma_output="chains"` for collected words, gamma conjugation and `dirac_adjoint`.
@@ -303,7 +303,9 @@ def _(mo):
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.
       `TensorExpression(raw)` validates and wraps an ordinary expression.
 
-    `TensorExpression` owns the shared typed value; it does not inherit `Expression`.
+    `TensorExpression` subclasses `Expression` and retains the shared typed value.
+    Inspection, matching, conversions and evaluators are inherited; tensor-aware
+    algebra and rewrite methods retain the tensor interface.
     `TensorPattern` remains a Symbolica pattern. Tensor gamma factories and index
     operations have tensor-specific meanings; a scalar gamma special function uses
     `Expression.gamma()`.

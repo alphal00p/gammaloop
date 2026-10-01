@@ -61,44 +61,27 @@ class TensorOperationsTests(unittest.TestCase):
 
     def test_transforms_preserve_interface_and_refresh_identity(self):
         a = self.A(self.x, self.rep("i"), self.rep("j"))
-        replaced = sp.TensorExpression(
-            a.to_expression().replace(self.x, self.y), structure=a.structure
-        )
+        replaced = a.replace(self.x, self.y)
         self.assertIsInstance(replaced, sp.TensorExpression)
         self.assertEqual(replaced.structure.arguments, (self.y,))
         self.assertEqual(replaced.structure.slots, a.structure.slots)
         self.assertEqual(
-            sp.TensorExpression(
-                a.to_expression().map(T().replace(self.x, self.y)),
-                structure=a.structure,
-            ),
+            a.map(T().replace(self.x, self.y)),
             replaced,
         )
         self.assertEqual(
-            sp.TensorExpression(
-                a.to_expression().replace_multiple([Replacement(self.x, self.y)]),
-                structure=a.structure,
-            ),
+            a.replace_multiple([Replacement(self.x, self.y)]),
             replaced,
         )
         # Formal derivatives of tensor-valued functions remain outside the
         # strict tensor grammar; scalar-prefactor derivatives preserve its ports.
-        with self.assertRaisesRegex(ValueError, "not tagged as a tensor"):
-            sp.TensorExpression(
-                (a.to_expression() * self.x).derivative(self.x),
-                structure=a.structure,
-            )
+        with self.assertRaisesRegex(ValueError, "formal tensor derivatives"):
+            (a * self.x).derivative(self.x)
         weighted = a * self.y
-        derivative = sp.TensorExpression(
-            weighted.to_expression().derivative(self.y),
-            structure=weighted.structure,
-        )
+        derivative = weighted.derivative(self.y)
         self.assertEqual(derivative.structure.slots, a.structure.slots)
         self.assertEqual(derivative.to_expression(), a.to_expression())
-        zero = sp.TensorExpression(
-            a.to_expression().derivative(S("api_operations::absent")),
-            structure=a.structure,
-        )
+        zero = a.derivative(S("api_operations::absent"))
         self.assertEqual(zero.rank, 2)
         self.assertEqual(zero.to_expression(), E("0"))
         with self.assertRaisesRegex(ValueError, "interface"):
@@ -108,6 +91,54 @@ class TensorOperationsTests(unittest.TestCase):
             sp.Tensor.dense(self.A(self.y, self.rep, self.rep), [5.0, 6.0, 7.0, 8.0])
         )
         self.assertEqual(replaced.to_tensor(library)[:], [5.0, 6.0, 7.0, 8.0])
+
+    def test_symbolica_rewrites_preserve_ordered_ports_and_reject_interface_changes(
+        self,
+    ):
+        source = self.A(self.x, self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        expected = self.A(self.y, self.rep("j"), self.rep("i")).permute_axes([1, 0])
+        for changed, expected_result in (
+            (source.replace(self.x, self.y), expected),
+            (source.replace(self.x, lambda _: self.y), expected),
+            (source.replace_multiple([Replacement(self.x, self.y)]), expected),
+            (source.map(T().replace(self.x, self.y)), expected),
+            ((self.y * source).derivative(self.y), source),
+        ):
+            self.assertIsInstance(changed, sp.TensorExpression)
+            self.assertEqual(changed.structure.slots, source.structure.slots)
+            self.assertTrue(Expression.__eq__(changed, changed.to_expression()))
+            self.assertEqual(changed, expected_result)
+            self.assertEqual(
+                changed.structure.arguments, expected_result.structure.arguments
+            )
+
+        for replacement in (E("1"), self.A(self.rep("k"), self.rep("i"))):
+            for operation in (
+                lambda rhs: source.replace(source.to_expression(), rhs),
+                lambda rhs: source.replace_multiple([Replacement(source, rhs)]),
+                lambda rhs: source.map(T().replace(source, rhs)),
+            ):
+                with (
+                    self.subTest(replacement=replacement),
+                    self.assertRaisesRegex(ValueError, "interface"),
+                ):
+                    operation(replacement)
+        # An atomic data key follows its function head, so a zero no longer has
+        # that key. Explicit result metadata is retained across these rewrites.
+        self.assertEqual(
+            source.replace(source, 0).structure.slots, source.structure.slots
+        )
+        self.assertIsNone(source.replace(source, 0).structure.name)
+        source = source.with_name(sp.TensorName("api_operations::RewriteMetadata")(7))
+        for zero in (
+            source.replace(source.to_expression(), E("0")),
+            source.replace_multiple([Replacement(source, E("0"))]),
+            source.map(T().replace(source, E("0"))),
+            source.derivative(self.y),
+        ):
+            self.assertIsInstance(zero, sp.TensorExpression)
+            self.assertEqual(zero.to_expression(), E("0"))
+            self.assertEqual(zero.structure, source.structure)
 
     def test_reusable_tensor_rules_share_checked_replacement(self):
         source = self.A(self.rep("i"))

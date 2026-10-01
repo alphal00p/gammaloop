@@ -1,10 +1,19 @@
 """Static regressions: run `ty check` with the installed community Python environment."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Literal, assert_type
 
 import linnet
-from symbolica import AtomType, Condition, Expression, S
+from symbolica import (
+    AtomType,
+    Condition,
+    Evaluator,
+    Expression,
+    FunctionDefinition,
+    Replacement,
+    S,
+    T,
+)
 from symbolica.community import tensor as sp
 
 
@@ -129,8 +138,8 @@ def check_types(
     )
     assert_type(expression.contains(scalar), Condition)
     assert_type(scalar in expression, bool)
-    assert_type(expression.get_all_symbols(), list[Expression])
-    assert_type(expression.get_all_indeterminates(False), list[Expression])
+    assert_type(expression.get_all_symbols(), Sequence[Expression])
+    assert_type(expression.get_all_indeterminates(False), Sequence[Expression])
     assert_type(expression.get_type(), AtomType)
     assert_type(expression.get_name(), str)
     assert_type(expression.get_head(), Expression)
@@ -152,7 +161,29 @@ def check_types(
         sp.TensorExpression,
     )
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
+    assert_type(expression.replace(scalar, scalar + 1), sp.TensorExpression)
+    assert_type(
+        expression.replace_multiple([Replacement(scalar, scalar + 1)]),
+        sp.TensorExpression,
+    )
+    assert_type(expression.map(T().replace(scalar, scalar + 1)), sp.TensorExpression)
+    assert_type(expression.derivative(scalar), sp.TensorExpression)
+    assert_type(expression.coefficient(scalar), Expression)
+    assert_type(expression.terms(), Iterator[Expression])
+    assert_type(expression.get_tags(), list[str])
+    # Tensor expressions are accepted anywhere Symbolica expects Expression.
+    assert_type(scalar.coefficient(expression), Expression)
+    assert_type(scalar(expression), Expression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
+    assert_type(
+        expression.evaluator(
+            [scalar],
+            functions=[FunctionDefinition(S("typing::f"), [scalar], scalar**2)],
+            jit_compile=False,
+            n_cores=1,
+        ),
+        Evaluator,
+    )
     assert_type(
         expression.simplify_algebra(gamma=True, color=True, epsilon=True),
         sp.TensorExpression,

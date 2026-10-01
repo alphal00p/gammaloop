@@ -362,6 +362,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
     type Error = PyErr;
 
     fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        // Check typed interfaces before inherited numeric coercion can erase them,
+        // particularly for tensor-valued zeros.
+        for component in value.extract::<Vec<Bound<'py, PyAny>>>()? {
+            TensorElements::validate_scalar(&component)?;
+        }
         if let Ok(values) = value.extract::<Vec<f64>>() {
             Ok(Self::Floats(values))
         } else if let Ok(values) = value.extract::<Vec<Complex<f64>>>() {
@@ -533,6 +538,17 @@ pub enum TensorElements {
     Real(Py<PyFloat>),
     Complex(Py<PyComplex>),
     Symbolica(PythonExpression),
+}
+
+impl TensorElements {
+    fn validate_scalar(value: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(tensor) = value.extract::<PyRef<'_, TensorExpression>>()
+            && !tensor.interface().canonical().is_scalar()
+        {
+            return Err(PyTypeError::new_err("tensor components must be scalar"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "python_stubgen")]
@@ -1226,6 +1242,7 @@ impl Spensor {
         item: Bound<'py, PyAny>,
         value: Bound<'py, PyAny>,
     ) -> eyre::Result<()> {
+        TensorElements::validate_scalar(&value)?;
         let value = if let Ok(v) = value.extract::<PythonExpression>() {
             ConcreteOrParam::Param(v.expr)
         } else if let Ok(v) = value.extract::<f64>() {

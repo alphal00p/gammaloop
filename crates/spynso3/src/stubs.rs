@@ -114,6 +114,20 @@ pub(crate) fn refine(module: &mut Module) {
             }
         }
         for method in class.methods.values_mut().flatten() {
+            // These established tensor operations intentionally specialize the
+            // base Expression API: indexing, powers, and HEP display settings.
+            // Keep their actual signatures instead of claiming base compatibility.
+            if class.name == "TensorExpression"
+                && matches!(
+                    method.name,
+                    "__call__" | "__pow__" | "to_typst" | "formatted" | "_repr_html_"
+                )
+            {
+                method.type_ignored = Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&[
+                    "override",
+                    "invalid-method-override",
+                ]));
+            }
             // PyO3 accepts macro doc literals; the stub derive only reads literal
             // attributes. Reuse the same docs for every manually specified overload.
             match (class.name, method.name) {
@@ -194,8 +208,9 @@ pub(crate) fn refine(module: &mut Module) {
                         | ("__rpow__", "base") => {
                             parameter.type_info = named("TensorExpression | _ScalarInput");
                         }
-                        ("replace", "rules") => {
-                            parameter.type_info = named("TensorRule | list[TensorRule]");
+                        ("replace", "pattern") => {
+                            parameter.type_info =
+                                named("TensorRule | list[TensorRule] | _ScalarInput");
                         }
                         _ => {}
                     }
