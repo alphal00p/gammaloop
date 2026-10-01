@@ -550,6 +550,76 @@ fn assert_spectator_case(adjoint: bool) {
     );
 }
 
+fn assert_two_plus_two_prefix(adjoint: bool) {
+    let mut components = Components::new();
+    let label = spenso::index_symbol!("color_trace_validation::prefix_edge");
+    let labels = [0, 1, 2, 3].map(|axis| function!(label, Atom::num(axis), Atom::num(2)));
+    let coad = ColorAdjoint {}.new_rep(symbol!("color_trace_validation::Na"));
+    let representation = if adjoint {
+        coad.to_symbolic([])
+    } else {
+        ColorFundamental {}
+            .new_rep(symbol!("color_trace_validation::Nc"))
+            .to_symbolic([])
+    };
+    let factors = labels.each_ref().map(|label| {
+        let slot = coad.to_symbolic([label.clone()]);
+        if adjoint {
+            idenso::color_f!(
+                Atom::var(SPENSO_TAG.chain_in),
+                Atom::var(SPENSO_TAG.chain_out),
+                slot
+            )
+        } else {
+            idenso::color_t!(slot)
+        }
+    });
+    let expression = spenso::trace!(
+        representation,
+        shadowing::sym(factors[..2].iter().cloned()),
+        &factors[2],
+        &factors[3]
+    );
+    let source = SymbolicTensor::infer(expression).unwrap();
+    let result = source.simplify_algebra(&settings()).unwrap();
+    assert_eq!(source.structure(), result.structure());
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(result.simplify_algebra(&settings()).unwrap(), result);
+    assert!(!result.expression().contains_symbol(ETS.metric));
+    assert!(
+        result
+            .expression()
+            .contains_symbol(if adjoint { CS.cas } else { CS.idx })
+    );
+    assert!(result.expression().contains_symbol(SPENSO_TAG.trace));
+    let actual = components.compile(result.expression().as_view());
+    let points = [[7, 7, 7, 7], [0, 0, 1, 1], [0, 1, 2, 7], [3, 4, 5, 6]]
+        .into_iter()
+        .chain((0..32usize).map(|sample| {
+            [
+                sample % 8,
+                (sample / 4) % 8,
+                (sample * 3 + 1) % 8,
+                (sample * 5 + 2) % 8,
+            ]
+        }));
+    for values in points {
+        let first = components.trace(adjoint, false, values.to_vec());
+        let second = components.trace(
+            adjoint,
+            false,
+            vec![values[1], values[0], values[2], values[3]],
+        );
+        let expected = scalar((first + second) / Atom::num(2));
+        let mut bindings = labels.iter().cloned().zip(values).collect();
+        assert_eq!(
+            actual.evaluate(&mut components, &mut bindings),
+            expected,
+            "two-plus-two adjoint={adjoint}, components={values:?}"
+        );
+    }
+}
+
 fn assert_repeated_case(adjoint: bool) {
     let mut components = Components::new();
     let label = spenso::index_symbol!("color_trace_validation::repeated_edge");
@@ -669,6 +739,11 @@ component_cases!(assert_trace_case;
 component_cases!(assert_spectator_case;
     fundamental_trace_preserves_capabilities_and_factorization: (false),
     adjoint_trace_preserves_capabilities_and_factorization: (true),
+);
+
+component_cases!(assert_two_plus_two_prefix;
+    fundamental_two_plus_two_prefix_matches_exact_matrices: (false),
+    adjoint_two_plus_two_prefix_matches_exact_matrices: (true),
 );
 
 component_cases!(assert_repeated_case;

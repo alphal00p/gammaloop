@@ -291,6 +291,32 @@ impl ColorAlgebraSimplifier {
             return Some(Self::trace_symmetric_terminal(rep, adjoint, prefix));
         }
         prefix.sort();
+        if let ([a, b], [c, d]) = (prefix.as_slice(), suffix) {
+            // Averaging the ordered four-generator identity over a,b gives
+            // color.h's two-plus-two terminal rule. It avoids intermediate
+            // rank-two traces/metrics and combines the two cubic invariants.
+            // For raw F=i*T_A, the fourth-order phase is positive: the f*f
+            // coefficient is +CA/12, while the odd symmetric trace vanishes.
+            let x = self.color_adjoint_dummy_like(a)?;
+            let index = if adjoint {
+                quadratic_casimir(rep.clone())
+            } else {
+                quadratic_index(rep.clone())
+            };
+            let mut result = Self::trace_symmetric_terminal(
+                rep,
+                adjoint,
+                vec![a.clone(), b.clone(), c.clone(), d.clone()],
+            ) + index / Atom::num(12)
+                * (color_f!(a, c, &x) * color_f!(b, d, &x)
+                    + color_f!(a, d, &x) * color_f!(b, c, &x));
+            if !adjoint {
+                result += Atom::i() / Atom::num(2)
+                    * color_f!(c, d, &x)
+                    * color_symmetric_trace(rep, [a.clone(), b.clone(), x]);
+            }
+            return Some(result);
+        }
         let (next, remaining) = suffix.split_first()?;
         let mut terms = Vec::new();
         for (depth, coefficient) in coefficients.iter().enumerate().take(prefix.len() + 1) {
@@ -570,6 +596,52 @@ mod tests {
             true
         });
         assert_eq!(longest_prefix, 2);
+    }
+
+    #[test]
+    fn two_plus_two_terminal_matches_symmetrized_ordered_quartic_identity() {
+        use crate::IndexTooling;
+
+        let reps = crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("quartic_prefix::edge");
+        let slots = [0, 1, 2, 3].map(|axis| {
+            reps.coad_da
+                .to_symbolic([function!(label, Atom::num(axis), Atom::num(1))])
+        });
+        let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+            dummies: ParseState::default(),
+        };
+        let coefficients = ColorAlgebraSimplifier::trace_bernoulli_coefficients(2);
+        let result = simplifier
+            .trace_symmetric_prefix(&rep, false, slots[..2].to_vec(), &slots[2..], &coefficients)
+            .unwrap();
+        // The established ordered-word identity supplies an independent
+        // symbolic derivation; only its first two matrices are symmetrized.
+        let first = simplifier
+            .simplify_four_generator_trace_terminal(
+                &rep, &slots[0], &slots[1], &slots[2], &slots[3],
+            )
+            .unwrap()
+            .canonize(AbstractIndex::Dummy)
+            .unwrap();
+        let second = simplifier
+            .simplify_four_generator_trace_terminal(
+                &rep, &slots[1], &slots[0], &slots[2], &slots[3],
+            )
+            .unwrap()
+            .canonize(AbstractIndex::Dummy)
+            .unwrap();
+        assert!(
+            (result.canonize(AbstractIndex::Dummy).unwrap() - (first + second) / Atom::num(2))
+                .collect_factors()
+                .factor()
+                .is_zero()
+        );
+        assert!(!result.contains_symbol(ETS.metric));
+        assert!(result.contains_symbol(CS.idx));
+        assert!(result.contains_symbol(T.trace));
     }
 
     #[test]

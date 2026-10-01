@@ -501,9 +501,16 @@ impl SymbolicTensor<PartialStructure> {
             || (order.is_none()
                 && source == self.expression
                 && self.contraction_is_noop_observed(settings, observed))
+            || (!settings.expand
+                && source == self.expression
+                && !source.as_view().needs_normalization()
+                && observations.candidates.intrinsic
+                && observations.excludes_contraction_sources(settings))
         {
-            // Complete intrinsic observation and the carried interface proof
-            // exclude callbacks, opaque payloads and AUTO.
+            // Repeated indices in algebraic invariants do not themselves
+            // authorize metric/vector work. Reuse the source inventory before
+            // constructing its network; unknown and bracket regions still need
+            // planning. Chain/trace collection remains in contract_parts.
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
                 root: self.with_identity_result(
                     source,
@@ -520,19 +527,22 @@ impl SymbolicTensor<PartialStructure> {
                 observations: None,
             });
         }
+        // Notation normalization can replace whole arithmetic scopes. Keep the
+        // payload, regional observations and shallow graph on the same owner.
+        let domain = self.with_identity_result(source, None)?;
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
             .expanding(settings.expand)
-            .observed(self.reduction_observations());
-        let contractor = match self.shallow_graph() {
+            .observed(domain.reduction_observations());
+        let contractor = match domain.shallow_graph() {
             Ok(graph) => contractor.planned(
-                self.expression.clone(),
+                domain.expression.clone(),
                 graph,
-                self.proofs.leaf_interfaces.get().cloned(),
+                domain.proofs.leaf_interfaces.get().cloned(),
             ),
             Err(_) => contractor,
         };
         if let Some(contracted) =
-            contractor.contract_factorized(source.as_view(), order, settings.rank_one)
+            contractor.contract_factorized(domain.expression.as_view(), order, settings.rank_one)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
                 root: self.with_identity_result(contracted.root, contracted.observations)?,
@@ -550,20 +560,41 @@ impl SymbolicTensor<PartialStructure> {
         // The typed interface includes ports inside chain/trace words. Their
         // builtin projectors can decline intrinsic graph admission; the ordered
         // reducer must still apply substitutions to those established ports.
-        let rewritten =
-            contractor.contract_ordered(source.as_view(), settings.rank_one, Some(observed));
-        if rewritten != source
-            && let Some(contracted) =
-                contractor.contract_factorized(rewritten.as_view(), None, settings.rank_one)
-        {
+        let rewritten = contractor.contract_ordered(
+            domain.expression.as_view(),
+            settings.rank_one,
+            Some(&domain.reduction_observations().candidates),
+        );
+        let root = domain.with_identity_result(rewritten, None)?;
+        if root.expression.is_zero() {
+            // The ordered rewrite already annihilated the whole domain. Keep
+            // its typed boundary without opening any now-irrelevant scopes.
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root, contracted.observations)?,
-                status: contracted.status,
+                root,
+                status: ReductionStatus::Complete,
                 observations: None,
             });
         }
-        let root = self.with_identity_result(rewritten, None)?;
-        root.observe_replacement(self);
+        if root.expression != domain.expression {
+            let contractor = contractor.observed(root.reduction_observations());
+            let contractor = match root.shallow_graph() {
+                Ok(graph) => contractor.planned(
+                    root.expression.clone(),
+                    graph,
+                    root.proofs.leaf_interfaces.get().cloned(),
+                ),
+                Err(_) => contractor,
+            };
+            if let Some(contracted) =
+                contractor.contract_factorized(root.expression.as_view(), None, settings.rank_one)
+            {
+                return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                    root: root.with_identity_result(contracted.root, contracted.observations)?,
+                    status: contracted.status,
+                    observations: None,
+                });
+            }
+        }
         // The ordered fallback supports spaces declined by the coefficient
         // collector. Repeated gamma ports or compact slash vectors are not
         // structural source endpoints. Their existing regional observations can
@@ -1274,7 +1305,7 @@ mod policy_tests {
             "source={} chainify={} primitive={} result={}",
             source.expression,
             source.expression.chainify(rep),
-            source.expression.collect_chains(rep, true, false),
+            source.expression.collect_chains(rep, true, false, false),
             open.expression
         );
         assert!(!open.expression.contains_symbol(SPENSO_TAG.trace));

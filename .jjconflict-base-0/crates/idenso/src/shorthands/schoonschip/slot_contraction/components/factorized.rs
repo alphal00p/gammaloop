@@ -5,7 +5,9 @@
 //! substitutions remain port bindings until a distinct output variable is emitted.
 
 use super::*;
-use crate::tensor::{SymbolicNet, simplification::observation::DomainObservations};
+use crate::tensor::{
+    ContractSettings, SymbolicNet, simplification::observation::DomainObservations,
+};
 use ahash::AHashSet;
 use linnet::{
     half_edge::{
@@ -80,6 +82,7 @@ struct ContractionScope<'src> {
     ports: AHashMap<NodeIndex, (Vec<Atom>, PartialStructure)>,
     opened: AHashMap<NodeIndex, std::cell::OnceCell<Option<Box<Self>>>>,
     reductions: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
+    // Each scope serves one fixed contraction or admission policy.
     work: AHashMap<NodeIndex, std::cell::OnceCell<bool>>,
     interfaces: Option<LeafInterfaceCache>,
 }
@@ -260,18 +263,30 @@ impl<'src> ContractionScope<'src> {
             .as_deref()
     }
 
-    fn contains_work(&self, node: NodeIndex, contractor: &SlotContraction) -> bool {
+    fn contains_work(
+        &self,
+        node: NodeIndex,
+        contractor: &SlotContraction,
+        settings: ContractSettings<'_>,
+    ) -> bool {
         *self.work[&node].get_or_init(|| {
             let Some(value) = self.literal(node) else {
                 return false;
             };
             if let Some(observed) = &contractor.observations {
-                // Compact vectors and metrics in a scalar coefficient already
-                // denote contracted products. Only explicit ports or a
-                // transparent bracket require opening its arithmetic here.
-                observed
-                    .region(value)
-                    .is_none_or(|region| region.has_indices() || region.counts[7] > 0)
+                observed.region(value).is_none_or(|region| {
+                    // Internal colour/gamma connections are not metric/vector
+                    // work. Keep these regions opaque, including their open
+                    // interfaces: incident sources can bind those ports without
+                    // opening the payload. Minimal notation admission still
+                    // needs its independent chain/trace candidates. Expanding
+                    // collection also merges alpha-equivalent tensor terms.
+                    (settings.expand
+                        || settings.collect_chains
+                        || settings.collect_traces
+                        || !region.excludes_contraction_sources(settings))
+                        && (region.has_indices() || region.counts[7] > 0)
+                })
             } else {
                 let observed = SimplificationCandidates::scan(value, [contractor.metric], || true);
                 observed.symbols[0] || observed.dots || observed.repeated_indices
@@ -297,6 +312,18 @@ impl<'src> ContractionScope<'src> {
 }
 
 impl SlotContraction {
+    fn contraction_settings(&self, rank_one: bool) -> ContractSettings<'_> {
+        ContractSettings {
+            metrics: self.metrics,
+            representations: self.representations.as_deref(),
+            rank_one,
+            collect_chains: false,
+            collect_traces: false,
+            expand: self.expand,
+            ..Default::default()
+        }
+    }
+
     /// Budget admission uses the same shallow scopes and boundary edges as the
     /// contraction. It does not normalize a tensor or invoke user callbacks.
     pub(crate) fn minimal_work_permitted(
@@ -427,7 +454,7 @@ impl SlotContraction {
                     // Keep their existing admission and checked rewrite rules.
                     return None;
                 }
-            } else if scope.contains_work(node, self) {
+            } else if scope.contains_work(node, self, settings) {
                 if !matches!(scope.network.graph.graph[node], NetworkNode::Leaf(_)) {
                     if self.minimal_scope_work(scope, node, settings)? {
                         return Some(true);
@@ -584,7 +611,7 @@ impl SlotContraction {
                             .is_none_or(|region| region.has_chain_channel(representation))
                     });
                 if relevant {
-                    let next = expression.collect_chains(representation, collect, traces);
+                    let next = expression.collect_chains(representation, collect, traces, false);
                     changed |= next != expression;
                     expression = next;
                 }
@@ -763,7 +790,7 @@ impl SlotContraction {
                     // selected wrapper, retaining ordinary scalar powers verbatim.
                     if matches!(scope.literal(child)?, AtomView::Fun(function)
                         if function.get_symbol() == self.tags.bracket)
-                        && scope.contains_work(child, self)
+                        && scope.contains_work(child, self, self.contraction_settings(rank_one))
                     {
                         let opened = scope.open(child)?;
                         let mut result =
@@ -921,6 +948,21 @@ impl SlotContraction {
             &scope.tree,
             node,
             &mut |tape, node, value| {
+                if let Some(literal) = scope.literal(node)
+                    && matches!(literal, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !scope.contains_work(node, self, self.contraction_settings(sum.rank_one))
+                {
+                    // The graph already established this boundary. A completed
+                    // structural region can still contain identity candidates;
+                    // retain its payload without inventing terminal algebra facts.
+                    sum.scalar_interfaces.insert(literal, scope.ports[&node].0.is_empty());
+                    return Some(if scope.ports[&node].0.is_empty() {
+                        TermLeaf::Value(InputLeaf::Scalar(literal))
+                    } else {
+                        let position = sum.register_factor(scope, node, positions)?;
+                        TermLeaf::Value(InputLeaf::Subtree(position))
+                    });
+                }
                 if let Some((child, power, _)) = self.power_scope(scope, node) {
                     let result = self.scoped_power(scope, node, sum.rank_one)?;
                     let unchanged = scope.literal(node).map_or_else(
@@ -962,15 +1004,26 @@ impl SlotContraction {
                     literal,
                     AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
                 ) || matches!(literal, AtomView::Fun(function) if function.get_symbol() == self.tags.bracket) {
-                    if scope.contains_work(node, self) {
+                    if scope.contains_work(node, self, self.contraction_settings(sum.rank_one)) {
+                        let region = self.observations.as_ref()
+                            .and_then(|observed| observed.region(literal));
                         if self.expand
                             && matches!(literal, AtomView::Add(_) | AtomView::Mul(_))
-                            && self.observations.as_ref()
-                                .and_then(|observed| observed.region(literal))
+                            && region.as_ref()
                                 .is_some_and(|region| !region.has_indexed_powers() && region.counts[7] == 0)
                         {
                             let (node, size) = self.compile_arithmetic(literal, tape, sum)?;
                             return Some(TermLeaf::Reference(node, size));
+                        }
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            use crate::reference_cases::timing::{ScopeOpenReason, scope_open};
+                            let reason = match region.as_ref() {
+                                None => ScopeOpenReason::Unobserved,
+                                Some(region) if region.contraction_sources(self.contraction_settings(sum.rank_one)) => ScopeOpenReason::MetricOrVector,
+                                Some(_) => ScopeOpenReason::OpaqueOrBracket,
+                            };
+                            scope_open(reason, region.as_ref().is_some_and(|region| region.has_indexed_powers()));
                         }
                         let opened = scope.open(node)?;
                         if !self.expand && sum.exposed_sum != Some((scope as *const _ as usize, node)) && self.tensor_alternatives(literal) {
@@ -1031,6 +1084,25 @@ impl SlotContraction {
         order: Option<&[usize]>,
         rank_one: bool,
     ) -> Option<FactorizedContraction> {
+        if !self.expand
+            && let Some(source) = scope.literal(root)
+            && self
+                .observations
+                .as_ref()
+                .and_then(|observed| observed.region(source))
+                .is_some_and(|region| {
+                    region.excludes_contraction_sources(self.contraction_settings(rank_one))
+                })
+        {
+            return Some(FactorizedContraction {
+                root: source.to_owned(),
+                status: ReductionStatus::Complete,
+                observations: self
+                    .observations
+                    .as_ref()
+                    .and_then(|observed| observed.certify_scalar_region(source)),
+            });
+        }
         if self.power_scope(scope, root).is_some() {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
@@ -1066,7 +1138,11 @@ impl SlotContraction {
         let selected = nodes
             .iter()
             .enumerate()
-            .filter_map(|(i, &node)| scope.contains_work(node, self).then_some(i))
+            .filter_map(|(i, &node)| {
+                scope
+                    .contains_work(node, self, self.contraction_settings(rank_one))
+                    .then_some(i)
+            })
             .collect();
         let mut selected = self.factor_order(scope, &nodes, selected, order)?;
         if !self.expand && order.is_none() {
@@ -1890,6 +1966,120 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
+
+    #[test]
+    fn source_free_color_scopes_stay_opaque_beside_real_contractions() {
+        let reps = crate::test_support::test_initialize();
+        let [a, b, c, d, e, f] = [97801, 97802, 97803, 97804, 97805, 97806]
+            .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+        let symmetric = |x: &Atom| {
+            spenso::trace_sym!(
+                &rep,
+                crate::color_t!(x),
+                crate::color_t!(&c),
+                crate::color_t!(&d)
+            )
+        };
+        let invariant = crate::color_f!(&a, &b, &e)
+            * symmetric(&e)
+            * crate::color_f!(&a, &b, &f)
+            * symmetric(&f);
+        let spectator = Atom::mul_many((0..32).map(|index| {
+            let coefficient =
+                Atom::var(symbolica::symbol!(&format!("opaque_color_scope::x{index}")));
+            (coefficient + &invariant).pow(2)
+        }));
+        let mu = spenso::mink!(4, 97807);
+        let nu = spenso::mink!(4, 97808);
+        let source =
+            SymbolicTensor::infer(&spectator * spenso::g!(&mu, &nu) * spenso::p!(&nu)).unwrap();
+        let contractor = SlotContraction::new()
+            .expanding(false)
+            .observed(source.reduction_observations());
+        crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
+        let result = contractor
+            .contract_factorized(source.expression.as_view(), None, true)
+            .unwrap();
+        assert_eq!(result.root, spectator * spenso::p!(&mu));
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert!(
+            result.observations.is_none(),
+            "remaining colour identities are not terminal scalar algebra"
+        );
+        assert_eq!(crate::tensor::SELECTED_OPENS.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn source_free_open_color_sum_keeps_positional_metric_bindings() {
+        let reps = crate::test_support::test_initialize();
+        let [a, b, c, d, e, z] = [97811, 97812, 97813, 97814, 97815, 97816]
+            .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+        let sum = |port: &Atom| {
+            crate::color_f!(port, &b, &e)
+                * spenso::trace_sym!(
+                    &rep,
+                    crate::color_t!(&e),
+                    crate::color_t!(&c),
+                    crate::color_t!(&d)
+                )
+                + crate::color_f!(port, &c, &e)
+                    * spenso::trace_sym!(
+                        &rep,
+                        crate::color_t!(&e),
+                        crate::color_t!(&b),
+                        crate::color_t!(&d)
+                    )
+        };
+        let source = SymbolicTensor::infer(spenso::g!(&a, &z) * sum(&a)).unwrap();
+        let contractor = SlotContraction::new()
+            .expanding(false)
+            .observed(source.reduction_observations());
+        crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
+        let result = contractor
+            .contract_factorized(source.expression.as_view(), None, true)
+            .unwrap();
+        assert_eq!(result.root, sum(&z));
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert!(result.observations.is_none());
+        assert_eq!(crate::tensor::SELECTED_OPENS.with(|count| count.get()), 0);
+        assert_eq!(
+            SymbolicTensor::infer(result.root).unwrap().structure,
+            source.structure
+        );
+    }
+
+    #[test]
+    fn source_free_callback_region_still_requires_checked_contraction() {
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, 97821);
+        let b = spenso::mink!(4, 97822);
+        let target = b.clone();
+        let callback = spenso::tensor_symbol!(
+            "source_proof_callback",
+            norm = move |value, output| {
+                if let AtomView::Fun(function) = value
+                    && function.iter().any(|argument| argument == target.as_view())
+                {
+                    **output = Atom::one();
+                }
+            }
+        );
+        let sibling = spenso::tensor_symbol!("source_proof_callback_sibling");
+        let source = SymbolicTensor::infer(
+            spenso::g!(&a, &b)
+                * (symbolica::function!(callback, &a) + symbolica::function!(sibling, &a)),
+        )
+        .unwrap();
+        let contractor = SlotContraction::new().observed(source.reduction_observations());
+        assert!(
+            contractor
+                .contract_factorized(source.expression.as_view(), None, true)
+                .is_none()
+        );
+        assert!(source.contract(Default::default()).is_err());
+    }
 
     #[test]
     fn negative_power_contracts_its_existing_graph_scope() {

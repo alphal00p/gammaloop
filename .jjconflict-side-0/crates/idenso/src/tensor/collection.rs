@@ -44,6 +44,7 @@ thread_local! {
     pub(crate) static SHALLOW_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SHALLOW_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static ANALYZED_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Whether the selected kernel needs monomials or can choose its own local
@@ -137,9 +138,9 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
         ) {
             if let Some(region) = self.observations.region(value)
-                && let Some(leaves) = region.leaves()
+                && let Some(selected) = region.any_leaf(&mut self.select)
             {
-                return leaves.iter().any(|leaf| (self.select)(leaf.as_view()));
+                return selected;
             }
             // Arbitrary user selection and newly exposed replacement regions
             // have no reusable family observation. Inspect only this leaf.
@@ -199,6 +200,8 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         let mut owned = HashMap::new();
         let mut interfaces = HashMap::<_, PartialStructure>::new();
         for &node in traversal.iter().rev() {
+            #[cfg(test)]
+            ANALYZED_NODES.with(|count| count.set(count.get() + 1));
             let children = tree
                 .iter_children(node, &network.graph.graph)
                 .collect::<Vec<_>>();
@@ -434,8 +437,11 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         tree: &CollectionTree,
         root: NodeIndex,
         split_root_sum: bool,
+        analysis: &CollectionAnalysis,
     ) -> Result<Option<(usize, (usize, usize))>> {
-        let (owned, interfaces) = self.analyze(network, tree, root)?;
+        // These facts belong to this immutable graph. Selecting a smaller root
+        // does not change its leaf interfaces or require another selection walk.
+        let (owned, interfaces) = analysis;
         let mut failure = None;
         let mut refused = false;
         let compiled = tape.compile_graph(&network.graph, tree, root, &mut |tape, node, value| {
@@ -503,7 +509,8 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                             let opened = self.open(value.as_view())?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                             let root = opened.graph.graph.node_id(opened.graph.head());
-                            return self.compile(tape, &opened, &tree, root, false)
+                            let analysis = self.analyze(&opened, &tree, root)?;
+                            return self.compile(tape, &opened, &tree, root, false, &analysis)
                                 .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                         }
                     }
@@ -517,8 +524,9 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         };
                         let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                         let root = graph.graph.graph.node_id(graph.graph.head());
+                        let analysis = self.analyze(&graph, &tree, root)?;
                         let Some(copy) =
-                            self.compile(tape, &graph, &tree, root, false)?
+                            self.compile(tape, &graph, &tree, root, false, &analysis)?
                         else {
                             refused = true;
                             return Ok(None);
@@ -547,7 +555,8 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
                         let split_root_sum = split_root_sum && node == root
                             && matches!(expression.as_view(), AtomView::Add(_));
-                        return self.compile(tape, &opened, &opened_tree, opened_root, split_root_sum)
+                        let analysis = self.analyze(&opened, &opened_tree, opened_root)?;
+                        return self.compile(tape, &opened, &opened_tree, opened_root, split_root_sum, &analysis)
                             .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                     }
                 }
@@ -678,6 +687,8 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Collect leaves selected by a predicate, retaining all unselected tensor
     /// blocks in the coefficients with their logical interfaces intact.
+    /// The predicate must return the same decision for an unchanged value;
+    /// selection facts can be reused without invoking it again.
     pub fn coefficient_list_with(
         &self,
         select: impl FnMut(AtomView<'_>) -> bool,
@@ -744,7 +755,8 @@ impl SymbolicTensor<PartialStructure> {
         let network = input.parse(self)?;
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
-        let (owned, interfaces) = input.analyze(&network, &tree, root)?;
+        let analysis = input.analyze(&network, &tree, root)?;
+        let (owned, interfaces) = &analysis;
         if !owned[&root] {
             if let Some(finalize) = finalize.as_mut() {
                 let one = Self::from_validated_parts(
@@ -823,7 +835,15 @@ impl SymbolicTensor<PartialStructure> {
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let scoped_root = graph.graph.graph.node_id(graph.graph.head());
-                input.compile(&mut tape, &graph, &scoped_tree, scoped_root, false)?
+                let scoped_analysis = input.analyze(&graph, &scoped_tree, scoped_root)?;
+                input.compile(
+                    &mut tape,
+                    &graph,
+                    &scoped_tree,
+                    scoped_root,
+                    false,
+                    &scoped_analysis,
+                )?
             } else {
                 input.compile(
                     &mut tape,
@@ -834,6 +854,7 @@ impl SymbolicTensor<PartialStructure> {
                     // are collected. Splitting a sole selected sum therefore
                     // preserves their factorization as well as the sum's.
                     selected_count == 1,
+                    &analysis,
                 )?
             };
             let Some((compiled, _)) = compiled else {
@@ -1988,9 +2009,10 @@ mod tests {
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
         let mut tape = TermTape::<usize>::default();
+        let analysis = input.analyze(&network, &tree, root).unwrap();
         assert!(
             input
-                .compile(&mut tape, &network, &tree, root, false)
+                .compile(&mut tape, &network, &tree, root, false, &analysis)
                 .unwrap()
                 .is_some()
         );
@@ -2273,12 +2295,20 @@ mod planning_tests {
         SHALLOW_BUILDS.with(|count| count.set(0));
         SHALLOW_VIEWS.with(|count| count.set(0));
         SELECTED_OPENS.with(|count| count.set(0));
+        ANALYZED_NODES.with(|count| count.set(0));
         let collected = source.collect(TensorCollectFilter::<0>::Metrics).unwrap();
         assert_eq!(collected.expression, expression);
         assert_eq!(SHALLOW_VIEWS.with(|count| count.get()), 1);
         assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
         let graph = source.shallow_graph().unwrap();
+        let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.graph.node_id(graph.graph.head());
+        let nodes = tree
+            .iter_preorder_tree_nodes(&graph.graph.graph, root)
+            .count();
+        assert_eq!(ANALYZED_NODES.with(|count| count.get()), nodes);
         source.collect(TensorCollectFilter::<0>::Metrics).unwrap();
+        assert_eq!(ANALYZED_NODES.with(|count| count.get()), 2 * nodes);
         assert!(Arc::ptr_eq(&graph, &source.shallow_graph().unwrap()));
         assert_eq!(SHALLOW_BUILDS.with(|count| count.get()), 1);
     }

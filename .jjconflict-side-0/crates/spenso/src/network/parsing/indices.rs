@@ -19,7 +19,7 @@ impl RepeatedIndices {
     // uses the same traversal, with index bookkeeping disabled for the suffix.
     pub(super) fn contains<'a>(
         expr: AtomView<'a>,
-        mut observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        mut observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         on_first_repeat: impl FnOnce() -> bool,
     ) -> bool {
         let mut decision = None;
@@ -34,7 +34,10 @@ impl RepeatedIndices {
         // Top-level alternatives do not need their possible-index sets merged.
         let repeated = match expr {
             AtomView::Add(sum) => {
-                observe(expr, &SlotMatch::Other);
+                if !observe(expr, &SlotMatch::Other) {
+                    observe_remainder();
+                    return true;
+                }
                 let mut terms = sum.iter();
                 let repeated = terms.any(|term| {
                     seen.symbols.clear();
@@ -66,14 +69,19 @@ impl RepeatedIndices {
         &mut self,
         expr: AtomView<'a>,
         seen: &mut Indices<'a>,
-        observe: &mut impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        observe: &mut impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         observe_remainder: &mut impl FnMut() -> bool,
     ) -> bool {
         let classification = match expr {
             AtomView::Fun(_) => self.slots.classify(expr),
             _ => SlotMatch::Other,
         };
-        observe(expr, &classification);
+        if !observe(expr, &classification) {
+            // An observer can reuse an exact subtree without walking it. Its
+            // incidence is then unknown to this scanner: preserve a possible
+            // repetition rather than incorrectly certifying its absence.
+            return TRACK_INDICES;
+        }
         match expr {
             AtomView::Num(_) | AtomView::Var(_) => false,
             AtomView::Fun(fun) => {
@@ -181,7 +189,7 @@ impl RepeatedIndices {
         &mut self,
         mut children: impl Iterator<Item = AtomView<'a>>,
         seen: &mut Indices<'a>,
-        observe: &mut impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        observe: &mut impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         observe_remainder: &mut impl FnMut() -> bool,
     ) -> bool {
         let repeated = children
@@ -204,6 +212,54 @@ mod tests {
     fn parse(source: &str) -> Atom {
         Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap()
     }
+
+    #[test]
+    fn cached_subtrees_skip_index_visits_and_keep_a_conservative_candidate() {
+        crate::structure::representation::initialize();
+        let cached = parse("T(mink(4,a))+U(mink(4,b))");
+        for expression in [
+            cached.clone(),
+            parse("observer_scope(T(mink(4,a))+U(mink(4,b)),tail_marker)"),
+            parse("observer_scope(mink(4,c),mink(4,c),T(mink(4,a))+U(mink(4,b)),tail_marker)"),
+        ] {
+            let mut exhaustive = Vec::new();
+            expression.has_repeated_explicit_indices_with_observer(
+                |node, _| {
+                    exhaustive.push(node);
+                    true
+                },
+                || true,
+            );
+            for resume in [false, true] {
+                let mut visited = Vec::new();
+                let mut decisions = 0;
+                assert!(expression.has_repeated_explicit_indices_with_observer(
+                    |node, _| {
+                        visited.push(node);
+                        node != cached.as_view()
+                    },
+                    || {
+                        decisions += 1;
+                        resume
+                    },
+                ));
+                assert_eq!(decisions, 1);
+                assert!(visited.len() < exhaustive.len());
+                assert!(!visited.iter().any(|node| {
+                    matches!(node, symbolica::atom::AtomView::Fun(function)
+                        if function.get_symbol() == symbolica::symbol!("spenso::T")
+                            || function.get_symbol() == symbolica::symbol!("spenso::U"))
+                }));
+                if resume && expression != cached {
+                    assert_eq!(
+                        visited.last().copied(),
+                        Some(parse("tail_marker").as_view())
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn repeated_explicit_indices_follow_product_and_sum_scopes() {
         crate::structure::representation::initialize();
@@ -286,7 +342,10 @@ mod tests {
             let mut visited = Vec::new();
             assert_eq!(
                 expr.has_repeated_explicit_indices_with_observer(
-                    |node, _| visited.push(node),
+                    |node, _| {
+                        visited.push(node);
+                        true
+                    },
                     || true
                 ),
                 expected,
@@ -296,7 +355,10 @@ mod tests {
             let mut prefix = Vec::new();
             assert_eq!(
                 expr.has_repeated_explicit_indices_with_observer(
-                    |node, _| prefix.push(node),
+                    |node, _| {
+                        prefix.push(node);
+                        true
+                    },
                     || false
                 ),
                 expected,
@@ -309,7 +371,10 @@ mod tests {
             let mut resumed = Vec::new();
             let mut decisions = 0;
             let repeated = expr.has_repeated_explicit_indices_with_observer(
-                |node, _| resumed.push(node),
+                |node, _| {
+                    resumed.push(node);
+                    true
+                },
                 || {
                     decisions += 1;
                     true
@@ -347,22 +412,29 @@ mod tests {
             let mut prefix = Vec::new();
             let mut full = Vec::new();
             assert!(expression.has_repeated_explicit_indices_with_observer(
-                |node, _| prefix.push(node),
+                |node, _| {
+                    prefix.push(node);
+                    true
+                },
                 || false
             ));
-            assert!(
-                expression.has_repeated_explicit_indices_with_observer(
-                    |node, _| full.push(node),
-                    || true
-                )
-            );
+            assert!(expression.has_repeated_explicit_indices_with_observer(
+                |node, _| {
+                    full.push(node);
+                    true
+                },
+                || true
+            ));
             for resume in [false, true] {
                 let events = RefCell::new(Vec::new());
                 // Capturing an owned token makes this a genuine FnOnce; a
                 // propagated hit must reuse the decision instead of calling it.
                 let token = source.to_owned();
                 assert!(expression.has_repeated_explicit_indices_with_observer(
-                    |node, _| events.borrow_mut().push(Some(node)),
+                    |node, _| {
+                        events.borrow_mut().push(Some(node));
+                        true
+                    },
                     || {
                         drop(token);
                         events.borrow_mut().push(None);
@@ -417,6 +489,7 @@ mod tests {
                     if !matches!(classification, SlotMatch::Other) {
                         slots.push(node);
                     }
+                    true
                 },
                 || true
             ));
@@ -432,9 +505,13 @@ mod tests {
         // repeated pair regardless of commutative term or factor ordering.
         let expr = parse("index_observer_scope(mink(4,a),mink(4,a),tail_marker)");
         let mut prefix = Vec::new();
-        assert!(
-            expr.has_repeated_explicit_indices_with_observer(|node, _| prefix.push(node), || false)
-        );
+        assert!(expr.has_repeated_explicit_indices_with_observer(
+            |node, _| {
+                prefix.push(node);
+                true
+            },
+            || false
+        ));
         assert_eq!(prefix.len(), 3);
         let mut visited = Vec::new();
         let mut indices = Vec::new();
@@ -444,6 +521,7 @@ mod tests {
                 if let SlotMatch::Explicit(slot) = classification {
                     indices.push(slot.index());
                 }
+                true
             },
             || true
         ));
@@ -479,13 +557,17 @@ mod tests {
             assert!(expr.has_repeated_explicit_indices_with_observer(
                 |node, _| {
                     observed.push(node);
+                    true
                 },
                 || true
             ));
             assert_eq!(observed, expected, "{source}");
             let mut prefix = Vec::new();
             assert!(expr.has_repeated_explicit_indices_with_observer(
-                |node, _| prefix.push(node),
+                |node, _| {
+                    prefix.push(node);
+                    true
+                },
                 || false
             ));
             assert!(observed.starts_with(&prefix), "{source}");

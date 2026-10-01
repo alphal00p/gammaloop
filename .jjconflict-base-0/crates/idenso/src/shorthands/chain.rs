@@ -91,7 +91,15 @@ pub(crate) trait Chain {
 
     /// Collect only the selected representation, optionally retaining closed words
     /// as exact chains. A disabled collection only converts existing closed chains.
-    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom;
+    /// `retain_singletons` keeps isolated matrices in chain notation for algebra
+    /// kernels; structural contraction otherwise preserves their indexed form.
+    fn collect_chains(
+        &self,
+        representation: LibraryRep,
+        collect: bool,
+        traces: bool,
+        retain_singletons: bool,
+    ) -> Atom;
 
     /// Collapse identity words to metrics and closed chains to traces, e.g.
     ///
@@ -116,9 +124,15 @@ impl Chain for Atom {
         self.as_view().join_chains(representation)
     }
 
-    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom {
+    fn collect_chains(
+        &self,
+        representation: LibraryRep,
+        collect: bool,
+        traces: bool,
+        retain_singletons: bool,
+    ) -> Atom {
         self.as_view()
-            .collect_chains(representation, collect, traces)
+            .collect_chains(representation, collect, traces, retain_singletons)
     }
 
     fn undo_single_length(&self) -> Atom {
@@ -139,12 +153,17 @@ impl Chain for Atom {
 }
 impl<'a> Chain for AtomView<'a> {
     fn join_chains(&self, representation: LibraryRep) -> Atom {
-        self.collect_chains(representation, true, true)
-            .chainify(representation)
+        self.collect_chains(representation, true, true, true)
             .normalize_chains()
     }
 
-    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom {
+    fn collect_chains(
+        &self,
+        representation: LibraryRep,
+        collect: bool,
+        traces: bool,
+        retain_singletons: bool,
+    ) -> Atom {
         let normalize = |value: Atom| {
             if !traces {
                 return value;
@@ -281,6 +300,12 @@ impl<'a> Chain for AtomView<'a> {
             result = normalize(result);
             // Every join removes one chain; normalization may close it as a trace.
             if result == previous {
+                if retain_singletons {
+                    // The existing pass has already collected every matrix.
+                    // Algebra kernels keep those words, so neither unfold them
+                    // here nor run chainify again to reconstruct them afterward.
+                    return result;
+                }
                 if !joined && (!traces || result == source) {
                     // No connection was joined or closed. Keep the original
                     // notation, including existing one-factor chains: unfolding
@@ -895,7 +920,7 @@ mod tests {
             word(second, T.chain_in, T.chain_out),
             word(first, T.chain_out, T.chain_in)
         );
-        let result = input.collect_chains(r.mink4.rep.into(), true, false);
+        let result = input.collect_chains(r.mink4.rep.into(), true, false, false);
         assert!(result == forward || result == reverse, "{result}");
     }
 
@@ -931,7 +956,7 @@ mod tests {
             function!(second, T.chain_in, T.chain_out)
         );
         *calls.lock().unwrap() = 0;
-        let collected = source.collect_chains(r.mink4.rep.into(), true, false);
+        let collected = source.collect_chains(r.mink4.rep.into(), true, false, false);
         assert_ne!(collected, source);
         assert_eq!(*calls.lock().unwrap(), 0);
     }
@@ -1080,6 +1105,43 @@ mod tests {
     }
 
     #[test]
+    fn joining_indexed_words_keeps_singletons_without_repeating_chainify() {
+        test_initialize();
+        let rep = Bispinor {}.into();
+        let [a, b, c, d, e] =
+            [98971, 98972, 98973, 98974, 98975].map(|index| bis!(4, Atom::num(index)));
+        let [mu, nu, rho] = [98976, 98977, 98978].map(|index| spenso::mink!(4, Atom::num(index)));
+        let first = gamma!(&a, &b, &mu);
+        let second = gamma!(&b, &c, &nu);
+        let isolated = gamma!(&d, &e, &rho);
+        let spectator = parse_lit!((chain_collection_x + chain_collection_y) ^ 9);
+        let expected_word = chain!(&a, &c, gamma!(&mu), gamma!(&nu));
+        let expected_single = chain!(&d, &e, gamma!(&rho));
+        let input = &spectator * &first * &second * &isolated;
+        CHAINIFY_CALLS.with(|calls| calls.set(0));
+        let result = input.join_chains(rep);
+        assert_eq!(result, &spectator * &expected_word * &expected_single);
+        CHAINIFY_CALLS.with(|calls| assert_eq!(calls.get(), 1));
+        assert_eq!(result.join_chains(rep), result);
+        assert_eq!(
+            input.collect_chains(rep, true, true, false),
+            &spectator * &expected_word * &isolated,
+        );
+        CHAINIFY_CALLS.with(|calls| calls.set(0));
+        assert_eq!(isolated.join_chains(rep), expected_single);
+        CHAINIFY_CALLS.with(|calls| assert_eq!(calls.get(), 1));
+
+        // The same shared pass closes a cycle, preserving its ordered factors.
+        let closed = &first * gamma!(&b, &a, &nu);
+        CHAINIFY_CALLS.with(|calls| calls.set(0));
+        assert_eq!(
+            closed.join_chains(rep),
+            trace!(bis!(4), gamma!(&mu), gamma!(&nu))
+        );
+        CHAINIFY_CALLS.with(|calls| assert_eq!(calls.get(), 1));
+    }
+
+    #[test]
     fn structural_collection_preserves_existing_isolated_chain_notation() {
         test_initialize();
         let source = parse!(
@@ -1087,10 +1149,13 @@ mod tests {
             default_namespace = "spenso"
         );
         let representation = Bispinor {}.into();
-        assert_eq!(source.collect_chains(representation, true, true), source);
+        assert_eq!(
+            source.collect_chains(representation, true, true, false),
+            source
+        );
         let explicit = source.undo_single_length();
         assert_eq!(
-            explicit.collect_chains(representation, true, true),
+            explicit.collect_chains(representation, true, true, false),
             explicit
         );
     }

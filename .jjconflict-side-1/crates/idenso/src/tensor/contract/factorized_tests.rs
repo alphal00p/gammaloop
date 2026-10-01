@@ -34,6 +34,47 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 }
 
 #[test]
+fn contraction_forwards_observations_after_normalization_and_ordered_rewriting() {
+    use crate::tensor::{ContractSettings, SELECTED_OPENS};
+    setup();
+    let settings = ContractSettings {
+        collect_chains: false,
+        collect_traces: false,
+        ..Default::default()
+    };
+    for (expression, normalized_first) in [
+        // The empty chain becomes a metric before planning, changing the first
+        // branch key while retaining its scalar coefficient and tensor leaves.
+        (
+            "(x+y)*spenso::chain(spenso::mink(4,a),spenso::mink(4,b))*t(spenso::mink(4,a))*u(spenso::mink(4,b))-(x+y)*t(spenso::mink(4,c))*u(spenso::mink(4,c))",
+            true,
+        ),
+        // A tensor argument with pending contractions initially declines the
+        // polynomial intake. The ordered rewrite finishes its metadata; the
+        // retry must still collect the two alpha-equivalent dummy networks.
+        (
+            "t(p(spenso::mink(4,x))*q(spenso::mink(4,x)),spenso::mink(4,a))*u(spenso::mink(4,a))-t(spenso::g(p(spenso::mink(4)),q(spenso::mink(4))),spenso::mink(4,b))*u(spenso::mink(4,b))",
+            false,
+        ),
+    ] {
+        let source = SymbolicTensor::infer(input(expression)).unwrap();
+        assert!(!source.expression.is_zero());
+        assert_eq!(
+            source.normalized_contract_notation(settings) != source.expression,
+            normalized_first,
+        );
+        source.reduction_observations();
+        SELECTED_OPENS.with(|count| count.set(0));
+        let result = source.contract(settings).unwrap();
+        assert_eq!(result.expression, Atom::Zero);
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
+        assert_eq!(result.contract(settings).unwrap(), result);
+    }
+}
+
+#[test]
 fn chain_admission_skips_finished_open_tensor_coefficients() {
     use crate::Cookable;
     use crate::shorthands::chain::CHAINIFY_CALLS;
@@ -111,6 +152,93 @@ fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
         "(x+y)^7*(spenso::trace(spenso::mink(4),spenso::cyclic(t(spenso::in,spenso::out),u(spenso::in,spenso::out)))+z)^2",
     );
     assert_eq!(traced.expression, expected);
+}
+
+#[test]
+fn contraction_reuses_source_free_color_invariants_without_opening_scopes() {
+    use crate::tensor::{ContractSettings, SELECTED_OPENS, collection::SHALLOW_BUILDS};
+    let reps = crate::test_support::test_initialize();
+    let [a, b, c, d, e, f] = [97601, 97602, 97603, 97604, 97605, 97606]
+        .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+    let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+    let symmetric = |x: &Atom| {
+        spenso::trace_sym!(
+            &rep,
+            crate::color_t!(x),
+            crate::color_t!(&c),
+            crate::color_t!(&d)
+        )
+    };
+    let invariant =
+        crate::color_f!(&a, &b, &e) * symmetric(&e) * crate::color_f!(&a, &b, &f) * symmetric(&f);
+    let weight = symbolica::parse_lit!((source_free_weight_x + source_free_weight_y) ^ 12);
+    let source = SymbolicTensor::infer(weight * (Atom::one() + invariant).pow(2)).unwrap();
+    let settings = ContractSettings {
+        collect_chains: false,
+        collect_traces: false,
+        expand: false,
+        ..Default::default()
+    };
+    let observations = source.reduction_observations();
+    assert!(observations.candidates.repeated_indices);
+    assert!(observations.excludes_contraction_sources(settings));
+    SHALLOW_BUILDS.with(|count| count.set(0));
+    SELECTED_OPENS.with(|count| count.set(0));
+    // Minimal contraction keeps structurally finished invariants opaque.
+    // Expanding contraction also collects alpha-equivalent terms and therefore
+    // cannot rule out its work solely from the absence of metric/vector sources.
+    let result = source.contract_parts(settings).unwrap();
+    assert_eq!(result.root, source);
+    assert_eq!(result.status, ReductionStatus::Complete);
+    assert!(Arc::ptr_eq(
+        observations,
+        result.root.reduction_observations()
+    ));
+    assert_eq!(SHALLOW_BUILDS.with(|count| count.get()), 0);
+    assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
+    assert!(
+        source
+            .contract_parts(ContractSettings {
+                order: Some(&[]),
+                ..settings
+            })
+            .is_err()
+    );
+}
+
+#[test]
+fn contraction_source_proof_keeps_new_metric_connections_eligible() {
+    use crate::tensor::ContractSettings;
+    let reps = crate::test_support::test_initialize();
+    let [a, b, c, d, e, z] = [97611, 97612, 97613, 97614, 97615, 97616]
+        .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+    let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+    let symmetric = spenso::trace_sym!(
+        &rep,
+        crate::color_t!(&e),
+        crate::color_t!(&c),
+        crate::color_t!(&d)
+    );
+    let source =
+        SymbolicTensor::infer(spenso::g!(&a, &z) * crate::color_f!(&a, &b, &e) * &symmetric)
+            .unwrap();
+    let settings = ContractSettings {
+        collect_chains: false,
+        collect_traces: false,
+        ..Default::default()
+    };
+    assert!(
+        !source
+            .reduction_observations()
+            .excludes_contraction_sources(settings)
+    );
+    let result = source.contract_parts(settings).unwrap();
+    assert_eq!(
+        result.root.expression,
+        crate::color_f!(&z, &b, &e) * symmetric
+    );
+    assert_eq!(result.root.structure, source.structure);
+    assert_eq!(result.status, ReductionStatus::Complete);
 }
 
 #[test]

@@ -118,9 +118,14 @@ pub trait AtomStructureExt {
     /// true to observe the remainder without collecting further index occurrences,
     /// or false to stop. With no repetition the decision is not called and the
     /// traversal finishes. Slot payloads remain opaque in either case.
+    ///
+    /// Return true from `observe` to visit the node's children. Returning false
+    /// reuses an externally observed subtree and skips it; the repeated-index
+    /// result is conservatively true because its incidences were not visited.
+    /// The observer must retain any facts it needs about that subtree itself.
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
-        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         on_first_repeat: impl FnOnce() -> bool,
     ) -> bool;
 
@@ -152,7 +157,7 @@ impl AtomStructureExt for Atom {
 
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
-        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         on_first_repeat: impl FnOnce() -> bool,
     ) -> bool {
         super::indices::RepeatedIndices::contains(self.as_view(), observe, on_first_repeat)
@@ -177,12 +182,12 @@ impl AtomStructureExt for Atom {
 
 impl AtomStructureExt for AtomView<'_> {
     fn has_repeated_explicit_indices(&self) -> bool {
-        super::indices::RepeatedIndices::contains(*self, |_, _| {}, || false)
+        super::indices::RepeatedIndices::contains(*self, |_, _| true, || false)
     }
 
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
-        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
         on_first_repeat: impl FnOnce() -> bool,
     ) -> bool {
         super::indices::RepeatedIndices::contains(*self, observe, on_first_repeat)

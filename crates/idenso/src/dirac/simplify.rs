@@ -549,9 +549,8 @@ impl SymbolicTensor<PartialStructure> {
                 let output = trace_kernel::TraceOutput::Factored;
                 let prepared = DiracSimplifier::new(&settings)
                     .prepare(selected.expression.as_view(), &dummies);
-                let expression = BracketNormalizer::normalize(prepared.as_view())
-                    .chainify(representation)
-                    .join_chains(representation);
+                let expression =
+                    BracketNormalizer::normalize(prepared.as_view()).join_chains(representation);
                 let expression = BracketNormalizer::normalize(expression.as_view());
                 // Finish joining the selected spinor factors before Clifford
                 // reduction can turn an open prefix into a sum of chains. Such

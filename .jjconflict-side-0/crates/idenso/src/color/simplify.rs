@@ -23,8 +23,7 @@ use symbolica::function;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
-    id::{Context, Replacement},
-    utils::Settable,
+    id::Replacement,
 };
 use symbolica_utils::PatternReplacement;
 
@@ -134,7 +133,7 @@ impl ColorAlgebraSimplifier {
     /// Apply the local colour identities. Contraction and cross-domain
     /// scheduling belong to the shared tensor owner.
     pub(crate) fn step(&self, expression: AtomView<'_>, complete: bool) -> Atom {
-        let collected = self.collect_lines(expression);
+        let collected = expression.join_chains(ColorFundamental {}.into());
         let rewritten = self.rewrite_terms(collected.as_view(), complete);
         if self.settings.substitute_cof_dimension_invariants {
             rewritten.to_cof_dimension_invariants()
@@ -210,31 +209,6 @@ impl ColorAlgebraSimplifier {
         } else {
             terms.into_iter().fold(Atom::Zero, |sum, term| sum + term)
         }
-    }
-
-    fn collect_lines(&self, expr: AtomView<'_>) -> Atom {
-        let rep = ColorFundamental {}.into();
-        expr.to_owned()
-            .chainify(rep)
-            .join_chains(ColorFundamental {}.into())
-            .replace_map(&Self::close_trace_chain)
-    }
-
-    fn close_trace_chain(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
-        let Some((start, end, factors)) = chain_parts(arg) else {
-            return;
-        };
-        let Some((dimension, start_index, false)) = color_fundamental_slot(start.as_view()) else {
-            return;
-        };
-        let Some((end_dimension, end_index, true)) = color_fundamental_slot(end.as_view()) else {
-            return;
-        };
-        if dimension != end_dimension || start_index != end_index {
-            return;
-        }
-
-        **out = trace!(ColorFundamental {}.to_symbolic([dimension]); factors);
     }
 
     fn rewrite_node(&self, arg: AtomView<'_>, complete: bool) -> Option<Atom> {

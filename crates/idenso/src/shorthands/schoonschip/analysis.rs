@@ -11,6 +11,7 @@ use crate::tensor::inference::InterfaceInference;
 #[cfg(test)]
 std::thread_local! {
     pub(super) static SCAN_COUNTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static CANDIDATE_NODE_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Call-local observations of one expression. Intrinsic dot rewrites may retain
@@ -37,7 +38,7 @@ impl<const N: usize> SimplificationCandidates<N> {
         symbols: [Symbol; N],
         on_first_repeat: impl FnOnce() -> bool,
     ) -> Self {
-        Self::scan_observing(expression, symbols, on_first_repeat, |_, _| {})
+        Self::scan_observing(expression, symbols, on_first_repeat, |_, _| true)
     }
 
     /// Extend the same traversal with regional or dependency observations.
@@ -46,7 +47,7 @@ impl<const N: usize> SimplificationCandidates<N> {
         expression: AtomView<'_>,
         symbols: [Symbol; N],
         on_first_repeat: impl FnOnce() -> bool,
-        mut observe: impl for<'a> FnMut(AtomView<'a>, &SlotMatch<'a>),
+        mut observe: impl for<'a> FnMut(AtomView<'a>, &SlotMatch<'a>) -> bool,
     ) -> Self {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
@@ -70,9 +71,16 @@ impl<const N: usize> SimplificationCandidates<N> {
             intrinsic: true,
         };
         let mut traversal_complete = true;
+        let mut skipped = false;
         candidates.repeated_indices = expression.has_repeated_explicit_indices_with_observer(
             |node, slot| {
-                observe(node, slot);
+                #[cfg(test)]
+                CANDIDATE_NODE_VISITS.with(|count| count.set(count.get() + 1));
+                if !observe(node, slot) {
+                    skipped = true;
+                    candidates.allow_all();
+                    return false;
+                }
                 match node {
                     AtomView::Fun(function) => {
                         let id = function.get_symbol_id();
@@ -150,13 +158,14 @@ impl<const N: usize> SimplificationCandidates<N> {
                     }
                     _ => {}
                 }
+                true
             },
             || {
                 traversal_complete = on_first_repeat();
                 traversal_complete
             },
         );
-        candidates.traversal_complete = traversal_complete;
+        candidates.traversal_complete = traversal_complete && !skipped;
         candidates
     }
 

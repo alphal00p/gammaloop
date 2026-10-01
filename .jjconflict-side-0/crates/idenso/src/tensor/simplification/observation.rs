@@ -72,7 +72,11 @@ pub(crate) struct RegionObservation {
     // Possible matrix channels, including existing chain endpoints. Merely
     // mentioning a representation in a vector or scalar dot is insufficient.
     chain_channels: HashSet<LibraryRep>,
-    pub(crate) leaves: HashSet<Atom>,
+    // Only functions observed directly in this scope. Descendant inventories
+    // stay in their shared regional observations rather than being cloned and
+    // rehashed into every arithmetic ancestor.
+    leaves: HashSet<Atom>,
+    leaf_children: Vec<Arc<RegionObservation>>,
     leaf_inventory_complete: bool,
     reserved_indices: HashSet<AbstractIndex>,
     indices: usize,
@@ -94,6 +98,7 @@ impl Default for RegionObservation {
             representations: HashSet::new(),
             chain_channels: HashSet::new(),
             leaves: HashSet::new(),
+            leaf_children: Vec::new(),
             leaf_inventory_complete: true,
             reserved_indices: HashSet::new(),
             indices: 0,
@@ -111,8 +116,27 @@ impl Default for RegionObservation {
 }
 
 impl RegionObservation {
-    pub(crate) fn leaves(&self) -> Option<&HashSet<Atom>> {
-        self.leaf_inventory_complete.then_some(&self.leaves)
+    pub(crate) fn any_leaf(&self, mut selected: impl FnMut(AtomView<'_>) -> bool) -> Option<bool> {
+        if !self.leaf_inventory_complete {
+            return None;
+        }
+        let mut pending = vec![self];
+        let mut regions = HashSet::new();
+        let mut leaves = HashSet::new();
+        while let Some(region) = pending.pop() {
+            if !regions.insert(std::ptr::from_ref(region)) {
+                continue;
+            }
+            for leaf in &region.leaves {
+                // Arbitrary predicates retain the previous set semantics even
+                // when an unchanged child occurs at several call sites.
+                if leaves.insert(leaf.as_view()) && selected(leaf.as_view()) {
+                    return Some(true);
+                }
+            }
+            pending.extend(region.leaf_children.iter().map(AsRef::as_ref));
+        }
+        Some(false)
     }
 
     pub(crate) fn has_chain_channel(&self, representation: LibraryRep) -> bool {
@@ -296,7 +320,7 @@ impl RegionObservation {
             | (u8::from(counts[4] > 0) * super::EPSILON)
     }
 
-    fn merge(&mut self, other: &Self) {
+    fn merge(&mut self, other: &Arc<Self>) {
         for (count, additional) in self.counts.iter_mut().zip(other.counts) {
             *count += additional;
         }
@@ -304,7 +328,9 @@ impl RegionObservation {
             .extend(other.representations.iter().copied());
         self.chain_channels
             .extend(other.chain_channels.iter().copied());
-        self.leaves.extend(other.leaves.iter().cloned());
+        if !other.leaves.is_empty() || !other.leaf_children.is_empty() {
+            self.leaf_children.push(Arc::clone(other));
+        }
         self.leaf_inventory_complete &= other.leaf_inventory_complete;
         self.reserved_indices
             .extend(other.reserved_indices.iter().copied());
@@ -621,7 +647,11 @@ impl DomainObservations {
             AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
         ) || matches!(value, AtomView::Fun(function)
             if function.get_symbol().is_scalar()
-                || [SPENSO_TAG.bracket, SPENSO_TAG.scalar, SPENSO_TAG.pure_scalar, SPENSO_TAG.dot, ETS.metric]
+                || function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                || function.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                || [SPENSO_TAG.chain, SPENSO_TAG.trace, SPENSO_TAG.bracket,
+                    SPENSO_TAG.scalar, SPENSO_TAG.pure_scalar, SPENSO_TAG.dot, ETS.metric,
+                    *spenso::shadowing::SYM, *spenso::shadowing::ANTISYM, *spenso::shadowing::CYCLIC]
                     .contains(&function.get_symbol()))
     }
 
@@ -637,7 +667,6 @@ impl DomainObservations {
         let mut slots = SlotMatcher::default();
         let mut scopes = HashMap::new();
         let mut stack = Vec::<(usize, usize, Atom, Arc<RegionObservation>)>::new();
-        let mut reused = None::<(usize, usize)>;
         let candidates = SimplificationCandidates::scan_observing(
             expression,
             *DOMAIN_HEADS,
@@ -648,10 +677,6 @@ impl DomainObservations {
                 // function arguments and slot metadata update their owner directly.
                 let begin = node.get_data().as_ptr() as usize;
                 let end = begin + node.get_data().len();
-                if reused.is_some_and(|(start, stop)| begin >= start && end <= stop) {
-                    return;
-                }
-                reused = None;
                 while stack
                     .last()
                     .is_some_and(|(start, stop, _, _)| begin < *start || end > *stop)
@@ -671,12 +696,15 @@ impl DomainObservations {
                         #[cfg(test)]
                         REUSED_SCOPES.with(|count| count.set(count.get() + 1));
                         stack.push((begin, end, node.to_owned(), Arc::clone(observation)));
-                        reused = Some((begin, end));
-                        return;
+                        // Stop the shared candidate/index traversal itself, not
+                        // just regional bookkeeping. Replacement candidates are
+                        // reconstructed from these complete regional summaries.
+                        return false;
                     }
                     stack.push((begin, end, node.to_owned(), Arc::default()));
                 }
                 Arc::make_mut(&mut stack.last_mut().unwrap().3).observe(node, slot, &mut slots);
+                true
             },
         );
         while !stack.is_empty() {
@@ -1089,7 +1117,99 @@ mod tests {
     use super::*;
 
     #[test]
+    fn leaf_inventories_share_descendants_instead_of_copying_each_ancestor() {
+        crate::test_support::test_initialize();
+        let leaf = symbolica::symbol!("local_inventory::leaf");
+        let left = symbolica::symbol!("local_inventory::left");
+        let right = symbolica::symbol!("local_inventory::right");
+        for depth in [4, 16, 48] {
+            let mut nested = symbolica::function!(leaf, 0);
+            for number in 1..=depth {
+                nested = (nested + symbolica::function!(leaf, number)).pow(2);
+            }
+            let source = symbolica::function!(left, &nested) + symbolica::function!(right, &nested);
+            let observed = DomainObservations::initial(source.as_view());
+            let root = observed.region(source.as_view()).unwrap();
+            let mut pending = vec![root.as_ref()];
+            let mut visited = HashSet::new();
+            let mut retained_leaves = 0;
+            while let Some(region) = pending.pop() {
+                if !visited.insert(std::ptr::from_ref(region)) {
+                    continue;
+                }
+                retained_leaves += region.leaves.len();
+                pending.extend(region.leaf_children.iter().map(AsRef::as_ref));
+            }
+            // Every function occurrence is stored once, even though each one
+            // lies below many retained arithmetic scopes. Flattening child sets
+            // at every ancestor made this quadratic in the nesting depth.
+            assert_eq!(retained_leaves, 2 * (depth + 1) + 2);
+
+            let mut selected = HashSet::new();
+            assert_eq!(
+                root.any_leaf(|value| {
+                    assert!(
+                        selected.insert(value.to_owned()),
+                        "predicate repeated for {value}"
+                    );
+                    false
+                }),
+                Some(false)
+            );
+            assert_eq!(selected.len(), depth + 3);
+            assert_eq!(
+                root.any_leaf(|value| value == symbolica::function!(leaf, depth).as_view()),
+                Some(true)
+            );
+        }
+    }
+
+    #[test]
+    fn replacement_reuses_tensor_and_symmetric_trace_boundaries() {
+        use crate::shorthands::schoonschip::CANDIDATE_NODE_VISITS;
+        let reps = crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("terminal_inventory::hedge");
+        let ports = [0, 1, 2].map(|axis| {
+            reps.coad_da
+                .to_symbolic([symbolica::function!(label, 81, axis)])
+        });
+        let structure = crate::color_f!(&ports[0], &ports[1], &ports[2]);
+        let trace = spenso::trace_sym!(
+            reps.cof_nc.to_symbolic([] as [Atom; 0]);
+            ports.iter().map(|port| crate::color_t!(port))
+        );
+        let source = SymbolicTensor::infer(&structure * &trace).unwrap();
+        let initial = source.reduction_observations();
+        assert!(initial.scopes.read().unwrap().contains_key(&structure));
+        assert!(initial.scopes.read().unwrap().contains_key(&trace));
+        let AtomView::Fun(trace_view) = trace.as_view() else {
+            panic!("expected trace")
+        };
+        let symmetric = trace_view.iter().nth(1).unwrap();
+        assert!(
+            initial
+                .scopes
+                .read()
+                .unwrap()
+                .contains_key(symmetric.get_data())
+        );
+
+        let changed = Atom::one()
+            + Atom::var(symbolica::symbol!("terminal_inventory::weight")) * &source.expression;
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
+        let updated = initial.updated(changed.as_view());
+        // One scalar summand, then Mul, coefficient, f and trace. Their tensor
+        // arguments, projector words and compound slot payloads remain unopened.
+        assert_eq!(CANDIDATE_NODE_VISITS.with(|count| count.get()), 5);
+        let fresh = DomainObservations::initial(changed.as_view());
+        assert_eq!(updated.regions, fresh.regions);
+        assert_eq!(updated.candidates.counts, fresh.candidates.counts);
+        assert_eq!(updated.reserved_indices, fresh.reserved_indices);
+    }
+
+    #[test]
     fn replacement_reuses_nested_scope_facts_without_losing_occurrences() {
+        use crate::shorthands::schoonschip::CANDIDATE_NODE_VISITS;
         crate::test_support::test_initialize();
         let epsilon = *crate::epsilon::EPSILON_SYMBOL;
         let x = Atom::var(symbolica::symbol!("nested_observation::x"));
@@ -1102,13 +1222,20 @@ mod tests {
         let changed = symbolica::function!(a, &nested) + symbolica::function!(b, &nested);
         REUSED_SCOPES.with(|count| count.set(0));
         OBSERVED_NODES.with(|count| count.set(0));
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
         let updated = observed.updated(changed.as_view());
         let visited = OBSERVED_NODES.with(|count| count.get());
+        let scanned = CANDIDATE_NODE_VISITS.with(|count| count.get());
+        // Two changed wrapper nodes and two reused sum roots. The candidate
+        // scanner itself must not revisit either sum's children.
+        assert_eq!(scanned, 4);
         assert_eq!(REUSED_SCOPES.with(|count| count.get()), 2);
         assert!(Arc::ptr_eq(&observed.scopes, &updated.scopes));
         OBSERVED_NODES.with(|count| count.set(0));
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
         let fresh = DomainObservations::initial(changed.as_view());
         assert!(visited < OBSERVED_NODES.with(|count| count.get()));
+        assert!(scanned < CANDIDATE_NODE_VISITS.with(|count| count.get()));
         assert_eq!(updated.regions, fresh.regions);
         assert_eq!(updated.candidates.counts, fresh.candidates.counts);
         assert_eq!(updated.candidates.counts[4], 4);
@@ -1120,6 +1247,61 @@ mod tests {
         let removed = surviving.updated(x.as_view());
         assert_eq!(removed.candidates.counts[4], 0);
         assert_eq!(removed.identity_candidates(), 0);
+    }
+
+    #[test]
+    fn replacement_skip_retains_compound_indices_callbacks_and_opaque_metadata() {
+        use crate::shorthands::schoonschip::CANDIDATE_NODE_VISITS;
+        use spenso::structure::slot::ParseableAind;
+        crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("cached_observation::hedge");
+        let scope = symbolica::symbol!("cached_observation::scope_");
+        let indices = std::array::from_fn::<_, 4, _>(|axis| {
+            AbstractIndex::Named(label.into(), 37, axis).scoped(scope)
+        });
+        let ports = indices.map(|index| spenso::mink!(4, index.to_atom()));
+        let epsilon = symbolica::function!(
+            *crate::epsilon::EPSILON_SYMBOL,
+            &ports[0],
+            &ports[1],
+            &ports[2],
+            &ports[3]
+        );
+        let callback = spenso::tensor_symbol!("cached_observation::callback", norm = |_, _| {});
+        let tensor = spenso::tensor_symbol!("cached_observation::T");
+        let dimension =
+            symbolica::function!(symbolica::symbol!("cached_observation::dimension"), 7);
+        let opaque_port = spenso::structure::representation::Minkowski {}
+            .to_symbolic([dimension, indices[0].to_atom()]);
+        let unchanged = epsilon + symbolica::function!(callback, &ports[0]);
+        let first = symbolica::symbol!("cached_observation::first");
+        let second = symbolica::symbol!("cached_observation::second");
+        let original = symbolica::function!(first, &unchanged);
+        let initial = DomainObservations::initial(original.as_view());
+        let changed = symbolica::function!(first, &unchanged)
+            + symbolica::function!(
+                second,
+                &unchanged,
+                symbolica::function!(tensor, opaque_port)
+            );
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
+        let updated = initial.updated(changed.as_view());
+        let visits = CANDIDATE_NODE_VISITS.with(|count| count.get());
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
+        let fresh = DomainObservations::initial(changed.as_view());
+        assert!(visits < CANDIDATE_NODE_VISITS.with(|count| count.get()));
+        assert_eq!(updated.regions, fresh.regions);
+        assert_eq!(updated.candidates.counts, fresh.candidates.counts);
+        assert_eq!(updated.reserved_indices, fresh.reserved_indices);
+        assert_eq!(updated.reserved_indices, HashSet::from(indices));
+        assert!(!updated.candidates.complete && !updated.candidates.intrinsic);
+        assert_eq!(updated.candidates.counts[4], 2);
+        assert!(updated.candidates.repeated_indices);
+
+        let survivor = updated.updated(symbolica::function!(second, &unchanged).as_view());
+        assert_eq!(survivor.candidates.counts[4], 1);
+        assert!(!survivor.candidates.intrinsic);
+        assert!(!survivor.region(unchanged.as_view()).unwrap().intrinsic);
     }
 
     #[test]
@@ -1233,14 +1415,14 @@ mod tests {
             observed
                 .region(selected.expression.as_view())
                 .unwrap()
-                .leaves()
+                .any_leaf(|_| false)
                 .is_none()
         );
         assert!(
             observed
                 .region(spectators[0].expression.as_view())
                 .unwrap()
-                .leaves()
+                .any_leaf(|_| false)
                 .is_some()
         );
 
@@ -1291,7 +1473,7 @@ mod tests {
             facts
                 .region(selected.expression.as_view())
                 .unwrap()
-                .leaves()
+                .any_leaf(|_| false)
                 .is_none()
         );
         assert_eq!(facts.identity_candidates(), super::super::COLOR);
@@ -1306,7 +1488,7 @@ mod tests {
             changed
                 .region(selected.expression.as_view())
                 .unwrap()
-                .leaves()
+                .any_leaf(|_| false)
                 .is_none()
         );
 

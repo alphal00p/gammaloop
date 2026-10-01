@@ -59,6 +59,21 @@ pub(crate) struct Frontier {
     pub max_coefficient_bytes: usize,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum ScopeOpenReason {
+    Unobserved,
+    OpaqueOrBracket,
+    MetricOrVector,
+}
+
+/// Requests may reuse an already opened scope. Indexed powers overlap the
+/// exclusive reasons; metric/vector presence takes precedence over opacity.
+#[derive(Default)]
+struct ScopeOpenRequests {
+    reasons: [usize; 3],
+    indexed_powers: usize,
+}
+
 #[derive(Clone, Copy, Default)]
 struct Entry {
     calls: usize,
@@ -72,6 +87,7 @@ struct Capture {
     entries: [Entry; PHASES.len()],
     outcomes: Vec<(&'static str, ReductionStatus)>,
     frontiers: Vec<Frontier>,
+    scope_open_requests: ScopeOpenRequests,
 }
 
 thread_local! {
@@ -101,6 +117,15 @@ pub(crate) fn frontier_workspace(bytes: usize) {
             .and_then(|capture| capture.frontiers.last_mut())
         {
             frontier.predicted_bytes = frontier.predicted_bytes.max(bytes);
+        }
+    });
+}
+
+pub(crate) fn scope_open(reason: ScopeOpenReason, indexed_power: bool) {
+    CAPTURE.with_borrow_mut(|capture| {
+        if let Some(capture) = capture {
+            capture.scope_open_requests.reasons[reason as usize] += 1;
+            capture.scope_open_requests.indexed_powers += usize::from(indexed_power);
         }
     });
 }
@@ -147,6 +172,7 @@ pub struct Measurements {
     entries: [Entry; PHASES.len()],
     outcomes: Vec<(&'static str, ReductionStatus)>,
     frontiers: Vec<Frontier>,
+    scope_open_requests: ScopeOpenRequests,
 }
 
 impl fmt::Display for Measurements {
@@ -193,7 +219,12 @@ impl fmt::Display for Measurements {
                 frontier.max_coefficient_bytes,
             )?;
         }
-        f.write_str("]}")
+        let [unobserved, opaque_or_bracket, metric_or_vector] = self.scope_open_requests.reasons;
+        write!(
+            f,
+            "],\"scope_open_requests\":{{\"unobserved\":{unobserved},\"opaque_or_bracket\":{opaque_or_bracket},\"metric_or_vector\":{metric_or_vector},\"indexed_powers\":{}}}}}",
+            self.scope_open_requests.indexed_powers,
+        )
     }
 }
 
@@ -227,6 +258,7 @@ pub fn measure<T>(label: &str, operation: impl FnOnce() -> T) -> (T, Measurement
             entries: capture.entries,
             outcomes: capture.outcomes,
             frontiers: capture.frontiers,
+            scope_open_requests: capture.scope_open_requests,
         },
     )
 }
