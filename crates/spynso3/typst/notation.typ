@@ -696,7 +696,9 @@
   }
   // Momentum notation: a trailing power applies to the contraction of these
   // vector labels, so the dot product needs no additional parentheses.
-  _tight((left.label, math.class("normal", $dot$), right.label))
+  let body = _tight((left.label, math.class("normal", $dot$), right.label))
+  // Keep the contraction tight; separate only the next implicit multiplier.
+  if ctx.followed-by-factor { body + h(settings.factor-gap) } else { body }
 }
 
 #let _render-chain(ctx, settings) = {

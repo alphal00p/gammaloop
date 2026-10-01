@@ -1592,7 +1592,7 @@ impl SpensoTags {
         Some(output)
     }
 
-    fn print_dot(a: AtomView<'_>, opt: &PrintOptions, _state: &PrintState) -> Option<String> {
+    fn print_dot(a: AtomView<'_>, opt: &PrintOptions, state: &PrintState) -> Option<String> {
         let resolved = SpensoPrintSettings::resolve(opt)?;
         let settings = resolved.presentation;
         let parens = settings.parens;
@@ -1619,7 +1619,17 @@ impl SpensoTags {
             {
                 return None;
             }
-            return Some(format!("{} dot {}", a.label, b.label));
+            // A dot is one scalar factor. Separate consecutive factors without
+            // grouping parentheses; standalone dots retain their compact spacing.
+            let gap = if state.in_product && !state.in_exp_base {
+                " #h(0.12em)"
+            } else {
+                ""
+            };
+            return Some(format!(
+                r#"{} class("normal", dot) {}{gap}"#,
+                a.label, b.label
+            ));
         }
 
         let mut out = String::new();
@@ -2836,7 +2846,7 @@ mod tests {
             prepare_tensor_print(&dot)
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
-            "attach(#($italic(\"dot_p\")$,std.hide($zws$)).join(),t:std.hide(1),b:1) dot attach(#($italic(\"dot_q\")$,std.hide($zws$)).join(),t:std.hide(2),b:2)"
+            "attach(#($italic(\"dot_p\")$,std.hide($zws$)).join(),t:std.hide(1),b:1) class(\"normal\", dot) attach(#($italic(\"dot_q\")$,std.hide($zws$)).join(),t:std.hide(2),b:2)"
         );
 
         let u = crate::vector_symbol!("spenso_typst_tests::u");
@@ -2858,6 +2868,38 @@ mod tests {
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
             "upright(\"⟨\") attach(#($u$,std.hide($zws$)).join(),t:std.hide(1),b:1) upright(\"|\") lr([attach(#($gamma$,std.hide($zws$)).join(),t:mu,b:std.hide(mu))]) upright(\"|\") attach(#($v$,std.hide($zws$)).join(),t:std.hide(2),b:2) upright(\"⟩\")"
+        );
+    }
+
+    #[test]
+    fn dot_products_print_with_spacing() {
+        let vectors = [
+            crate::vector_symbol!("dot_spacing::p"),
+            crate::vector_symbol!("dot_spacing::q"),
+            crate::vector_symbol!("dot_spacing::r"),
+            crate::vector_symbol!("dot_spacing::s"),
+        ]
+        .map(|name| function!(name, mink!(4)));
+        let [p, q, r, s] = &vectors;
+        let left = function!(SPENSO_TAG.dot, p, q);
+        let right = function!(SPENSO_TAG.dot, r, s);
+        let product = &left * &right;
+        let options = SpensoPrintSettings::typst_options();
+        assert_eq!(
+            left.printer(options.clone()).to_string(),
+            r#"p class("normal", dot) q"#
+        );
+        assert_eq!(
+            product.printer(options.clone()).to_string(),
+            r#"p class("normal", dot) q #h(0.12em) r class("normal", dot) s #h(0.12em)"#
+        );
+        // Spacing must not become the base to which an exponent attaches.
+        assert!(
+            !left
+                .pow(2)
+                .printer(options)
+                .to_string()
+                .contains("#h(0.12em)")
         );
     }
 

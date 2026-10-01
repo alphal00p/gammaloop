@@ -55,6 +55,35 @@ class OpenPortDisplayTests(unittest.TestCase):
         self.assertEqual(expression.structure, structure)
         return list(visible_nodes(mathml(rich)))
 
+    def test_dot_products_keep_tight_contractions_and_separate_factors(self):
+        space = Representation.mink(4)
+        p, q, r, s = (
+            TensorName.vector(f"dot_factor_spacing::{name}")(space)
+            for name in ("p", "q", "r", "s")
+        )
+        single, product = p * q, (p * q) * (r * s)
+        for value in (single, product):
+            source = value.to_typst()
+            native = typst.compile(f"$ {source} $".encode(), format="html").decode()
+            for document in (native, value.to_html()):
+                with self.subTest(product=value == product, native=document == native):
+                    nodes = list(mathml(document))
+                    dots = [i for i, node in enumerate(nodes) if node.text == "⋅"]
+                    self.assertEqual(len(dots), 2 if value == product else 1)
+                    for i in dots:
+                        # Keep ordinary glyph spacing inside each contraction.
+                        self.assertEqual(nodes[i].tag, "mi")
+                        self.assertNotEqual(nodes[i - 1].tag, "mspace")
+                        self.assertNotEqual(nodes[i + 1].tag, "mspace")
+                    if value == product:
+                        gaps = [
+                            n for n in nodes[dots[0] + 1 : dots[1]] if n.tag == "mspace"
+                        ]
+                        self.assertEqual(len(gaps), 1)
+                        self.assertEqual(gaps[0].attrib["width"], "0.12em")
+                    else:
+                        self.assertFalse(any(n.tag == "mspace" for n in nodes))
+
     def test_factories_and_user_tensors_share_the_same_placeholder_convention(self):
         rep = Representation.euc(3)
         a = TensorName("open_display::A")(rep, rep)
