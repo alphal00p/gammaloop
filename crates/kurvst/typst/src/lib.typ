@@ -3,7 +3,76 @@
 // Keep path constructors, geometry helpers, and emitters here. The implementation
 // lives in `impl.typ`.
 
-#import "impl.typ" as _impl
+// Import each implementation directly so wrappers capture only the function
+// they use, rather than repeatedly hashing the complete implementation module.
+#import "impl.typ": (
+  append as _impl-append,
+  center-outset as _impl-center-outset,
+  close as _impl-close,
+  coil as _impl-coil,
+  cubic as _impl-cubic,
+  cubic-point as _impl-cubic-point,
+  cubic-tangent as _impl-cubic-tangent,
+  cubic-to as _impl-cubic-to,
+  elements as _impl-elements,
+  frames as _impl-frames,
+  from-cubic as _impl-from-cubic,
+  from-elements as _impl-from-elements,
+  hobby-spline as _impl-hobby-spline,
+  hobby-through as _impl-hobby-through,
+  intersections as _impl-intersections,
+  layer as _impl-layer,
+  layers as _impl-layers,
+  layer-defaults as _impl-layer-defaults,
+  length as _impl-length,
+  line as _impl-line,
+  line-segment as _impl-line-segment,
+  line-to as _impl-line-to,
+  move-to as _impl-move-to,
+  outset-point as _impl-outset-point,
+  parallel as _impl-parallel,
+  path as _impl-path,
+  pattern as _impl-pattern,
+  pattern-to-cetz as _impl-pattern-to-cetz,
+  point as _impl-point,
+  points as _impl-points,
+  quad as _impl-quad,
+  quad-to as _impl-quad-to,
+  region-samples as _impl-region-samples,
+  resolve-length as _impl-resolve-length,
+  segments as _impl-segments,
+  split-through as _impl-split-through,
+  to-cetz as _impl-to-cetz,
+  to-cetz-data as _impl-to-cetz-data,
+  to-native as _impl-to-native,
+  trim as _impl-trim,
+  wave as _impl-wave,
+  zigzag as _impl-zigzag,
+)
+
+/// Sample points and tangent directions at arc distances, clamped to the path.
+/// Uses the same prefix trimming as trim; empty paths return none per sample.
+/// Tangents are not normalized. `format: "cbor"` retains the encoded records
+/// for transport to another native geometry operation. -> array | bytes
+#let frames(path, distances, accuracy: 0.001, format: "array") = _impl-frames(
+  path, distances, accuracy: accuracy, format: format,
+)
+
+/// Sample overlapping points in equal arc-length regions across cubic parts.
+/// Hidden parts contribute length but produce no points. Both endpoints of
+/// every trimmed cubic are retained, including shared endpoints. -> array
+#let region-samples(
+  /// Parts with cubic `segments` and a boolean `visible` field. -> array
+  parts,
+  /// Number of equal arc-length regions. -> int
+  regions: 4,
+  /// Coordinate scale applied before the maximum sampling step. -> int | float
+  unit: 1,
+  /// Maximum control-polygon step after scaling. -> int | float
+  step: 4,
+  /// Positive arc-length tolerance. -> int | float
+  accuracy: 0.001,
+) = _impl-region-samples(parts, regions: regions, unit: unit, step: step, accuracy: accuracy)
 
 /// Build a numeric point tuple.
 /// -> array
@@ -12,22 +81,22 @@
   x,
   /// Y coordinate. -> int | float
   y,
-) = _impl.point(x, y)
+) = _impl-point(x, y)
 
 /// Default geometry options for derived path layers.
 /// -> dictionary
-#let layer-defaults = _impl.layer-defaults
+#let layer-defaults = _impl-layer-defaults
 
 /// A smooth sinusoidal path pattern.
 /// -> dictionary
 #let wave(
   /// Number of samples used to approximate one wave period. -> int
   samples-per-period: 16,
-) = _impl.wave(samples-per-period: samples-per-period)
+) = _impl-wave(samples-per-period: samples-per-period)
 
 /// A straight-segment triangular path pattern.
 /// -> dictionary
-#let zigzag() = _impl.zigzag()
+#let zigzag() = _impl-zigzag()
 
 /// A smooth coil path pattern.
 /// -> dictionary
@@ -36,10 +105,22 @@
   samples-per-period: 16,
   /// Horizontal scale of the coil before it is mapped onto a path. -> int | float
   longitudinal-scale: 1.25,
+  /// Fit a complete coil between inward-facing natural endpoints, without tapering.
+  /// A positive path length fits half-integer periods using wavelength as nominal spacing.
+  /// Apply once with pattern wavelength equal to fit-length, phase zero, and
+  /// samples-per-period equal to the returned points.len() - 1. -> none | int | float
+  fit-length: none,
+  /// Amplitude used for longitudinal fitting; pass the same amplitude to pattern. -> int | float
+  amplitude: 0.1,
+  /// Requested coil spacing when fit-length is set. -> int | float
+  wavelength: 1.0,
 ) = {
-  _impl.coil(
+  _impl-coil(
     samples-per-period: samples-per-period,
     longitudinal-scale: longitudinal-scale,
+    fit-length: fit-length,
+    amplitude: amplitude,
+    wavelength: wavelength,
   )
 }
 
@@ -52,21 +133,21 @@
   toward,
   /// Distance to move from `from` toward `toward`. -> int | float
   distance: 0,
-) = _impl.outset-point(from, toward, distance: distance)
+) = _impl-outset-point(from, toward, distance: distance)
 
 /// Build a `move` path element.
 /// -> dictionary
 #let move-to(
   /// New current point and subpath start. -> array
   start,
-) = _impl.move-to(start)
+) = _impl-move-to(start)
 
 /// Build a `line` path element.
 /// -> dictionary
 #let line-to(
   /// Line endpoint. -> array
   end,
-) = _impl.line-to(end)
+) = _impl-line-to(end)
 
 /// Build a `quad` path element.
 /// -> dictionary
@@ -75,7 +156,7 @@
   control,
   /// Quadratic endpoint. -> array
   end,
-) = _impl.quad-to(control, end)
+) = _impl-quad-to(control, end)
 
 /// Build a `cubic` path element.
 /// -> dictionary
@@ -86,28 +167,28 @@
   control-end,
   /// Cubic endpoint. -> array
   end,
-) = _impl.cubic-to(control-start, control-end, end)
+) = _impl-cubic-to(control-start, control-end, end)
 
 /// Build a `close` path element.
 /// -> dictionary
 #let close(
   /// Native Typst curve close mode. -> string
   mode: "straight",
-) = _impl.close(mode: mode)
+) = _impl-close(mode: mode)
 
 /// Build a path dictionary from an existing element array.
 /// -> dictionary
 #let from-elements(
   /// Array of Kurvst path elements. -> array
   elements,
-) = _impl.from-elements(elements)
+) = _impl-from-elements(elements)
 
 /// Build a path dictionary from path fragments or elements.
 /// -> dictionary
 #let path(
   /// Path fragments, path elements, or element arrays to concatenate. -> any
   ..parts,
-) = _impl.path(..parts)
+) = _impl-path(..parts)
 
 /// Return a path with additional fragments or elements appended.
 /// -> dictionary
@@ -116,7 +197,7 @@
   path,
   /// Path fragments, path elements, or element arrays to append. -> any
   ..parts,
-) = _impl.append(path, ..parts)
+) = _impl-append(path, ..parts)
 
 /// Build a straight-line path fragment.
 /// -> dictionary
@@ -125,7 +206,7 @@
   start,
   /// Endpoint. -> array
   end,
-) = _impl.line(start, end)
+) = _impl-line(start, end)
 
 /// Build a quadratic path fragment.
 /// -> dictionary
@@ -136,7 +217,7 @@
   control,
   /// Endpoint. -> array
   end,
-) = _impl.quad(start, control, end)
+) = _impl-quad(start, control, end)
 
 /// Build a cubic path fragment.
 /// -> dictionary
@@ -149,14 +230,14 @@
   control-end,
   /// Endpoint. -> array
   end,
-) = _impl.cubic(start, control-start, control-end, end)
+) = _impl-cubic(start, control-start, control-end, end)
 
 /// Build a path fragment from a cubic segment dictionary.
 /// -> dictionary
 #let from-cubic(
   /// Segment with `start`, `control-start`, `control-end`, and `end`. -> dictionary
   segment,
-) = _impl.from-cubic(segment)
+) = _impl-from-cubic(segment)
 
 /// Build a cubic segment dictionary for a straight line.
 /// -> dictionary
@@ -165,21 +246,21 @@
   start,
   /// Endpoint. -> array
   end,
-) = _impl.line-segment(start, end)
+) = _impl-line-segment(start, end)
 
 /// Return the command elements that make up a Kurvst path.
 /// -> array
 #let elements(
   /// Kurvst path dictionary to inspect. -> dictionary
   path,
-) = _impl.elements(path)
+) = _impl-elements(path)
 
 /// Return the points visited by a Kurvst path's command stream.
 /// -> array
 #let points(
   /// Kurvst path dictionary to inspect. -> dictionary
   path,
-) = _impl.points(path)
+) = _impl-points(path)
 
 /// Evaluate a cubic segment at parameter `t`.
 /// -> array
@@ -188,7 +269,7 @@
   segment,
   /// Segment parameter in the range `[0, 1]`. -> int | float
   t,
-) = _impl.cubic-point(segment, t)
+) = _impl-cubic-point(segment, t)
 
 /// Evaluate the tangent of a cubic segment at parameter `t`.
 /// -> array
@@ -197,14 +278,14 @@
   segment,
   /// Segment parameter in the range `[0, 1]`. -> int | float
   t,
-) = _impl.cubic-tangent(segment, t)
+) = _impl-cubic-tangent(segment, t)
 
 /// Return drawable cubic segments for any Kurvst path dictionary.
 /// -> array
 #let segments(
   /// Kurvst path dictionary to convert. -> dictionary
   path,
-) = _impl.segments(path)
+) = _impl-segments(path)
 
 /// Compute the arc length of a path dictionary.
 /// -> int | float
@@ -213,7 +294,7 @@
   path,
   /// Arc-length approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
-) = _impl.length(path, accuracy: accuracy)
+) = _impl-length(path, accuracy: accuracy)
 
 /// Find transverse crossings between two paths, sorted by arc distance along the first path.
 /// -> array
@@ -224,7 +305,7 @@
   b,
   /// Absolute geometry and arc-length tolerance. -> float
   accuracy: 0.001,
-) = _impl.intersections(a, b, accuracy: accuracy)
+) = _impl-intersections(a, b, accuracy: accuracy)
 
 /// Resolve a fixed and relative visible path length.
 /// -> none | int | float
@@ -238,7 +319,7 @@
   /// Resolution strategy for fixed and relative targets. -> string | function
   method: "min",
 ) = {
-  _impl.resolve-length(
+  _impl-resolve-length(
     base-length,
     length: length,
     ratio: ratio,
@@ -261,7 +342,7 @@
   start-outset: 0,
   /// Already-applied trim at the end of the path. -> int | float
   end-outset: 0,
-) = _impl.center-outset(
+) = _impl-center-outset(
   base-length,
   length: length,
   ratio: ratio,
@@ -282,7 +363,7 @@
   /// Arc-length approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.trim(
+  _impl-trim(
     path,
     start-outset: start-outset,
     end-outset: end-outset,
@@ -304,7 +385,7 @@
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.hobby-through(start, through, end, omega: omega, accuracy: accuracy)
+  _impl-hobby-through(start, through, end, omega: omega, accuracy: accuracy)
 }
 
 /// Construct a Hobby spline through an arbitrary point sequence.
@@ -317,7 +398,7 @@
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.hobby-spline(points, omega: omega, accuracy: accuracy)
+  _impl-hobby-spline(points, omega: omega, accuracy: accuracy)
 }
 
 /// Apply a repeated path pattern to a base path.
@@ -331,9 +412,9 @@
   amplitude: 0.1,
   /// Arc length of one pattern period. -> int | float
   wavelength: 1.0,
-  /// Initial phase offset in pattern periods. -> int | float
+  /// Initial phase offset in radians. -> int | float
   phase: 0,
-  /// Samples per period for string-resolved smooth patterns. -> int
+  /// Samples per period for string-resolved patterns and smooth point-pattern mapping. -> int
   samples-per-period: 16,
   /// Longitudinal scale used when resolving the built-in coil pattern. -> int | float
   coil-longitudinal-scale: 1.25,
@@ -341,9 +422,18 @@
   anchor-start: true,
   /// Force the generated path to end on the base path. -> bool
   anchor-end: true,
+  /// Initial slope of an anchored taper envelope, from 0 to 3. Zero keeps
+  /// tangential ends; positive values allow angled ends when the pattern's
+  /// lateral offset is nonzero at its endpoint phase. This is not an angle.
+  /// Ignored for unanchored ends and patterns without endpoint ramping, including fitted coils. -> int | float
+  endpoint-slope: 0,
+  /// Carrier arc distances at which to split the finished pattern into parts.
+  /// Sorted and clamped to the carrier length; repeated cuts keep empty parts.
+  /// The full path is unchanged. -> array
+  split-at: (),
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
-) = _impl.pattern(
+) = _impl-pattern(
   path,
   pattern: pattern,
   amplitude: amplitude,
@@ -353,8 +443,24 @@
   coil-longitudinal-scale: coil-longitudinal-scale,
   anchor-start: anchor-start,
   anchor-end: anchor-end,
+  endpoint-slope: endpoint-slope,
+  split-at: split-at,
   accuracy: accuracy,
 )
+
+/// Generate and draw a patterned path through CeTZ.
+/// Geometry options are the same as pattern; drawing styles are kept separate.
+/// -> array
+#let pattern-to-cetz(
+  /// Base Kurvst path dictionary. -> dictionary
+  path,
+  /// Scale applied to the generated coordinates. -> int | float | length
+  unit: 1,
+  /// CeTZ drawing style. -> dictionary
+  style: (:),
+  /// Geometry options accepted by pattern. -> arguments
+  ..options,
+) = _impl-pattern-to-cetz(path, unit: unit, style: style, ..options.named())
 
 /// Generate a parallel path for a path.
 /// -> dictionary
@@ -372,7 +478,7 @@
   /// Let Kurbo simplify/optimize the fitted path. -> bool
   optimize: true,
 ) = {
-  _impl.parallel(
+  _impl-parallel(
     path,
     distance: distance,
     start-outset: start-outset,
@@ -383,6 +489,8 @@
 }
 
 /// Build a derived visible path layer.
+/// Returns drawable geometry and `offset`, the resolved signed offset before
+/// trimming. Reuse that value to apply the same side choice to path fragments.
 /// -> dictionary
 #let layer(
   /// Base Kurvst path dictionary. -> dictionary
@@ -407,7 +515,7 @@
   accuracy: 0.001,
   /// Let Kurbo simplify/optimize fitted parallel paths. -> bool
   optimize: true,
-) = _impl.layer(
+) = _impl-layer(
   path,
   offset: offset,
   length: length,
@@ -421,6 +529,48 @@
   optimize: optimize,
 )
 
+/// Build several shifted layers with one carrier preparation.
+/// Each result contains the normal layer `path` dictionary and its drawable
+/// cubic `segments`. Length resolution and offsetting match @layer.
+/// `format: "cbor"` returns encoded native layers and footprint paths with
+/// count, nonzero, supported, all-single and shared offset metadata. Native
+/// layer paths omit the shared offset field. `unit` affects footprint geometry
+/// only: single-segment Beziers retain unit 1, matching the drawing owner.
+/// -> array | dictionary
+#let layers(
+  /// Base Kurvst path dictionary. -> dictionary
+  path,
+  /// Arc-length displacements, clamped as in @layer. -> array
+  shifts,
+  /// Signed normal offset distance. -> int | float
+  offset: 0,
+  /// Fixed target visible length. -> none | int | float
+  length: none,
+  /// Relative target visible length. -> none | int | float
+  ratio: none,
+  /// Resolution strategy for fixed and relative targets. -> string | function
+  resolve-length: "min",
+  /// Arc length removed from the start. -> int | float
+  start-outset: 0,
+  /// Arc length removed from the end. -> int | float
+  end-outset: 0,
+  /// Optional point choosing the offset sign. -> none | array
+  side-point: none,
+  /// Geometry approximation accuracy. -> float
+  accuracy: 0.001,
+  /// Optimize fitted parallel paths. -> bool
+  optimize: true,
+  /// Return decoded layers or an opaque geometry packet. -> string
+  format: "array",
+  /// Numeric scale for multi-segment footprint paths. -> int | float
+  unit: 1,
+) = _impl-layers(
+  path, shifts, offset: offset, length: length, ratio: ratio,
+  resolve-length: resolve-length, start-outset: start-outset,
+  end-outset: end-outset, side-point: side-point, accuracy: accuracy,
+  optimize: optimize, format: format, unit: unit,
+)
+
 /// Emit a Kurvst path as native Typst `curve` content.
 /// -> content
 #let to-native(
@@ -430,7 +580,7 @@
   unit: 1,
   /// Native `curve` style arguments. -> any
   ..style,
-) = _impl.to-native(path, unit: unit, ..style)
+) = _impl-to-native(path, unit: unit, ..style)
 
 /// Emit a Kurvst path as CeTZ path data.
 /// -> array
@@ -439,7 +589,7 @@
   path,
   /// Coordinate multiplier for emitted CeTZ points. -> int | float | length | ratio
   unit: 1,
-) = _impl.to-cetz-data(path, unit: unit)
+) = _impl-to-cetz-data(path, unit: unit)
 
 /// Draw a path dictionary through CeTZ.
 /// -> content
@@ -450,7 +600,7 @@
   unit: 1,
   /// CeTZ draw style arguments forwarded to `merge-path`. -> any
   ..style,
-) = _impl.to-cetz(path, unit: unit, ..style)
+) = _impl-to-cetz(path, unit: unit, ..style)
 
 /// Split a path through a point sequence into per-span paths.
 /// -> dictionary
@@ -466,7 +616,7 @@
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.split-through(
+  _impl-split-through(
     points,
     omega: omega,
     start-outset: start-outset,
