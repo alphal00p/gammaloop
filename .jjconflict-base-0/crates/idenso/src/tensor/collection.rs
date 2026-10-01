@@ -46,6 +46,15 @@ thread_local! {
     pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+/// Whether the selected kernel needs monomials or can choose its own local
+/// distribution while retaining arithmetic leaves. Both modes share the same
+/// graph, copy scopes, tape and result publication.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CollectionMode {
+    Monomials,
+    Factored,
+}
+
 type CollectionFinalizer<'a> = dyn FnMut(
         &mut Vec<(
             SymbolicTensor<PartialStructure>,
@@ -61,6 +70,7 @@ struct CollectionInput<Select> {
     observations: Arc<super::simplification::observation::DomainObservations>,
     state: ParseState<AbstractIndex>,
     select: Select,
+    mode: CollectionMode,
     values: Vec<(SymbolicTensor<PartialStructure>, bool)>,
     positions: HashMap<(Atom, Vec<PartialSlot>, bool), usize>,
 }
@@ -72,11 +82,16 @@ type CollectionAnalysis = (
 );
 
 impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
-    fn new(source: &SymbolicTensor<PartialStructure>, select: Select) -> Self {
+    fn new(
+        source: &SymbolicTensor<PartialStructure>,
+        select: Select,
+        mode: CollectionMode,
+    ) -> Self {
         Self {
             observations: Arc::clone(source.reduction_observations()),
             state: SymbolicTensor::reserved_dummies(std::iter::once(source)),
             select,
+            mode,
             values: Vec::new(),
             positions: HashMap::new(),
         }
@@ -418,6 +433,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         network: &SymbolicNet<AbstractIndex, E>,
         tree: &CollectionTree,
         root: NodeIndex,
+        split_root_sum: bool,
     ) -> Result<Option<(usize, (usize, usize))>> {
         let (owned, interfaces) = self.analyze(network, tree, root)?;
         let mut failure = None;
@@ -432,6 +448,13 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                 }
                 _ => None,
             };
+            // Existing outer sum terms are independent kernel regions. Sums
+            // inside a product or a powered copy stay opaque: enumerating those
+            // rows would distribute arithmetic that was still factored.
+            let factored = self.mode == CollectionMode::Factored
+                && (matches!(value, NetworkNode::Op(NetworkOp::Product))
+                    || (matches!(value, NetworkNode::Op(NetworkOp::Sum))
+                        && !(split_root_sum && node == root)));
             let function = matches!(value, NetworkNode::Op(NetworkOp::Function(_)));
             // Closed inverse powers belong to a scalar scope, not to the
             // positive-power copy frontier. Inspect the base interface: an
@@ -445,6 +468,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                 && !matches!(value, NetworkNode::Leaf(_))
                 && scoped_power.is_none()
                 && !function
+                && !factored
                 && !scalar_power
             {
                 return None;
@@ -479,7 +503,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                             let opened = self.open(value.as_view())?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                             let root = opened.graph.graph.node_id(opened.graph.head());
-                            return self.compile(tape, &opened, &tree, root)
+                            return self.compile(tape, &opened, &tree, root, false)
                                 .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                         }
                     }
@@ -494,7 +518,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                         let root = graph.graph.graph.node_id(graph.graph.head());
                         let Some(copy) =
-                            self.compile(tape, &graph, &tree, root)?
+                            self.compile(tape, &graph, &tree, root, false)?
                         else {
                             refused = true;
                             return Ok(None);
@@ -509,6 +533,9 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                 }
                 let expression = self.emit(network, tree, node)?;
                 if owned[&node] && matches!(value, NetworkNode::Leaf(_))
+                    && (self.mode == CollectionMode::Monomials
+                        || matches!(expression.as_view(), AtomView::Pow(_))
+                        || (split_root_sum && node == root && matches!(expression.as_view(), AtomView::Add(_))))
                     && matches!(expression.as_view(), AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
                 {
                     // This leaf was selected from its retained head inventory.
@@ -518,7 +545,9 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                     let opened_root = opened.graph.graph.node_id(opened.graph.head());
                     if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
-                        return self.compile(tape, &opened, &opened_tree, opened_root)
+                        let split_root_sum = split_root_sum && node == root
+                            && matches!(expression.as_view(), AtomView::Add(_));
+                        return self.compile(tape, &opened, &opened_tree, opened_root, split_root_sum)
                             .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                     }
                 }
@@ -605,6 +634,7 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<ConditionResult> {
         let mut proof = ConditionResult::Inconclusive;
         self.collect_with_map(
+            CollectionMode::Monomials,
             Some(&mut |states, spectators| {
                 let spectator = Self::collection_product(spectators)?;
                 proof = ConditionResult::True;
@@ -654,6 +684,7 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<Vec<(Self, Self)>> {
         let mut rows = None;
         self.collect_with_map(
+            CollectionMode::Monomials,
             Some(&mut |states, spectators| {
                 let spectator = Self::collection_product(spectators)?;
                 rows = Some(
@@ -683,10 +714,17 @@ impl SymbolicTensor<PartialStructure> {
     /// Collect selected tensors with factored coefficients.
     /// Unselected scalar and tensor subtrees remain factored.
     pub fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
-        self.collect_with_map(None, |value| filter.matches(value), |value, _, _| Ok(value))
+        self.collect_with_map(
+            CollectionMode::Monomials,
+            None,
+            |value| filter.matches(value),
+            |value, _, _| Ok(value),
+        )
     }
 
-    /// Visit selected monomials through the graph's established factor order.
+    /// Visit selected arithmetic through the graph's established factor order.
+    /// Monomial consumers distribute selected sums; factored consumers retain
+    /// them as leaves and decide which local identities require distribution.
     /// The boolean is true only when every selected factor has entered this
     /// frontier. A kernel may consume incident coefficient ports; the combined
     /// logical boundary remains invariant. Refused and capped frontiers remain exact.
@@ -696,12 +734,13 @@ impl SymbolicTensor<PartialStructure> {
     /// work it receives the original coefficient for inspection only.
     pub(crate) fn collect_with_map(
         &self,
+        mode: CollectionMode,
         mut finalize: Option<&mut CollectionFinalizer<'_>>,
         mut select: impl FnMut(AtomView<'_>) -> bool,
         mut step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
     ) -> Result<Self> {
         self.ensure_validated()?;
-        let mut input = CollectionInput::new(self, &mut select);
+        let mut input = CollectionInput::new(self, &mut select, mode);
         let network = input.parse(self)?;
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
@@ -731,7 +770,8 @@ impl SymbolicTensor<PartialStructure> {
         let mut tape = TermTape::<usize>::default();
         let mut factors = Vec::new();
         let mut spectators = Vec::new();
-        let expose = nodes.iter().filter(|node| owned[node]).count() > 1;
+        let selected_count = nodes.iter().filter(|node| owned[node]).count();
+        let expose = mode == CollectionMode::Monomials && selected_count > 1;
         for node in nodes {
             if !owned[&node] {
                 let spectator = Self::collection_product(&[Self::from_normalized_parts(
@@ -783,9 +823,18 @@ impl SymbolicTensor<PartialStructure> {
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let scoped_root = graph.graph.graph.node_id(graph.graph.head());
-                input.compile(&mut tape, &graph, &scoped_tree, scoped_root)?
+                input.compile(&mut tape, &graph, &scoped_tree, scoped_root, false)?
             } else {
-                input.compile(&mut tape, &network, &tree, node)?
+                input.compile(
+                    &mut tape,
+                    &network,
+                    &tree,
+                    node,
+                    // Spectators are multiplied back after the selected rows
+                    // are collected. Splitting a sole selected sum therefore
+                    // preserves their factorization as well as the sum's.
+                    selected_count == 1,
+                )?
             };
             let Some((compiled, _)) = compiled else {
                 // No domain callback has run; discard all refused tape scratch.
@@ -1084,8 +1133,18 @@ impl SymbolicTensor<PartialStructure> {
                 slot.rep().slot(index)
             }),
         );
-        let intrinsic = values.iter().all(Self::normalization_is_intrinsic);
         let expression = Atom::mul_many(values.iter().map(|value| &value.expression));
+        if let Some(value) = values.iter().find(|value| {
+            value.proofs.validated.get() == Some(&true)
+                && value.expression == expression
+                && value.structure == interface
+        }) {
+            // Multiplication by an identity did not change the exact payload or
+            // its ordered interface. Keep its observations and lazy graph; an
+            // encoded AUTO boundary must still pass the decoding above first.
+            return Ok(value.clone());
+        }
+        let intrinsic = values.iter().all(Self::normalization_is_intrinsic);
         if !intrinsic {
             Self::validate_interface(&expression, &interface)?;
             Self::validate_atom(&expression)?;
@@ -1185,6 +1244,7 @@ mod tests {
             spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
         let result = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
                 |selected, _, _| {
@@ -1235,6 +1295,7 @@ mod tests {
                 .unwrap();
         let result = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
                 |selected, complete, coefficient| {
@@ -1278,7 +1339,7 @@ mod tests {
             + Atom::num(2) * tensor(heads[1], &[port]);
         let source = SymbolicTensor::infer(&selected * &foreign * &spectator).unwrap();
         let mut calls = 0;
-        let result = source.collect_with_map(
+        let result = source.collect_with_map(CollectionMode::Monomials,
             Some(&mut |states, spectators| {
                 calls += 1;
                 assert_eq!(states.len(), 2);
@@ -1350,6 +1411,7 @@ mod tests {
         let mut seen = Vec::new();
         let root = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == selected),
                 |value, _complete, _| {
@@ -1368,6 +1430,123 @@ mod tests {
     }
 
     #[test]
+    fn factored_selected_sum_reuses_callback_leaves_without_replaying_them() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "factored_selected_callback",
+            norm = move |_, _| {
+                seen.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let port = spenso::mink!(4, 97003);
+        let body = tensor(head, std::slice::from_ref(&port)) + spenso::p!(port);
+        let coefficient = Atom::var(symbolica::symbol!("factored_callback_coefficient"));
+        let source = SymbolicTensor::infer(&coefficient * &body).unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let mut steps = 0;
+        let result = source
+            .collect_with_map(
+                CollectionMode::Factored,
+                None,
+                |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
+                |value, complete, _| {
+                    steps += 1;
+                    assert!(complete);
+                    let AtomView::Add(terms) = body.as_view() else {
+                        unreachable!()
+                    };
+                    assert!(terms.iter().any(|term| term == value.expression.as_view()));
+                    Ok(value)
+                },
+            )
+            .unwrap();
+        assert_eq!(result, source);
+        assert_eq!(steps, 2);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(
+            source
+                .collect_with_map(
+                    CollectionMode::Factored,
+                    None,
+                    |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
+                    |value, _, _| Ok(SymbolicTensor::from_normalized_parts(
+                        Atom::one(),
+                        value.structure
+                    )),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn factored_outer_sum_reuses_settled_terms_without_distributing_products() {
+        use crate::tensor::simplification::observation::SettledRegions;
+        crate::test_support::test_initialize();
+        let port = spenso::mink!(4, 97033);
+        let coefficient = symbolica::parse_lit!(factored_region_x + factored_region_y);
+        let other_coefficient = symbolica::parse_lit!(factored_region_u + factored_region_v);
+        let left = spenso::p!(&port) * &coefficient;
+        let replacement = tensor(
+            SPENSO_TAG.rank_one_tensor_symbol("factored_region_r"),
+            std::slice::from_ref(&port),
+        ) * &coefficient;
+        let right = spenso::q!(&port) * &other_coefficient;
+        let spectator = symbolica::parse_lit!((factored_spectator_x + factored_spectator_y) ^ 17);
+        for spectator in [Atom::one(), spectator] {
+            let source = SymbolicTensor::infer(&spectator * (&left + &right)).unwrap();
+            let mut settled = SettledRegions::default();
+            let mut calls = 0;
+            let mut current = source.clone();
+            for expected_calls in [2, 3] {
+                current = current
+                    .collect_with_map(
+                        CollectionMode::Factored,
+                        None,
+                        |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
+                        |value, complete, _| {
+                            settled.run(value, complete, |value| {
+                                calls += 1;
+                                assert!(complete);
+                                assert!([&left, &replacement, &right].contains(&&value.expression));
+                                if value.expression == left {
+                                    value.with_identity_result(replacement.clone(), None)
+                                } else {
+                                    Ok(value)
+                                }
+                            })
+                        },
+                    )
+                    .unwrap();
+                assert_eq!(calls, expected_calls);
+                assert_eq!(current.expression, &spectator * (&replacement + &right));
+                assert_eq!(current.structure, source.structure);
+            }
+        }
+    }
+
+    #[test]
+    fn collection_product_reuses_a_validated_identity_operand() {
+        crate::test_support::test_initialize();
+        let source = SymbolicTensor::infer(spenso::p!(spenso::mink!(4, 97034))).unwrap();
+        let observations = Arc::clone(source.reduction_observations());
+        let graph = source.shallow_graph().unwrap();
+        let one = SymbolicTensor::from_validated_parts(
+            Atom::one(),
+            PartialStructure::from_logical_slots([]),
+        );
+        let result = SymbolicTensor::collection_product(&[one, source.clone()]).unwrap();
+        assert_eq!(result, source);
+        assert!(Arc::ptr_eq(&observations, result.reduction_observations()));
+        assert!(Arc::ptr_eq(&graph, &result.shallow_graph().unwrap()));
+    }
+
+    #[test]
     fn selected_domain_cannot_discard_an_established_tensor_port() {
         crate::test_support::test_initialize();
         let a = spenso::mink!(4, 97004);
@@ -1379,6 +1558,7 @@ mod tests {
         assert!(
             source
                 .collect_with_map(
+                    CollectionMode::Monomials,
                     None,
                     |_| true,
                     |value, _complete, _| {
@@ -1416,6 +1596,7 @@ mod tests {
         assert!(
             source
                 .collect_with_map(
+                    CollectionMode::Monomials,
                     None,
                     |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                     contract_selected
@@ -1457,6 +1638,7 @@ mod tests {
         let mut steps = 0;
         let root = body
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |_| true,
                 |value, _complete, _| {
@@ -1482,6 +1664,7 @@ mod tests {
         let mut seen = Vec::new();
         let root = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == head),
                 |value, complete, _| {
@@ -1518,10 +1701,14 @@ mod tests {
             ],
         );
         let base = tensor(p, std::slice::from_ref(&a)) * tensor(q, std::slice::from_ref(&a)) + &x;
-        for power in [2, 3] {
+        for (mode, power) in [CollectionMode::Monomials, CollectionMode::Factored]
+            .into_iter()
+            .flat_map(|mode| [2, 3].map(|power| (mode, power)))
+        {
             let source = SymbolicTensor::infer(base.pow(power)).unwrap();
             let root = source
                 .collect_with_map(
+                    mode,
                     None,
                     |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                     contract_selected,
@@ -1538,6 +1725,7 @@ mod tests {
         let source = SymbolicTensor::infer(open).unwrap();
         let root = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                 contract_selected,
@@ -1575,6 +1763,7 @@ mod tests {
         let mut seen = Vec::new();
         let root = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| matches!(value, AtomView::Fun(fun) if fun.get_symbol() == hook),
                 |value, _complete, _| {
@@ -1609,6 +1798,7 @@ mod tests {
         let mut selected_calls = 0;
         let root = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
                 |value, _complete, _| {
@@ -1761,6 +1951,7 @@ mod tests {
         let mut observed = false;
         source
             .collect_with_map(
+                CollectionMode::Monomials,
                 Some(&mut |_, spectators| {
                     assert_eq!(spectators.len(), 30);
                     assert_eq!(
@@ -1792,14 +1983,14 @@ mod tests {
         .unwrap()
         .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99513))]))
         .unwrap();
-        let mut input = CollectionInput::new(&source, |_| true);
+        let mut input = CollectionInput::new(&source, |_| true, CollectionMode::Monomials);
         let network = input.parse(&source).unwrap();
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
         let mut tape = TermTape::<usize>::default();
         assert!(
             input
-                .compile(&mut tape, &network, &tree, root)
+                .compile(&mut tape, &network, &tree, root, false)
                 .unwrap()
                 .is_some()
         );
@@ -1840,6 +2031,7 @@ mod tests {
         let mut calls = 0;
         let result = source
             .collect_with_map(
+                CollectionMode::Monomials,
                 None,
                 |_| true,
                 |selected, _complete, _| {
@@ -1918,7 +2110,7 @@ mod tests {
         .unwrap();
         let mut calls = 0;
         let mut complete_rows = false;
-        let root = source.collect_with_map(
+        let root = source.collect_with_map(CollectionMode::Monomials,
             Some(&mut |_, _| { complete_rows = true; Ok(()) }),
             |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
             |mut selected, _, _| {

@@ -66,6 +66,31 @@ operations are `TensorExpression` methods, so symbolic pipelines can chain
 tensor interface and literal aliases. Resolve the result with `to_expression()`;
 `expand()` explicitly requests polynomial materialization.
 
+Colour reduction accepts arbitrarily long traces in the supported fundamental
+and adjoint representations, and structure-constant networks of arbitrary size.
+Ordered generator traces are reduced to symmetric traces and
+commutator terms; closed structure-constant cycles use the same trace reduction
+in the adjoint representation. There is no fixed maximum trace length or cycle
+size. The existing short-word identities remain useful shortcuts.
+
+The result stays parametric in the group and representation. Higher symmetric
+traces and their scalar contractions, such as `gram(rank, rep1, rep2)`, can remain
+as exact invariants. A completed result therefore need not be a polynomial only
+in `Ca`, `Cf`, and `Na`; higher-rank invariant relations are a separate algebraic
+question. This also applies to repeated indices within a higher symmetric
+trace. General networks of several symmetric invariants, words with multiple
+symmetric blocks, and arbitrary matrix insertions can also remain exact; this
+is not a complete canonical basis for every colour tensor. Disabling trace
+evaluation preserves ordered trace notation.
+
+Local colour identities can produce combinatorial term growth as their input
+size increases. They use the shared reduction planner and preserve unrelated
+sums and scalar factors; they do not expand the whole numerator. An explicit
+work budget can return an exact capped result that can be resumed. Step limits
+count kernel transformations; they do not impose a time limit within one identity.
+Completion is relative to the enabled identities and requested output, while deferred
+structural work retains its exact remaining expression.
+
 `TensorNetwork` retains component data and library bindings while composing and executing a
 graph. Its binary positional contraction is `contract_ports(rhs, left=..., right=...)`,
 matching `TensorExpression.contract_ports`; `TensorExpression.contract()` instead performs

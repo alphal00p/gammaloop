@@ -43,7 +43,7 @@ color_form_two_generator_trace [ColorSu3, ColorDefault, enabled]
 g(coad(8,a),coad(8,b))*idx(2,cof(3))
 
 color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
--1/3*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))*idx(2,cof(3))+g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))*idx(2,cof(3))
+(-1/3*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))+g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j))))*idx(2,cof(3))
 
 color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, enabled]
 -1/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))+cas(2,cof(3))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))

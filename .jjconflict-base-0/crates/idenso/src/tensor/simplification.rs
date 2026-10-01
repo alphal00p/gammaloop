@@ -386,7 +386,7 @@ impl SymbolicTensor<PartialStructure> {
                                 GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), settings.collect_coefficients, plan.settled.entry(GAMMA).or_default(), settings.max_passes.map(|limit| limit.saturating_sub(plan.changes)))?,
                                 COLOR => before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
                                 EPSILON if observed.epsilon_degree < 2 => before.clone(),
-                                EPSILON => before.collect_with_map(None,
+                                EPSILON => before.collect_with_map(crate::tensor::CollectionMode::Monomials, None,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                                     |selected, complete, _| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
                                         let expression = EpsilonSimplifierPass::step(selected.expression.as_view());

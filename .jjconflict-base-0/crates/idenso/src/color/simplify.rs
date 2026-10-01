@@ -1,20 +1,20 @@
-use std::sync::LazyLock;
+use std::{collections::VecDeque, sync::LazyLock};
 
-use itertools::Itertools;
 use spenso::{
     chain,
     network::{
         library::symbolic::ETS,
-        parsing::{ParseSettings, ParseState},
+        parsing::{ParseSettings, ParseState, ShorthandParsing},
         tags::SPENSO_TAG as T,
     },
     rep_,
     shadowing::{self, ProjectorExpander, TensorCollectFilter},
     structure::{
+        OrderedStructure, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::PartialStructure,
-        representation::RepName,
-        slot::{ParseableAind, SlotMatch, SlotMatcher},
+        representation::{LibraryRep, RepName},
+        slot::{DualSlotTo, ParseableAind, SlotMatch, SlotMatcher},
     },
     trace, trace_sym,
 };
@@ -36,6 +36,8 @@ use crate::{
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
+
+mod trace;
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     [Replacement::new(
@@ -64,36 +66,54 @@ impl SymbolicTensor<PartialStructure> {
             settings,
             dummies: Self::reserved_dummies([self]),
         };
-        self.collect_with_map(None, atom_contains_color_node, |selected, complete, _| {
-            settled.run(selected, complete, |selected| {
-                // Recognize signed graph zeros before a loop identity opens
-                // them into sums and hides their antisymmetric automorphisms.
-                let mut network = selected
-                    .expression
-                    .as_view()
-                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
-                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
-                let expression = if network.remove_antisymmetric_zero_terms() {
-                    network
-                        .simple_execute::<()>()
-                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
-                } else {
-                    selected.expression.clone()
-                };
-                let expression = simplifier.step(expression.as_view(), complete);
-                let expression = restore_explicit_su_n_generator_chains(expression);
-                let rewritten = selected.with_rewritten_expression(expression)?;
-                // Every structural request is limited to this selected colour
-                // monomial and uses the shared contraction implementation.
-                let mut contracted = rewritten.contract_parts(crate::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?;
-                contracted.root.proofs.frontier = contracted.status;
-                Ok(contracted.root)
-            })
-        })
+        self.collect_with_map(
+            crate::tensor::CollectionMode::Factored,
+            None,
+            atom_contains_color_node,
+            |selected, complete, _| {
+                settled.run(selected, complete, |selected| {
+                    // Recognize signed graph zeros before a loop identity opens
+                    // them into sums and hides their antisymmetric automorphisms.
+                    let mut network = selected
+                        .expression
+                        .as_view()
+                        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                            // Signed-zero detection only needs the visible topology.
+                            // Opening a symmetric trace here would enumerate every
+                            // projector permutation before the colour kernel runs.
+                            shorthand_parsing: ShorthandParsing::Opaque,
+                            ..Default::default()
+                        })
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                    let expression = if network.remove_antisymmetric_zero_terms() {
+                        network
+                            .simple_execute::<()>()
+                            .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+                    } else {
+                        selected.expression.clone()
+                    };
+                    let expression = simplifier.step(expression.as_view(), complete);
+                    let expression = restore_explicit_su_n_generator_chains(expression);
+                    let rewritten = selected.with_identity_result(expression, None)?;
+                    // A retained sum can include non-colour coefficients. Only
+                    // colour connections are prerequisites of this identity;
+                    // the shared contractor preserves the other representations.
+                    let mut contracted =
+                        rewritten.contract_parts(crate::tensor::ContractSettings {
+                            representations: Some(&[
+                                ColorFundamental {}.into(),
+                                ColorAdjoint {}.into(),
+                                ColorSextet {}.into(),
+                            ]),
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?;
+                    contracted.root.proofs.frontier = contracted.status;
+                    Ok(contracted.root)
+                })
+            },
+        )
     }
 }
 
@@ -284,6 +304,45 @@ impl ColorAlgebraSimplifier {
     fn simplify_trace_node(&self, trace: AtomView, complete: bool) -> Option<Atom> {
         let (rep, factors) = trace_parts(trace)?;
 
+        if matches!(rep.as_view(), AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep) {
+            let mut prefactor = Atom::one();
+            let mut degree = Some(0usize);
+            let normalized = factors
+                .iter()
+                .map(|factor| {
+                    if let Some((coefficient, factor)) =
+                        Self::normalize_adjoint_factor(rep.as_view(), factor.as_view())
+                    {
+                        prefactor *= coefficient;
+                        if let Some(value) = degree.as_mut() {
+                            *value += projector_parts(factor.as_view())
+                                .map_or(1, |(_, factors)| factors.len());
+                        }
+                        factor
+                    } else {
+                        degree = None;
+                        factor.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            if !prefactor.is_one() || normalized != factors {
+                return Some(prefactor * trace_with_factors(rep, normalized));
+            }
+            if let Some(degree) = degree {
+                // Every certified raw adjoint matrix is antisymmetric. Trace
+                // transposition reverses the ordered blocks; a symmetric block
+                // only contributes the parity of its number of matrices.
+                let reverse =
+                    trace_with_factors(rep.clone(), factors.iter().rev().cloned().collect());
+                if reverse.as_view() == trace && degree % 2 == 1 {
+                    return Some(Atom::Zero);
+                }
+                if reverse.as_view() < trace {
+                    return Some(if degree % 2 == 0 { reverse } else { -reverse });
+                }
+            }
+        }
+
         if factors.is_empty()
             || factors
                 .iter()
@@ -304,6 +363,26 @@ impl ColorAlgebraSimplifier {
                 rep,
                 factors_excluding_indices(&factors, &[identity_index]),
             ));
+        }
+
+        // Raw adjoint matrices are F^a_bc = f^{bca} = i T_A^a_bc.
+        // Their odd symmetric traces vanish. Keep the even symmetric traces
+        // as invariant tensors; unfolding them would undo the terminal form.
+        if let [factor] = factors.as_slice()
+            && let Some(args) = color_symmetric_trace_arg_views(rep.as_view(), factor.as_view())
+        {
+            if symmetric_trace_phase(rep.as_view(), args.len()) == 0 {
+                return Some(Atom::Zero);
+            }
+            if args.len() <= 2 {
+                return self.simplify_generator_trace(
+                    &rep,
+                    &args
+                        .into_iter()
+                        .map(|slot| slot.to_owned())
+                        .collect::<Vec<_>>(),
+                );
+            }
         }
 
         // Through degree four, every cyclic ordering of a repeated adjoint pair
@@ -340,6 +419,27 @@ impl ColorAlgebraSimplifier {
             return Some(trace.expand_projectors());
         }
 
+        let adjoint = matches!(rep.as_view(), AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep);
+        let generators = if adjoint {
+            factors
+                .iter()
+                .map(|factor| {
+                    adjoint_generator_slot(rep.as_view(), factor.as_view())
+                        .map(|slot| slot.to_owned())
+                })
+                .collect::<Option<Vec<_>>>()
+        } else {
+            factors
+                .iter()
+                .map(|factor| color_generator_adjoint(factor.as_view()))
+                .collect()
+        };
+        if let Some(generators) = &generators {
+            // Short Casimir and terminal rules require the same compatible
+            // adjoint space as the general word recurrence.
+            Self::trace_generator_is_adjoint(&rep, generators)?;
+        }
+
         if let Some(rewritten) = self.simplify_antisymmetric_trace_projector(&rep, &factors) {
             return Some(rewritten);
         }
@@ -356,17 +456,24 @@ impl ColorAlgebraSimplifier {
             return Some(rewritten);
         }
 
+        if let Some(generators) = &generators
+            && let Some(rewritten) = self.simplify_repeated_generator_trace(&rep, generators)
+        {
+            return Some(rewritten);
+        }
+
         // Later selected factors can still contract with this ordered trace.
         // Keep its terminal decomposition until the frontier is complete;
         // identity, Casimir and product rewrites remain available on prefixes.
         if !complete {
             return None;
         }
-
-        let generators = factors
-            .iter()
-            .map(|factor| color_generator_adjoint(factor.as_view()))
-            .collect::<Option<Vec<_>>>()?;
+        let Some(generators) = generators else {
+            return self.simplify_prefixed_generator_trace(&rep, &factors);
+        };
+        if adjoint {
+            return self.simplify_generator_trace(&rep, &generators);
+        }
 
         match generators.as_slice() {
             // Tr(T^a) -> 0.
@@ -382,8 +489,33 @@ impl ColorAlgebraSimplifier {
                         * color_f!(a.clone(), b.clone(), c.clone()),
             ),
             [a, b, c, d] => self.simplify_four_generator_trace_terminal(&rep, a, b, c, d),
-            _ => None,
+            _ => self.simplify_generator_trace(&rep, &generators),
         }
+    }
+
+    fn normalize_adjoint_factor(rep: AtomView<'_>, factor: AtomView<'_>) -> Option<(Atom, Atom)> {
+        if let Some((mut coefficient, symbol, factors)) = projector_factor(factor)
+            && symbol == *shadowing::SYM
+        {
+            let normalized = factors
+                .iter()
+                .map(|factor| {
+                    let (slot, phase) = adjoint_generator(rep, factor.as_view())?;
+                    coefficient *= phase;
+                    Some(color_f!(
+                        Atom::var(T.chain_in),
+                        Atom::var(T.chain_out),
+                        slot
+                    ))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            return Some((coefficient, shadowing::sym(normalized)));
+        }
+        let (slot, coefficient) = adjoint_generator(rep, factor)?;
+        Some((
+            coefficient,
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), slot),
+        ))
     }
 
     fn simplify_adjacent_trace_casimir(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
@@ -590,8 +722,7 @@ impl ColorAlgebraSimplifier {
             return None;
         }
 
-        product
-            .distribute_color_sum_factor()
+        Self::simplify_symmetric_prefix_structure_product(&product)
             .or_else(|| Self::join_color_chain_product(&product))
             .or_else(|| {
                 self.settings
@@ -602,13 +733,7 @@ impl ColorAlgebraSimplifier {
             .or_else(|| self.simplify_chain_structure_product(&product))
             .or_else(|| Self::simplify_symmetric_structure_product(&product))
             .or_else(|| self.simplify_two_f_loop_product(&product))
-            .or_else(|| self.simplify_three_f_loop_product(&product))
-            .or_else(|| {
-                self.settings
-                    .evaluate_traces
-                    .then(|| Self::simplify_four_f_loop_product(&product))
-                    .flatten()
-            })
+            .or_else(|| self.simplify_adjoint_loop_product(&product))
             .or_else(|| Self::simplify_symmetric_invariant_product(&product))
             .or_else(|| {
                 self.settings
@@ -616,6 +741,7 @@ impl ColorAlgebraSimplifier {
                     .then(|| Self::simplify_cross_chain_fierz_product(&product))
                     .flatten()
             })
+            .or_else(|| product.distribute_color_sum_factor())
             .or_else(|| self.simplify_embedded_color_node(&product, complete))
     }
 
@@ -700,13 +826,16 @@ impl ColorAlgebraSimplifier {
                 } else {
                     return None;
                 };
-                Some((index, factor, dimension, factors))
+                Some((index, factor, dimension, factors, factor.generator_slots()?))
             })
             .collect::<Vec<_>>();
 
-        for (position, (left_index, left, left_dimension, left_factors)) in lines.iter().enumerate()
+        for (position, (left_index, left, left_dimension, left_factors, left_slots)) in
+            lines.iter().enumerate()
         {
-            for (right_index, right, right_dimension, right_factors) in &lines[position + 1..] {
+            for (right_index, right, right_dimension, right_factors, right_slots) in
+                &lines[position + 1..]
+            {
                 if left_dimension != right_dimension {
                     continue;
                 }
@@ -714,6 +843,19 @@ impl ColorAlgebraSimplifier {
                     let Some(left_adjoint) = color_generator_adjoint(*left_generator) else {
                         continue;
                     };
+                    if left_slots
+                        .iter()
+                        .filter(|slot| **slot == left_adjoint.as_view())
+                        .count()
+                        != 1
+                        || right_slots
+                            .iter()
+                            .filter(|slot| **slot == left_adjoint.as_view())
+                            .count()
+                            != 1
+                    {
+                        continue;
+                    }
                     for (right_position, right_generator) in right_factors.iter().enumerate() {
                         if color_generator_adjoint(*right_generator).as_ref() != Some(&left_adjoint)
                         {
@@ -826,14 +968,18 @@ impl ColorAlgebraSimplifier {
             return None;
         }
 
-        if let Some(invariant) = color_symmetric_invariant(base)
+        if let Some(invariant) = SymmetricInvariantView::parse(base)
             && invariant.args.len() >= 3
+            && invariant.has_distinct_args()
         {
-            return Some(color_symmetric_product(
-                invariant.args.len(),
-                invariant.rep.clone(),
-                invariant.rep,
-            ));
+            return Some(
+                Atom::num(invariant.phase * invariant.phase)
+                    * color_symmetric_product(
+                        invariant.args.len(),
+                        invariant.rep.to_owned(),
+                        invariant.rep.to_owned(),
+                    ),
+            );
         }
 
         let args = structure_constant_args(base)?;
@@ -849,6 +995,17 @@ impl ColorAlgebraSimplifier {
             if trace.factors.len() < 2 {
                 continue;
             }
+            let Some(slots) = trace_factor.generator_slots() else {
+                continue;
+            };
+            let adjoint = matches!(trace.rep, AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep);
+            let generator = |factor| {
+                if adjoint {
+                    adjoint_generator_slot(trace.rep, factor)
+                } else {
+                    color_generator_adjoint_view(factor)
+                }
+            };
 
             for (f_index, f_factor) in product.factors.iter().enumerate() {
                 if f_index == trace_index {
@@ -866,12 +1023,17 @@ impl ColorAlgebraSimplifier {
                 for pair_index in 0..trace.factors.len() {
                     let first = trace.factors[pair_index];
                     let second = trace.factors[(pair_index + 1) % trace.factors.len()];
-                    let Some(a) = color_generator_adjoint_view(first) else {
+                    let Some(a) = generator(first) else {
                         continue;
                     };
-                    let Some(b) = color_generator_adjoint_view(second) else {
+                    let Some(b) = generator(second) else {
                         continue;
                     };
+                    if [a, b].iter().any(|candidate| {
+                        slots.iter().filter(|slot| *slot == candidate).count() != 1
+                    }) {
+                        continue;
+                    }
                     let Some((target, structure_prefactor)) =
                         Self::structure_target_for_generator_pair(&structure.args, &a, &b)
                     else {
@@ -881,13 +1043,17 @@ impl ColorAlgebraSimplifier {
                     let rest = (0..trace.factors.len() - 2).map(|offset| {
                         trace.factors[(pair_index + 2 + offset) % trace.factors.len()].to_owned()
                     });
-                    let replacement_factors = std::iter::once(color_t!(target.clone()))
-                        .chain(rest)
-                        .collect::<Vec<_>>();
+                    let target = if adjoint {
+                        color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), target)
+                    } else {
+                        color_t!(target)
+                    };
+                    let replacement_factors =
+                        std::iter::once(target).chain(rest).collect::<Vec<_>>();
 
-                    // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
+                    // Fundamental [T,T] = i f T; raw adjoint [F,F] = -f F.
                     let replacement = structure_prefactor
-                        * Atom::i()
+                        * if adjoint { -Atom::one() } else { Atom::i() }
                         * adjoint_casimir_for_dimension(structure_dimension.clone())
                         / Atom::num(2)
                         * trace_with_factors(trace.rep.to_owned(), replacement_factors);
@@ -904,6 +1070,9 @@ impl ColorAlgebraSimplifier {
             let Some(chain) = &chain_factor.chain else {
                 continue;
             };
+            let Some(slots) = chain_factor.generator_slots() else {
+                continue;
+            };
 
             for pair_index in 0..chain.factors.len().saturating_sub(1) {
                 let Some(left) = color_generator_adjoint_view(chain.factors[pair_index]) else {
@@ -913,6 +1082,12 @@ impl ColorAlgebraSimplifier {
                 else {
                     continue;
                 };
+                if [left, right]
+                    .iter()
+                    .any(|candidate| slots.iter().filter(|slot| *slot == candidate).count() != 1)
+                {
+                    continue;
+                }
 
                 for (f_index, f_factor) in product.factors.iter().enumerate() {
                     if f_index == chain_index {
@@ -962,13 +1137,16 @@ impl ColorAlgebraSimplifier {
         left: &AtomView<'_>,
         right: &AtomView<'_>,
     ) -> Option<(Atom, Atom)> {
-        let actual = color_f!(args[0].to_owned(), args[1].to_owned(), args[2].to_owned());
-
-        args.iter().find_map(|target| {
-            let oriented = color_f!(target.to_owned(), left.to_owned(), right.to_owned());
-            let prefactor = oriented.coefficient(actual.as_view());
-            (!prefactor.is_zero()).then_some((target.to_owned(), prefactor))
-        })
+        let left = args.iter().position(|arg| arg == left)?;
+        let right = args.iter().position(|arg| arg == right)?;
+        if left == right {
+            return None;
+        }
+        let target = (0..3).find(|&i| i != left && i != right)?;
+        Some((
+            args[target].to_owned(),
+            StructureView::orientation(left, right),
+        ))
     }
 
     fn simplify_symmetric_structure_product(product: &ProductView) -> Option<Atom> {
@@ -987,10 +1165,12 @@ impl ColorAlgebraSimplifier {
                 if color_structure_dimension(&structure.args.map(|arg| arg.to_owned())).is_none() {
                     continue;
                 }
-                let common_count = symmetric
+                // A repeated slot is bound inside the symmetric trace. It
+                // cannot connect to a same-spelled index outside that trace.
+                let common_count = structure
                     .args
                     .iter()
-                    .filter(|arg| structure.args.iter().any(|candidate| candidate == *arg))
+                    .filter(|arg| symmetric.args.iter().filter(|slot| *slot == *arg).count() == 1)
                     .count();
                 if common_count >= 2 {
                     return Some(Atom::Zero);
@@ -1035,114 +1215,7 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_three_f_loop_product(&self, product: &ProductView) -> Option<Atom> {
-        for indices in (0..product.factors.len()).combinations(3) {
-            let Some(f_args) = indices
-                .iter()
-                .map(|index| {
-                    product.factors[*index]
-                        .structure
-                        .as_ref()
-                        .map(|structure| structure.args.map(|arg| arg.to_owned()))
-                })
-                .collect::<Option<Vec<_>>>()
-            else {
-                continue;
-            };
-            let Some(dimensions) = f_args
-                .iter()
-                .map(color_structure_dimension)
-                .collect::<Option<Vec<_>>>()
-            else {
-                continue;
-            };
-            if !dimensions
-                .iter()
-                .all(|dimension| dimension == &dimensions[0])
-            {
-                continue;
-            }
-
-            let common01 = common_structure_positions(&f_args[0], &f_args[1]);
-            let common12 = common_structure_positions(&f_args[1], &f_args[2]);
-            let common20 = common_structure_positions(&f_args[2], &f_args[0]);
-            let ([edge01], [edge12], [edge20]) = (
-                common01.as_slice(),
-                common12.as_slice(),
-                common20.as_slice(),
-            ) else {
-                continue;
-            };
-            if edge01.left == edge20.right
-                || edge01.right == edge12.left
-                || edge12.right == edge20.left
-            {
-                continue;
-            }
-
-            let Some(external0) =
-                (0..3).find(|position| *position != edge01.left && *position != edge20.right)
-            else {
-                continue;
-            };
-            let Some(external1) =
-                (0..3).find(|position| *position != edge01.right && *position != edge12.left)
-            else {
-                continue;
-            };
-            let Some(external2) =
-                (0..3).find(|position| *position != edge12.right && *position != edge20.left)
-            else {
-                continue;
-            };
-
-            let internal01 = f_args[0][edge01.left].clone();
-            let internal12 = f_args[1][edge12.left].clone();
-            let internal20 = f_args[2][edge20.left].clone();
-            let externals = [
-                f_args[0][external0].clone(),
-                f_args[1][external1].clone(),
-                f_args[2][external2].clone(),
-            ];
-            let actual = f_args
-                .iter()
-                .map(|args| color_f!(args[0].clone(), args[1].clone(), args[2].clone()))
-                .collect::<Vec<_>>();
-            let oriented = [
-                color_f!(internal20.clone(), internal01.clone(), externals[0].clone()),
-                color_f!(internal01, internal12.clone(), externals[1].clone()),
-                color_f!(internal12, internal20, externals[2].clone()),
-            ];
-            // Orient all three structures around the cycle; their coefficient
-            // product carries the permutation parity into the reduced f.
-            let prefactor = oriented
-                .iter()
-                .zip(actual)
-                .fold(Atom::num(1), |prefactor, (oriented, actual)| {
-                    prefactor * oriented.coefficient(actual.as_view())
-                });
-            if prefactor.is_zero() {
-                continue;
-            }
-
-            let replacement = prefactor * adjoint_casimir_for_dimension(dimensions[0].clone())
-                / Atom::num(2)
-                * color_f!(
-                    externals[0].clone(),
-                    externals[1].clone(),
-                    externals[2].clone()
-                );
-            let mut excluded = vec![false; product.factors.len()];
-            for index in indices {
-                excluded[index] = true;
-            }
-            return Some(product.excluding(&excluded) * replacement);
-        }
-
-        None
-    }
-
-    fn simplify_four_f_loop_product(product: &ProductView) -> Option<Atom> {
+    fn simplify_adjoint_loop_product(&self, product: &ProductView) -> Option<Atom> {
         let structures = product
             .factors
             .iter()
@@ -1153,13 +1226,13 @@ impl ColorAlgebraSimplifier {
                 Some((index, args, dimension))
             })
             .collect::<Vec<_>>();
-        if structures.len() < 4 {
+        if structures.len() < 3 {
             return None;
         }
 
-        // Build adjacency from complete typed slots, not index labels alone.
-        // A cubic graph has at most three neighbours per vertex; following its
-        // edges avoids enumerating every quadruple in a large colour product.
+        // Complete typed slots define the edges. Prefer a shortest cycle:
+        // its trace decomposition introduces the fewest new invariant slots.
+        // This also handles triangles without enumerating every vertex triple.
         let mut neighbours = vec![Vec::new(); structures.len()];
         for (left, (_, left_args, left_dimension)) in structures.iter().enumerate() {
             for (right, (_, right_args, right_dimension)) in
@@ -1173,77 +1246,94 @@ impl ColorAlgebraSimplifier {
                 }
             }
         }
-        for first in 0..structures.len() {
-            for &second in &neighbours[first] {
-                if second <= first {
-                    continue;
-                }
-                for &third in &neighbours[second] {
-                    if third <= first {
-                        continue;
-                    }
-                    for &fourth in &neighbours[third] {
-                        // Each cycle is visited once, in either orientation.
-                        if fourth <= second || !neighbours[fourth].contains(&first) {
-                            continue;
-                        }
-                        let cycle = [first, second, third, fourth];
-                        let links: [_; 4] = std::array::from_fn(|i| {
-                            common_structure_positions(
-                                &structures[cycle[i]].1,
-                                &structures[cycle[(i + 1) % 4]].1,
-                            )[0]
-                        });
-                        let mut external = Vec::with_capacity(4);
-                        let mut prefactor = Atom::num(1);
-                        for i in 0..4 {
-                            let args = &structures[cycle[i]].1;
-                            let incoming = links[(i + 3) % 4].right;
-                            let outgoing = links[i].left;
-                            if incoming == outgoing {
-                                break;
+        let mut cycle = Vec::new();
+        'roots: for root in 0..structures.len() {
+            let mut parent = vec![usize::MAX; structures.len()];
+            let mut depth = vec![0; structures.len()];
+            parent[root] = root;
+            let mut pending = VecDeque::from([root]);
+            while let Some(vertex) = pending.pop_front() {
+                for &next in &neighbours[vertex] {
+                    if parent[next] == usize::MAX {
+                        parent[next] = vertex;
+                        depth[next] = depth[vertex] + 1;
+                        pending.push_back(next);
+                    } else if next != parent[vertex] && parent[next] != vertex {
+                        let (mut left, mut right) = (vec![vertex], vec![next]);
+                        let (mut a, mut b) = (vertex, next);
+                        while a != b {
+                            if depth[a] >= depth[b] {
+                                a = parent[a];
+                                left.push(a);
+                            } else {
+                                b = parent[b];
+                                right.push(b);
                             }
-                            let open = (0..3).find(|p| *p != incoming && *p != outgoing)?;
-                            external.push(args[open].clone());
-                            let actual = color_f!(&args[0], &args[1], &args[2]);
-                            let oriented = color_f!(&args[incoming], &args[outgoing], &args[open]);
-                            prefactor *= oriented.coefficient(actual.as_view());
                         }
-                        if external.len() != 4 || prefactor.is_zero() {
-                            continue;
+                        right.pop();
+                        left.extend(right.into_iter().rev());
+                        if cycle.is_empty() || left.len() < cycle.len() {
+                            cycle = left;
+                            if cycle.len() == 3 {
+                                break 'roots;
+                            }
                         }
-                        let [a, b, c, d] = external.as_slice() else {
-                            unreachable!();
-                        };
-                        // Both occurrences of this admitted dummy disappear with
-                        // the selected cycle. Reuse its typed slot for the new
-                        // f*f connection, so no spectator or other copy can be
-                        // captured by a fixed globally named trace dummy.
-                        let dummy = &structures[first].1[links[0].left];
-                        let dimension = &structures[first].2;
-                        // color.h's four-adjoint-loop decomposition: the fully
-                        // symmetric trace stays as an invariant; only the two
-                        // commutator terms introduce local sums.
-                        // Four raw adjoint f matrices give (-i)^4=1:
-                        // this is the normalized Hermitian adjoint trace.
-                        let symmetric = trace_sym!(adjoint_rep(dimension.clone()); external.iter().map(|port| {
-                            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), port)
-                        }));
-                        let replacement = prefactor
-                            * (symmetric
-                                + adjoint_casimir_for_dimension(dimension.clone()) / Atom::num(6)
-                                    * (color_f!(a, b, dummy) * color_f!(d, c, dummy)
-                                        + color_f!(a, dummy, d) * color_f!(c, b, dummy)));
-                        let mut excluded = vec![false; product.len()];
-                        for vertex in cycle {
-                            excluded[structures[vertex].0] = true;
-                        }
-                        return Some(product.excluding(&excluded) * replacement);
                     }
                 }
             }
         }
-        None
+        if cycle.is_empty() || (cycle.len() > 3 && !self.settings.evaluate_traces) {
+            return None;
+        }
+
+        let links = (0..cycle.len())
+            .map(|i| {
+                common_structure_positions(
+                    &structures[cycle[i]].1,
+                    &structures[cycle[(i + 1) % cycle.len()]].1,
+                )[0]
+            })
+            .collect::<Vec<_>>();
+        let mut external = Vec::with_capacity(cycle.len());
+        let mut prefactor = Atom::one();
+        for i in 0..cycle.len() {
+            let args = &structures[cycle[i]].1;
+            let incoming = links[(i + cycle.len() - 1) % cycle.len()].right;
+            let outgoing = links[i].left;
+            if incoming == outgoing {
+                return None;
+            }
+            let open = (0..3).find(|p| *p != incoming && *p != outgoing)?;
+            external.push(args[open].clone());
+            prefactor *= StructureView::orientation(incoming, outgoing);
+        }
+        if prefactor.is_zero() {
+            return None;
+        }
+        let dimension = &structures[cycle[0]].2;
+        let replacement = match external.as_slice() {
+            [a, b, c] => {
+                adjoint_casimir_for_dimension(dimension.clone()) / Atom::num(2) * color_f!(a, b, c)
+            }
+            [a, b, c, d] => {
+                // Keep the compact color.h quartic identity. Reuse a removed
+                // cycle edge for its new dummy; neither endpoint survives.
+                let dummy = &structures[cycle[0]].1[links[0].left];
+                let symmetric = trace_sym!(adjoint_rep(dimension.clone()); external.iter().map(|port| {
+                    color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), port)
+                }));
+                symmetric
+                    + adjoint_casimir_for_dimension(dimension.clone()) / Atom::num(6)
+                        * (color_f!(a, b, dummy) * color_f!(d, c, dummy)
+                            + color_f!(a, dummy, d) * color_f!(c, b, dummy))
+            }
+            _ => self.simplify_generator_trace(&adjoint_rep(dimension.clone()), &external)?,
+        };
+        let mut excluded = vec![false; product.len()];
+        for vertex in cycle {
+            excluded[structures[vertex].0] = true;
+        }
+        Some(product.excluding(&excluded) * prefactor * replacement)
     }
 
     fn simplify_symmetric_invariant_product(product: &ProductView) -> Option<Atom> {
@@ -1257,7 +1347,11 @@ impl ColorAlgebraSimplifier {
                 let Some(right) = &right_factor.symmetric_invariant else {
                     continue;
                 };
-                if left.args.len() != right.args.len() || left.args.len() < 3 {
+                if left.args.len() != right.args.len()
+                    || left.args.len() < 3
+                    || !left.has_distinct_args()
+                    || !right.has_distinct_args()
+                {
                     continue;
                 };
 
@@ -1276,11 +1370,12 @@ impl ColorAlgebraSimplifier {
                 let (common, left_open, right_open) =
                     symmetric_common_and_open_args(&left_args, &right_args);
                 if common.len() == left_args.len() {
-                    let replacement = color_symmetric_product(
-                        left_args.len(),
-                        left.rep.to_owned(),
-                        right.rep.to_owned(),
-                    );
+                    let replacement = Atom::num(left.phase * right.phase)
+                        * color_symmetric_product(
+                            left_args.len(),
+                            left.rep.to_owned(),
+                            right.rep.to_owned(),
+                        );
                     return Some(product.replacing_pair(left_index, right_index, replacement));
                 }
                 let ([left_open], [right_open]) = (left_open.as_slice(), right_open.as_slice())
@@ -1290,11 +1385,13 @@ impl ColorAlgebraSimplifier {
                 let dimension = color_adjoint_dimension(left_open)
                     .or_else(|| color_adjoint_dimension(right_open))
                     .or_else(|| common.iter().find_map(color_adjoint_dimension))?;
-                let replacement = color_symmetric_product(
-                    left_args.len(),
-                    left.rep.to_owned(),
-                    right.rep.to_owned(),
-                ) * color_metric(left_open.clone(), right_open.clone())
+                let replacement = Atom::num(left.phase * right.phase)
+                    * color_symmetric_product(
+                        left_args.len(),
+                        left.rep.to_owned(),
+                        right.rep.to_owned(),
+                    )
+                    * color_metric(left_open.clone(), right_open.clone())
                     / dimension;
                 return Some(product.replacing_pair(left_index, right_index, replacement));
             }
@@ -1354,6 +1451,13 @@ struct StructureView<'a> {
 }
 
 impl<'a> StructureView<'a> {
+    fn orientation(first: usize, second: usize) -> Atom {
+        // The third position is fixed. Read the antisymmetric permutation
+        // directly; rebuilding f and extracting a coefficient must not depend
+        // on the spelling or intrinsic normalization of admitted index labels.
+        Atom::num(if second == (first + 1) % 3 { 1 } else { -1 })
+    }
+
     fn parse(expr: AtomView<'a>) -> Option<Self> {
         let AtomView::Fun(f) = expr else {
             return None;
@@ -1373,17 +1477,31 @@ impl<'a> StructureView<'a> {
 struct SymmetricInvariantView<'a> {
     rep: AtomView<'a>,
     args: Vec<AtomView<'a>>,
+    // Raw adjoint symmetric words carry i^rank relative to the Hermitian
+    // invariant used by gram. Odd adjoint symmetric invariants are zero.
+    phase: i8,
 }
 
 impl<'a> SymmetricInvariantView<'a> {
+    fn has_distinct_args(&self) -> bool {
+        // Repeated slots contract inside this invariant. They are not free
+        // ports that a second copy may connect to form a Gram invariant.
+        self.args
+            .iter()
+            .enumerate()
+            .all(|(i, arg)| !self.args[..i].contains(arg))
+    }
+
     fn parse(expr: AtomView<'a>) -> Option<Self> {
         if let Some(trace) = TraceView::parse(expr) {
             let [factor] = trace.factors.as_slice() else {
                 return None;
             };
             let args = color_symmetric_trace_arg_views(trace.rep, *factor)?;
+            ColorAlgebraSimplifier::trace_generator_is_adjoint(&trace.rep.to_owned(), &args)?;
             return Some(Self {
                 rep: trace.rep,
+                phase: symmetric_trace_phase(trace.rep, args.len()),
                 args,
             });
         }
@@ -1396,9 +1514,13 @@ impl<'a> SymmetricInvariantView<'a> {
         }
 
         let args = f.iter().collect::<Vec<_>>();
+        // Explicit d_R also supports representations without a generator-word
+        // kernel. Its contracted index space must still be homogeneous.
+        let _ = color_structure_dimension(&args[1..])?;
         Some(Self {
             rep: args[0],
             args: args[1..].to_vec(),
+            phase: 1,
         })
     }
 }
@@ -1425,6 +1547,36 @@ impl<'a> ProductFactor<'a> {
             structure,
             symmetric_invariant,
         }
+    }
+
+    /// Borrow all generator side ports before selecting a connection to another
+    /// factor. A repeated port contracts within this line and is not an external
+    /// leg, including when its other occurrence lies in a symmetric block.
+    fn generator_slots(&self) -> Option<Vec<AtomView<'a>>> {
+        let (representation, factors) = if let Some(trace) = &self.trace {
+            (trace.rep, &trace.factors)
+        } else if let Some(chain) = &self.chain {
+            let _ = fundamental_chain_dimension_view(chain.start, chain.end)?;
+            (chain.start, &chain.factors)
+        } else {
+            return None;
+        };
+        let adjoint =
+            matches!(representation, AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep);
+        let mut slots = Vec::new();
+        for &factor in factors {
+            let slot = if adjoint {
+                adjoint_generator_slot(representation, factor)
+            } else {
+                color_generator_adjoint_view(factor)
+            };
+            if let Some(slot) = slot {
+                slots.push(slot);
+            } else {
+                slots.extend(color_symmetric_trace_arg_views(representation, factor)?);
+            }
+        }
+        Some(slots)
     }
 }
 
@@ -1486,6 +1638,58 @@ impl<'a> ProductView<'a> {
             .enumerate()
             .find_map(|(index, factor)| match factor.atom {
                 AtomView::Add(add) if add.iter().any(atom_contains_color_node) => {
+                    let mut matcher = SlotMatcher::default();
+                    let mut outside = Vec::new();
+                    let mut only_structures = true;
+                    for (other_index, other) in self.factors.iter().enumerate() {
+                        if other_index == index {
+                            continue;
+                        }
+                        if let Some(structure) = &other.structure {
+                            let parsed = structure
+                                .args
+                                .iter()
+                                .map(|slot| matcher.parse::<LibraryRep, AbstractIndex>(*slot))
+                                .collect::<Result<Vec<_>, _>>();
+                            let Ok(parsed) = parsed else {
+                                only_structures = false;
+                                break;
+                            };
+                            outside.extend(parsed);
+                        } else if !OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                            other.atom,
+                            &mut matcher,
+                        )
+                        .is_ok_and(|structure| structure.canonical().is_scalar())
+                        {
+                            only_structures = false;
+                            break;
+                        }
+                    }
+                    // An f-only region needs at least two connections into
+                    // this sum for a loop or a trace/symmetry contraction.
+                    // A single bridge cannot authorize distribution. Reuse
+                    // admitted homogeneous-sum inference: it inspects only
+                    // the first summand and performs no validation walk.
+                    // Other tensors, missing interfaces and Fierz/chain
+                    // connections retain the existing conservative behavior.
+                    if only_structures && outside.is_empty() {
+                        return None;
+                    }
+                    if only_structures
+                        && let Ok(structure) = OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                            factor.atom,
+                            &mut matcher,
+                        )
+                        && outside
+                            .iter()
+                            .filter(|outer| structure.canonical().external_structure_iter().any(|inner| outer.matches(&inner)))
+                            .take(2)
+                            .count()
+                            < 2
+                    {
+                        return None;
+                    }
                     Some((index, add))
                 }
                 _ => None,
@@ -1560,41 +1764,16 @@ fn structure_constant_args(factor: AtomView) -> Option<[Atom; 3]> {
     Some([args[0].clone(), args[1].clone(), args[2].clone()])
 }
 
-#[derive(Clone, Debug)]
-struct ColorSymmetricInvariant {
-    rep: Atom,
-    args: Vec<Atom>,
-}
-
-fn color_symmetric_invariant(invariant: AtomView) -> Option<ColorSymmetricInvariant> {
-    if let Some((rep, factors)) = trace_parts(invariant) {
-        let [factor] = factors.as_slice() else {
-            return None;
-        };
-        let args = color_symmetric_trace_args(rep.as_view(), factor.as_view())?;
-        return Some(ColorSymmetricInvariant { rep, args });
+fn symmetric_trace_phase(rep: AtomView, rank: usize) -> i8 {
+    if matches!(rep, AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep) {
+        match rank % 4 {
+            0 => 1,
+            2 => -1,
+            _ => 0,
+        }
+    } else {
+        1
     }
-
-    let AtomView::Fun(f) = invariant else {
-        return None;
-    };
-    if f.get_symbol() != CS.d || f.get_nargs() < 4 {
-        return None;
-    }
-
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    Some(ColorSymmetricInvariant {
-        rep: args[0].clone(),
-        args: args[1..].to_vec(),
-    })
-}
-
-fn color_symmetric_trace_args(rep: AtomView, projector: AtomView) -> Option<Vec<Atom>> {
-    color_symmetric_trace_arg_views(rep, projector).map(|args| {
-        args.into_iter()
-            .map(|arg| arg.to_owned())
-            .collect::<Vec<_>>()
-    })
 }
 
 fn color_symmetric_trace_arg_views<'a>(
@@ -1608,43 +1787,73 @@ fn color_symmetric_trace_arg_views<'a>(
         return None;
     }
 
-    if let AtomView::Fun(representation) = rep
+    let args = if let AtomView::Fun(representation) = rep
         && representation.get_symbol() == CS.adjoint_rep
         && representation.get_nargs() == 1
-        && f.get_nargs() == 4
     {
-        let dimension = representation.iter().next()?;
-        // Only the degree-four adjoint symmetric trace is represented by raw
-        // f words: its Hermitian-generator phase is (-i)^4=1. Ordinary trace
-        // and fundamental-generator matching must not mistake raw f matrices
-        // for T matrices at other degrees.
-        return f
-            .iter()
-            .map(|factor| {
-                let AtomView::Fun(structure) = factor else {
-                    return None;
-                };
-                if structure.get_symbol() != CS.f || structure.get_nargs() != 3 {
-                    return None;
-                }
-                let args = structure.iter().collect::<Vec<_>>();
-                let AtomView::Fun(slot) = args[2] else {
-                    return None;
-                };
-                if !has_chain_endpoints(args[0], args[1])
-                    || slot.get_symbol() != CS.adjoint_rep
-                    || slot.get_nargs() != 2
-                    || slot.iter().next()? != dimension
-                {
-                    return None;
-                }
-                Some(args[2])
-            })
-            .collect();
+        f.iter()
+            .map(|factor| adjoint_generator_slot(rep, factor))
+            .collect::<Option<Vec<_>>>()?
+    } else {
+        f.iter()
+            .map(color_generator_adjoint_view)
+            .collect::<Option<Vec<_>>>()?
+    };
+    if !args.is_empty() {
+        let _ = color_structure_dimension(&args)?;
     }
-    f.iter()
-        .map(color_generator_adjoint_view)
-        .collect::<Option<Vec<_>>>()
+    Some(args)
+}
+
+fn adjoint_generator_slot<'a>(rep: AtomView<'a>, factor: AtomView<'a>) -> Option<AtomView<'a>> {
+    let (slot, coefficient) = adjoint_generator(rep, factor)?;
+    coefficient.is_one().then_some(slot)
+}
+
+fn adjoint_generator<'a>(rep: AtomView<'a>, factor: AtomView<'a>) -> Option<(AtomView<'a>, Atom)> {
+    let AtomView::Fun(representation) = rep else {
+        return None;
+    };
+    let mut coefficient = Atom::one();
+    let mut matrix = None;
+    for factor in multiplicative_factor_views(factor) {
+        if matches!(factor, AtomView::Num(_)) {
+            coefficient *= factor;
+        } else if matrix.replace(factor).is_some() {
+            return None;
+        }
+    }
+    let AtomView::Fun(structure) = matrix? else {
+        return None;
+    };
+    if representation.get_symbol() != CS.adjoint_rep
+        || representation.get_nargs() != 1
+        || structure.get_symbol() != CS.f
+        || structure.get_nargs() != 3
+    {
+        return None;
+    }
+    let args = structure.iter().collect::<Vec<_>>();
+    let input = args
+        .iter()
+        .position(|arg| is_chain_endpoint(*arg, T.chain_in))?;
+    let output = args
+        .iter()
+        .position(|arg| is_chain_endpoint(*arg, T.chain_out))?;
+    let slot = args[(0..3).find(|&i| i != input && i != output)?];
+    let AtomView::Fun(index) = slot else {
+        return None;
+    };
+    if index.get_symbol() == CS.adjoint_rep
+        && index.get_nargs() == 2
+        && index.iter().next()? == representation.iter().next()?
+    {
+        return Some((
+            slot,
+            coefficient * StructureView::orientation(input, output),
+        ));
+    }
+    None
 }
 
 fn color_antisymmetric_generator_args(factor: AtomView) -> Option<(Atom, Vec<Atom>)> {
@@ -1715,11 +1924,11 @@ fn color_fundamental_slot(slot: AtomView) -> Option<(Atom, Atom, bool)> {
         .map(|(dimension, index)| (dimension, index, true))
 }
 
-fn color_adjoint_dimension(slot: &Atom) -> Option<Atom> {
-    representation_slot(slot.as_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
+fn color_adjoint_dimension(slot: &impl AtomCore) -> Option<Atom> {
+    representation_slot(slot.as_atom_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
 }
 
-fn color_structure_dimension(args: &[Atom; 3]) -> Option<Atom> {
+fn color_structure_dimension(args: &[impl AtomCore]) -> Option<Atom> {
     let mut dimensions = args.iter().map(color_adjoint_dimension);
     let dimension = dimensions.next()??;
     dimensions
@@ -2004,25 +2213,8 @@ fn two_structure_loop_contraction(
             let left_open = (0..3).find(|index| *index != first.left && *index != second.left)?;
             let right_open =
                 (0..3).find(|index| *index != first.right && *index != second.right)?;
-            let common = [left[first.left].clone(), left[second.left].clone()];
-            let left_actual = color_f!(left[0].clone(), left[1].clone(), left[2].clone());
-            let right_actual = color_f!(right[0].clone(), right[1].clone(), right[2].clone());
-            let left_oriented = color_f!(
-                left[left_open].clone(),
-                common[0].clone(),
-                common[1].clone()
-            );
-            let right_oriented = color_f!(
-                right[right_open].clone(),
-                common[0].clone(),
-                common[1].clone()
-            );
-
-            let left_prefactor = left_oriented.coefficient(left_actual.as_view());
-            let right_prefactor = right_oriented.coefficient(right_actual.as_view());
-            if left_prefactor.is_zero() || right_prefactor.is_zero() {
-                return None;
-            }
+            let left_prefactor = StructureView::orientation(first.left, second.left);
+            let right_prefactor = StructureView::orientation(first.right, second.right);
             Some(
                 left_prefactor
                     * right_prefactor
@@ -2030,7 +2222,12 @@ fn two_structure_loop_contraction(
                     * color_metric(left[left_open].clone(), right[right_open].clone()),
             )
         }
-        [_, _, _] => Some(adjoint_casimir * color_structure_dimension(left)?),
+        [first, second, _] => Some(
+            StructureView::orientation(first.left, second.left)
+                * StructureView::orientation(first.right, second.right)
+                * adjoint_casimir
+                * color_structure_dimension(left)?,
+        ),
         _ => None,
     }
 }
@@ -2078,6 +2275,115 @@ mod reconstruction_tests {
     use super::*;
     use std::sync::{Arc, Mutex};
     use symbolica::{domains::float::Float, parse, parse_lit, symbol};
+
+    #[test]
+    fn legacy_symmetric_invariant_reader_requires_a_uniform_adjoint_index_space() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: Default::default(),
+            dummies: ParseState::default(),
+        };
+        for representation in [
+            fundamental_rep(Atom::num(3)),
+            ColorSextet {}.to_symbolic([Atom::num(6)]),
+        ] {
+            for degree in [4, 6] {
+                for uniform in [false, true] {
+                    let slots = (0..degree)
+                        .map(|index| {
+                            ColorAdjoint {}.to_symbolic([
+                                Atom::num(if uniform || index != 0 { 8 } else { 3 }),
+                                Atom::num(99851 + index),
+                            ])
+                        })
+                        .collect::<Vec<_>>();
+                    // This is the legacy internal d_R representation. Public
+                    // admission uses a symmetric trace; its representation
+                    // argument must not be invented as an additional open port.
+                    let invariant = CS.symmetric_d(&representation, slots);
+                    assert_eq!(
+                        SymmetricInvariantView::parse(invariant.as_view()).is_some(),
+                        uniform
+                    );
+                    let result = simplifier.simplify_power(invariant.pow(2).as_view());
+                    let gram = CS.gram(Atom::num(degree), &representation, &representation);
+                    if uniform {
+                        assert_eq!(result, Some(gram));
+                    } else {
+                        assert_eq!(result, None);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn structure_word_connections_require_unique_ports_in_the_whole_line() {
+        crate::test_support::test_initialize();
+        let slots = (1..7)
+            .map(|i| ColorAdjoint {}.to_symbolic([Atom::num(8), Atom::num(i)]))
+            .collect::<Vec<_>>();
+        let incoming = ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(11)]);
+        let outgoing =
+            spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(12)]));
+        let simplifier = ColorAlgebraSimplifier {
+            settings: Default::default(),
+            dummies: ParseState::default(),
+        };
+        for repeated in [false, true] {
+            let word = [0, 1, if repeated { 0 } else { 2 }, 3].map(|i| color_t!(&slots[i]));
+            let line = trace!(fundamental_rep(Atom::num(3)); &word);
+            SymbolicTensor::infer(line.clone()).unwrap();
+            let input = &line * color_f!(&slots[0], &slots[1], &slots[4]);
+            assert_eq!(
+                simplifier
+                    .simplify_trace_structure_product(&ProductView::parse(input.as_view()))
+                    .is_some(),
+                !repeated,
+            );
+            let line = chain!(&incoming, &outgoing; &word);
+            SymbolicTensor::infer(line.clone()).unwrap();
+            let input = line * color_f!(&slots[0], &slots[1], &slots[4]);
+            assert_eq!(
+                simplifier
+                    .simplify_chain_structure_product(&ProductView::parse(input.as_view()))
+                    .is_some(),
+                !repeated,
+            );
+        }
+    }
+
+    #[test]
+    fn cross_line_fierz_never_uses_a_port_contracted_inside_either_line() {
+        crate::test_support::test_initialize();
+        let slots = (21..28)
+            .map(|i| ColorAdjoint {}.to_symbolic([Atom::num(8), Atom::num(i)]))
+            .collect::<Vec<_>>();
+        let incoming = ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(31)]);
+        let outgoing =
+            spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(32)]));
+        for repeated in [false, true] {
+            let factors = [0, 1, if repeated { 0 } else { 2 }, 3].map(|i| color_t!(&slots[i]));
+            let other =
+                trace!(fundamental_rep(Atom::num(3)); [color_t!(&slots[0]), color_t!(&slots[4])]);
+            for line in [
+                trace!(fundamental_rep(Atom::num(3)); &factors),
+                chain!(&incoming, &outgoing; &factors),
+            ] {
+                // The raw product deliberately repeats an internal spelling;
+                // each admitted line still has its own established boundary.
+                SymbolicTensor::infer(line.clone()).unwrap();
+                let input = line * &other;
+                assert_eq!(
+                    ColorAlgebraSimplifier::simplify_cross_chain_fierz_product(
+                        &ProductView::parse(input.as_view())
+                    )
+                    .is_some(),
+                    !repeated,
+                );
+            }
+        }
+    }
 
     // Preserve the prior reconstruction schedule as an independent oracle for
     // rounding and user normalizers, which exact polynomial equality cannot test.

@@ -537,6 +537,7 @@ fn closed_trace_observations_keep_generated_leaves_available_to_collection() {
         let mut selected_target = false;
         let mut mapped_target = false;
         body.collect_with_map(
+            crate::tensor::CollectionMode::Monomials,
             None,
             |value| {
                 let selected = value == target.as_view();

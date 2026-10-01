@@ -1850,29 +1850,24 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
         color_t!(slot!(r.coad_da, c)),
     );
     let index = color_idx!(2, ColorFundamental {}.to_symbolic([Atom::var(s!(Nc))]));
-    let expected = index.clone()
-        * chain!(
+    let expected = index
+        * (chain!(
             slot!(r.cof_nc, i),
             slot!(r.cof_nc.dual(), l),
             color_t!(slot!(r.coad_da, c)),
-        )
-        * chain!(
+        ) * chain!(
             slot!(r.cof_nc, k),
             slot!(r.cof_nc.dual(), j),
             color_t!(slot!(r.coad_da, b)),
-        )
-        - index
-            * chain!(
-                slot!(r.cof_nc, i),
-                slot!(r.cof_nc.dual(), j),
-                color_t!(slot!(r.coad_da, b)),
-            )
-            * chain!(
-                slot!(r.cof_nc, k),
-                slot!(r.cof_nc.dual(), l),
-                color_t!(slot!(r.coad_da, c)),
-            )
-            / s!(Nc);
+        ) - chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), j),
+            color_t!(slot!(r.coad_da, b)),
+        ) * chain!(
+            slot!(r.cof_nc, k),
+            slot!(r.cof_nc.dual(), l),
+            color_t!(slot!(r.coad_da, c)),
+        ) / s!(Nc));
 
     assert_eq!(
         crate::tensor::SymbolicTensor::infer(

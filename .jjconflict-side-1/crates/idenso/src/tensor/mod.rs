@@ -50,6 +50,7 @@ use crate::NetworkToolingError;
 
 mod canonicalize;
 mod collection;
+pub(crate) use collection::CollectionMode;
 #[cfg(test)]
 pub(crate) use collection::SELECTED_OPENS;
 pub mod composition;
