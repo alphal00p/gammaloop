@@ -244,9 +244,7 @@ where
         self.forces.compute(
             &self.state,
             &energy,
-            &self.node_z,
-            &self.edge_z,
-            &self.route_z,
+            (&self.node_z, &self.edge_z, &self.route_z),
             scale,
             &self.workset,
         );
@@ -533,11 +531,13 @@ fn apply_initial_jitter<'a, E, V, H, N>(
     }
 }
 
+type ProjectedEdgeChargeSample = (Option<(Hedge, usize)>, Point3<f64>, f64);
+
 struct ForceBuffers {
     vertices: NodeVec<Vector3<f64>>,
     edges: EdgeVec<Vector3<f64>>,
     routes: HedgeVec<Vec<Vector3<f64>>>,
-    samples: EdgeVec<Vec<(Option<(Hedge, usize)>, Point3<f64>, f64)>>,
+    samples: EdgeVec<Vec<ProjectedEdgeChargeSample>>,
     half_routes: HedgeVec<Vec<Point3<f64>>>,
     projected_vertices: NodeVec<Vector3<f64>>,
     projected_edges: EdgeVec<Vector3<f64>>,
@@ -581,9 +581,7 @@ impl ForceBuffers {
         &mut self,
         state: &LayoutState<'a, E, V, H, N>,
         energy: &SpringChargeEnergy,
-        node_z: &NodeVec<f64>,
-        edge_z: &EdgeVec<f64>,
-        route_z: &HedgeVec<Vec<f64>>,
+        depths: (&NodeVec<f64>, &EdgeVec<f64>, &HedgeVec<Vec<f64>>),
         scale: f64,
         workset: &ForceWorkSet,
     ) where
@@ -591,6 +589,7 @@ impl ForceBuffers {
         V: HasPointConstraint,
         N: NodeStorageOps<NodeData = V> + Clone,
     {
+        let (node_z, edge_z, route_z) = depths;
         for &node in &workset.active_nodes {
             self.node_points[node] =
                 point3_from_point(state.vertex_points[node], node_z[node], scale);
@@ -1020,7 +1019,7 @@ mod tests {
         N: NodeStorageOps<NodeData = V> + Clone,
     {
         let mut buffers = ForceBuffers::new(state);
-        buffers.compute(state, energy, node_z, edge_z, route_z, scale, workset);
+        buffers.compute(state, energy, (node_z, edge_z, route_z), scale, workset);
         (buffers.vertices, buffers.edges, buffers.routes)
     }
 
@@ -2419,11 +2418,13 @@ mod tests {
             buffers.compute(
                 &state,
                 &energy,
-                &node_z,
-                &edge_z,
-                &state
-                    .graph
-                    .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                (
+                    &node_z,
+                    &edge_z,
+                    &state
+                        .graph
+                        .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                ),
                 0.0,
                 &workset,
             );

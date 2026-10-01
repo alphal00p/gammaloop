@@ -648,7 +648,7 @@
     let automatic = side in (auto, "auto")
     assert(arrow.offset-side == if automatic { "label" } else { none })
     assert(arrow.label-side == if automatic { auto } else { side })
-    assert(arrow.offset == if side == "right" { -0.5 } else { 0.5 })
+    assert(arrow.offset == if side == "right" { -0.35 } else { 0.35 })
     assert(label.offset == 0 and label.label-side == arrow.label-side)
     assert(label.offset-side == none)
     assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)

@@ -3,15 +3,17 @@
 use crate::{TreeInitCfg, TypstGraph};
 use cgmath::{InnerSpace, Point2};
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[cfg(any(test, feature = "projection-service"))]
 use std::collections::BTreeSet;
-use std::{
-    collections::BTreeMap,
-    error::Error,
-};
+use std::{collections::BTreeMap, error::Error};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+enum CoordinateProjection {
+    InitialSeed,
+    Proposal,
+}
 
 pub struct ProjectionSession {
     template: Value,
@@ -148,7 +150,7 @@ impl ProjectionSession {
                     vec![(hedge, keys)]
                 }
                 HedgePair::Split { .. } => {
-                    return Err("split edges must be separated before ImPrEd projection".into())
+                    return Err("split edges must be separated before ImPrEd projection".into());
                 }
             };
             for (hedge, keys) in halves {
@@ -414,7 +416,7 @@ impl ProjectionSession {
                 json!(keys.iter().map(|key| positions[key]).collect::<Vec<_>>());
         }
         let mut graph: TypstGraph = serde_json::from_value(candidate)?;
-        graph.project_coordinates()?;
+        graph.project_coordinates(CoordinateProjection::Proposal)?;
         let output = serde_json::to_value(&graph)?;
         for (kind, keys) in [("node", &self.nodes), ("edge", &self.anchors)] {
             for (&id, key) in keys {
@@ -485,7 +487,7 @@ impl TypstGraph {
                     flow: Flow::Sink,
                 } => (None, Some(self.node_id(hedge).0), Some("incoming")),
                 HedgePair::Split { .. } => {
-                    return Err("split edges must be separated before ImPrEd layout".into())
+                    return Err("split edges must be separated before ImPrEd layout".into());
                 }
             };
             edges.push(json!({"id":i,"source":source,"target":target,"state":state}));
@@ -493,7 +495,7 @@ impl TypstGraph {
         Ok(json!({"vertices":(0..self.n_nodes()).collect::<Vec<_>>(), "edges":edges}))
     }
 
-    fn project_coordinates(&mut self) -> Result<()> {
+    fn project_coordinates(&mut self, stage: CoordinateProjection) -> Result<()> {
         self.validate_layout()?;
         // Group references are user input: reject invalid targets before indexing.
         for constraint in (0..self.n_nodes())
@@ -515,9 +517,13 @@ impl TypstGraph {
         self.layout_initialized = true;
         let (mut nodes, mut edges) =
             self.initial_solver_positions(TreeInitCfg { dx: 1.0, dy: 1.0 });
-        self.apply_initial_grouped_constraints(&mut nodes, &mut edges);
-        // Match the existing zero-step native path: reference synchronization
-        // follows start/sign projection, then final sign projection.
+        // The EC seed already supplies separated coordinates. Initialize a shared
+        // axis from its canonical reference: averaging opposite-side seed rows can
+        // collapse distinct groups (for example, reversed cross-section cut pairs).
+        // Later proposals retain the native start/averaging and sign projection.
+        if matches!(stage, CoordinateProjection::Proposal) {
+            self.apply_initial_grouped_constraints(&mut nodes, &mut edges);
+        }
         self.apply_group_references(
             &mut nodes,
             &mut edges,
@@ -599,14 +605,10 @@ impl ProjectionSession {
                             format!("external edge {edge} endpoint identity disagrees").into()
                         );
                     }
-                    if source {
-                        route.len() - 1
-                    } else {
-                        0
-                    }
+                    if source { route.len() - 1 } else { 0 }
                 }
                 HedgePair::Split { .. } => {
-                    return Err("split edges must be separated before ImPrEd layout".into())
+                    return Err("split edges must be separated before ImPrEd layout".into());
                 }
             };
             anchors.insert(edge, route[slot].clone());
@@ -672,7 +674,7 @@ impl ProjectionSession {
             graph.graph[crate::Hedge(hedge)].route_points =
                 keys.iter().map(|key| positions[key]).collect();
         }
-        graph.project_coordinates()?;
+        graph.project_coordinates(CoordinateProjection::InitialSeed)?;
         for (&id, key) in &nodes {
             positions.insert(key.clone(), graph[crate::NodeIndex(id)].pos);
         }
@@ -695,10 +697,12 @@ impl ProjectionSession {
         if carrier_crossings(&positions, &routes)? != before_crossings {
             return Err("native seed constraints changed the embedding's crossings".into());
         }
-        seed["positions"] = json!(positions
-            .iter()
-            .map(|(key, p)| (key, [p.x, p.y]))
-            .collect::<BTreeMap<_, _>>());
+        seed["positions"] = json!(
+            positions
+                .iter()
+                .map(|(key, p)| (key, [p.x, p.y]))
+                .collect::<BTreeMap<_, _>>()
+        );
         seed["routes"] = json!(routes);
         seed["anchor_ids"] = json!(anchors);
         if let Some(object) = seed.as_object_mut() {
@@ -729,7 +733,7 @@ impl ProjectionSession {
             graph.graph[crate::Hedge(id)].route_points =
                 keys.iter().map(|key| positions[key]).collect();
         }
-        graph.project_coordinates()?;
+        graph.project_coordinates(CoordinateProjection::Proposal)?;
         let pair = |p: Point2<f64>| [p.x, p.y];
         let geometry = json!({
             "nodes":(0..graph.n_nodes()).map(|i| pair(graph[crate::NodeIndex(i)].pos)).collect::<Vec<_>>(),
@@ -956,6 +960,57 @@ mod tests {
     }
 
     #[test]
+    fn initializer_keeps_reversed_cut_groups_separate() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+                left [id=0]
+                right [id=1]
+                ext [style=invis]
+                right -> ext [id=0 pos="3,-1" pin="x:@+right,y:@cut-10" "group-start-y"=true]
+                right -> ext [id=1 pos="3,1" pin="x:@+right,y:@cut-20" "group-start-y"=true]
+                ext -> left [id=2 pos="-3,-1" pin="x:@-left,y:@cut-20" "group-start-y"=true]
+                ext -> left [id=3 pos="-3,1" pin="x:@-left,y:@cut-10" "group-start-y"=true]
+                left -> right [id=4]
+            }"#,
+        )
+        .unwrap();
+        let seed = json!({
+            "positions":{"v:0":[-1.0,0.0],"v:1":[1.0,0.0],
+                "x:0":[3.0,-1.0],"x:1":[3.0,1.0],
+                "x:2":[-3.0,-1.0],"x:3":[-3.0,1.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["v:1","x:0"],"1":["v:1","x:1"],
+                "2":["x:2","v:0"],"3":["x:3","v:0"],"4":["v:0","v:1"]},
+            "external_ids":{"0":"x:0","1":"x:1","2":"x:2","3":"x:3"},
+            "incoming_ids":["x:2","x:3"],"outgoing_ids":["x:0","x:1"],"report":{}
+        });
+        let (session, initialized) = ProjectionSession::initialize(graph, seed).unwrap();
+        let mut positions = initialized["state"]["positions"].clone();
+        assert_eq!(positions["x:0"], json!([3.0, -1.0]));
+        assert_eq!(positions["x:1"], json!([3.0, 1.0]));
+        assert_eq!(positions["x:2"], json!([-3.0, 1.0]));
+        assert_eq!(positions["x:3"], json!([-3.0, -1.0]));
+        let mut layout = session.impred_layout().unwrap();
+        layout
+            .solve(linnet::half_edge::layout::impred::ImpredConfig {
+                steps: 0,
+                ..Default::default()
+            })
+            .unwrap();
+
+        // Subsequent proposals still average group-start members, rather than
+        // granting their canonical representative a different movement weight.
+        for (edge, y) in [(0, -2.0), (1, 2.0), (2, 6.0), (3, -6.0)] {
+            positions[format!("x:{edge}")][1] = json!(y);
+        }
+        let projected = session.project(&json!({"positions":positions})).unwrap();
+        assert_eq!(projected["positions"]["x:0"][1], -4.0);
+        assert_eq!(projected["positions"]["x:3"][1], -4.0);
+        assert_eq!(projected["positions"]["x:1"][1], 4.0);
+        assert_eq!(projected["positions"]["x:2"][1], 4.0);
+    }
+
+    #[test]
     fn initializer_rejects_pins_that_destroy_the_carrier() {
         let graph = TypstGraph::parse(
             r#"digraph {
@@ -994,12 +1049,14 @@ mod tests {
         assert_eq!(imported.n_nodes(), graph.n_nodes());
         assert_eq!(imported.n_edges(), graph.n_edges());
         layout.positions[layout.node_points[0]][0] += 1.0;
-        assert!(session
-            .apply_impred_layout(&layout)
-            .err()
-            .unwrap()
-            .to_string()
-            .contains("authored fixed coordinate"));
+        assert!(
+            session
+                .apply_impred_layout(&layout)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("authored fixed coordinate")
+        );
     }
 
     #[test]
@@ -1033,8 +1090,8 @@ impl ProjectionSession {
     /// immutable references used by projection and adaptive route ownership.
     pub fn impred_layout(&self) -> Result<linnet::half_edge::layout::impred::ImpredLayout> {
         use linnet::half_edge::layout::impred::{
-            movement::{AxisConstraint, PointRecord},
             ExternalFlow, ImpredLayout,
+            movement::{AxisConstraint, PointRecord},
         };
         let keys: Vec<_> = self.initial.keys().cloned().collect();
         let ids: BTreeMap<_, _> = keys
@@ -1236,11 +1293,11 @@ impl ProjectionSession {
                     graph.graph[hedge].route_points = route;
                 }
                 HedgePair::Split { .. } => {
-                    return Err("split edges must be separated before ImPrEd layout".into())
+                    return Err("split edges must be separated before ImPrEd layout".into());
                 }
             }
         }
-        graph.project_coordinates()?;
+        graph.project_coordinates(CoordinateProjection::Proposal)?;
         Ok(graph)
     }
 }

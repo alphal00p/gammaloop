@@ -168,6 +168,8 @@ impl Bounds {
 struct CollisionCandidate {
     bounds: Bounds,
     cost: ciborium::Value,
+    #[serde(default, rename = "arrow-bounds")]
+    arrow_bounds: Vec<Bounds>,
 }
 
 impl CollisionCandidate {
@@ -214,6 +216,10 @@ struct CollisionSpec {
     label_padding: f64,
     #[serde(deserialize_with = "crate::deserialize_f64")]
     obstacle_padding: f64,
+    #[serde(default)]
+    fixed_arrows: Vec<Bounds>,
+    #[serde(default)]
+    coordinated: bool,
 }
 
 struct CollisionGeometry {
@@ -221,6 +227,8 @@ struct CollisionGeometry {
     areas: Vec<Vec<f64>>,
     extents: Vec<Bounds>,
     costs: Vec<Vec<ciborium::Value>>,
+    arrows: Vec<Vec<Vec<Bounds>>>,
+    coordinated: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -315,16 +323,66 @@ impl ExponentialCheck {
 }
 
 impl CollisionGeometry {
+    fn pair_cost(&self, i: usize, choice: usize, j: usize, other: usize, padding: f64) -> f64 {
+        let bounds = self.boxes[i][choice];
+        let other_bounds = self.boxes[j][other];
+        let area = self.areas[i][choice];
+        let other_area = self.areas[j][other];
+        let mut cost = 4.0 * bounds.overlap(other_bounds, padding) / area.min(other_area).max(1e-9);
+        for &arrow in &self.arrows[i][choice] {
+            let arrow_area = (arrow.right - arrow.left) * (arrow.top - arrow.bottom);
+            cost +=
+                2.0 * arrow.overlap(other_bounds, padding) / arrow_area.min(other_area).max(1e-9);
+            for &other_arrow in &self.arrows[j][other] {
+                let other_arrow_area =
+                    (other_arrow.right - other_arrow.left) * (other_arrow.top - other_arrow.bottom);
+                cost += arrow.overlap(other_arrow, padding)
+                    / arrow_area.min(other_arrow_area).max(1e-9);
+            }
+        }
+        for &arrow in &self.arrows[j][other] {
+            let arrow_area = (arrow.right - arrow.left) * (arrow.top - arrow.bottom);
+            cost += 2.0 * bounds.overlap(arrow, padding) / area.min(arrow_area).max(1e-9);
+        }
+        cost
+    }
+
+    fn local_cost(
+        &self,
+        costs: &[Vec<Cost>],
+        i: usize,
+        choice: usize,
+        choices: &[usize],
+        excluding: Option<usize>,
+        padding: f64,
+    ) -> Cost {
+        let mut cost = costs[i][choice];
+        for (j, &other) in choices.iter().enumerate() {
+            if j == i || Some(j) == excluding {
+                continue;
+            }
+            // Preserve the original label-only search's zero-term elision.
+            // Arrows may extend beyond the text's candidate envelope.
+            if !self.coordinated && self.extents[i].overlap(self.boxes[j][other], padding) == 0.0 {
+                continue;
+            }
+            cost = Cost::Float(cost.float() + self.pair_cost(i, choice, j, other, padding));
+        }
+        cost
+    }
+
     fn search(&self, math: &SearchMath) -> Result<SearchResult, String> {
         let count = self.boxes.len();
         if math.temperatures.len() != 84
             || self.areas.len() != count
             || self.extents.len() != count
             || self.costs.len() != count
+            || self.arrows.len() != count
             || (0..count).any(|i| {
                 self.boxes[i].is_empty()
                     || self.areas[i].len() != self.boxes[i].len()
                     || self.costs[i].len() != self.boxes[i].len()
+                    || self.arrows[i].len() != self.boxes[i].len()
             })
         {
             return Err("invalid label search geometry or temperature schedule".to_owned());
@@ -341,6 +399,36 @@ impl CollisionGeometry {
             .collect();
         let mut missing = Vec::new();
         let mut pending = BTreeMap::new();
+        let mut accept = |delta: Cost, temperature: f64, anneal: bool, random: u32| {
+            if delta.float() < -1e-12 {
+                return true;
+            }
+            if !anneal {
+                return false;
+            }
+            // Typst's max(0, delta) keeps the integer zero on ties.
+            let argument = if delta.float() <= 0.0 {
+                0.0
+            } else {
+                -delta.float() / temperature
+            };
+            let threshold = f64::from(random) / 4_294_967_296.0;
+            match exponentials.get(&argument.to_bits()) {
+                Some(&value) => threshold < value,
+                None => {
+                    let index = *pending.entry(argument.to_bits()).or_insert_with(|| {
+                        missing.push(ExponentialCheck::new(argument));
+                        missing.len() - 1
+                    });
+                    // Exp affects only acceptance comparisons. The host verifies
+                    // their bounds or supplies exact values and replays.
+                    missing[index].accept(threshold)
+                }
+            }
+        };
+        let score = |i, choice, choices: &[usize], excluding| {
+            self.local_cost(&costs, i, choice, choices, excluding, math.pair_padding)
+        };
         let mut choices = vec![0; count];
         let mut best_choices = choices.clone();
         let mut energy = Cost::Integer(0);
@@ -363,60 +451,15 @@ impl CollisionGeometry {
                     0
                 };
                 let last = if sweep < 80 { first + 1 } else { candidates };
-                let others: Vec<_> = choices
-                    .iter()
-                    .enumerate()
-                    .filter(|(j, _)| *j != i)
-                    .map(|(j, &choice)| (self.boxes[j][choice], self.areas[j][choice]))
-                    .filter(|(bounds, _)| self.extents[i].overlap(*bounds, math.pair_padding) > 0.0)
-                    .collect();
-                let score = |choice: usize| {
-                    let mut cost = costs[i][choice];
-                    for &(bounds, area) in &others {
-                        cost = Cost::Float(
-                            cost.float()
-                                + 4.0 * self.boxes[i][choice].overlap(bounds, math.pair_padding)
-                                    / self.areas[i][choice].min(area).max(1e-9),
-                        );
-                    }
-                    cost
-                };
-                let mut current_score = score(choices[i]);
+                let mut current_score = score(i, choices[i], &choices, None);
                 for proposal in first..last {
                     if proposal == choices[i] {
                         continue;
                     }
-                    let proposal_score = score(proposal);
+                    let proposal_score = score(i, proposal, &choices, None);
                     let delta = proposal_score.subtract(current_score)?;
                     random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-                    let accept = if delta.float() < -1e-12 {
-                        true
-                    } else if sweep < 80 {
-                        // Typst's max(0, delta) keeps the integer zero on ties.
-                        let argument = if delta.float() <= 0.0 {
-                            0.0
-                        } else {
-                            -delta.float() / temperature
-                        };
-                        let threshold = f64::from(random) / 4_294_967_296.0;
-                        match exponentials.get(&argument.to_bits()) {
-                            Some(&value) => threshold < value,
-                            None => {
-                                let index =
-                                    *pending.entry(argument.to_bits()).or_insert_with(|| {
-                                        missing.push(ExponentialCheck::new(argument));
-                                        missing.len() - 1
-                                    });
-                                // Exp affects only acceptance comparisons. The host
-                                // verifies their strict lower/inclusive upper bounds,
-                                // or supplies exact values and replays after a mismatch.
-                                missing[index].accept(threshold)
-                            }
-                        }
-                    } else {
-                        false
-                    };
-                    if accept {
+                    if accept(delta, temperature, sweep < 80, random) {
                         choices[i] = proposal;
                         current_score = proposal_score;
                         energy = energy.add(delta)?;
@@ -426,7 +469,98 @@ impl CollisionGeometry {
                         }
                     }
                 }
+                if self.coordinated && sweep < 80 && sweep % 4 == 0 && count > 1 {
+                    random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let j = (i + 1 + (random >> 16) as usize % (count - 1)) % count;
+                    if self.boxes[j].len() <= 1 {
+                        continue;
+                    }
+                    let mut proposed = choices.clone();
+                    for index in [i, j] {
+                        random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                        proposed[index] = (random >> 16) as usize % self.boxes[index].len();
+                    }
+                    let before = score(i, choices[i], &choices, None).add(score(
+                        j,
+                        choices[j],
+                        &choices,
+                        Some(i),
+                    ))?;
+                    let after = score(i, proposed[i], &proposed, None).add(score(
+                        j,
+                        proposed[j],
+                        &proposed,
+                        Some(i),
+                    ))?;
+                    let delta = after.subtract(before)?;
+                    random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    if accept(delta, temperature, true, random) {
+                        choices = proposed;
+                        energy = energy.add(delta)?;
+                        if energy.float() < best_energy.float() - 1e-12 {
+                            best_energy = energy;
+                            best_choices.clone_from(&choices);
+                        }
+                    }
+                }
             }
+        }
+        if self.coordinated {
+            choices.clone_from(&best_choices);
+            for _ in 0..2 {
+                for i in 0..count {
+                    if self.boxes[i].len() <= 1 {
+                        continue;
+                    }
+                    for j in i + 1..count {
+                        if self.boxes[j].len() <= 1
+                            || self.pair_cost(i, choices[i], j, choices[j], math.pair_padding)
+                                <= 1e-12
+                        {
+                            continue;
+                        }
+                        // Rank without the partner so both annotations can
+                        // leave a crowded basin together. Bound the joint search.
+                        let ranked = [i, j].map(|index| {
+                            let other = if index == i { j } else { i };
+                            let mut ranked: Vec<_> = (0..self.boxes[index].len())
+                                .map(|choice| {
+                                    (choice, score(index, choice, &choices, Some(other)).float())
+                                })
+                                .collect();
+                            ranked.sort_by(|left, right| {
+                                left.1
+                                    .partial_cmp(&right.1)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                            ranked.truncate(6);
+                            ranked.push((
+                                choices[index],
+                                score(index, choices[index], &choices, Some(other)).float(),
+                            ));
+                            ranked
+                        });
+                        let mut best = (choices[i], choices[j]);
+                        let mut cost = score(i, best.0, &choices, None)
+                            .add(score(j, best.1, &choices, Some(i)))?
+                            .float();
+                        for &(left, left_cost) in &ranked[0] {
+                            for &(right, right_cost) in &ranked[1] {
+                                let proposed = left_cost
+                                    + right_cost
+                                    + self.pair_cost(i, left, j, right, math.pair_padding);
+                                if proposed < cost - 1e-12 {
+                                    cost = proposed;
+                                    best = (left, right);
+                                }
+                            }
+                        }
+                        choices[i] = best.0;
+                        choices[j] = best.1;
+                    }
+                }
+            }
+            best_choices = choices;
         }
         Ok(SearchResult {
             costs: best_choices
@@ -441,12 +575,14 @@ impl CollisionGeometry {
 }
 
 impl CollisionSpec {
-    fn geometry(&self) -> Result<CollisionGeometry, String> {
+    fn geometry(&self, pair_padding: f64) -> Result<CollisionGeometry, String> {
         let mut geometry = CollisionGeometry {
             boxes: Vec::with_capacity(self.placements.len()),
             areas: Vec::with_capacity(self.placements.len()),
             extents: Vec::with_capacity(self.placements.len()),
             costs: Vec::with_capacity(self.placements.len()),
+            arrows: Vec::with_capacity(self.placements.len()),
+            coordinated: self.coordinated,
         };
         for label in &self.placements {
             let boxes: Vec<_> = label
@@ -466,7 +602,8 @@ impl CollisionSpec {
                 // An obstacle outside the union cannot overlap any candidate.
                 // Retain its zero term so the additions below stay unchanged.
                 .map(|obstacle| {
-                    (extent.overlap(obstacle.bounds, self.obstacle_padding) != 0.0)
+                    (self.coordinated
+                        || extent.overlap(obstacle.bounds, self.obstacle_padding) != 0.0)
                         .then_some(obstacle)
                 })
                 .collect();
@@ -484,13 +621,36 @@ impl CollisionSpec {
                         bounds.overlap(obstacle.bounds, self.obstacle_padding)
                     });
                     cost += overlap / area.max(1e-9);
+                    for &arrow in &candidate.arrow_bounds {
+                        let arrow_area = (arrow.right - arrow.left) * (arrow.top - arrow.bottom);
+                        cost += obstacle.map_or(0.0, |obstacle| {
+                            arrow.overlap(obstacle.bounds, self.obstacle_padding)
+                        }) / arrow_area.max(1e-9);
+                    }
                 }
-                costs.push(if relevant.is_empty() {
+                for &fixed in &self.fixed_arrows {
+                    let fixed_area = (fixed.right - fixed.left) * (fixed.top - fixed.bottom);
+                    cost +=
+                        2.0 * bounds.overlap(fixed, pair_padding) / area.min(fixed_area).max(1e-9);
+                    for &arrow in &candidate.arrow_bounds {
+                        let arrow_area = (arrow.right - arrow.left) * (arrow.top - arrow.bottom);
+                        cost += arrow.overlap(fixed, pair_padding)
+                            / arrow_area.min(fixed_area).max(1e-9);
+                    }
+                }
+                costs.push(if relevant.is_empty() && self.fixed_arrows.is_empty() {
                     candidate.cost.clone()
                 } else {
                     ciborium::Value::Float(cost)
                 });
             }
+            geometry.arrows.push(
+                label
+                    .candidates
+                    .iter()
+                    .map(|candidate| candidate.arrow_bounds.clone())
+                    .collect(),
+            );
             geometry.boxes.push(boxes);
             geometry.areas.push(areas);
             geometry.extents.push(extent);
@@ -597,7 +757,7 @@ pub fn search_bytes(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|error| format!("Invalid label collision geometry: {error}"))?;
     let math: SearchMath = ciborium::de::from_reader(math)
         .map_err(|error| format!("Invalid label search math: {error}"))?;
-    crate::graph_api::encode_cbor(&spec.geometry()?.search(&math)?)
+    crate::graph_api::encode_cbor(&spec.geometry(math.pair_padding)?.search(&math)?)
 }
 
 pub fn obstacle_boxes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -636,6 +796,7 @@ mod tests {
                 top: 1.0,
             },
             cost: ciborium::Value::Float(cost),
+            arrow_bounds: Vec::new(),
         };
         // Either single move raises the energy, but taking both lowers it.
         let geometry = CollisionSpec {
@@ -652,8 +813,10 @@ mod tests {
             obstacles: vec![],
             label_padding: 0.0,
             obstacle_padding: 0.0,
+            fixed_arrows: Vec::new(),
+            coordinated: false,
         }
-        .geometry()
+        .geometry(0.0)
         .unwrap();
         let mut math = SearchMath {
             temperatures: (0..84).map(|sweep| 0.15 * 0.9_f64.powi(sweep)).collect(),
@@ -689,6 +852,101 @@ mod tests {
                 .unwrap()
                 .float(),
             1.0
+        );
+    }
+
+    #[test]
+    fn paired_annotations_include_arrows_and_fixed_decorations_in_collisions() {
+        let bounds = |left| Bounds {
+            left,
+            right: left + 1.0,
+            bottom: 0.0,
+            top: 1.0,
+        };
+        let spec = CollisionSpec {
+            placements: [(0.0, 4.0), (4.0, 0.0)]
+                .into_iter()
+                .map(|(text, arrow)| CollisionLabel {
+                    candidates: vec![CollisionCandidate {
+                        bounds: bounds(text),
+                        cost: ciborium::Value::Integer(0.into()),
+                        arrow_bounds: vec![bounds(arrow)],
+                    }],
+                    edge: None,
+                })
+                .collect(),
+            obstacles: vec![Obstacle {
+                bounds: bounds(4.0),
+                edge: None,
+                self_loop: false,
+            }],
+            label_padding: 0.25,
+            obstacle_padding: 0.0,
+            fixed_arrows: vec![bounds(4.0)],
+            coordinated: true,
+        };
+        let geometry = spec.geometry(0.0).unwrap();
+        // The two texts are disjoint, but each arrow intersects the other text.
+        assert_eq!(geometry.pair_cost(0, 0, 1, 0, 0.0), 4.0);
+        assert_eq!(geometry.pair_cost(1, 0, 0, 0, 0.0), 4.0);
+        // An arrow outside the text envelope still collides with fixed geometry.
+        assert_eq!(geometry.costs[0][0], ciborium::Value::Float(2.0));
+        assert_eq!(geometry.costs[1][0], ciborium::Value::Float(3.0));
+        assert_eq!(geometry.arrows[0][0], [bounds(4.0)]);
+        assert_eq!(geometry.boxes[0][0], bounds(0.0).expanded(0.25));
+    }
+
+    #[test]
+    fn coordinated_proposals_cross_a_barrier_without_single_uphill_moves() {
+        let candidate = |left, cost| CollisionCandidate {
+            bounds: Bounds {
+                left,
+                right: left + 1.0,
+                bottom: 0.0,
+                top: 1.0,
+            },
+            cost: ciborium::Value::Float(cost),
+            arrow_bounds: Vec::new(),
+        };
+        let spec = CollisionSpec {
+            placements: vec![
+                CollisionLabel {
+                    candidates: vec![candidate(0.0, 1.0), candidate(10.0, 0.0)],
+                    edge: None,
+                },
+                CollisionLabel {
+                    candidates: vec![candidate(10.0, 1.0), candidate(0.0, 0.0)],
+                    edge: None,
+                },
+            ],
+            obstacles: Vec::new(),
+            label_padding: 0.0,
+            obstacle_padding: 0.0,
+            fixed_arrows: Vec::new(),
+            coordinated: true,
+        };
+        let geometry = spec.geometry(0.0).unwrap();
+        let mut math = SearchMath {
+            temperatures: (0..84).map(|sweep| 0.15 * 0.9_f64.powi(sweep)).collect(),
+            exponentials: Vec::new(),
+            pair_padding: 0.0,
+        };
+        let mut result = geometry.search(&math).unwrap();
+        // Certify a host policy rejecting all uphill/tied moves. A simultaneous
+        // exchange is the only descending route out of the initial arrangement.
+        for _ in 0..1000 {
+            if result.missing.is_empty() {
+                break;
+            }
+            math.exponentials
+                .extend(result.missing.iter().map(|check| (check.argument, 0.0)));
+            result = geometry.search(&math).unwrap();
+        }
+        assert!(result.missing.is_empty());
+        assert_eq!(result.choices, [1, 1]);
+        assert_eq!(
+            result.costs,
+            [ciborium::Value::Float(0.0), ciborium::Value::Float(0.0)]
         );
     }
 
@@ -740,6 +998,7 @@ mod tests {
                 candidates: vec![CollisionCandidate {
                     bounds,
                     cost: ciborium::Value::Integer(0.into()),
+                    arrow_bounds: Vec::new(),
                 }],
                 edge: edge.clone(),
             }],
@@ -750,34 +1009,36 @@ mod tests {
             }],
             label_padding: 0.25,
             obstacle_padding: 0.08,
+            fixed_arrows: Vec::new(),
+            coordinated: false,
         };
-        let own_edge = spec.geometry().unwrap();
+        let own_edge = spec.geometry(0.0).unwrap();
         assert_eq!(own_edge.costs[0][0], ciborium::Value::Integer(0.into()));
         assert_eq!(own_edge.boxes[0][0], bounds.expanded(0.25));
         assert_eq!(own_edge.areas[0], [1.0]);
         spec.obstacles[0].edge = Some(ciborium::Value::Float(7.0));
-        assert_eq!(spec.geometry().unwrap().costs, own_edge.costs);
+        assert_eq!(spec.geometry(0.0).unwrap().costs, own_edge.costs);
         spec.obstacles[0].self_loop = true;
         let expected = ciborium::Value::Float(1.08 * 1.08);
-        assert_eq!(spec.geometry().unwrap().costs[0][0], expected);
+        assert_eq!(spec.geometry(0.0).unwrap().costs[0][0], expected);
         spec.obstacles[0].self_loop = false;
         spec.obstacles[0].edge = None;
-        assert_eq!(spec.geometry().unwrap().costs[0][0], expected);
+        assert_eq!(spec.geometry(0.0).unwrap().costs[0][0], expected);
         spec.obstacles[0].bounds.left = 10.0;
         spec.obstacles[0].bounds.right = 11.0;
         assert_eq!(
-            spec.geometry().unwrap().costs[0][0],
+            spec.geometry(0.0).unwrap().costs[0][0],
             ciborium::Value::Float(0.0)
         );
         spec.placements[0].candidates[0].cost = ciborium::Value::Float(-0.0);
-        let ciborium::Value::Float(cost) = spec.geometry().unwrap().costs[0][0] else {
+        let ciborium::Value::Float(cost) = spec.geometry(0.0).unwrap().costs[0][0] else {
             panic!("an unowned obstacle must convert the cost to a float");
         };
         assert_eq!(cost.to_bits(), 0.0_f64.to_bits());
         spec.placements[0].candidates[0].cost = ciborium::Value::Integer(0.into());
         spec.obstacles.clear();
         assert_eq!(
-            spec.geometry().unwrap().costs[0][0],
+            spec.geometry(0.0).unwrap().costs[0][0],
             ciborium::Value::Integer(0.into())
         );
     }
@@ -796,6 +1057,7 @@ mod tests {
                 candidates: vec![CollisionCandidate {
                     bounds,
                     cost: ciborium::Value::Float(cost),
+                    arrow_bounds: Vec::new(),
                 }],
                 edge: None,
             }],
@@ -808,11 +1070,13 @@ mod tests {
                 .collect(),
             label_padding: 0.0,
             obstacle_padding: 0.0,
+            fixed_arrows: Vec::new(),
+            coordinated: false,
         };
         // Each individual addition rounds back to the initial value. Summing
         // obstacle penalties before adding the initial cost would change it.
         assert_eq!(
-            spec.geometry().unwrap().costs[0][0],
+            spec.geometry(0.0).unwrap().costs[0][0],
             ciborium::Value::Float(cost)
         );
         assert_ne!(cost + 3.0, cost);

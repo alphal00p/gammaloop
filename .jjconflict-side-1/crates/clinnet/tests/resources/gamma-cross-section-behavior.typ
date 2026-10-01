@@ -124,7 +124,7 @@ digraph {
       amplitude-mode: not cross-section, cross-section-mode: cross-section,
       edge-style-options: (momentum-arrows: arrows, show-momentum: momentum),
       layout-passes: ((viewport-w: 1, viewport-h: 1, spring: (length: 1),
-        solver: (steps: 0), labels: (steps: 1, repulsion: 0,
+        solver: (algorithm: "force", steps: 0), labels: (steps: 1, repulsion: 0,
           ..if distance == none { (:) } else { (external-distance: distance) })),),
       diagram-options: (title: none, draw-after: (g, _) => {
         for edge in graph.edges(g) {
