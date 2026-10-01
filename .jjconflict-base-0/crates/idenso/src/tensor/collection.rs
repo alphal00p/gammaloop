@@ -643,6 +643,15 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         filter: TensorCollectFilter<N>,
     ) -> Result<Vec<(Self, Self)>> {
+        self.coefficient_list_with(|value| filter.matches(value))
+    }
+
+    /// Collect leaves selected by a predicate, retaining all unselected tensor
+    /// blocks in the coefficients with their logical interfaces intact.
+    pub fn coefficient_list_with(
+        &self,
+        select: impl FnMut(AtomView<'_>) -> bool,
+    ) -> Result<Vec<(Self, Self)>> {
         let mut rows = None;
         self.collect_with_map(
             Some(&mut |states, spectators| {
@@ -663,7 +672,7 @@ impl SymbolicTensor<PartialStructure> {
                 );
                 Ok(())
             }),
-            |value| filter.matches(value),
+            select,
             |value, _, _| Ok(value),
         )?;
         rows.ok_or_else(|| {

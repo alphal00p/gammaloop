@@ -51,6 +51,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
 
+mod blocks;
 mod external;
 
 use crate::{
@@ -479,12 +480,16 @@ impl TensorReducer {
                 rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
+                expand: false,
                 ..Default::default()
             })
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
         let normalized = normalized
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+        if Self::has_tensor_sum(normalized.expression().as_view()) {
+            return self.reduce_blocks(&normalized, &cooking, external.as_ref());
+        }
         let rows = normalized
             .coefficient_list(TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]))
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;

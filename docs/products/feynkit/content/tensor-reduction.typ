@@ -106,6 +106,13 @@ Internal edge momenta are still selected from the diagram. For a `Subgraph`, cal
 `region.tensor_reduce(D, expression=prepared)` to integrate only its selected internal
 momenta. An explicit projector is required when reducing a proper region's stored numerator.
 
+Tensor reduction keeps loop-dependent vertex sums factored. It separates fixed
+Lorentz tensors from the loop-dependent blocks and projects the open indices of
+those blocks, rather than distributing all their internal contractions. The result
+can therefore retain contracted indices inside sums. Metric and vector contractions
+that preserve the sums are performed automatically; expanding those sums into scalar
+dot-product monomials is a separate, potentially expensive operation.
+
 For standalone tensors, `TensorExpression(expression)` performs the same conversion as
 `as_tensor(expression)`. Algebraic rearrangements return tensor expressions with their ordered
 interfaces and data identities preserved: `expand`, `expand_num`, `factor`, `collect`,
