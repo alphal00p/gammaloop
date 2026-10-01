@@ -280,9 +280,9 @@
 
 #let _selected-label(edge, options) = {
   let api = options.api
-  let pieces = ()
+  let particle = none
   if options.show-particle != false {
-    let particle = (api.edge-entry)(
+    particle = (api.edge-entry)(
       edge,
       map: options.map,
       default: options.default,
@@ -294,35 +294,60 @@
         map: options.map,
         scope: options.scope,
       )
-      pieces.push(if options.particle-prefix == none { particle } else {
-        options.particle-prefix + particle
-      })
+      if options.particle-prefix != none {
+        particle = options.particle-prefix + particle
+      }
     }
   }
+  // Momentum lines: one, or a long routed sum split between two lines.
+  let momentum = ()
   if options.show-momentum {
-    let momentum = (api.momentum-value)(edge)
-    pieces.push(if momentum == none { [$q_(#edge.eid)$] } else {
-      (api.label-content)(momentum, edge, map: options.map, scope: options.scope)
-    })
+    let terms = (api.momentum-terms)(edge)
+    momentum = if terms == none {
+      let value = (api.momentum-value)(edge)
+      (if value == none { [$q_(#edge.eid)$] } else {
+        (api.label-content)(value, edge, map: options.map, scope: options.scope)
+      },)
+    } else if (
+      options.label-stack
+        and options.label-stack-terms != none
+        and terms.len() >= options.label-stack-terms
+    ) {
+      let split = calc.ceil(terms.len() / 2)
+      (
+        (api.momentum-sum)(terms.slice(0, split)),
+        (api.momentum-sum)(terms.slice(split), continued: true),
+      )
+    } else { ((api.momentum-sum)(terms),) }
   }
+  let indices = ()
   if options.show-edge-index {
-    pieces.push(_prefixed-content(
+    indices.push(_prefixed-content(
       options.edge-index-prefix,
       (api.edge-index)(edge, fields: options.edge-index-fields),
       api,
     ))
   }
   if options.show-half-edge-index {
-    pieces.push(_prefixed-content(
+    indices.push(_prefixed-content(
       options.half-edge-index-prefix,
       (api.dangling-half-edge-index)(edge),
       api,
     ))
   }
-  let joined = _join-content(pieces, options.label-separator)
-  if joined == none { none } else {
-    text(size: options.label-size, fill: options.label-fill)[#joined]
+  let lines = if options.label-stack {
+    // The particle and any indices head the stack, above the momentum.
+    let head = _join-content((particle, ..indices), options.label-separator)
+    (if head == none { () } else { (head,) }) + momentum
+  } else {
+    let line = _join-content((particle, ..momentum, ..indices), options.label-separator)
+    if line == none { () } else { (line,) }
   }
+  if lines.len() == 0 { return none }
+  let body = if lines.len() == 1 { lines.first() } else {
+    grid(columns: 1, align: center, row-gutter: 0.45em, ..lines)
+  }
+  text(size: options.label-size, fill: options.label-fill)[#body]
 }
 
 #let edge-label(edge, options) = {

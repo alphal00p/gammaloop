@@ -374,8 +374,10 @@ DOT graphs and graphs built directly in Typst:
 }
 ```
 
-Momentum arrows are opt-in. Their default combined label is the particle-map label followed by
-`$q_(#edge.eid)$`, in 10pt text by default; explicit labels take precedence. `show-momentum: false` and
+Momentum arrows are opt-in. Their default combined label stacks the particle-map label above
+`$q_(#edge.eid)$` or the routed momentum, in 10pt text by default; explicit labels take precedence.
+Routed sums of at least `label-stack-terms` (default `3`) terms split over two lines, and
+`label-stack: false` restores one line joined by `label-separator`. `show-momentum: false` and
 `show-particle: false` suppress the corresponding portion. Neither a cut sewing tag nor a
 momentum expression renumbers the edge ID.
 

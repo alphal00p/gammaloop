@@ -297,25 +297,47 @@
   }
 }
 
-/// Render a routed momentum signature, or read an explicit momentum field.
-/// Edges without routing metadata retain their edge-index label.
-/// -> none | any
-#let momentum-value(edge, fields: ("momentum", "mom", "q")) = {
+/// Signed terms of a routed momentum signature, loop momenta first, as
+/// `(negative: bool, label: content)` records. Edges without routing metadata
+/// return `none`.
+/// -> none | array
+#let momentum-terms(edge) = {
   let signature = _field-value(edge, "momentum-signature")
-  if signature == none { return _field-value(edge, fields) }
-  let result = none
+  if signature == none { return none }
+  let terms = ()
   for (kind, coefficients) in (("k", signature.loops), ("p", signature.external)) {
     for (index, coefficient) in coefficients.enumerate() {
       if coefficient != 0 {
         let label = if kind == "k" { [$k_(#index)$] } else { [$p_(#index)$] }
         if calc.abs(coefficient) != 1 { label = [#calc.abs(coefficient)#label] }
-        result = if result == none {
-          if coefficient < 0 { [$-#label$] } else { label }
-        } else if coefficient < 0 { [#result $-$ #label] } else { [#result $+$ #label] }
+        terms.push((negative: coefficient < 0, label: label))
       }
     }
   }
+  terms
+}
+
+/// Join momentum terms into a sum. A `continued` line starts with its binary
+/// operator, so a sum split over lines reads as one expression.
+/// -> content
+#let momentum-sum(terms, continued: false) = {
+  let result = none
+  for term in terms {
+    result = if result != none {
+      if term.negative { [#result $-$ #term.label] } else { [#result $+$ #term.label] }
+    } else if continued {
+      if term.negative { [$-$ #term.label] } else { [$+$ #term.label] }
+    } else if term.negative { [$-#term.label$] } else { term.label }
+  }
   if result == none { [$0$] } else { result }
+}
+
+/// Render a routed momentum signature, or read an explicit momentum field.
+/// Edges without routing metadata retain their edge-index label.
+/// -> none | any
+#let momentum-value(edge, fields: ("momentum", "mom", "q")) = {
+  let terms = momentum-terms(edge)
+  if terms == none { _field-value(edge, fields) } else { momentum-sum(terms) }
 }
 
 /// Return the edge index used by optional edge labels. The DOT `id` statement
@@ -365,6 +387,8 @@
       label-content: label-content,
       style-dict: style-dict,
       momentum-value: momentum-value,
+      momentum-terms: momentum-terms,
+      momentum-sum: momentum-sum,
       edge-index: edge-index,
       dangling-half-edge-index: dangling-half-edge-index,
     )
@@ -473,6 +497,9 @@
 /// Native and DOT `display-label` or `label` values take precedence. Otherwise
 /// combine the particle-map label with requested metadata. Momentum is always
 /// `$q_(#edge.eid)$`; cut pairing and external ordering never rename it.
+/// With `label-stack: true`, the particle name sits centered above its
+/// momentum, and momentum sums of at least `label-stack-terms` terms split over
+/// two lines; `label-stack: false` joins everything with `label-separator`.
 /// Explicit false `show-*` flags suppress their portion, including all labels:
 ///
 /// ```example
@@ -498,6 +525,8 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
+  label-stack: true,
+  label-stack-terms: 3,
   label-size: 7.5pt,
   label-fill: red,
 ) = _impl.edge-label(edge, (
@@ -514,6 +543,8 @@
   half-edge-index-prefix: half-edge-index-prefix,
   particle-prefix: particle-prefix,
   label-separator: label-separator,
+  label-stack: label-stack,
+  label-stack-terms: label-stack-terms,
   label-size: label-size,
   label-fill: label-fill,
   api: _api(),
@@ -550,6 +581,9 @@
 /// to use the particle map's separate source and sink colors.
 /// Momentum arrows are opt-in; enabling them also enables combined particle and `q_(eid)` labels
 /// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
+/// Combined labels stack the particle above its momentum and split sums of at
+/// least `label-stack-terms` terms over two lines; set `label-stack: false` for
+/// one `label-separator`-joined line.
 /// Prepared external labels retain their outward endpoint position by default;
 /// explicit momentum shifts or `momentum-label-anchor` select path-relative placement.
 /// Momentum arrows and their labels move together in Linnest's collision optimizer
@@ -650,6 +684,8 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
+  label-stack: true,
+  label-stack-terms: 3,
   label-size: 7.5pt,
   label-fill: red,
 ) = (
@@ -719,6 +755,8 @@
     half-edge-index-prefix: half-edge-index-prefix,
     particle-prefix: particle-prefix,
     label-separator: label-separator,
+    label-stack: label-stack,
+    label-stack-terms: label-stack-terms,
     label-size: label-size,
     label-fill: label-fill,
   ),
