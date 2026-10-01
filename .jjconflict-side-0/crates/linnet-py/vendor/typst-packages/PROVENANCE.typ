@@ -30,7 +30,9 @@ same transform arithmetic, line order and final coordinate context. Other
 coordinate systems, resolver hooks, frames and nonfinite geometry use scalar
 placement from the same prepared plan. Preparation receives only the style,
 length and transform it uses; coordinate resolution and placement retain the
-full canvas context.
+full canvas context. Prepared plans store geometry and drawable templates;
+a shared placement function consumes them, avoiding per-plan closures and their
+repeated hashing during batch processing.
 
 Content computes its bounds from the four frame corners and evaluates secondary
 anchors when requested. `line-strip` normalizes its closing and zero-length

@@ -32,6 +32,7 @@
   parallel as _impl-parallel,
   path as _impl-path,
   pattern as _impl-pattern,
+  pattern-to-cetz as _impl-pattern-to-cetz,
   point as _impl-point,
   points as _impl-points,
   quad as _impl-quad,
@@ -437,6 +438,20 @@
   endpoint-slope: endpoint-slope,
   accuracy: accuracy,
 )
+
+/// Generate and draw a patterned path through CeTZ.
+/// Geometry options are the same as pattern; drawing styles are kept separate.
+/// -> array
+#let pattern-to-cetz(
+  /// Base Kurvst path dictionary. -> dictionary
+  path,
+  /// Scale applied to the generated coordinates. -> int | float | length
+  unit: 1,
+  /// CeTZ drawing style. -> dictionary
+  style: (:),
+  /// Geometry options accepted by pattern. -> arguments
+  ..options,
+) = _impl-pattern-to-cetz(path, unit: unit, style: style, ..options.named())
 
 /// Generate a parallel path for a path.
 /// -> dictionary

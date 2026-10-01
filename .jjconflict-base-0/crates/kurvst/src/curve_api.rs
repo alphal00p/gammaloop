@@ -582,6 +582,116 @@ pub fn curve_pattern_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+#[derive(Deserialize)]
+struct PatternCetzSpec {
+    pattern: PatternPathSpec,
+    #[serde(deserialize_with = "deserialize_f64")]
+    unit: f64,
+}
+
+#[derive(Serialize)]
+struct CetzSubpath([f64; 3], bool, Vec<CetzSegment>);
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum CetzSegment {
+    Line((&'static str, [f64; 3])),
+    Cubic((&'static str, [f64; 3], [f64; 3], [f64; 3])),
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum PatternCetzOutput {
+    Data(Vec<CetzSubpath>),
+    Original(PatternPathOutput),
+}
+
+impl PatternCetzOutput {
+    // Match Typst's _to-cetz-data numeric representation, including subpath
+    // boundaries, quadratic promotion, and multiplication before float coercion.
+    fn from_pattern(output: PatternPathOutput, unit: f64) -> Self {
+        let point = |p: Point| [p.x * unit, p.y * unit, 0.0];
+        let mut subpaths = Vec::new();
+        let mut origin = None;
+        let mut current = Point::ZERO;
+        let mut segments = Vec::new();
+        for &element in output.path.elements() {
+            if let PathEl::MoveTo(start) = element {
+                if let Some(previous) = origin {
+                    subpaths.push(CetzSubpath(
+                        point(previous),
+                        false,
+                        std::mem::take(&mut segments),
+                    ));
+                }
+                origin = Some(start);
+                current = start;
+                continue;
+            }
+            if origin.is_none() {
+                // Typst synthesizes an integer (0, 0) origin here. Retain its
+                // number types and signed-zero behavior for coordinate hooks.
+                return Self::Original(output);
+            }
+            match element {
+                PathEl::MoveTo(_) => unreachable!(),
+                PathEl::LineTo(end) => {
+                    segments.push(CetzSegment::Line(("l", point(end))));
+                    current = end;
+                }
+                PathEl::QuadTo(control, end) => {
+                    // Keep the scalar operation order of _quad-cubic-segment;
+                    // Kurbo's general quadratic conversion uses another order.
+                    let first = Point::new(
+                        current.x + (control.x - current.x) * 2.0 / 3.0,
+                        current.y + (control.y - current.y) * 2.0 / 3.0,
+                    );
+                    let second = Point::new(
+                        end.x + (control.x - end.x) * 2.0 / 3.0,
+                        end.y + (control.y - end.y) * 2.0 / 3.0,
+                    );
+                    segments.push(CetzSegment::Cubic((
+                        "c",
+                        point(first),
+                        point(second),
+                        point(end),
+                    )));
+                    current = end;
+                }
+                PathEl::CurveTo(first, second, end) => {
+                    segments.push(CetzSegment::Cubic((
+                        "c",
+                        point(first),
+                        point(second),
+                        point(end),
+                    )));
+                    current = end;
+                }
+                PathEl::ClosePath => {
+                    let start = origin.take().unwrap();
+                    subpaths.push(CetzSubpath(
+                        point(start),
+                        true,
+                        std::mem::take(&mut segments),
+                    ));
+                    current = start;
+                }
+            }
+        }
+        if let Some(start) = origin {
+            subpaths.push(CetzSubpath(point(start), false, segments));
+        }
+        Self::Data(subpaths)
+    }
+}
+
+pub fn curve_pattern_cetz_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PatternCetzSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize CeTZ pattern spec: {err}"))?;
+    let output = pattern_path(spec.pattern)?;
+    encode_cbor(&PatternCetzOutput::from_pattern(output, spec.unit))
+}
+
 pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
@@ -1787,6 +1897,84 @@ pub fn curve_region_samples_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cetz_pattern_promotes_quadratics_before_scaling() {
+        let mut path = BezPath::new();
+        path.move_to((-2.5, 4.0));
+        path.quad_to((0.3, -1.2), (7.1, 0.8));
+        let output = PatternPathOutput {
+            path,
+            pattern: "wave".into(),
+        };
+        let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.75)
+        else {
+            panic!("expected compact output")
+        };
+        assert_eq!(subpaths.len(), 1);
+        let CetzSegment::Cubic((kind, first, second, end)) = &subpaths[0].2[0] else {
+            panic!("expected cubic promotion")
+        };
+        assert_eq!(*kind, "c");
+        let expected_first: [f64; 3] = [
+            (-2.5 + (0.3 + 2.5) * 2.0 / 3.0) * -1.75,
+            (4.0 + (-1.2 - 4.0) * 2.0 / 3.0) * -1.75,
+            0.0,
+        ];
+        let expected_second: [f64; 3] = [
+            (7.1 + (0.3 - 7.1) * 2.0 / 3.0) * -1.75,
+            (0.8 + (-1.2 - 0.8) * 2.0 / 3.0) * -1.75,
+            0.0,
+        ];
+        assert_eq!(first.map(f64::to_bits), expected_first.map(f64::to_bits));
+        assert_eq!(second.map(f64::to_bits), expected_second.map(f64::to_bits));
+        assert_eq!(*end, [7.1 * -1.75, 0.8 * -1.75, 0.0]);
+    }
+
+    #[test]
+    fn cetz_pattern_keeps_subpath_boundaries_and_signed_zeros() {
+        let mut path = BezPath::new();
+        path.move_to((-0.0, 0.0));
+        path.line_to((1.0, 2.0));
+        path.close_path();
+        path.move_to((3.0, 4.0));
+        let output = PatternPathOutput {
+            path,
+            pattern: "zigzag".into(),
+        };
+        let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.0)
+        else {
+            panic!("expected compact output")
+        };
+        assert_eq!(subpaths.len(), 2);
+        assert_eq!(
+            subpaths[0].0.map(f64::to_bits),
+            [0.0f64, -0.0, 0.0].map(f64::to_bits)
+        );
+        assert!(subpaths[0].1);
+        assert_eq!(subpaths[0].2.len(), 1);
+        assert!(!subpaths[1].1);
+        assert!(subpaths[1].2.is_empty());
+    }
+
+    #[test]
+    fn cetz_pattern_retains_original_commands_for_implicit_integer_origins() {
+        let path = BezPath::from_vec(vec![
+            PathEl::MoveTo(Point::ZERO),
+            PathEl::ClosePath,
+            PathEl::LineTo(Point::ZERO),
+        ]);
+        let output = PatternPathOutput {
+            path,
+            pattern: "coil".into(),
+        };
+        let expected = encode_cbor(&output).unwrap();
+        for unit in [-1.0, -0.0, 0.0, 1.0] {
+            let converted = PatternCetzOutput::from_pattern(output.clone(), unit);
+            assert!(matches!(converted, PatternCetzOutput::Original(_)));
+            assert_eq!(encode_cbor(&converted).unwrap(), expected);
+        }
+    }
 
     #[test]
     fn batched_frames_clamp_and_handle_empty_or_short_paths() {

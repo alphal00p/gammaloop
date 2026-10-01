@@ -1047,10 +1047,10 @@
 }
 
 /// Prepare content for repeated placement in one canvas style and transform.
-/// The plan's `place` function accepts a context and an already-resolved center.
+/// The plan contains position-independent geometry and drawable templates.
 /// Reuse the plan while the canvas style, length and transform remain unchanged;
 /// coordinate resolution may still update the context between placements.
-/// Its frame offsets and drawable templates also support native batch placement.
+/// Shared scalar placement and native batch placement consume the same plan.
 #let prepare-content(ctx, body, size: auto, angle: 0deg, ..style) = {
   let style = styles.resolve(ctx.style, merge: style.named(), root: "content")
   let padding = util.map-dict(util.as-padding-dict(style.padding), (_, v) => {
@@ -1144,138 +1144,148 @@
     )
   )
 
-  let place = (ctx, center, anchor: none, name: none, default: "center") => {
-    // Only the center is transformed. Other anchors remain relative to that
-    // transformed center, so their floating-point arithmetic stays unchanged.
-    let bounds-center = matrix.mul4x4-vec3(ctx.transform,
-      vector.as-vec(center, init: (0, 0, 0)))
-    let anchors = (
-      center: bounds-center,
-      north-east: vector.add(bounds-center, north-east-offset),
-      north-west: vector.sub(bounds-center, south-east-offset),
-      south-east: vector.add(bounds-center, south-east-offset),
-      south-west: vector.sub(bounds-center, north-east-offset),
-    )
-    // Named text anchors are only evaluated when requested. Unnamed content
-    // needs its center and frame corners, including for bounds calculation.
-    let anchor-position(anchor) = {
-      if anchor in anchors { return anchors.at(anchor) }
-      let north = vector.add(bounds-center, north-scaled)
-      let south = vector.add(bounds-center, south-scaled)
-      let east = vector.add(bounds-center, east-scaled)
-      let west = vector.add(bounds-center, west-scaled)
-
-      let base = vector.add(south, base-offset)
-      let mid = vector.lerp(
-        vector.sub(north, top-padding),
-        base,
-        0.5)
-      let base-east = vector.add(base, east-scaled)
-      let base-west = vector.add(base, west-scaled)
-      let text = vector.add(base, text-offset)
-      let mid-east = vector.add(mid, east-scaled)
-      let mid-west = vector.add(mid, west-scaled)
-
-      let values = (
-        mid: mid,
-        mid-east: mid-east,
-        mid-west: mid-west,
-        base: base,
-        base-east: base-east,
-        base-west: base-west,
-        text: text,
-        north: north,
-        south: south,
-        east: east,
-        west: west,
-      )
-      values.at(anchor)
-    }
-
-    let rect-shape = drawable.apply-tags(
-      drawable.line-strip(
-        (anchors.north-west, anchors.north-east,
-         anchors.south-east, anchors.south-west),
-        close: true,
-        stroke: frame-stroke,
-        fill: frame-fill,
-      ),
-      drawable.TAG.content-frame,
-    )
-
-    let frame-shape = if style.frame in (none, "rect") {
-      rect-shape
-    } else if style.frame == "circle" {
-      let (x, y, z) = util.calculate-circle-center-3pt(anchors.north-west, anchors.south-west, anchors.south-east)
-      let r = vector.dist((x, y, z), anchors.north-west)
-      drawable.apply-tags(drawable.ellipse(
-        x, y, z,
-        r, r,
-        stroke: frame-stroke,
-        fill: frame-fill,
-      ), drawable.TAG.content-frame)
-    }
-
-    // Shape used for path & border-anchors. Defaults
-    // to "rect" if the content frame is unset.
-    let anchor-shape = if frame-shape != none {
-      frame-shape
-    } else {
-      rect-shape
-    }
-
-    let corners = (anchors.north-west, anchors.north-east, anchors.south-west, anchors.south-east)
-    let xs = corners.map(point => point.at(0))
-    let ys = corners.map(point => point.at(1))
-    let aabb-width = calc.abs(calc.max(..xs) - calc.min(..xs))
-    let aabb-height = calc.abs(calc.max(..ys) - calc.min(..ys))
-
-    let drawables = ()
-    if frame-shape != none {
-      drawables.push(frame-shape)
-    }
-
-    drawables.push(
-      drawable.content(
-        anchors.center,
-        aabb-width,
-        aabb-height,
-        frame-shape.segments,
-        shown-body
-      )
-    )
-
-    let (transform, anchors) = anchor_.setup(
-      anchor-position,
-      ("center", "mid", "mid-east", "mid-west", "base", "base-east",
-       "base-west", "text", "north", "north-east", "north-west", "south",
-       "south-east", "south-west", "east", "west"),
-      default: default,
-      offset-anchor: anchor,
-      transform: none, // Content does not get transformed, see the calculation of anchors.
-      name: name,
-      path-anchors: anchor-shape != none,
-      border-anchors: anchor-shape != none,
-      path: anchor-shape,
-      radii: (calc.max(width, height) * 2, calc.max(width, height) * 2),
-    )
-
-    return (
-      ctx: ctx,
-      name: name,
-      anchors: anchors,
-      drawables: drawable.apply-transform(
-        transform,
-        drawables
-      )
-    )
-  }
   (
-    place: place, north-east: north-east-offset, south-east: south-east-offset,
+    north-east: north-east-offset, south-east: south-east-offset,
+    north-scaled: north-scaled,
+    south-scaled: south-scaled,
+    east-scaled: east-scaled,
+    west-scaled: west-scaled,
+    base-offset: base-offset,
+    top-padding: top-padding,
+    text-offset: text-offset,
+    width: width,
+    height: height,
     frame: style.frame,
     path: drawable.line-strip(((0, 0, 0),), close: true, fill: frame-fill,
       stroke: frame-stroke, tags: (drawable.TAG.content-frame,)),
     body: drawable.content((0, 0, 0), 0, 0, (), shown-body),
+  )
+}
+
+#let _place-content(ctx, center, prepared, anchor: none, name: none, default: "center") = {
+  // Only the center is transformed. Other anchors remain relative to that
+  // transformed center, so their floating-point arithmetic stays unchanged.
+  let bounds-center = matrix.mul4x4-vec3(ctx.transform,
+    vector.as-vec(center, init: (0, 0, 0)))
+  let anchors = (
+    center: bounds-center,
+    north-east: vector.add(bounds-center, prepared.north-east),
+    north-west: vector.sub(bounds-center, prepared.south-east),
+    south-east: vector.add(bounds-center, prepared.south-east),
+    south-west: vector.sub(bounds-center, prepared.north-east),
+  )
+  // Named text anchors are only evaluated when requested. Unnamed content
+  // needs its center and frame corners, including for bounds calculation.
+  let anchor-position(anchor) = {
+    if anchor in anchors { return anchors.at(anchor) }
+    let north = vector.add(bounds-center, prepared.north-scaled)
+    let south = vector.add(bounds-center, prepared.south-scaled)
+    let east = vector.add(bounds-center, prepared.east-scaled)
+    let west = vector.add(bounds-center, prepared.west-scaled)
+
+    let base = vector.add(south, prepared.base-offset)
+    let mid = vector.lerp(
+      vector.sub(north, prepared.top-padding),
+      base,
+      0.5)
+    let base-east = vector.add(base, prepared.east-scaled)
+    let base-west = vector.add(base, prepared.west-scaled)
+    let text = vector.add(base, prepared.text-offset)
+    let mid-east = vector.add(mid, prepared.east-scaled)
+    let mid-west = vector.add(mid, prepared.west-scaled)
+
+    let values = (
+      mid: mid,
+      mid-east: mid-east,
+      mid-west: mid-west,
+      base: base,
+      base-east: base-east,
+      base-west: base-west,
+      text: text,
+      north: north,
+      south: south,
+      east: east,
+      west: west,
+    )
+    values.at(anchor)
+  }
+
+  let rect-shape = drawable.apply-tags(
+    drawable.line-strip(
+      (anchors.north-west, anchors.north-east,
+       anchors.south-east, anchors.south-west),
+      close: true,
+      stroke: prepared.path.stroke,
+      fill: prepared.path.fill,
+    ),
+    drawable.TAG.content-frame,
+  )
+
+  let frame-shape = if prepared.frame in (none, "rect") {
+    rect-shape
+  } else if prepared.frame == "circle" {
+    let (x, y, z) = util.calculate-circle-center-3pt(anchors.north-west, anchors.south-west, anchors.south-east)
+    let r = vector.dist((x, y, z), anchors.north-west)
+    drawable.apply-tags(drawable.ellipse(
+      x, y, z,
+      r, r,
+      stroke: prepared.path.stroke,
+      fill: prepared.path.fill,
+    ), drawable.TAG.content-frame)
+  }
+
+  // Shape used for path & border-anchors. Defaults
+  // to "rect" if the content frame is unset.
+  let anchor-shape = if frame-shape != none {
+    frame-shape
+  } else {
+    rect-shape
+  }
+
+  let corners = (anchors.north-west, anchors.north-east, anchors.south-west, anchors.south-east)
+  let xs = corners.map(point => point.at(0))
+  let ys = corners.map(point => point.at(1))
+  let aabb-width = calc.abs(calc.max(..xs) - calc.min(..xs))
+  let aabb-height = calc.abs(calc.max(..ys) - calc.min(..ys))
+
+  let drawables = ()
+  if frame-shape != none {
+    drawables.push(frame-shape)
+  }
+
+  drawables.push(
+    drawable.content(
+      anchors.center,
+      aabb-width,
+      aabb-height,
+      frame-shape.segments,
+      prepared.body.body
+    )
+  )
+
+  let (transform, anchors) = anchor_.setup(
+    anchor-position,
+    ("center", "mid", "mid-east", "mid-west", "base", "base-east",
+     "base-west", "text", "north", "north-east", "north-west", "south",
+     "south-east", "south-west", "east", "west"),
+    default: default,
+    offset-anchor: anchor,
+    transform: none, // Content does not get transformed, see the calculation of anchors.
+    name: name,
+    path-anchors: anchor-shape != none,
+    border-anchors: anchor-shape != none,
+    path: anchor-shape,
+    radii: (calc.max(prepared.width, prepared.height) * 2, calc.max(prepared.width, prepared.height) * 2),
+  )
+
+  return (
+    ctx: ctx,
+    name: name,
+    anchors: anchors,
+    drawables: drawable.apply-transform(
+      transform,
+      drawables
+    )
   )
 }
 
@@ -1334,7 +1344,7 @@
       for position in group.positions {
         let resolved = none
         (ctx, resolved) = coordinate.resolve(ctx, position)
-        let placed = (plan.place)(ctx, resolved)
+        let placed = _place-content(ctx, resolved, plan)
         ctx = placed.ctx
         drawables += drawable.apply-tags(placed.drawables, ..tags)
       }
@@ -1431,7 +1441,7 @@
 
     let prepared = prepare-content((style: ctx.style, length: ctx.length, transform: ctx.transform), body,
       size: if auto-size { auto } else { vector.sub(b, a) }, angle: angle, ..style)
-    (prepared.place)(ctx, if auto-size { a } else { vector.lerp(a, b, .5) },
+    _place-content(ctx, if auto-size { a } else { vector.lerp(a, b, .5) }, prepared,
       anchor: anchor, name: name, default: if auto-size { "center" } else { "north-west" })
   },)
 }

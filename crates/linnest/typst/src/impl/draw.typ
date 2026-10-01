@@ -1398,7 +1398,9 @@
     } else if pattern-style.pattern-fit and anchor-start and anchor-end and length > 0 {
       wavelength = length / calc.max(1, calc.round(length / wavelength))
     }
-    let patterned = curve-api.pattern(
+    let draw-style = _draw-style(style)
+    let unit = draw-style.remove("unit", default: 1)
+    let patterned = curve-api.pattern-to-cetz(
       path,
       pattern: pattern,
       amplitude: pattern-style.pattern-amplitude,
@@ -1410,8 +1412,9 @@
       anchor-end: anchor-end,
       endpoint-slope: pattern-style.pattern-endpoint-slope,
       accuracy: pattern-style.pattern-accuracy,
+      unit: unit, style: draw-style,
     )
-    elements.push(curve-api.to-cetz(patterned, .._draw-style(style)))
+    elements.push(patterned)
   } else {
     for segment in segments {
       elements.push(curve-api.to-cetz(

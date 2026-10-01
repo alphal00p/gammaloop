@@ -1249,3 +1249,71 @@
 }
 
 #curved-arrow-behavior
+
+#cetz.canvas({
+  cetz.draw.get-ctx(ctx => {
+    // Preserve exact coordinates and primitive callback types when the native
+    // pattern operation emits CeTZ tuples directly, including implicit origins.
+    let typed-coordinate(ctx, point) = if type(point) == array and type(point.at(0)) in (int, float) {
+      (point.at(0) + if type(point.at(0)) == int { 0.125 } else { 0.0 }, point.at(1))
+    } else { point }
+    let zero = curve.from-elements((curve.move-to((0, 0)), curve.close(), curve.line-to((0, 0))))
+    let cases = (
+      curve.path(), zero,
+      curve.quad((0, 0), (1e-18, 2e-18), (3e-18, 0)),
+      curve.line((-0.0, 0.0), (1.5, -0.5)),
+      curve.cubic((0, 0), (0.5, 1), (1, -0.5), (2, 0)),
+    )
+    for path in cases {
+      for unit in (1, -1, -0.0, 1.75, 1pt) {
+        for options in (
+          (pattern: "wave", samples-per-period: 4),
+          (pattern: "zigzag", samples-per-period: 4),
+          (pattern: "coil", samples-per-period: 4, anchor-start: false, anchor-end: false),
+        ) {
+          let generated = curve.pattern(path, wavelength: 2.5, amplitude: 0.04, ..options)
+          for variant in range(4) {
+            let local = ctx
+            let style = (stroke: black + 0.3pt)
+            if variant == 1 {
+              local.transform = cetz.matrix.transform-shear-x(0.3)
+              local.resolve-coordinate = (typed-coordinate,)
+            } else if variant == 2 { local.debug = true }
+            else if variant == 3 {
+              local.style.line.mark = (end: ">",)
+              local.style.bezier.mark = (end: ">",)
+            }
+            let actual = curve.pattern-to-cetz(path, unit: unit, style: style,
+              wavelength: 2.5, amplitude: 0.04, ..options)
+            let expected = curve.to-cetz(generated, unit: unit, ..style)
+            if expected.len() == 0 { assert.eq(actual, ()) }
+            else {
+              let actual = actual.first()(local)
+              let expected = expected.first()(local)
+              assert.eq(actual.drawables, expected.drawables, message: "fused pattern drawables")
+              assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+                cbor.encode(expected.drawables.map(d => d.segments)), message: "fused pattern coordinates")
+              assert.eq(cbor.encode(actual.ctx.prev), cbor.encode(expected.ctx.prev), message: "fused pattern context")
+            }
+          }
+        }
+      }
+    }
+    // A `unit` in an edge's drawing style remains a coordinate scale, rather
+    // than being accidentally forwarded as a CeTZ stroke-style property.
+    let path = curve.line((0, 0), (1.5, -0.5))
+    for unit in (-1, 1.75, 1pt, 9007199254740993) {
+      let style = (pattern: "wave", pattern-wavelength: 2.5, pattern-amplitude: 0.04,
+        pattern-samples-per-period: 4, unit: unit)
+      let actual = drawing._segments-elements(curve.segments(path), style, auto, true, true).elements
+      let generated = curve.pattern(drawing._segments-path(curve.segments(path)), pattern: "wave", wavelength: 2.5, amplitude: 0.04, samples-per-period: 4)
+      let expected = curve.to-cetz(generated, ..drawing._draw-style(style))
+      let actual = cetz.process.many(ctx, actual.flatten())
+      let expected = cetz.process.many(ctx, expected)
+      assert.eq(actual.drawables, expected.drawables, message: "patterned edge unit override")
+      assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+        cbor.encode(expected.drawables.map(d => d.segments)), message: "patterned edge scaled coordinates")
+    }
+    ()
+  })
+})
