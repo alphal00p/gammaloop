@@ -611,6 +611,108 @@
         }
       }
 
+      // Final candidate geometry must match the former scalar attachment path,
+      // including explicit anchors, fixed labels and dangling endpoint normals.
+      let scalar-candidate-final(spec, index) = {
+        let frame = spec.frames.at(index)
+        let endpoint = spec.endpoint-direction
+        let normal = if endpoint != none {
+          drawing._point-scale(endpoint, 1 / drawing._point-length(endpoint))
+        } else {
+          let length = drawing._point-length(frame.tangent)
+          if length <= 1e-9 { (0.0, spec.side) } else {
+            drawing._point-scale((-frame.tangent.at(1), frame.tangent.at(0)), spec.side / length)
+          }
+        }
+        let outward = cetz.vector.sub(cetz.matrix.mul4x4-vec3(spec.transform, (..normal, 0)), spec.origin)
+        let squared = cetz.vector.dot(outward, outward)
+        let nearest = if (spec.clear-box or endpoint != none) and squared > 1e-18 {
+          calc.min(..spec.corners.map(corner => cetz.vector.dot(corner, outward))) / squared
+        } else { 0.0 }
+        let offset = spec.gap - nearest
+        if spec.attachment != none and spec.clear-box and not spec.fixed {
+          let local = ctx + (transform: spec.transform)
+          let attachment = spec.attachment
+          let lines = (scalar-label-path-lines(local, drawing._segments-path(attachment.paths.at(index)), spec.accuracy)
+            + scalar-label-path-lines(local, drawing._segments-path(attachment.carrier), spec.accuracy))
+          offset = scalar_label-attachment-offset(lines, spec.corners,
+            drawing._point(cetz.matrix.mul4x4-vec3(spec.transform, (..frame.point, 0))),
+            outward, spec.gap, offset)
+        }
+        let position = if spec.fixed and endpoint == none { frame.point } else {
+          drawing._point-add(frame.point, drawing._point-scale(normal, offset))
+        }
+        let center = cetz.matrix.mul4x4-vec3(spec.transform, (..position, 0))
+        let corners = spec.corners.map(corner => cetz.vector.add(center, corner))
+        (
+          normal: normal, outward: outward, nearest: nearest,
+          position: position, corners: corners,
+          bounds: (
+            left: calc.min(..corners.map(p => p.at(0))), right: calc.max(..corners.map(p => p.at(0))),
+            bottom: calc.min(..corners.map(p => p.at(1))), top: calc.max(..corners.map(p => p.at(1))),
+          ),
+        )
+      }
+      let candidate-frames = (
+        (point: (0.0, 0.0), tangent: (1.0, 0.0)),
+        (point: (1.2, 0.4), tangent: (0.7, -0.3)),
+        (point: (-0.2, -0.1), tangent: (0.0, 0.0)),
+      )
+      let candidate-arrows = (
+        curve.line((-0.4, 0), (0.7, 0)),
+        curve.cubic((0.6, 0.2), (0.6, 1.5), (1.8, -1), (1.8, 0.6)),
+        curve.line((5, 0), (6, 0)),
+      ).map(curve.segments)
+      let candidate-carrier = curve.segments(curve.path(
+        curve.line((-4, 0), (4, 0)), curve.line((-4, 3), (4, 3)),
+      ))
+      for (transform-index, transform) in (
+        identity,
+        cetz.matrix.transform-translate(3, -2, 1),
+        cetz.matrix.transform-scale((-1.5, 0.6, 1)),
+        cetz.matrix.mul-mat(cetz.matrix.transform-rotate-z(37deg), cetz.matrix.transform-shear-x(0.6)),
+        cetz.matrix.transform-scale((0, 1, 1)),
+      ).enumerate() {
+        let transform = transform.map(row => row.map(float))
+        let origin = cetz.matrix.mul4x4-vec3(transform, (0.0, 0.0, 0.0)).map(float)
+        let corners = ((-1.0, 0.5), (1.0, 0.5), (-1.0, -0.5), (1.0, -0.5)).map(point =>
+          cetz.vector.sub(cetz.matrix.mul4x4-vec3(transform, (..point, 0.0)), origin).map(float))
+        for (mode-index, (fixed, clear-box, endpoint)) in (
+          (false, true, none), (true, true, none),
+          (false, false, none), (true, false, none),
+          (false, true, (2.0, -3.0)), (true, true, (2.0, -3.0)),
+          (false, false, (-1.0, 0.5)), (true, false, (-1.0, 0.5)),
+        ).enumerate() {
+          for side in (-1.0, 1.0) {
+            for (attachment-index, attachment) in (
+              none,
+              (carrier: (), paths: ((), (), ())),
+              (carrier: candidate-carrier, paths: ((), (), ())),
+              (carrier: (), paths: candidate-arrows),
+              (carrier: candidate-carrier, paths: candidate-arrows),
+            ).enumerate() {
+              let spec = (
+                frames: candidate-frames, positions: (0.4, 1.2, 2.6),
+                transform: transform, origin: origin, corners: corners,
+                total: 3.0, preferred: 1.5, accuracy: 0.005,
+                side: side, preferred-side: 1.0, path-index: 1, path-shift: -0.25,
+                gap: 0.2, clear-box: clear-box, fixed: fixed,
+                endpoint-direction: endpoint, attachment: attachment,
+              )
+              let actual = cbor(drawing._plugin.label_candidates(cbor.encode(spec)))
+              assert.eq(actual.len(), candidate-frames.len())
+              for (index, candidate) in actual.enumerate() {
+                let expected = scalar-candidate-final(spec, index)
+                for (key, value) in expected {
+                  assert.eq(candidate.at(key), value,
+                    message: "batched finite candidate " + repr((transform-index, mode-index, side, attachment-index, index, key)))
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Batching path drawing preserves CeTZ primitives, including disconnected
       // or empty subpaths and transforms that collapse distinct endpoints.
       for (sampled, unit) in (
@@ -621,6 +723,10 @@
         (curve.path(curve.move-to((-0.0, 0.0)), curve.quad-to((1, 3), (2, 0))), 1.75),
         (curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.line-to((1, 1)), curve.close()), -0.25),
         (curved, 1pt),
+        (curve.path(curve.move-to((0, 0)), curve.cubic-to((1, 2), (2, -1), (3, 0)), curve.close(),
+          curve.move-to((3, 0)), curve.cubic-to((4, 2), (5, -2), (6, 0))), 1),
+        (curve.path(curve.move-to((0, 0)), curve.line-to((0, 0)),
+          curve.move-to((1, 2)), curve.line-to((1, 2))), 1),
       ) {
         let primitives = {
           for (origin, closed, segments) in curve.to-cetz-data(sampled, unit: unit) {
@@ -646,6 +752,29 @@
             cbor.encode(expected.drawables.map(d => d.segments)), message: "batched path coordinates")
           assert.eq(actual.ctx.prev, expected.ctx.prev, message: "batched path context")
         }
+      }
+      // CeTZ's close flag affects later primitive joins: once closed,
+      // subpath-end is its origin, rather than its final command endpoint.
+      let closing-subpaths = curve.path(
+        curve.move-to((0, 0)), curve.line-to((1, 0)), curve.line-to((1, 1)),
+        curve.move-to((0, 0)), curve.line-to((3, 0)),
+      )
+      let closing-primitives = {
+        cetz.draw.line((0.0, 0.0), (1.0, 0.0))
+        cetz.draw.line((1.0, 0.0), (1.0, 1.0))
+        cetz.draw.line((0.0, 0.0), (3.0, 0.0))
+      }
+      for transform in (
+        identity, cetz.matrix.transform-scale((-1.5, 0.6, 1)),
+        cetz.matrix.transform-scale((0, 0, 1)),
+      ) {
+        let local = ctx + (transform: transform)
+        let actual = curve.to-cetz(closing-subpaths, close: true).first()(local)
+        let expected = cetz.draw.merge-path(closing-primitives, close: true).first()(local)
+        assert.eq(cbor.encode(actual.drawables.map(d => d.segments)),
+          cbor.encode(expected.drawables.map(d => d.segments)),
+          message: "closed multi-subpaths retain CeTZ primitive connector semantics")
+        assert.eq(actual.ctx.prev, expected.ctx.prev)
       }
       let cases = ()
       let comparisons = ()

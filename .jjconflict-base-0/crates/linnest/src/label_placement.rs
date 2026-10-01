@@ -132,6 +132,18 @@ impl PathLinesSpec {
             .map(|segment| segment.lines(&self.transform, self.accuracy))
             .collect()
     }
+
+    fn flattened(
+        segments: &[CubicSegment],
+        transform: &Transform,
+        accuracy: f64,
+    ) -> Vec<[Point; 2]> {
+        segments
+            .iter()
+            .flat_map(|segment| segment.lines(transform, accuracy))
+            .map(|line| line.map(|[x, y]| Point(x, y)))
+            .collect()
+    }
 }
 
 impl Point {
@@ -298,7 +310,11 @@ impl AttachmentSpec {
         }
         // Independent manual arrow/label shifts may put the finite arrow wholly
         // away from this ray; preserve the deliberate tangential placement.
-        if attached { Some(reach / scale) } else { None }
+        if attached {
+            Some(reach / scale)
+        } else {
+            None
+        }
     }
 }
 
@@ -393,6 +409,10 @@ impl ObstacleSpec {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct CandidateSpec {
+    #[serde(default)]
+    attachment: Option<CandidateAttachment>,
+    #[serde(default)]
+    endpoint_direction: Option<Point>,
     frames: Vec<Frame>,
     positions: Vec<f64>,
     transform: Transform,
@@ -408,6 +428,12 @@ struct CandidateSpec {
     gap: f64,
     clear_box: bool,
     fixed: bool,
+}
+
+#[derive(Deserialize)]
+struct CandidateAttachment {
+    carrier: Vec<CubicSegment>,
+    paths: Vec<Vec<CubicSegment>>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -1037,24 +1063,46 @@ impl CandidateSpec {
         if self.frames.len() != self.positions.len() {
             return Err("label frames and positions must have equal lengths".to_owned());
         }
+        if self
+            .attachment
+            .as_ref()
+            .is_some_and(|attachment| attachment.paths.len() != self.frames.len())
+        {
+            return Err("label attachment paths and frames must have equal lengths".to_owned());
+        }
+        let attachment = self
+            .attachment
+            .as_ref()
+            .filter(|_| self.clear_box && !self.fixed);
+        let carrier_lines = attachment.map_or_else(Vec::new, |attachment| {
+            PathLinesSpec::flattened(&attachment.carrier, &self.transform, self.accuracy)
+        });
         Ok(self
             .positions
             .iter()
             .zip(&self.frames)
-            .map(|(&at, frame)| {
-                let [tx, ty] = frame.tangent;
-                let length = (tx * tx + ty * ty).sqrt();
-                let normal = if length <= 1e-9 {
-                    [0.0, self.side]
+            .enumerate()
+            .map(|(index, (&at, frame))| {
+                let normal = if let Some(direction) = self.endpoint_direction {
+                    let Point(x, y) = direction.scaled(1.0 / direction.length());
+                    [x, y]
                 } else {
-                    let scale = self.side / length;
-                    [-ty * scale, tx * scale]
+                    let [tx, ty] = frame.tangent;
+                    let length = (tx * tx + ty * ty).sqrt();
+                    if length <= 1e-9 {
+                        [0.0, self.side]
+                    } else {
+                        let scale = self.side / length;
+                        [-ty * scale, tx * scale]
+                    }
                 };
                 let transformed = self.transform.point(normal);
                 let outward: [f64; 3] = std::array::from_fn(|i| transformed[i] - self.origin[i]);
                 let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
                 let normal_squared = dot(outward, outward);
-                let nearest = if self.clear_box && normal_squared > 1e-18 {
+                let nearest = if (self.clear_box || self.endpoint_direction.is_some())
+                    && normal_squared > 1e-18
+                {
                     self.corners
                         .iter()
                         .map(|&corner| dot(corner, outward))
@@ -1063,10 +1111,33 @@ impl CandidateSpec {
                 } else {
                     0.0
                 };
-                let position = if self.fixed {
+                let initial = self.gap - nearest;
+                let offset = attachment.map_or(initial, |attachment| {
+                    // The finite arrow precedes its physical carrier, exactly as
+                    // in the scalar attachment boundary. Flatten the carrier once
+                    // per label batch instead of encoding its lines per candidate.
+                    let mut lines = PathLinesSpec::flattened(
+                        &attachment.paths[index],
+                        &self.transform,
+                        self.accuracy,
+                    );
+                    lines.extend_from_slice(&carrier_lines);
+                    let [x, y, _] = self.transform.point(frame.point);
+                    AttachmentSpec {
+                        initial: ciborium::Value::Float(initial),
+                        lines,
+                        corners: self.corners.map(|[x, y, _]| Point(x, y)),
+                        frame: Point(x, y),
+                        outward: Point(outward[0], outward[1]),
+                        gap: self.gap,
+                    }
+                    .offset()
+                    .unwrap_or(initial)
+                });
+                let position = if self.fixed && self.endpoint_direction.is_none() {
                     frame.point
                 } else {
-                    std::array::from_fn(|i| frame.point[i] + normal[i] * (self.gap - nearest))
+                    std::array::from_fn(|i| frame.point[i] + normal[i] * offset)
                 };
                 let center = self.transform.point(position);
                 let bounds = self
@@ -1570,8 +1641,115 @@ mod tests {
     }
 
     #[test]
+    fn batched_finite_candidates_match_separate_geometry_calls() {
+        let input = serde_json::json!({
+            "frames": [
+                {"point": [0.0, 0.0], "tangent": [1.0, 1.0]},
+                {"point": [1.0, 0.0], "tangent": [0.0, -0.0]},
+                {"point": [2.0, 0.0], "tangent": [-2.0, 1.0]}
+            ],
+            "positions": [0.5, 1.0, 2.0],
+            "transform": [[2.0, -0.25, 0.0, 10.0], [0.5, -1.5, 0.0, -4.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+            "origin": [10.0, -4.0, 0.0],
+            "corners": [[-2.0, 0.3, 0.0], [2.0, 0.3, 0.0], [-2.0, -0.3, 0.0], [2.0, -0.3, 0.0]],
+            "total": 3.0, "preferred": 1.5, "accuracy": 0.001, "side": 1.0,
+            "preferred-side": -1.0, "path-index": 2, "path-shift": 0.25,
+            "gap": 0.2, "clear-box": true, "fixed": false,
+            "attachment": {
+                "carrier": [{"start": [-2, -2], "control-start": [-1, -1], "control-end": [1, 1], "end": [2, 2]}],
+                "paths": [
+                    [{"start": [-0.2, -0.2], "control-start": [-0.1, -0.1], "control-end": [0.1, 0.1], "end": [0.2, 0.2]}],
+                    [{"start": [0, 0], "control-start": [2, -1], "control-end": [1, 3], "end": [2, 1]}],
+                    []
+                ]
+            }
+        });
+        let encode = |value: &serde_json::Value| crate::graph_api::encode_cbor(value).unwrap();
+        let flatten = |segments: &serde_json::Value| {
+            let bytes = path_lines_bytes(&encode(&serde_json::json!({
+                "segments": segments, "transform": input["transform"], "accuracy": input["accuracy"],
+            }))).unwrap();
+            let parts: Vec<Vec<[Point; 2]>> = ciborium::de::from_reader(bytes.as_slice()).unwrap();
+            parts.into_iter().flatten().collect::<Vec<_>>()
+        };
+        let carrier = flatten(&input["attachment"]["carrier"]);
+        let spec: CandidateSpec = serde_json::from_value(input.clone()).unwrap();
+        let mut base: CandidateSpec = serde_json::from_value(input.clone()).unwrap();
+        base.attachment = None;
+        let mut expected = base.candidates().unwrap();
+        let mut moved = false;
+        for (index, candidate) in expected.iter_mut().enumerate() {
+            let mut lines = flatten(&input["attachment"]["paths"][index]);
+            lines.extend_from_slice(&carrier);
+            let [x, y, _] = spec.transform.point(spec.frames[index].point);
+            let request = serde_json::json!({
+                "initial": spec.gap - candidate.nearest,
+                "lines": lines.iter().map(|line| line.map(|Point(x,y)| [x,y])).collect::<Vec<_>>(),
+                "corners": spec.corners.map(|[x,y,_]| [x,y]), "frame": [x,y],
+                "outward": [candidate.outward[0],candidate.outward[1]], "gap": spec.gap,
+            });
+            let bytes = attachment_offset_bytes(&encode(&request)).unwrap();
+            let offset: f64 = ciborium::de::from_reader(bytes.as_slice()).unwrap();
+            let position =
+                std::array::from_fn(|i| spec.frames[index].point[i] + candidate.normal[i] * offset);
+            moved |= position != candidate.position;
+            candidate.position = position;
+            let center = spec.transform.point(position);
+            candidate.corners = spec
+                .corners
+                .map(|corner| std::array::from_fn(|i| center[i] + corner[i]));
+            candidate.bounds = Bounds {
+                left: candidate
+                    .corners
+                    .iter()
+                    .map(|p| p[0])
+                    .fold(f64::INFINITY, f64::min),
+                right: candidate
+                    .corners
+                    .iter()
+                    .map(|p| p[0])
+                    .fold(f64::NEG_INFINITY, f64::max),
+                bottom: candidate
+                    .corners
+                    .iter()
+                    .map(|p| p[1])
+                    .fold(f64::INFINITY, f64::min),
+                top: candidate
+                    .corners
+                    .iter()
+                    .map(|p| p[1])
+                    .fold(f64::NEG_INFINITY, f64::max),
+            };
+        }
+        assert!(moved, "the fixture must exercise a finite-path correction");
+        assert_eq!(
+            candidates_bytes(&encode(&input)).unwrap(),
+            crate::graph_api::encode_cbor(&expected).unwrap()
+        );
+        for (clear_box, fixed) in [(false, false), (true, true)] {
+            let mut with_attachment: CandidateSpec = serde_json::from_value(input.clone()).unwrap();
+            with_attachment.clear_box = clear_box;
+            with_attachment.fixed = fixed;
+            let attached =
+                crate::graph_api::encode_cbor(&with_attachment.candidates().unwrap()).unwrap();
+            with_attachment.attachment = None;
+            assert_eq!(
+                attached,
+                crate::graph_api::encode_cbor(&with_attachment.candidates().unwrap()).unwrap()
+            );
+        }
+        let mut invalid: CandidateSpec = serde_json::from_value(input).unwrap();
+        invalid.attachment.as_mut().unwrap().paths.pop();
+        assert!(
+            matches!(invalid.candidates(), Err(error) if error.contains("attachment paths and frames"))
+        );
+    }
+
+    #[test]
     fn transformed_label_clears_its_box_and_preserves_fixed_position() {
         let mut spec = CandidateSpec {
+            attachment: None,
+            endpoint_direction: None,
             frames: vec![Frame {
                 point: [1.0, 2.0],
                 tangent: [3.0, 0.0],
@@ -1627,6 +1805,13 @@ mod tests {
         assert_eq!(candidate.cost, 0.0);
         spec.fixed = true;
         assert_eq!(spec.candidates().unwrap()[0].position, [1.0, 2.0]);
+        // A dangling endpoint is a frame for an outward label, even when pinned.
+        spec.endpoint_direction = Some(Point(3.0, 0.0));
+        spec.clear_box = false;
+        let endpoint = spec.candidates().unwrap().remove(0);
+        assert_eq!(endpoint.normal, [1.0, 0.0]);
+        assert_eq!(endpoint.position, [2.25, 2.0]);
+        assert_eq!(endpoint.nearest, -1.0);
         spec.positions.clear();
         assert!(matches!(spec.candidates(), Err(error) if error.contains("equal lengths")));
     }

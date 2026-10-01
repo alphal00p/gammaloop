@@ -1084,20 +1084,38 @@
   segments.map(((kind, ..points)) => (kind, ..points.map(p => p.slice(0, 2)))),
 ))
 
-#let _cetz-carrier(origin, joined, current, ctx) = {
-  ctx.prev.pt = current
-  (ctx: ctx, drawables: _cetz-apply-transform(ctx.transform,
-    _cetz-drawable-path(((origin, false, joined),)),
-  ))
+#let _cetz-carrier(subpaths, ctx) = {
+  let merged = none
+  for (origin, closed, joined) in subpaths {
+    let current = joined.last().last()
+    if closed and current != origin { joined.push(("l", origin)); current = origin }
+    ctx.prev.pt = current
+    let carrier = _cetz-apply-transform(ctx.transform,
+      _cetz-drawable-path(((origin, false, joined),)),
+    ).first()
+    // Join in canvas coordinates, just as merge-path joins primitive drawables.
+    // A singular transform can make distinct source endpoints coincide.
+    if merged == none { merged = carrier } else {
+      let (origin, closed, joined) = merged.segments.first()
+      let (next-origin, _, next-joined) = carrier.segments.first()
+      let end = if joined.len() == 0 { origin } else { joined.last().last() }
+      if next-origin != end { joined.push(("l", next-origin)) }
+      joined += next-joined
+      merged.segments = ((origin, closed, joined),)
+    }
+  }
+  (ctx: ctx, drawables: (merged,))
 }
 
 #let _draw-cetz(subpaths, style, numeric, pairs, ctx) = {
   // Numeric paths need no per-segment coordinate resolution, anchors or
-  // bounds. Keep CeTZ's primitive processing when user hooks or inherited
-  // marks can change those segments before the final merge.
+  // bounds. Keep primitive processing for hooks, inherited marks, empty paths
+  // and multi-subpath merges with explicit closing or disabled joining.
   let custom = (not numeric
     or ctx.debug
-    or subpaths.len() != 1 or subpaths.first().last().len() == 0
+    or subpaths.any(path => path.last().len() == 0)
+    or (subpaths.len() > 1 and (
+      not style.at("join", default: true) or style.at("close", default: false)))
     or (type(ctx.resolve-coordinate) == array and ctx.resolve-coordinate.len() > 0)
     or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "line").mark)
     or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "bezier").mark))
@@ -1121,10 +1139,7 @@
       }
     }
   } else {
-    let (origin, closed, joined) = subpaths.first()
-    let current = joined.last().last()
-    if closed and current != origin { joined.push(("l", origin)); current = origin }
-    (_cetz-carrier.with(origin, joined, current),)
+    (_cetz-carrier.with(subpaths),)
   }
   (_cetz-merge-path(body, ..style).first())(ctx)
 }

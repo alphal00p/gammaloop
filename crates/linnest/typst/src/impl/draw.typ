@@ -2051,7 +2051,6 @@
     corners.push(cetz.vector.sub((measured.anchors)(anchor), origin))
   }
   let total = if path == none { 0 } else { curve-api.length(path, accuracy: accuracy) }
-  let preferred = calc.clamp(total / 2 + shift, 0, total)
   let movable = placement and fixed-position == none and clear-box and _style-value(style, "label-slide") and total > accuracy
   let sides = (side,)
   if movable and _style-value(style, "label-side") == auto { sides.push(-side) }
@@ -2063,11 +2062,9 @@
       offset-side: none, length: none, ratio: none, resolve-length: "none", shift: 0,
     ), 0, 0, none, auto)
   })
-  let carrier-lines = if clear-box and fixed-position == none {
-    _label-path-lines(ctx, path, accuracy)
-  } else { () }
-  let path-options = paths.enumerate().map(((path-index, candidate-path)) => {
-    let candidate-side = sides.at(path-index)
+  let attachment = clear-box and fixed-position == none
+  let carrier-segments = if attachment and path != none { curve-api.segments(path) } else { () }
+  let path-options = paths.map(candidate-path => {
     let total = if candidate-path == none { 0 } else { curve-api.length(candidate-path, accuracy: accuracy) }
     let preferred = calc.clamp(total / 2 + shift, 0, total)
     let low = 0
@@ -2084,95 +2081,8 @@
     }
     (
       total: total, preferred: preferred, low: low, high: high,
-      lines: carrier-lines,
     )
   })
-  let candidate-at = (path-index, at, sampled-frame: none, base: none) => {
-    let candidate-path = paths.at(path-index)
-    let candidate-side = sides.at(path-index)
-    let options = path-options.at(path-index)
-    let total = options.total
-    let preferred = options.preferred
-    let at = calc.clamp(at, options.low, options.high)
-    let frame = if sampled-frame != none { sampled-frame } else if fixed-position != none { frame } else {
-      _path-mid-frame(candidate-path, accuracy, shift: at - total / 2)
-    }
-    let normal = if endpoint-direction != none {
-      _point-scale(endpoint-direction, 1 / _point-length(endpoint-direction))
-    } else if base != none {
-      base.normal
-    } else {
-      let tangent-length = _point-length(frame.tangent)
-      if tangent-length <= 1e-9 { (0, candidate-side) } else {
-        _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
-      }
-    }
-    let outward = if base != none and endpoint-direction == none { base.outward } else { cetz.vector.sub(
-      cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
-    ) }
-    let nearest = if base != none and endpoint-direction == none { base.nearest } else {
-      let normal-squared = cetz.vector.dot(outward, outward)
-      if (clear-box or endpoint-direction != none) and normal-squared > 1e-18 {
-        calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
-      } else { 0 }
-    }
-    let path-shift = at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift }
-    let annotation-elements = ()
-    let attachment-lines = options.lines
-    if attached != none {
-      let arrow-style = attached + (offset: 0, offset-side: none, shift: path-shift)
-      let arrow-path = _path-layer(candidate-path, arrow-style, 0, 0, none, auto)
-      if clear-box and fixed-position == none {
-        // The finite arrow and its physical carrier are one attachment:
-        // a wide label must not cross the carrier beyond the short arrow.
-        attachment-lines = _label-path-lines(ctx, arrow-path, accuracy) + carrier-lines
-      }
-      if placement {
-        annotation-elements = _derived-path(arrow-path, arrow-style, auto, true, true)
-      }
-    }
-    let normal-offset = if clear-box and fixed-position == none {
-      _label-attachment-offset(
-        attachment-lines, corners,
-        _point(cetz.matrix.mul4x4-vec3(ctx.transform, (..frame.point, 0))),
-        outward, gap, gap - nearest,
-      )
-    } else { gap - nearest }
-    let position = if base != none and endpoint-direction == none and (fixed-position != none or normal-offset == gap - nearest) {
-      base.position
-    } else if fixed-position != none and endpoint-direction == none { frame.point } else {
-      _point-add(frame.point, _point-scale(normal, normal-offset))
-    }
-    let bounds = if base != none and position == base.position { base.corners } else {
-      let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
-      let translated = ()
-      for corner in corners { translated.push(cetz.vector.add(center, corner)) }
-      translated
-    }
-    (
-      position: position,
-      at: at,
-      side: candidate-side,
-      path-index: path-index,
-      path-shift: path-shift,
-      annotation-elements: annotation-elements,
-      corners: bounds,
-      bounds: if base != none and position == base.position { base.bounds } else {
-        let xs = ()
-        let ys = ()
-        for point in bounds { xs.push(point.at(0)); ys.push(point.at(1)) }
-        (
-          left: calc.min(..xs), right: calc.max(..xs),
-          bottom: calc.min(..ys), top: calc.max(..ys),
-        )
-      },
-      // Prefer the original side when both placements are otherwise equivalent.
-      cost: if base != none { base.cost } else { (
-        (if total <= accuracy { 0 } else { 0.002 * calc.pow((at - preferred) / total, 2) })
-          + if candidate-side == side { 0 } else { 0.00002 }
-      ) },
-    )
-  }
   let candidates = ()
   for (path-index, options) in path-options.enumerate() {
     let positions = (options.preferred,)
@@ -2188,7 +2098,20 @@
     let frames = if fixed-position != none { (frame,) } else {
       curve-api.frames(candidate-path, positions.map(at => options.total / 2 + (at - options.total / 2)), accuracy: accuracy)
     }
-    let bases = cbor(_plugin.label_candidates(cbor.encode((
+    // Prepare each finite arrow once. The shared candidate batch now owns
+    // its clearance against both this arrow and the full physical carrier.
+    let arrows = positions.map(at => if attached == none { none } else {
+      let arrow-style = attached + (
+        offset: 0, offset-side: none,
+        shift: at - options.total / 2 + (_style-value(attached, "shift") - shift),
+      )
+      let arrow-path = _path-layer(candidate-path, arrow-style, 0, 0, none, auto)
+      (
+        segments: if attachment { curve-api.segments(arrow-path) } else { () },
+        prepared: if placement { _derived-path(arrow-path, arrow-style, auto, true, true) } else { () },
+      )
+    })
+    let resolved = cbor(_plugin.label_candidates(cbor.encode((
       frames: frames.map(frame => (point: frame.point.map(float), tangent: frame.tangent.map(float))),
       positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),
       origin: origin.map(float), corners: corners.map(corner => corner.map(float)),
@@ -2197,17 +2120,26 @@
       path-index: path-index,
       path-shift: float(if attached == none { 0 } else { _style-value(attached, "shift") - shift }),
       gap: float(gap), clear-box: clear-box, fixed: fixed-position != none,
+      endpoint-direction: if endpoint-direction == none { none } else { _point(endpoint-direction) },
+      attachment: if attachment {
+        (carrier: carrier-segments, paths: arrows.map(arrow => if arrow == none { () } else { arrow.segments }))
+      } else { none },
     ))))
-    for (at, sampled-frame, base) in positions.zip(frames, bases) {
-      candidates.push(candidate-at(path-index, at, sampled-frame: sampled-frame, base: base))
+    for (at, candidate, arrow) in positions.zip(resolved, arrows) {
+      candidates.push((
+        position: candidate.position, at: at, side: candidate-side,
+        path-index: path-index, path-shift: candidate.path-shift,
+        annotation-path: if arrow == none { () } else { arrow.prepared },
+        corners: candidate.corners, bounds: candidate.bounds, cost: candidate.cost,
+      ))
     }
   }
   let footprints = if placement and attached != none {
-    _annotation-path-bounds(ctx, candidates.map(candidate => candidate.annotation-elements))
+    _annotation-path-bounds(ctx, candidates.map(candidate => candidate.annotation-path))
   } else { candidates.map(_ => ()) }
   for i in range(candidates.len()) {
     let candidate = candidates.at(i)
-    let _ = candidate.remove("annotation-elements")
+    let _ = candidate.remove("annotation-path")
     candidate.arrow-bounds = footprints.at(i)
     candidates.at(i) = candidate
   }
