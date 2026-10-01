@@ -2070,150 +2070,21 @@
 // Flatten only the finite attachment geometry. Affine transformation happens
 // before the flatness test, so rotated text and scaled canvases use one metric.
 #let _label-path-lines(ctx, path, accuracy) = {
-  let lines = ()
-  if path == none { return lines }
-  let pending = curve-api.segments(path).rev().map(segment => (
-    points: (segment.start, segment.control-start, segment.control-end, segment.end).map(
-      point => _point(cetz.matrix.mul4x4-vec3(ctx.transform, (..point, 0))),
-    ),
-    depth: 0,
-  ))
-  while pending.len() > 0 {
-    let current = pending.pop()
-    let (a, b, c, d) = current.points
-    let chord = _point-sub(d, a)
-    let squared = chord.at(0) * chord.at(0) + chord.at(1) * chord.at(1)
-    let distance = point => {
-      let relative = _point-sub(point, a)
-      let at = if squared <= 1e-18 { 0 } else {
-        calc.clamp((relative.at(0) * chord.at(0) + relative.at(1) * chord.at(1)) / squared, 0, 1)
-      }
-      _point-distance(point, _point-lerp(a, d, at))
-    }
-    let flatness = calc.max(distance(b), distance(c))
-    if flatness <= accuracy or current.depth >= 10 {
-      lines.push((a, d))
-    } else {
-      let ab = _point-lerp(a, b, 0.5)
-      let bc = _point-lerp(b, c, 0.5)
-      let cd = _point-lerp(c, d, 0.5)
-      let abc = _point-lerp(ab, bc, 0.5)
-      let bcd = _point-lerp(bc, cd, 0.5)
-      let mid = _point-lerp(abc, bcd, 0.5)
-      pending.push((points: (mid, bcd, cd, d), depth: current.depth + 1))
-      pending.push((points: (a, ab, abc, mid), depth: current.depth + 1))
-    }
-  }
-  lines
+  if path == none { return () }
+  cbor(_plugin.label_path_lines(cbor.encode((
+    segments: curve-api.segments(path),
+    transform: ctx.transform.map(row => row.map(float)),
+    accuracy: accuracy,
+  )))).fold((), (all, lines) => all + lines)
 }
 
 // Find actual clearance from a measured quad to the finite attachment path.
 // The arc frame is unchanged; only its outward normal offset is adjusted.
 #let _label-attachment-offset(lines, corners, frame, outward, gap, initial) = {
-  if lines.len() == 0 { return initial }
-  let dot = (a, b) => _point-x(a) * _point-x(b) + _point-y(a) * _point-y(b)
-  let cross = (a, b) => _point-x(a) * _point-y(b) - _point-y(a) * _point-x(b)
-  let direction = _point(outward)
-  let scale = _point-length(direction)
-  if scale <= 1e-9 { return initial }
-  let normal = _point-scale(direction, 1 / scale)
-  let tangent = (-normal.at(1), normal.at(0))
-  let project = point => (dot(point, tangent), dot(point, normal))
-  let quad = (corners.at(0), corners.at(1), corners.at(3), corners.at(2)).map(project)
-  let orientation = cross(_point-sub(quad.at(1), quad.at(0)), _point-sub(quad.at(2), quad.at(1)))
-  let left = calc.min(..quad.map(point => point.at(0)))
-  let right = calc.max(..quad.map(point => point.at(0)))
-  let radius = gap * scale
-  // Intersect the vertical normal ray with a finite capsule. Its rectangle and
-  // endpoint discs give exact clearance to each straight boundary segment.
-  let capsule = (a, b) => {
-    if calc.min(a.at(0), b.at(0)) > radius or calc.max(a.at(0), b.at(0)) < -radius { return none }
-    let low = calc.inf
-    let high = -calc.inf
-    for point in (a, b) {
-      if calc.abs(point.at(0)) <= radius {
-        let reach = calc.sqrt(calc.max(0, radius * radius - point.at(0) * point.at(0)))
-        low = calc.min(low, point.at(1) - reach)
-        high = calc.max(high, point.at(1) + reach)
-      }
-    }
-    let delta = _point-sub(b, a)
-    let length = _point-length(delta)
-    if length > 1e-12 {
-      let along = _point-scale(delta, 1 / length)
-      let across = (-along.at(1), along.at(0))
-      let bottom = -calc.inf
-      let top = calc.inf
-      for (axis, minimum, maximum) in ((along, 0, length), (across, -radius, radius)) {
-        let intercept = dot(a, axis)
-        let slope = axis.at(1)
-        if calc.abs(slope) <= 1e-12 {
-          if -intercept < minimum or -intercept > maximum {
-            bottom = calc.inf
-            top = -calc.inf
-            break
-          }
-        } else {
-          let first = (minimum + intercept) / slope
-          let last = (maximum + intercept) / slope
-          bottom = calc.max(bottom, calc.min(first, last))
-          top = calc.min(top, calc.max(first, last))
-        }
-      }
-      if bottom <= top {
-        low = calc.min(low, bottom)
-        high = calc.max(high, top)
-      }
-    }
-    if low <= high { (low, high) } else { none }
-  }
-  let intervals = ()
-  for (start, end) in lines {
-    let start = project(_point-sub(start, frame))
-    let end = project(_point-sub(end, frame))
-    if calc.min(start.at(0), end.at(0)) > right + radius or calc.max(start.at(0), end.at(0)) < left - radius { continue }
-    // Sweep the measured quad along this finite segment. Each quad edge is
-    // exposed at one endpoint; side transitions add the corner trajectories.
-    let first = quad.map(corner => _point-sub(start, corner))
-    let last = quad.map(corner => _point-sub(end, corner))
-    let delta = _point-sub(end, start)
-    let at-end = range(4).map(i => cross(
-      _point-sub(first.at(calc.rem(i + 1, 4)), first.at(i)), delta,
-    ) * orientation < 0)
-    let boundary = ()
-    for i in range(4) {
-      let next = calc.rem(i + 1, 4)
-      let points = if at-end.at(i) { last } else { first }
-      boundary.push((points.at(i), points.at(next)))
-      if calc.abs(orientation) <= 1e-18 { boundary.push((last.at(i), last.at(next))) }
-      if at-end.at(i) != at-end.at(calc.rem(i + 3, 4)) or calc.abs(orientation) <= 1e-18 {
-        boundary.push((first.at(i), last.at(i)))
-      }
-    }
-    let low = calc.inf
-    let high = -calc.inf
-    for (a, b) in boundary {
-      let interval = capsule(a, b)
-      if interval != none {
-        low = calc.min(low, interval.at(0))
-        high = calc.max(high, interval.at(1))
-      }
-    }
-    if low <= high { intervals.push((low, high)) }
-  }
-  // Curves can give disjoint collision intervals. Leave the component touching
-  // the attachment frame, rather than jumping over a clear gap to a remote bend.
-  let reach = 0
-  let attached = false
-  for (low, high) in intervals.sorted(key: interval => interval.at(0)) {
-    if high < 0 { continue }
-    if low > reach + 1e-10 { break }
-    attached = true
-    reach = calc.max(reach, high)
-  }
-  // Explicit independent arrow/label shifts may separate the whole finite
-  // arrow from this normal ray; retain that deliberate tangential placement.
-  if attached { reach / scale } else { initial }
+  cbor(_plugin.label_attachment_offset(cbor.encode((
+    lines: lines, corners: corners.map(_point), frame: frame,
+    outward: _point(outward), gap: gap, initial: initial,
+  ))))
 }
 
 #let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, endpoint-direction: none, placement: false) = {
@@ -2412,8 +2283,8 @@
 // Native dash styles use the continuous stroke envelope, as for a solid edge.
 #let _edge-collision-lines(ctx, elements) = {
   let painted = cetz.process.many(ctx, elements.flatten(), compute-bounds: false)
-  let lines = ()
-  let canvas = ctx + (transform: cetz.matrix.ident(4))
+  let spans = ()
+  let curves = ()
   for drawable in painted.drawables {
     if drawable.type != "path" or cetz.drawable.TAG.hidden in drawable.tags { continue }
     let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
@@ -2422,75 +2293,37 @@
     for (origin, closed, commands) in drawable.segments {
       let start = origin
       for command in commands {
-        let pieces = ()
         if command.first() == "l" {
           for end in command.slice(1) {
-            pieces.push((_point(start), _point(end)))
+            spans.push((curve: none, lines: ((_point(start), _point(end)),), radius: radius))
             start = end
           }
         } else if command.first() == "c" {
-          let segment = (start: _point(start), control-start: _point(command.at(1)),
-            control-end: _point(command.at(2)), end: _point(command.at(3)))
-          pieces = _label-path-lines(canvas, _segments-path((segment,)), 0.005)
+          spans.push((curve: curves.len(), radius: radius))
+          curves.push((start: _point(start), control-start: _point(command.at(1)),
+            control-end: _point(command.at(2)), end: _point(command.at(3))))
           start = command.last()
         }
-        lines += pieces.map(((a, b)) => (start: a, end: b, radius: radius))
       }
       if closed and start != origin {
-        lines.push((start: _point(start), end: _point(origin), radius: radius))
+        spans.push((curve: none, lines: ((_point(start), _point(origin)),), radius: radius))
       }
     }
+  }
+  // Painted geometry is already transformed. Batch all cubics from this layer
+  // while retaining straight endpoints, subpath closures and original ordering.
+  let flattened = if curves.len() == 0 { () } else {
+    cbor(_plugin.label_path_lines(cbor.encode((
+      segments: curves, transform: cetz.matrix.ident(4).map(row => row.map(float)),
+      accuracy: 0.005,
+    ))))
+  }
+  let lines = ()
+  for span in spans {
+    let pieces = if span.curve == none { span.lines } else { flattened.at(span.curve) }
+    lines += pieces.map(((a, b)) => (start: a, end: b, radius: span.radius))
   }
   lines
-}
-
-// Clip physical edge segments to the measured, possibly rotated text quad.
-// Only the stroke's radius expands this box (conservatively at corners):
-// no label collision padding and
-// no force at all outside an actual intersection. Integrating covered length
-// makes the penalty independent of how finely the edge was subdivided.
-#let _label-edge-intersection(candidate, lines) = {
-  if lines.len() == 0 { return 0 }
-  let corners = candidate.corners
-  let origin = _point(corners.at(0))
-  let x = _point-sub(corners.at(1), origin)
-  let y = _point-sub(corners.at(2), origin)
-  let determinant = x.at(0) * y.at(1) - x.at(1) * y.at(0)
-  if calc.abs(determinant) < 1e-12 { return 0 }
-  let width = _point-length(x)
-  let height = _point-length(y)
-  let local = point => {
-    let delta = _point-sub(point, origin)
-    ((delta.at(0) * y.at(1) - delta.at(1) * y.at(0)) / determinant,
-      (x.at(0) * delta.at(1) - x.at(1) * delta.at(0)) / determinant)
-  }
-  let length = 0
-  for line in lines {
-    let box = candidate.bounds
-    if (calc.max(line.start.at(0), line.end.at(0)) + line.radius < box.left
-      or calc.min(line.start.at(0), line.end.at(0)) - line.radius > box.right
-      or calc.max(line.start.at(1), line.end.at(1)) + line.radius < box.bottom
-      or calc.min(line.start.at(1), line.end.at(1)) - line.radius > box.top) { continue }
-    let a = local(line.start)
-    let b = local(line.end)
-    let low = 0
-    let high = 1
-    for axis in range(2) {
-      // The inverse transform's row norm also handles sheared canvases.
-      let padding = line.radius * (if axis == 0 { height } else { width }) / calc.abs(determinant)
-      let delta = b.at(axis) - a.at(axis)
-      if calc.abs(delta) < 1e-12 {
-        if a.at(axis) < -padding or a.at(axis) > 1 + padding { high = -1; break }
-      } else {
-        let from = (-padding - a.at(axis)) / delta
-        let to = (1 + padding - a.at(axis)) / delta
-        low = calc.max(low, calc.min(from, to))
-        high = calc.min(high, calc.max(from, to))
-      }
-    }
-    length += calc.max(0, high - low) * _point-distance(line.start, line.end)
-  }
-  6 * length / calc.max(1e-9, calc.min(width, height))
 }
 
 // Optimize arc length and automatic side choices with fixed normal clearance.
@@ -2514,14 +2347,13 @@
       edge: label.at("edge", default: none),
       candidates: label.candidates.map(candidate => (
         bounds: candidate.bounds,
-        cost: candidate.cost + if edge-lines.len() > 0 and candidate.keys().contains("corners") {
-          _label-edge-intersection(candidate, edge-lines)
-        } else { 0 },
+        cost: candidate.cost,
+        corners: if candidate.keys().contains("corners") { candidate.corners.map(_point) } else { none },
         arrow-bounds: candidate.at("arrow-bounds", default: ()),
       )),
     )),
     obstacles: obstacles, label-padding: label-padding,
-    fixed-arrows: fixed-arrows, coordinated: coordinated,
+    fixed-arrows: fixed-arrows, coordinated: coordinated, edge-lines: edge-lines,
     obstacle-padding: _label-collision-padding.obstacles,
   ))
   let math = (
@@ -3322,7 +3154,7 @@
         let edge-targets = ()
         let label-placements = ()
         let fixed-arrows = ()
-        let edge-lines = ()
+        let edge-layers = ()
         let label-obstacles = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
@@ -4203,7 +4035,7 @@
             )) {
               fixed-arrows += _annotation-bounds(ctx, elements.slice(layer-start))
             } else {
-              edge-lines += _edge-collision-lines(ctx, elements.slice(layer-start))
+              edge-layers.push((ctx: ctx, elements: elements.slice(layer-start)))
             }
           }
 
@@ -4317,6 +4149,15 @@
         }
 
         label-placements = label-placements.filter(label => label != none)
+        // Fixed labels return before collision scoring; avoid flattening painted
+        // curves unless an annotation can actually move. Keep each layer's
+        // original context and processing boundary when materializing its lines.
+        let edge-lines = ()
+        if label-placements.any(label => label.candidates.len() > 1) {
+          for layer in edge-layers {
+            edge-lines += _edge-collision-lines(layer.ctx, layer.elements)
+          }
+        }
         let label-padding = options.label-collision-padding
         let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding, fixed-arrows: fixed-arrows, edge-lines: edge-lines)
         for (label, candidate) in label-placements.zip(relaxed) {

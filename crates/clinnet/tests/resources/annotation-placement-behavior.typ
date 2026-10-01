@@ -1,5 +1,16 @@
 #import "crates/linnest/typst/src/impl/draw.typ" as impl
 
+// Exercise the same native static-cost geometry used by production search.
+#let edge-intersection(candidate, lines) = {
+  let geometry = (
+    placements: ((candidates: ((bounds: candidate.bounds, cost: 0,
+      corners: candidate.corners.map(impl._point)),),),),
+    obstacles: (), label-padding: 0, obstacle-padding: 0, edge-lines: lines,
+  )
+  let math = (temperatures: range(84).map(_ => 1.0), exponentials: (), pair-padding: 0)
+  cbor(impl._plugin.label_search(cbor.encode(geometry), cbor.encode(math))).costs.first()
+}
+
 // Exact text-edge contact has no attraction/repulsion outside the painted
 // stroke. Rotation and curve subdivision must not change that rule.
 #let candidate(x, cost: 0) = (
@@ -9,20 +20,20 @@
 )
 #let line(a, b, radius: 0) = (start: a, end: b, radius: radius)
 #let box = candidate(0)
-#assert.eq(impl._label-edge-intersection(box, (line((-1, 2), (2, 2)),)), 0)
-#assert.eq(impl._label-edge-intersection(box, (line((-1, 0.5), (2, 0.5)),)), 6)
-#assert.eq(impl._label-edge-intersection(box, (
+#assert.eq(edge-intersection(box, (line((-1, 2), (2, 2)),)), 0)
+#assert.eq(edge-intersection(box, (line((-1, 0.5), (2, 0.5)),)), 6)
+#assert.eq(edge-intersection(box, (
   line((-1, 0.5), (0.5, 0.5)), line((0.5, 0.5), (2, 0.5)),
 )), 6)
-#assert(impl._label-edge-intersection(box, (line((-1, 1.02), (2, 1.02), radius: 0.03),)) > 0)
-#assert.eq(impl._label-edge-intersection(box, (line((-1, 1.04), (2, 1.04), radius: 0.03),)), 0)
+#assert(edge-intersection(box, (line((-1, 1.02), (2, 1.02), radius: 0.03),)) > 0)
+#assert.eq(edge-intersection(box, (line((-1, 1.04), (2, 1.04), radius: 0.03),)), 0)
 #let rotated = box + (
   corners: ((0, 1), (1, 2), (1, 0), (2, 1)),
   bounds: (left: 0, right: 2, bottom: 0, top: 2),
 )
 // This line is inside the AABB but outside the actual rotated text quad.
-#assert.eq(impl._label-edge-intersection(rotated, (line((0.05, 0.05), (0.2, 0.05)),)), 0)
-#assert(impl._label-edge-intersection(rotated, (line((0, 1), (2, 1)),)) > 0)
+#assert.eq(edge-intersection(rotated, (line((0.05, 0.05), (0.2, 0.05)),)), 0)
+#assert(edge-intersection(rotated, (line((0, 1), (2, 1)),)) > 0)
 
 // Each isolated swap overlaps the other annotation; a coordinated move puts
 // both at their preferred positions without an intermediate accepted overlap.

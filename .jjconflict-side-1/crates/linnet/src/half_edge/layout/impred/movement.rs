@@ -235,11 +235,16 @@ impl MovementDofs {
             if row.bound < -1e-12 * scale {
                 return Err("Old drawing is outside a movement halfplane".into());
             }
-            let mut coefficients = vec![0.0; count];
+            // A halfplane touches at most two independent coordinates. Keep it
+            // sparse until its connected component is known, rather than
+            // materializing and rescanning a global dense matrix.
+            let mut coefficients = [(count, 0.0); 2];
             let mut first = None;
             for (axis, &normal) in row.normal.iter().enumerate() {
                 if let Some(column) = self.index[row.point][axis] {
-                    coefficients[column] += normal;
+                    let slot = if coefficients[0].0 == column { 0 } else { axis };
+                    coefficients[slot].0 = column;
+                    coefficients[slot].1 += normal;
                     if normal != 0.0 {
                         if let Some(first) = first {
                             components.join(first, column);
@@ -249,7 +254,7 @@ impl MovementDofs {
                     }
                 }
             }
-            if coefficients.iter().any(|x| *x != 0.0) {
+            if coefficients.iter().any(|(_, value)| *value != 0.0) {
                 matrix.push(coefficients);
                 bounds.push(row.bound.max(0.0) / scale);
             }
@@ -285,17 +290,29 @@ impl MovementDofs {
                 .push(index);
         }
         evidence.components = groups.len();
-        let mut values = vec![0.0; count];
-        for columns in groups.values() {
-            let mut block = Vec::new();
-            let mut block_bounds = Vec::new();
-            for (row, &bound) in matrix.iter().zip(&bounds) {
-                let local: Vec<_> = columns.iter().map(|&column| row[column]).collect();
-                if local.iter().any(|x| *x != 0.0) {
-                    block.push(local);
-                    block_bounds.push(bound);
+        let groups: Vec<_> = groups.into_values().collect();
+        let mut locations = vec![(0, 0); count];
+        let mut blocks = Vec::with_capacity(groups.len());
+        for (group, columns) in groups.iter().enumerate() {
+            for (local, &column) in columns.iter().enumerate() {
+                locations[column] = (group, local);
+            }
+            blocks.push((Vec::new(), Vec::new()));
+        }
+        for (row, bound) in matrix.iter().zip(bounds) {
+            let &(column, _) = row.iter().find(|(_, value)| *value != 0.0).unwrap();
+            let group = locations[column].0;
+            let mut local = vec![0.0; groups[group].len()];
+            for &(column, value) in row {
+                if value != 0.0 {
+                    local[locations[column].1] = value;
                 }
             }
+            blocks[group].0.push(local);
+            blocks[group].1.push(bound);
+        }
+        let mut values = vec![0.0; count];
+        for (columns, (block, block_bounds)) in groups.iter().zip(blocks) {
             let weights: Vec<_> = columns.iter().map(|&column| self.weights[column]).collect();
             let desired: Vec<_> = columns.iter().map(|&column| desired[column]).collect();
             let (candidate, local) =
@@ -337,6 +354,20 @@ impl ProjectedComponent<'_> {
         quadratic: &[f64],
         desired: &[f64],
     ) -> Result<(Vec<f64>, Certificate), String> {
+        if matrix
+            .iter()
+            .zip(bounds)
+            .all(|(row, bound)| row.iter().zip(desired).map(|(a, x)| a * x).sum::<f64>() <= *bound)
+        {
+            return Ok((
+                desired.to_vec(),
+                Certificate {
+                    status: "unconstrained optimum".into(),
+                    rows: bounds.len(),
+                    ..Certificate::default()
+                },
+            ));
+        }
         let objective_scale = quadratic
             .iter()
             .zip(desired)
@@ -352,20 +383,6 @@ impl ProjectedComponent<'_> {
                 .map(|(q, v)| -q * v / objective_scale)
                 .collect(),
         };
-        if matrix
-            .iter()
-            .zip(bounds)
-            .all(|(row, bound)| row.iter().zip(desired).map(|(a, x)| a * x).sum::<f64>() <= *bound)
-        {
-            return Ok((
-                desired.to_vec(),
-                Certificate {
-                    status: "unconstrained optimum".into(),
-                    rows: bounds.len(),
-                    ..Certificate::default()
-                },
-            ));
-        }
         let (mut values, dual, mut status, iterations) = if desired.len() <= 2 {
             let (values, dual) = problem.small_polygon()?;
             (values, dual, "enumerated movement polygon".to_owned(), 0)
@@ -435,7 +452,10 @@ impl ProjectedComponent<'_> {
             }
         }
         if !Self::certified(residual) {
-            return Err(format!("Uncertified joint movement ({status}): primal={}, stationarity={}, complementarity={}, dual_sign={}", residual[0], residual[1], residual[2], residual[3]));
+            return Err(format!(
+                "Uncertified joint movement ({status}): primal={}, stationarity={}, complementarity={}, dual_sign={}",
+                residual[0], residual[1], residual[2], residual[3]
+            ));
         }
         Ok((
             values,
@@ -590,13 +610,21 @@ impl ProjectedComponent<'_> {
         struct Candidate {
             cost: Wide,
             point: [Wide; 2],
-            multipliers: Vec<(usize, Wide)>,
+            multipliers: [Option<(usize, Wide)>; 2],
         }
+        let cost = |point: [Wide; 2]| {
+            Wide::from(0.5) * (point[0] * point[0] + point[1] * point[1])
+                - point[0] * target[0]
+                - point[1] * target[1]
+        };
         let mut best: Option<Candidate> = None;
-        let mut consider = |point: [Wide; 2], multipliers: Vec<(usize, Wide)>| {
+        let consider = |best: &mut Option<Candidate>,
+                        point: [Wide; 2],
+                        multipliers: [Option<(usize, Wide)>; 2]| {
             if !point.iter().all(Wide::is_valid)
                 || multipliers
                     .iter()
+                    .flatten()
                     .any(|(_, value)| !value.is_valid() || *value < Wide::from(-2e-9))
             {
                 return;
@@ -607,11 +635,9 @@ impl ProjectedComponent<'_> {
             }) {
                 return;
             }
-            let cost = Wide::from(0.5) * (point[0] * point[0] + point[1] * point[1])
-                - point[0] * target[0]
-                - point[1] * target[1];
+            let cost = cost(point);
             if best.as_ref().is_none_or(|candidate| cost < candidate.cost) {
-                best = Some(Candidate {
+                *best = Some(Candidate {
                     cost,
                     point,
                     multipliers,
@@ -620,11 +646,15 @@ impl ProjectedComponent<'_> {
         };
         for (index, normal) in normals.iter().enumerate() {
             consider(
+                &mut best,
                 [
                     target[0] - distance[index] * normal[0],
                     target[1] - distance[index] * normal[1],
                 ],
-                vec![(index, Self::divide(distance[index], lengths[index]))],
+                [
+                    Some((index, Self::divide(distance[index], lengths[index]))),
+                    None,
+                ],
             );
         }
         for first in 0..normals.len() {
@@ -639,24 +669,36 @@ impl ProjectedComponent<'_> {
                     Self::divide(offsets[first] * b[1] - a[1] * offsets[second], determinant),
                     Self::divide(a[0] * offsets[second] - offsets[first] * b[0], determinant),
                 ];
+                // The original enumeration only replaces a feasible candidate
+                // with a strictly lower objective. A dominated intersection
+                // cannot win, so it needs neither dual divisions nor a scan of
+                // every halfplane. Keep the same extended-precision objective
+                // and enumeration order, including ties.
+                if best
+                    .as_ref()
+                    .is_some_and(|candidate| cost(point) >= candidate.cost)
+                {
+                    continue;
+                }
                 let delta = [target[0] - point[0], target[1] - point[1]];
                 consider(
+                    &mut best,
                     point,
-                    vec![
-                        (
+                    [
+                        Some((
                             first,
                             Self::divide(
                                 Self::divide(delta[0] * b[1] - b[0] * delta[1], determinant),
                                 lengths[first],
                             ),
-                        ),
-                        (
+                        )),
+                        Some((
                             second,
                             Self::divide(
                                 Self::divide(a[0] * delta[1] - delta[0] * a[1], determinant),
                                 lengths[second],
                             ),
-                        ),
+                        )),
                     ],
                 );
             }
@@ -664,7 +706,7 @@ impl ProjectedComponent<'_> {
         let Candidate {
             point, multipliers, ..
         } = best.ok_or("No primal/dual certified candidate in a movement polygon")?;
-        for (index, value) in multipliers {
+        for (index, value) in multipliers.into_iter().flatten() {
             dual[index] = value;
         }
         Ok((
@@ -936,6 +978,53 @@ mod tests {
     }
 
     #[test]
+    fn projection_keeps_sparse_axes_and_fixed_rows_separate() {
+        let mut metadata = records(&[[0.0; 2]; 4]);
+        metadata[1].constraints[0] = AxisConstraint::Fixed;
+        metadata[2].constraints = [
+            AxisConstraint::Grouped {
+                point: 0,
+                direction: ShiftDirection::Any,
+            },
+            AxisConstraint::Fixed,
+        ];
+        metadata[3].constraints = [AxisConstraint::Fixed; 2];
+        let dofs = MovementDofs::new(&metadata, false).unwrap();
+        let mut rows = box_rows(4, 0.125);
+        rows.extend([
+            Halfplane {
+                point: 0,
+                normal: [-0.0, 0.0],
+                bound: 0.0,
+            },
+            Halfplane {
+                point: 1,
+                normal: [1.0, -0.0],
+                bound: 0.05,
+            },
+            Halfplane {
+                point: 3,
+                normal: [1.0, 1.0],
+                bound: 0.05,
+            },
+        ]);
+        let (step, certificate) = dofs
+            .project(
+                &[[2.0, -3.0], [99.0, 2.0], [-1.0, 99.0], [99.0; 2]],
+                &rows,
+                1.0,
+            )
+            .unwrap();
+        assert_eq!(
+            step,
+            [[0.125, -0.125], [0.0, 0.125], [0.125, 0.0], [0.0; 2]]
+        );
+        assert_eq!(certificate.rows, 8);
+        assert_eq!(certificate.components, 3);
+        assert_eq!(certificate.primal_residual, 0.0);
+    }
+
+    #[test]
     fn shifted_cycles_eliminate_pins_and_preserve_directed_signs() {
         let points = [[2.0, 0.0], [3.0, 2.0], [4.0, 4.0]];
         let mut metadata = records(&points);
@@ -964,14 +1053,17 @@ mod tests {
         }
         dofs.validate(&after).unwrap();
         after[1][1] += 0.1;
-        assert!(dofs
-            .validate(&after)
-            .unwrap_err()
-            .contains("fixed reference"));
+        assert!(
+            dofs.validate(&after)
+                .unwrap_err()
+                .contains("fixed reference")
+        );
         metadata[0].shift[0] += 0.1;
-        assert!(MovementDofs::new(&metadata, false)
-            .unwrap_err()
-            .contains("grouped coordinates"));
+        assert!(
+            MovementDofs::new(&metadata, false)
+                .unwrap_err()
+                .contains("grouped coordinates")
+        );
     }
 
     #[test]
@@ -984,8 +1076,8 @@ mod tests {
         assert!(MovementDofs::new(&metadata, false).is_err());
         let dofs = MovementDofs::new(&records(&[[0.0, 0.0]]), false).unwrap();
         assert!(dofs.project(&[[f64::NAN, 0.0]], &[], 1.0).is_err());
-        assert!(dofs
-            .project(
+        assert!(
+            dofs.project(
                 &[[0.0, 0.0]],
                 &[Halfplane {
                     point: 0,
@@ -994,7 +1086,8 @@ mod tests {
                 }],
                 1.0
             )
-            .is_err());
+            .is_err()
+        );
         assert!(dofs.project(&[[0.0, 0.0]], &[], 0.0).is_err());
     }
 

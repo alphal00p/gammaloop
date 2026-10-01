@@ -49,6 +49,12 @@ impl Point {
             self.1 + (other.1 - self.1) * at,
         )
     }
+
+    fn distance(self, other: Self) -> f64 {
+        let x = self.0 - other.0;
+        let y = self.1 - other.1;
+        (x * x + y * y).sqrt()
+    }
 }
 
 #[derive(Deserialize)]
@@ -70,6 +76,286 @@ impl CubicSegment {
         let bcd = bc.lerp(cd, at);
         let Point(x, y) = abc.lerp(bcd, at);
         [x, y]
+    }
+
+    fn lines(&self, transform: &Transform, accuracy: f64) -> Vec<[[f64; 2]; 2]> {
+        // Transform before testing flatness, retaining the Typst de Casteljau
+        // operation order and depth cap. Push right first to emit left to right.
+        let points =
+            [self.start, self.control_start, self.control_end, self.end].map(|Point(x, y)| {
+                let [x, y, _] = transform.point([x, y]);
+                Point(x, y)
+            });
+        let mut pending = vec![(points, 0)];
+        let mut lines = Vec::new();
+        while let Some(([a, b, c, d], depth)) = pending.pop() {
+            let chord = Point(d.0 - a.0, d.1 - a.1);
+            let squared = chord.0 * chord.0 + chord.1 * chord.1;
+            let distance = |point: Point| {
+                let relative = Point(point.0 - a.0, point.1 - a.1);
+                let at = if squared <= 1e-18 {
+                    0.0
+                } else {
+                    ((relative.0 * chord.0 + relative.1 * chord.1) / squared).clamp(0.0, 1.0)
+                };
+                point.distance(a.lerp(d, at))
+            };
+            if distance(b).max(distance(c)) <= accuracy || depth >= 10 {
+                lines.push([[a.0, a.1], [d.0, d.1]]);
+            } else {
+                let ab = a.lerp(b, 0.5);
+                let bc = b.lerp(c, 0.5);
+                let cd = c.lerp(d, 0.5);
+                let abc = ab.lerp(bc, 0.5);
+                let bcd = bc.lerp(cd, 0.5);
+                let mid = abc.lerp(bcd, 0.5);
+                pending.push(([mid, bcd, cd, d], depth + 1));
+                pending.push(([a, ab, abc, mid], depth + 1));
+            }
+        }
+        lines
+    }
+}
+
+#[derive(Deserialize)]
+struct PathLinesSpec {
+    segments: Vec<CubicSegment>,
+    transform: Transform,
+    #[serde(deserialize_with = "crate::deserialize_f64")]
+    accuracy: f64,
+}
+
+impl PathLinesSpec {
+    fn lines(&self) -> Vec<Vec<[[f64; 2]; 2]>> {
+        self.segments
+            .iter()
+            .map(|segment| segment.lines(&self.transform, self.accuracy))
+            .collect()
+    }
+}
+
+impl Point {
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0, self.1 - other.1)
+    }
+
+    fn dot(self, other: Self) -> f64 {
+        self.0 * other.0 + self.1 * other.1
+    }
+
+    fn cross(self, other: Self) -> f64 {
+        self.0 * other.1 - self.1 * other.0
+    }
+
+    fn scaled(self, factor: f64) -> Self {
+        Self(self.0 * factor, self.1 * factor)
+    }
+
+    fn length(self) -> f64 {
+        (self.0 * self.0 + self.1 * self.1).sqrt()
+    }
+}
+
+#[derive(Deserialize)]
+struct AttachmentSpec {
+    initial: ciborium::Value,
+    lines: Vec<[Point; 2]>,
+    corners: [Point; 4],
+    frame: Point,
+    outward: Point,
+    #[serde(deserialize_with = "crate::deserialize_f64")]
+    gap: f64,
+}
+
+impl AttachmentSpec {
+    // Intersect the normal ray with the same finite capsule as the Typst
+    // clearance calculation: its endpoint discs and straight rectangle.
+    fn capsule(a: Point, b: Point, radius: f64) -> Option<(f64, f64)> {
+        if a.0.min(b.0) > radius || a.0.max(b.0) < -radius {
+            return None;
+        }
+        let mut low = f64::INFINITY;
+        let mut high = f64::NEG_INFINITY;
+        for point in [a, b] {
+            if point.0.abs() <= radius {
+                let reach = (radius * radius - point.0 * point.0).max(0.0).sqrt();
+                low = low.min(point.1 - reach);
+                high = high.max(point.1 + reach);
+            }
+        }
+        let delta = b.sub(a);
+        let length = delta.length();
+        if length > 1e-12 {
+            let along = delta.scaled(1.0 / length);
+            let across = Point(-along.1, along.0);
+            let mut bottom = f64::NEG_INFINITY;
+            let mut top = f64::INFINITY;
+            for (axis, minimum, maximum) in [(along, 0.0, length), (across, -radius, radius)] {
+                let intercept = a.dot(axis);
+                let slope = axis.1;
+                if slope.abs() <= 1e-12 {
+                    if -intercept < minimum || -intercept > maximum {
+                        bottom = f64::INFINITY;
+                        top = f64::NEG_INFINITY;
+                        break;
+                    }
+                } else {
+                    let first = (minimum + intercept) / slope;
+                    let last = (maximum + intercept) / slope;
+                    bottom = bottom.max(first.min(last));
+                    top = top.min(first.max(last));
+                }
+            }
+            if bottom <= top {
+                low = low.min(bottom);
+                high = high.max(top);
+            }
+        }
+        (low <= high).then_some((low, high))
+    }
+
+    fn offset(&self) -> Option<f64> {
+        if self.lines.is_empty() {
+            return None;
+        }
+        let scale = self.outward.length();
+        if scale <= 1e-9 {
+            return None;
+        }
+        let normal = self.outward.scaled(1.0 / scale);
+        let tangent = Point(-normal.1, normal.0);
+        let project = |point: Point| Point(point.dot(tangent), point.dot(normal));
+        let quad = [
+            self.corners[0],
+            self.corners[1],
+            self.corners[3],
+            self.corners[2],
+        ]
+        .map(project);
+        let orientation = quad[1].sub(quad[0]).cross(quad[2].sub(quad[1]));
+        let left = quad
+            .iter()
+            .map(|point| point.0)
+            .fold(f64::INFINITY, f64::min);
+        let right = quad
+            .iter()
+            .map(|point| point.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let radius = self.gap * scale;
+        let mut intervals = Vec::with_capacity(self.lines.len());
+        for &[start, end] in &self.lines {
+            let start = project(start.sub(self.frame));
+            let end = project(end.sub(self.frame));
+            if start.0.min(end.0) > right + radius || start.0.max(end.0) < left - radius {
+                continue;
+            }
+            // Sweep the measured quad along this finite segment, preserving
+            // boundary enumeration and the degenerate-quad cases.
+            let first = quad.map(|corner| start.sub(corner));
+            let last = quad.map(|corner| end.sub(corner));
+            let delta = end.sub(start);
+            let at_end: [bool; 4] = std::array::from_fn(|i| {
+                first[(i + 1) % 4].sub(first[i]).cross(delta) * orientation < 0.0
+            });
+            let mut low = f64::INFINITY;
+            let mut high = f64::NEG_INFINITY;
+            for i in 0..4 {
+                let next = (i + 1) % 4;
+                let points = if at_end[i] { last } else { first };
+                for boundary in [
+                    Some((points[i], points[next])),
+                    (orientation.abs() <= 1e-18).then_some((last[i], last[next])),
+                    (at_end[i] != at_end[(i + 3) % 4] || orientation.abs() <= 1e-18)
+                        .then_some((first[i], last[i])),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    if let Some((bottom, top)) = Self::capsule(boundary.0, boundary.1, radius) {
+                        low = low.min(bottom);
+                        high = high.max(top);
+                    }
+                }
+            }
+            if low <= high {
+                intervals.push((low, high));
+            }
+        }
+        // Keep the connected collision interval touching the attachment frame.
+        // A remote bend must not pull the label across an already clear gap.
+        intervals.sort_by(|first, second| first.0.partial_cmp(&second.0).unwrap());
+        let mut reach: f64 = 0.0;
+        let mut attached = false;
+        for (low, high) in intervals {
+            if high < 0.0 {
+                continue;
+            }
+            if low > reach + 1e-10 {
+                break;
+            }
+            attached = true;
+            reach = reach.max(high);
+        }
+        // Independent manual arrow/label shifts may put the finite arrow wholly
+        // away from this ray; preserve the deliberate tangential placement.
+        if attached { Some(reach / scale) } else { None }
+    }
+}
+
+pub fn attachment_offset_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: AttachmentSpec = ciborium::de::from_reader(arg)
+        .map_err(|error| format!("Invalid finite label attachment geometry: {error}"))?;
+    let mut bytes = Vec::new();
+    let offset = spec
+        .offset()
+        .map_or_else(|| spec.initial.clone(), ciborium::Value::Float);
+    ciborium::ser::into_writer(&offset, &mut bytes).map_err(|error| error.to_string())?;
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod attachment_tests {
+    use super::*;
+
+    #[test]
+    fn finite_attachment_clears_only_the_connected_carrier() {
+        let mut spec = AttachmentSpec {
+            initial: ciborium::Value::Integer(4.into()),
+            lines: vec![[Point(-10.0, 0.0), Point(10.0, 0.0)]],
+            corners: [
+                Point(-1.0, 0.5),
+                Point(1.0, 0.5),
+                Point(-1.0, -0.5),
+                Point(1.0, -0.5),
+            ],
+            frame: Point(0.0, 0.0),
+            outward: Point(0.0, 1.0),
+            gap: 0.2,
+        };
+        assert_eq!(spec.offset(), Some(0.7));
+        spec.lines.push([Point(-10.0, 3.0), Point(10.0, 3.0)]);
+        assert_eq!(spec.offset(), Some(0.7));
+        spec.lines.remove(0);
+        assert_eq!(spec.offset(), None);
+        spec.lines = vec![[Point(4.0, 0.0), Point(5.0, 0.0)]];
+        assert_eq!(spec.offset(), None);
+    }
+
+    #[test]
+    fn finite_attachment_preserves_degenerate_and_scaled_clearance() {
+        let mut spec = AttachmentSpec {
+            initial: ciborium::Value::Integer(4.into()),
+            lines: vec![[Point(0.0, 0.0), Point(0.0, 0.0)]],
+            corners: [Point(0.0, 0.0); 4],
+            frame: Point(0.0, 0.0),
+            outward: Point(0.0, 2.0),
+            gap: 0.2,
+        };
+        assert_eq!(spec.offset(), Some(0.2));
+        spec.outward = Point(0.0, 0.0);
+        assert_eq!(spec.offset(), None);
+        spec.lines.clear();
+        assert_eq!(spec.offset(), None);
     }
 }
 
@@ -168,13 +454,72 @@ impl Bounds {
 struct CollisionCandidate {
     bounds: Bounds,
     cost: ciborium::Value,
+    #[serde(default)]
+    corners: Option<[Point; 4]>,
     #[serde(default, rename = "arrow-bounds")]
     arrow_bounds: Vec<Bounds>,
 }
 
+#[derive(Deserialize)]
+struct StrokeLine {
+    start: Point,
+    end: Point,
+    #[serde(deserialize_with = "crate::deserialize_f64")]
+    radius: f64,
+}
+
 impl CollisionCandidate {
-    fn cost(&self) -> Result<f64, String> {
-        Cost::from_value(&self.cost).map(Cost::float)
+    fn edge_intersection(&self, lines: &[StrokeLine]) -> Cost {
+        let Some(corners) = self.corners.filter(|_| !lines.is_empty()) else {
+            return Cost::Integer(0);
+        };
+        let origin = corners[0];
+        let x = corners[1].sub(origin);
+        let y = corners[2].sub(origin);
+        let determinant = x.cross(y);
+        if determinant.abs() < 1e-12 {
+            return Cost::Integer(0);
+        }
+        let width = x.length();
+        let height = y.length();
+        let local = |point: Point| {
+            let delta = point.sub(origin);
+            [delta.cross(y) / determinant, x.cross(delta) / determinant]
+        };
+        let mut length = 0.0;
+        for line in lines {
+            let bounds = self.bounds;
+            if line.start.0.max(line.end.0) + line.radius < bounds.left
+                || line.start.0.min(line.end.0) - line.radius > bounds.right
+                || line.start.1.max(line.end.1) + line.radius < bounds.bottom
+                || line.start.1.min(line.end.1) - line.radius > bounds.top
+            {
+                continue;
+            }
+            let a = local(line.start);
+            let b = local(line.end);
+            let mut low: f64 = 0.0;
+            let mut high: f64 = 1.0;
+            for axis in 0..2 {
+                // The inverse transform's row norm also handles sheared canvases.
+                let padding =
+                    line.radius * (if axis == 0 { height } else { width }) / determinant.abs();
+                let delta = b[axis] - a[axis];
+                if delta.abs() < 1e-12 {
+                    if a[axis] < -padding || a[axis] > 1.0 + padding {
+                        high = -1.0;
+                        break;
+                    }
+                } else {
+                    let from = (-padding - a[axis]) / delta;
+                    let to = (1.0 + padding - a[axis]) / delta;
+                    low = low.max(from.min(to));
+                    high = high.min(from.max(to));
+                }
+            }
+            length += (high - low).max(0.0) * line.start.distance(line.end);
+        }
+        Cost::Float(6.0 * length / width.min(height).max(1e-9))
     }
 }
 
@@ -210,6 +555,8 @@ impl Obstacle {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct CollisionSpec {
+    #[serde(default)]
+    edge_lines: Vec<StrokeLine>,
     placements: Vec<CollisionLabel>,
     obstacles: Vec<Obstacle>,
     #[serde(deserialize_with = "crate::deserialize_f64")]
@@ -245,6 +592,13 @@ impl Cost {
                 .map_err(|_| "label costs exceed the Typst integer range".to_owned()),
             ciborium::Value::Float(value) => Ok(Self::Float(*value)),
             _ => Err("label candidate costs must be numbers".to_owned()),
+        }
+    }
+
+    fn value(self) -> ciborium::Value {
+        match self {
+            Self::Integer(value) => ciborium::Value::Integer(value.into()),
+            Self::Float(value) => ciborium::Value::Float(value),
         }
     }
 
@@ -613,7 +967,9 @@ impl CollisionSpec {
                 let raw = candidate.bounds;
                 let area = (raw.right - raw.left) * (raw.top - raw.bottom);
                 areas.push(area);
-                let mut cost = candidate.cost()?;
+                let initial = Cost::from_value(&candidate.cost)?
+                    .add(candidate.edge_intersection(&self.edge_lines))?;
+                let mut cost = initial.float();
                 // Keep zero terms too: adding them converts integer costs to
                 // floats. Preserve both obstacle order and numeric types.
                 for obstacle in &relevant {
@@ -639,7 +995,7 @@ impl CollisionSpec {
                     }
                 }
                 costs.push(if relevant.is_empty() && self.fixed_arrows.is_empty() {
-                    candidate.cost.clone()
+                    initial.value()
                 } else {
                     ciborium::Value::Float(cost)
                 });
@@ -766,9 +1122,122 @@ pub fn obstacle_boxes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::encode_cbor(&spec.boxes())
 }
 
+pub fn path_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PathLinesSpec = ciborium::de::from_reader(arg)
+        .map_err(|error| format!("Invalid label path geometry: {error}"))?;
+    crate::graph_api::encode_cbor(&spec.lines())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finite_edge_intersection_preserves_cost_types_and_search_addition() {
+        let mut candidate = CollisionCandidate {
+            bounds: Bounds {
+                left: -1.0,
+                right: 1.0,
+                bottom: -0.5,
+                top: 0.5,
+            },
+            corners: Some([
+                Point(-1.0, 0.5),
+                Point(1.0, 0.5),
+                Point(-1.0, -0.5),
+                Point(1.0, -0.5),
+            ]),
+            cost: ciborium::Value::Integer(2.into()),
+            arrow_bounds: Vec::new(),
+        };
+        assert!(matches!(candidate.edge_intersection(&[]), Cost::Integer(0)));
+        let lines = vec![StrokeLine {
+            start: Point(-2.0, 0.0),
+            end: Point(2.0, 0.0),
+            radius: 0.0,
+        }];
+        assert_eq!(candidate.edge_intersection(&lines).float(), 12.0);
+        candidate.corners = Some([Point(0.0, 0.0); 4]);
+        assert!(matches!(
+            candidate.edge_intersection(&lines),
+            Cost::Integer(0)
+        ));
+        candidate.corners = None;
+        let mut spec = CollisionSpec {
+            edge_lines: lines,
+            placements: vec![CollisionLabel {
+                candidates: vec![candidate],
+                edge: None,
+            }],
+            obstacles: Vec::new(),
+            label_padding: 0.0,
+            obstacle_padding: 0.0,
+            fixed_arrows: Vec::new(),
+            coordinated: false,
+        };
+        assert_eq!(
+            spec.geometry(0.0).unwrap().costs[0][0],
+            ciborium::Value::Integer(2.into())
+        );
+        spec.placements[0].candidates[0].corners = Some([
+            Point(-1.0, 0.5),
+            Point(1.0, 0.5),
+            Point(-1.0, -0.5),
+            Point(1.0, -0.5),
+        ]);
+        assert_eq!(
+            spec.geometry(0.0).unwrap().costs[0][0],
+            ciborium::Value::Float(14.0)
+        );
+        spec.edge_lines[0].start.1 = 2.0;
+        spec.edge_lines[0].end.1 = 2.0;
+        assert_eq!(
+            spec.geometry(0.0).unwrap().costs[0][0],
+            ciborium::Value::Float(2.0)
+        );
+    }
+
+    #[test]
+    fn path_lines_keep_empty_segments_and_cap_subdivision_depth() {
+        let mut spec = PathLinesSpec {
+            segments: Vec::new(),
+            transform: Transform([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]),
+            accuracy: 0.0,
+        };
+        assert!(spec.lines().is_empty());
+        spec.segments.push(CubicSegment {
+            start: Point(2.0, 3.0),
+            control_start: Point(2.0, 3.0),
+            control_end: Point(2.0, 3.0),
+            end: Point(2.0, 3.0),
+        });
+        spec.segments.push(CubicSegment {
+            start: Point(0.0, 0.0),
+            control_start: Point(0.0, 1.0),
+            control_end: Point(1.0, 1.0),
+            end: Point(1.0, 0.0),
+        });
+        let lines = spec.lines();
+        assert_eq!(lines[0], [[[2.0, 3.0], [2.0, 3.0]]]);
+        assert_eq!(lines[1].len(), 1 << 10);
+        assert_eq!(lines[1][0][0], [0.0, 0.0]);
+        assert_eq!(lines[1].last().unwrap()[1], [1.0, 0.0]);
+        for pair in lines[1].windows(2) {
+            assert_eq!(pair[0][1], pair[1][0]);
+        }
+        spec.transform = Transform([
+            [-2.0, 0.5, 0.0, 1.0],
+            [0.0, 3.0, 0.0, -4.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
+        assert_eq!(spec.lines()[0], [[[-1.5, 5.0], [-1.5, 5.0]]]);
+    }
 
     #[test]
     fn exponential_checks_keep_strict_acceptance_and_inclusive_rejection_bounds() {
@@ -789,6 +1258,7 @@ mod tests {
     #[test]
     fn host_exponentials_override_speculation_and_finish_a_verified_search() {
         let candidate = |left, cost| CollisionCandidate {
+            corners: None,
             bounds: Bounds {
                 left,
                 right: left + 1.0,
@@ -800,6 +1270,7 @@ mod tests {
         };
         // Either single move raises the energy, but taking both lowers it.
         let geometry = CollisionSpec {
+            edge_lines: Vec::new(),
             placements: vec![
                 CollisionLabel {
                     candidates: vec![candidate(0.0, 0.001), candidate(10.9995, 0.0)],
@@ -864,10 +1335,12 @@ mod tests {
             top: 1.0,
         };
         let spec = CollisionSpec {
+            edge_lines: Vec::new(),
             placements: [(0.0, 4.0), (4.0, 0.0)]
                 .into_iter()
                 .map(|(text, arrow)| CollisionLabel {
                     candidates: vec![CollisionCandidate {
+                        corners: None,
                         bounds: bounds(text),
                         cost: ciborium::Value::Integer(0.into()),
                         arrow_bounds: vec![bounds(arrow)],
@@ -899,6 +1372,7 @@ mod tests {
     #[test]
     fn coordinated_proposals_cross_a_barrier_without_single_uphill_moves() {
         let candidate = |left, cost| CollisionCandidate {
+            corners: None,
             bounds: Bounds {
                 left,
                 right: left + 1.0,
@@ -909,6 +1383,7 @@ mod tests {
             arrow_bounds: Vec::new(),
         };
         let spec = CollisionSpec {
+            edge_lines: Vec::new(),
             placements: vec![
                 CollisionLabel {
                     candidates: vec![candidate(0.0, 1.0), candidate(10.0, 0.0)],
@@ -994,8 +1469,10 @@ mod tests {
         };
         let edge = Some(ciborium::Value::Integer(7.into()));
         let mut spec = CollisionSpec {
+            edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
                 candidates: vec![CollisionCandidate {
+                    corners: None,
                     bounds,
                     cost: ciborium::Value::Integer(0.into()),
                     arrow_bounds: Vec::new(),
@@ -1053,8 +1530,10 @@ mod tests {
         };
         let cost = 9_007_199_254_740_992.0;
         let spec = CollisionSpec {
+            edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
                 candidates: vec![CollisionCandidate {
+                    corners: None,
                     bounds,
                     cost: ciborium::Value::Float(cost),
                     arrow_bounds: Vec::new(),
