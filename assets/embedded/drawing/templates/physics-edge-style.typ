@@ -49,8 +49,8 @@
   stroke-style(c: c, thickness: thickness, dash: dash)
 }
 
-/// Sink-half stroke helper. The default lightening makes the two halves encode
-/// the graph's source/sink split without requiring arrowheads.
+/// Sink-half stroke helper. With `orientation-split: true`, the lightening makes
+/// the two halves encode the graph's source/sink split without arrowheads.
 /// -> dictionary
 #let sink-stroke(
   c: palette.ink,
@@ -94,9 +94,12 @@
 /// -> dictionary
 #let coil = (
   pattern: "coil",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-  pattern-coil-longitudinal-scale: 1.6,
+  pattern-amplitude: 0.15,
+  pattern-wavelength: 0.45,
+  pattern-fit: true,
+  pattern-phase: calc.pi / 2,
+  pattern-natural-endpoints: true,
+  pattern-coil-longitudinal-scale: 1.4,
 )
 
 /// Weak-boson-style zigzag pattern.
@@ -169,14 +172,15 @@
 
 #let _momentum-arrow-stroke = (paint: palette.ink, thickness: 1pt, cap: "round")
 
-/// Default style for source-to-sink momentum arrow layers.
+/// Default style for source-to-sink momentum arrow layers. The requested length
+/// is capped at half the offset carrier's arc length.
 /// -> dictionary
 #let momentum-arrow-defaults = (
   offset: 0.35,
-  length: 1.0,
-  ratio: none,
+  length: 1.4,
+  ratio: 0.5,
   stroke: _momentum-arrow-stroke,
-  mark: (end: "straight", scale: 1.1),
+  mark: (end: "straight", scale: 0.8),
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
@@ -293,12 +297,48 @@
   }
 }
 
-/// Read a momentum metadata field; physics labels use the edge ID instead.
+/// Signed terms of a routed momentum signature, loop momenta first, as
+/// `(negative: bool, label: content)` records. Edges without routing metadata
+/// return `none`.
+/// -> none | array
+#let momentum-terms(edge) = {
+  let signature = _field-value(edge, "momentum-signature")
+  if signature == none { return none }
+  let terms = ()
+  for (kind, coefficients) in (("k", signature.loops), ("p", signature.external)) {
+    for (index, coefficient) in coefficients.enumerate() {
+      if coefficient != 0 {
+        let label = if kind == "k" { [$k_(#index)$] } else { [$p_(#index)$] }
+        if calc.abs(coefficient) != 1 { label = [#calc.abs(coefficient)#label] }
+        terms.push((negative: coefficient < 0, label: label))
+      }
+    }
+  }
+  terms
+}
+
+/// Join momentum terms into a sum. A `continued` line starts with its binary
+/// operator, so a sum split over lines reads as one expression.
+/// -> content
+#let momentum-sum(terms, continued: false) = {
+  let result = none
+  for term in terms {
+    result = if result != none {
+      if term.negative { [#result $-$ #term.label] } else { [#result $+$ #term.label] }
+    } else if continued {
+      if term.negative { [$-$ #term.label] } else { [$+$ #term.label] }
+    } else if term.negative { [$-#term.label$] } else { term.label }
+  }
+  if result == none { [$0$] } else { result }
+}
+
+/// Render a routed momentum signature, or read an explicit momentum field.
+/// Edges without routing metadata retain their edge-index label.
 /// -> none | any
-#let momentum-value(edge, fields: ("momentum", "mom", "q")) = _field-value(
-  edge,
-  fields,
-)
+#let momentum-value(edge, fields: ("momentum", "mom", "q")) = {
+  let terms = momentum-terms(edge)
+  if terms == none { _field-value(edge, fields) } else { momentum-sum(terms) }
+}
 
 /// Return the edge index used by optional edge labels. The DOT `id` statement
 /// wins over the renderer-local `eid`.
@@ -347,6 +387,8 @@
       label-content: label-content,
       style-dict: style-dict,
       momentum-value: momentum-value,
+      momentum-terms: momentum-terms,
+      momentum-sum: momentum-sum,
       edge-index: edge-index,
       dangling-half-edge-index: dangling-half-edge-index,
     )
@@ -357,6 +399,8 @@
 /// `momentum-arrows: true` adds a short parallel arrow and a full-path label
 /// carrier while the main edge retains its normal particle style. Side, shift,
 /// and label geometry can be set globally or through edge `momentum-*` fields.
+/// `momentum-label-slide` enables collision avoidance along the carrier; set it
+/// to `false` to retain the requested label shift.
 /// -> dictionary | array
 #let source-style(
   edge,
@@ -364,7 +408,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,
@@ -375,6 +419,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: 0.20,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
 ) = _impl.source-style(edge, (
   map: map,
@@ -392,6 +438,8 @@
   momentum-arrow-shift: momentum-arrow-shift,
   momentum-label-gap: momentum-label-gap,
   momentum-label-shift: momentum-label-shift,
+  momentum-label-slide: momentum-label-slide,
+  momentum-label-side: momentum-label-side,
   momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
@@ -408,7 +456,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,
@@ -419,6 +467,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: 0.20,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
 ) = _impl.sink-style(edge, (
   map: map,
@@ -436,6 +486,8 @@
   momentum-arrow-shift: momentum-arrow-shift,
   momentum-label-gap: momentum-label-gap,
   momentum-label-shift: momentum-label-shift,
+  momentum-label-slide: momentum-label-slide,
+  momentum-label-side: momentum-label-side,
   momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
@@ -445,6 +497,9 @@
 /// Native and DOT `display-label` or `label` values take precedence. Otherwise
 /// combine the particle-map label with requested metadata. Momentum is always
 /// `$q_(#edge.eid)$`; cut pairing and external ordering never rename it.
+/// With `label-stack: true`, the particle name sits centered above its
+/// momentum, and momentum sums of at least `label-stack-terms` terms split over
+/// two lines; `label-stack: false` joins everything with `label-separator`.
 /// Explicit false `show-*` flags suppress their portion, including all labels:
 ///
 /// ```example
@@ -470,7 +525,9 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 10pt,
+  label-stack: true,
+  label-stack-terms: 3,
+  label-size: 7.5pt,
   label-fill: red,
 ) = _impl.edge-label(edge, (
   map: map,
@@ -486,6 +543,8 @@
   half-edge-index-prefix: half-edge-index-prefix,
   particle-prefix: particle-prefix,
   label-separator: label-separator,
+  label-stack: label-stack,
+  label-stack-terms: label-stack-terms,
   label-size: label-size,
   label-fill: label-fill,
   api: _api(),
@@ -517,11 +576,21 @@
 }
 
 /// Bundle source-style, sink-style, edge-label and edge-label-style callbacks
-/// with shared options for `graph.style` or `linnest.draw`, without Python. Momentum arrows
-/// are opt-in; enabling them also enables combined particle and `q_(eid)` labels
+/// with shared options for `graph.style` or `linnest.draw`, without Python.
+/// Both halves use the source color by default. Set `orientation-split: true`
+/// to use the particle map's separate source and sink colors.
+/// Momentum arrows are opt-in; enabling them also enables combined particle and `q_(eid)` labels
 /// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
+/// Combined labels stack the particle above its momentum and split sums of at
+/// least `label-stack-terms` terms over two lines; set `label-stack: false` for
+/// one `label-separator`-joined line.
 /// Prepared external labels retain their outward endpoint position by default;
 /// explicit momentum shifts or `momentum-label-anchor` select path-relative placement.
+/// Momentum arrows and their labels move together in Linnest's collision optimizer
+/// while retaining their normal offsets. `momentum-label-shift` selects a preferred
+/// arc-length position; `momentum-label-slide: false` pins the annotation there.
+/// `momentum-label-side: auto` inherits the arrow side, leaving automatic arrows
+/// free to switch sides. Explicit anchors are pinned.
 ///
 /// ````example
 /// #let g = build({
@@ -592,7 +661,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,
@@ -603,6 +672,8 @@
   momentum-arrow-shift: 0,
   momentum-label-gap: auto,
   momentum-label-shift: auto,
+  momentum-label-slide: true,
+  momentum-label-side: auto,
   momentum-label-anchor: auto,
   show-momentum: auto,
   show-edge-index: false,
@@ -613,7 +684,9 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 10pt,
+  label-stack: true,
+  label-stack-terms: 3,
+  label-size: 7.5pt,
   label-fill: red,
 ) = (
   node-style: node-style,
@@ -637,6 +710,8 @@
       momentum-label-gap
     } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
+    momentum-label-slide: momentum-label-slide,
+    momentum-label-side: momentum-label-side,
     momentum-label-anchor: momentum-label-anchor,
   ),
   sink-style: edge => sink-style(
@@ -658,6 +733,8 @@
       momentum-label-gap
     } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
+    momentum-label-slide: momentum-label-slide,
+    momentum-label-side: momentum-label-side,
     momentum-label-anchor: momentum-label-anchor,
   ),
   edge-label: edge => edge-label(
@@ -678,6 +755,8 @@
     half-edge-index-prefix: half-edge-index-prefix,
     particle-prefix: particle-prefix,
     label-separator: label-separator,
+    label-stack: label-stack,
+    label-stack-terms: label-stack-terms,
     label-size: label-size,
     label-fill: label-fill,
   ),
