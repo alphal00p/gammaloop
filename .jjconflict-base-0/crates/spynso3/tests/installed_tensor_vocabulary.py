@@ -123,7 +123,7 @@ class TensorVocabularyTests(unittest.TestCase):
         reverse = TensorPattern.dirac_gamma(dimension, outgoing, incoming, mu)
         factor = gamma(AUTO, AUTO, "mu")
         reversed_factor = factor.permute_axes((1, 0, 2))
-        reversed_word = chain(*reversed_factor.structure.slots[:2], reversed_factor)
+        reversed_word = chain(*reversed_factor.axes[:2], reversed_factor)
         self.assertEqual(
             reversed_word.to_expression().replace(
                 TensorPattern.chain(left, right, reverse), 7
@@ -156,7 +156,7 @@ class TensorVocabularyTests(unittest.TestCase):
                 self.assertIsInstance(word, TensorExpression)
                 self.assertEqual(word.to_tensor(library)[:], expected)
                 expanded = word.expand_projectors()
-                self.assertEqual(expanded.structure.slots, word.structure.slots)
+                self.assertEqual(expanded.structure.axes, word.structure.axes)
                 self.assertEqual(expanded.to_tensor(library)[:], expected)
                 self.assertEqual(expanded.expand_projectors(), expanded)
                 network = chain(rep("i"), rep("j"), factory(data_a, data_b))

@@ -71,7 +71,7 @@ for outgoing, vertices, count in (
         for d in ((s, t - mass**2, u - mass**2) if count == 3 else (s,))
     )
     operator = TensorExpression(amplitude)
-    assert len(operator.structure.slots) == (8 if count == 3 else 6)
+    assert len(operator.structure.axes) == (8 if count == 3 else 6)
     adjoint = (
         operator.dirac_adjoint()
         .simplify_algebra(
@@ -99,7 +99,7 @@ for outgoing, vertices, count in (
         if position < 2:
             initial_colors *= abs(particle.color)
         matches = []
-        for slot in operator.structure.slots:
+        for slot in operator.structure.axes:
             original = slot.to_expression()
             if original.replace(ports[position], E("0")) == original:
                 continue

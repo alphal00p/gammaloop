@@ -862,6 +862,10 @@ pub enum StructureError {
     EmptyStructure(SlotError),
     #[error("wrong number of arguments {0}, expected {1}")]
     WrongNumberOfArguments(usize, usize),
+    #[error("axis {axis} is unresolved; slots() requires an explicit index on every axis")]
+    ExpectedExplicitSlot { axis: usize },
+    #[error("axis {axis} has an explicit index; representations() requires unresolved axes")]
+    ExpectedRepresentation { axis: usize },
     #[error("invalid pending index permutation: {0}")]
     InvalidIndexPermutation(String),
     // #[error("Non traced out indices before merger {0}")]

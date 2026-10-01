@@ -740,8 +740,9 @@ impl TensorExpression {
     ///     Existing tensor, Symbolica Expression, or scalar convertible to one.
     ///     Tensor syntax is inferred; an ordinary scalar has no external axes.
     /// structure : TensorStructure, optional
-    ///     Explicit external axes to check against the expression. This retains
-    ///     logical axis order and can specify the rank of a symbolic zero.
+    ///     Canonical free-axis signature to check against the expression. It does
+    ///     not reorder arguments or component axes. For zero, it supplies the rank
+    ///     and axes that cannot be inferred from the scalar expression alone.
     /// intern : {"indices", "flattened"} or None, optional
     ///     Encode compound index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
@@ -794,7 +795,16 @@ impl TensorExpression {
             } else {
                 atom
             };
-            let checked = Self::from_atom_interface(py, atom, Some(structure.interface.clone()))?;
+            let zero_interface = atom
+                .as_view()
+                .is_zero()
+                .then(|| Canonicalized::identity(structure.interface.clone()));
+            let checked = Self::from_atom_interface(py, atom, zero_interface)?;
+            if checked.borrow(py).structure() != *structure {
+                return Err(PyValueError::new_err(
+                    "supplied structure does not match the expression's external interface",
+                ));
+            }
             return Ok(checked.borrow(py).clone().into_initializer());
         }
         let tensor = if let Some(settings) = intern {
@@ -1315,15 +1325,22 @@ impl TensorExpression {
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
     fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        self.structure().shape(py)
+        crate::metadata::axis_shape(py, self.interface().logical_slots())
     }
 
-    /// Identity, scalar arguments, and external axes of this expression.
+    #[doc = python_doc!("Tensor.axes")]
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
+    fn axes(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::metadata::axis_objects(py, self.interface().logical_slots())
+    }
+
+    /// Canonical external signature of the whole expression.
     ///
     /// Returns
     /// -------
     /// TensorStructure
-    ///     Immutable metadata in logical axis order. Inspect this to determine
+    ///     Immutable signature in canonical order. Inspect this to determine
     ///     rank, representations, or existing index labels.
     ///
     /// Examples
@@ -1335,11 +1352,7 @@ impl TensorExpression {
     /// (3, 3)
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
-        crate::metadata::SpensoTensorStructure {
-            interface: self.interface().clone(),
-            name: self.name,
-            arguments: self.name_args.clone(),
-        }
+        crate::metadata::SpensoTensorStructure::from_interface(self.interface())
     }
 
     /// Optional name identifying stored tensor data.
@@ -1358,6 +1371,32 @@ impl TensorExpression {
     #[getter(name)]
     fn data_name(&self) -> Option<SpensoName> {
         self.name.map(|name| SpensoName { name })
+    }
+
+    /// Scalar arguments identifying the named tensor.
+    ///
+    /// Returns
+    /// -------
+    /// tuple of Expression
+    ///     Scalar key arguments in their original order; empty for an unnamed
+    ///     expression. These belong to the expression, not its external signature.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Representation, TensorName
+    /// >>> x = S("x")
+    /// >>> A = TensorName("A")(x, 7, Representation.euc(3))
+    /// >>> A.arguments == (x, 7)
+    /// True
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Expression, ...]"))]
+    fn arguments(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        Ok(PyTuple::new(
+            py,
+            self.name_args.iter().cloned().map(PythonExpression::from),
+        )?
+        .unbind())
     }
 
     /// Assign a data identity without rewriting the symbolic computation.
@@ -2583,7 +2622,7 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// For unresolved axes, prefer ``structure.slots`` to inspect the interface.
+    /// For unresolved axes, prefer ``structure.axes`` to inspect the interface.
     ///
     /// Examples
     /// --------
@@ -6958,9 +6997,8 @@ mod tests {
                     slot,
                     slot,
                     rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(103))),
-                ]),
-                name: Some(symbol!("unsafe_supplied_data")),
-                arguments: vec![Atom::num(7)],
+                ])
+                .into_canonical(),
             };
             let kwargs = PyDict::new(py);
             kwargs.set_item("structure", structure.clone())?;
@@ -6972,7 +7010,7 @@ mod tests {
                     TensorExpression::from_atom_interface(
                         py,
                         atom.clone(),
-                        structure.interface.clone()
+                        Canonicalized::identity(structure.interface.clone())
                     )
                     .is_err()
                 );

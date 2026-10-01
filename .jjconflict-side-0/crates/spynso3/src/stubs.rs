@@ -101,6 +101,11 @@ pub(crate) fn refine(module: &mut Module) {
         for (name, (getter, setter)) in &mut class.getter_setters {
             for member in getter.iter_mut().chain(setter.iter_mut()) {
                 simplify(&mut member.r#type);
+                if matches!(class.name, "Tensor" | "TensorExpression" | "TensorNetwork")
+                    && name == "axes"
+                {
+                    member.doc = python_doc!("Tensor.axes");
+                }
                 if class.name == "DisplaySettings"
                     && let Some(value) = display_type(name)
                 {

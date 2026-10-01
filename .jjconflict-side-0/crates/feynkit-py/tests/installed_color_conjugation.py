@@ -33,8 +33,8 @@ for colors in (2, 3, 5):
         raise AssertionError("unscoped independent dummy copies were accepted")
     ket = explicit.wrap_indices(S("color_norm_ket"), dummies_only=True)
     bra = explicit_conjugate.wrap_indices(S("color_norm_bra"), dummies_only=True)
-    assert ket.structure.slots == explicit.structure.slots
-    assert bra.structure.slots == explicit_conjugate.structure.slots
+    assert ket.structure.axes == explicit.structure.axes
+    assert bra.structure.axes == explicit_conjugate.structure.axes
     explicit_norm = ket * bra
     color_settings = dict(
         gamma=False, color=True, color_substitute_cof_dimension_invariants=True

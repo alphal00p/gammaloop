@@ -83,7 +83,7 @@ class TensorLibraryTests(unittest.TestCase):
         library.register(Tensor.dense(name(m, e), [float(i) for i in range(6)]))
         self.assertEqual(library[name][:], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         transposed = library[name(e, m)]
-        self.assertEqual(transposed.structure.shape, (3, 2))
+        self.assertEqual(transposed.shape, (3, 2))
         self.assertEqual(transposed[:], [0.0, 3.0, 1.0, 4.0, 2.0, 5.0])
         network = transposed("i", "mu")
         network.execute()

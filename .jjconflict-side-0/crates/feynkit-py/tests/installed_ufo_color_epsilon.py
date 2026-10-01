@@ -62,7 +62,7 @@ for sign in (1, -1):
         .to_expression()
         .replace(S("UFO::GC_69"), E("1"))
     )
-    assert len(color.structure.slots) == 3
+    assert len(color.structure.axes) == 3
     conjugate = color.dirac_adjoint()
     assert conjugate.dirac_adjoint().to_expression() == color.to_expression()
     norm = (

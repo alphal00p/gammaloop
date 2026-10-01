@@ -83,7 +83,7 @@ operator = kin.apply(
     .to_dots()
 )
 amplitude = operator.to_expression()
-assert len(operator.structure.slots) == 8
+assert len(operator.structure.axes) == 8
 adjoint = operator.dirac_adjoint().to_expression().replace(conj(P(a, b)), P(a, b))
 for real in (s, t, u, D, gs):
     adjoint = adjoint.replace(conj(real), real)

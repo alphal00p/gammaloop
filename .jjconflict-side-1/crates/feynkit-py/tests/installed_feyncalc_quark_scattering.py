@@ -79,7 +79,7 @@ for name, pdgs in [
     )
     amplitude = sum(operators, E("0"))
     operator = TensorExpression(amplitude)
-    assert len(operator.structure.slots) == 8
+    assert len(operator.structure.axes) == 8
     adjoints = []
     for term in operators:
         adjoint = (

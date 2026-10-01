@@ -30,8 +30,7 @@ fn logical_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("structure")?
-        .getattr("slots")?
+        .getattr("axes")?
         .extract::<Vec<SpensoRepresentation>>()
         .map(|representations| {
             representations
@@ -45,8 +44,7 @@ fn logical_slot_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("structure")?
-        .getattr("slots")?
+        .getattr("axes")?
         .extract::<Vec<SpensoSlot>>()
         .map(|slots| slots.into_iter().map(|slot| slot.slot.rep()).collect())
 }
@@ -267,7 +265,6 @@ fn metric_factory_accepts_dual_ports_and_preserves_logical_order() {
                 .call1(("i", "i"))?
                 .call_method("contract", (), Some(&kwargs))?
                 .call_method0("to_expression")?
-                .call_method0("to_expression")?
                 .extract::<PythonExpression>()?;
             assert_eq!(trace.expr, Atom::num(3));
         }
@@ -330,7 +327,7 @@ bis = spenso.Representation.bis(4)
 name = spenso.TensorName('component_identity_matrix')
 expr = name(bis, euc)
 before = expr.to_expression()
-interface = expr.structure.slots
+interface = expr.structure.axes
 components = expr.components()
 assert len(components) == 8
 assert len(set(str(x) for x in components)) == 8
@@ -338,7 +335,7 @@ assert components == expr.components()
 assert components == name(bis('j'), euc('i')).components()
 assert components == name(bis('l'), euc('k')).components()
 assert expr.to_expression() == before
-assert expr.structure.slots == interface
+assert expr.structure.axes == interface
 
 # Contracting one axis must select the same component identities and order.
 selector = spenso.Tensor.dense(

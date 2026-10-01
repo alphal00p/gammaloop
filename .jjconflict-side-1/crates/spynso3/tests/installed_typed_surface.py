@@ -25,12 +25,12 @@ class TypedSurfaceTests(unittest.TestCase):
         raw = source.to_expression().replace(self.x, self.y)
         changed = sp.TensorExpression(raw, structure=source.structure)
         self.assertEqual(changed.to_expression(), raw)
-        self.assertEqual(changed.structure.slots, source.structure.slots)
-        self.assertEqual(changed.structure.arguments, (self.y,))
-        self.assertEqual(str(changed.structure.name), str(source.structure.name))
+        self.assertEqual(changed.structure.axes, source.structure.axes)
+        self.assertEqual(changed.arguments, (self.y,))
+        self.assertEqual(str(changed.name), str(source.name))
         zero = sp.TensorExpression(E("0"), structure=source.structure)
         self.assertEqual(zero.rank, source.rank)
-        self.assertEqual(zero.structure.slots, source.structure.slots)
+        self.assertEqual(zero.structure.axes, source.structure.axes)
         with self.assertRaisesRegex(ValueError, "interface"):
             sp.TensorExpression(E("1"), structure=source.structure)
 
@@ -110,8 +110,8 @@ class TypedSurfaceTests(unittest.TestCase):
             self.assertIsInstance(copied, sp.TensorExpression)
             self.assertEqual(copied, value)
             self.assertEqual(copied.structure, value.structure)
-            self.assertEqual(copied.structure.arguments, (E("7"),))
-            self.assertEqual(copied.structure.slots, source.structure.slots)
+            self.assertEqual(copied.arguments, (E("7"),))
+            self.assertEqual(copied.structure.axes, source.structure.axes)
             self.assertTrue(Expression.__eq__(copied, value.to_expression()))
             # Inherited Expression pickling must not silently drop tensor metadata.
             with self.assertRaises(TypeError):
@@ -146,7 +146,7 @@ class TypedSurfaceTests(unittest.TestCase):
         quotient = vector.to_expression() / typed
         self.assertIsInstance(quotient, sp.TensorExpression)
         self.assertEqual(quotient, vector / self.x)
-        self.assertEqual(quotient.structure.slots, vector.structure.slots)
+        self.assertEqual(quotient.structure.axes, vector.structure.axes)
         with self.assertRaisesRegex(ValueError, "denominator"):
             self.x / vector
         with self.assertRaises(ValueError):
@@ -160,13 +160,13 @@ class TypedSurfaceTests(unittest.TestCase):
         denominator = numerator * q(slot)
         self.assertTrue(denominator.is_scalar)
         result = numerator / denominator
-        self.assertEqual(result.structure.slots, numerator.structure.slots)
+        self.assertEqual(result.structure.axes, numerator.structure.axes)
         self.assertEqual(
-            (numerator.to_expression() / denominator).structure.slots,
-            numerator.structure.slots,
+            (numerator.to_expression() / denominator).structure.axes,
+            numerator.structure.axes,
         )
         self.assertEqual(
-            (0 * numerator / denominator).structure.slots, numerator.structure.slots
+            (0 * numerator / denominator).structure.axes, numerator.structure.axes
         )
         self.assertFalse(0 * numerator / denominator)
 
@@ -174,9 +174,7 @@ class TypedSurfaceTests(unittest.TestCase):
         left = self.P(self.rep("i"), self.rep("j")).permute_axes([1, 0])
         right = self.Q(self.rep("k"), self.rep("i")).permute_axes([1, 0])
         result = left.contract_ports(right, left=1, right=0)
-        self.assertEqual(
-            result.structure.slots, (left.structure.slots[0], right.structure.slots[1])
-        )
+        self.assertEqual(result.axes, (left.axes[0], right.axes[1]))
         self.assertEqual(result.rank, 2)
         with self.assertRaises(TypeError):
             left.contract(right, left=1, right=0)
@@ -206,7 +204,7 @@ class TypedSurfaceTests(unittest.TestCase):
         opened = self.P(self.rep)
         self.assertEqual((opened**2).rank, 0)
         self.assertEqual((opened**3).rank, 1)
-        self.assertEqual(((0 * opened) ** 3).structure.slots, opened.structure.slots)
+        self.assertEqual(((0 * opened) ** 3).structure.axes, opened.structure.axes)
 
     def test_explicit_evaluator_uses_symbolic_payloads(self):
         source = sp.TensorExpression((self.x + 1) ** 3 + self.y)
@@ -247,7 +245,7 @@ class TypedSurfaceTests(unittest.TestCase):
             self.assertEqual(len(calls), count)
         zero = source.replace(sp.TensorRule(source, sp.TensorExpression(E("0"))))
         self.assertFalse(zero)
-        self.assertEqual(zero.structure.slots, source.structure.slots)
+        self.assertEqual(zero.structure.axes, source.structure.axes)
         with self.assertRaisesRegex(ValueError, "interface"):
             source.replace(sp.TensorRule(source, sp.TensorExpression(E("1"))))
 

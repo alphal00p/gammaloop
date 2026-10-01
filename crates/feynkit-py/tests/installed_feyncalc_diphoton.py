@@ -70,7 +70,7 @@ for diagram in generated.diagrams:
     )
 assert set(denominators) == {t - mass**2, u - mass**2}
 operator = TensorExpression(amplitude)
-assert len(operator.structure.slots) == 4
+assert len(operator.structure.axes) == 4
 adjoint = (
     operator.dirac_adjoint()
     .simplify_algebra(

@@ -60,7 +60,7 @@ def example_specification():
         ),
         (
             "Tensor",
-            "Actual dense or sparse component data. Integer indexing is flat row-major indexing; a coordinate sequence follows structure.slots. expression() gives its symbolic descriptor; with_name gives stored data a library identity.",
+            "Actual dense or sparse component data. Integer indexing is flat row-major indexing; a coordinate sequence follows axes. expression() gives its symbolic descriptor; with_name gives stored data a library identity.",
             'tensor = sp.Tensor.dense(expression, [x, E("1"), E("0"), x + 1]).with_name("spenso_api_tour::M")',
             "tensor",
         ),

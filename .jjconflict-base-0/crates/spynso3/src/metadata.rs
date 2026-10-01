@@ -9,20 +9,18 @@ use pyo3_stub_gen::derive::*;
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 use spenso::structure::{
-    TensorStructure,
+    OrderedStructure, TensorStructure,
+    abstract_index::AbstractIndex,
     dimension::Dimension,
-    partial::{PartialIndex, PartialStructure, PartialStructureExt},
+    partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
     representation::{LibraryRep, RepName},
     slot::IsAbstractSlot,
 };
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::{Atom, Symbol},
-};
+use symbolica::api::python::PythonExpression;
 
 use crate::{
     ModuleInit, display,
-    structure::{SpensoName, SpensoRepresentation, SpensoSlot},
+    structure::{SpensoRepresentation, SpensoSlot},
 };
 
 /// A representation identity independent of its dimension.
@@ -199,11 +197,14 @@ impl SpensoRepresentationName {
     }
 }
 
-/// The identity, scalar arguments, and ordered axes of a tensor.
+/// The canonical external signature of an opaque tensor.
 ///
 /// A Slot denotes a labeled axis; a Representation denotes an unresolved axis.
-/// This immutable object stores metadata, without an expression or components.
-/// Axis positions and component shapes follow the order of ``slots``.
+/// This immutable signature contains only free axes: no tensor name, scalar
+/// arguments, expression, component data, or layout permutation. Axes follow
+/// Spenso's canonical representation/index ordering. A(i,j), A(j,i), and their
+/// sum have the same structure. The expression retains argument order; tensor
+/// and network component views retain their own axis order.
 ///
 /// Examples
 /// --------
@@ -223,22 +224,62 @@ impl SpensoRepresentationName {
 )]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SpensoTensorStructure {
-    pub(crate) interface: PartialStructure,
-    pub(crate) name: Option<Symbol>,
-    pub(crate) arguments: Vec<Atom>,
+    pub(crate) interface: OrderedStructure<LibraryRep, PartialIndex<AbstractIndex>>,
 }
 
 impl ModuleInit for SpensoTensorStructure {}
 
-pub(crate) fn validate_axis_permutation(rank: usize, axes: &[usize]) -> PyResult<()> {
-    let mut sorted = axes.to_vec();
-    sorted.sort_unstable();
-    if sorted != (0..rank).collect::<Vec<_>>() {
-        return Err(PyValueError::new_err(format!(
-            "axes must be a permutation of 0..{rank}"
-        )));
+impl SpensoTensorStructure {
+    pub(crate) fn from_interface(interface: &PartialStructure) -> Self {
+        // Open identifiers are occurrence-local. Renumber them in canonical order
+        // so two equal signatures do not retain the source argument positions.
+        let mut interface = interface.canonical().clone();
+        let mut next_open = 0;
+        for slot in &mut interface {
+            if matches!(slot.aind, PartialIndex::Open(_)) {
+                slot.aind = PartialIndex::open(next_open);
+                next_open += 1;
+            }
+        }
+        Self { interface }
     }
-    Ok(())
+}
+
+pub(crate) fn axis_objects(py: Python<'_>, slots: Vec<PartialSlot>) -> PyResult<Py<PyTuple>> {
+    let slots = slots
+        .into_iter()
+        .map(|slot| match slot.aind {
+            PartialIndex::Explicit(index) => Py::new(
+                py,
+                SpensoSlot {
+                    slot: slot.rep().slot(index),
+                },
+            )
+            .map(Py::into_any),
+            PartialIndex::Open(_) => Py::new(
+                py,
+                SpensoRepresentation {
+                    representation: slot.rep(),
+                },
+            )
+            .map(Py::into_any),
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyTuple::new(py, slots)?.unbind())
+}
+
+pub(crate) fn axis_shape(py: Python<'_>, slots: Vec<PartialSlot>) -> PyResult<Py<PyTuple>> {
+    let shape = slots
+        .into_iter()
+        .map(|slot| match slot.rep().dim {
+            Dimension::Concrete(n) => n
+                .into_pyobject(py)
+                .map(|v| v.into_any().unbind())
+                .map_err(Into::into),
+            dim => Py::new(py, PythonExpression::from(dim.to_symbolic())).map(Py::into_any),
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyTuple::new(py, shape)?.unbind())
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -246,21 +287,18 @@ pub(crate) fn validate_axis_permutation(rank: usize, axes: &[usize]) -> PyResult
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoTensorStructure {
-    /// Describe a tensor interface in logical axis order.
+    /// Describe an opaque tensor by its canonical free axes.
     ///
     /// Parameters
     /// ----------
     /// slots : sequence of Slot or Representation
-    ///     External axes, in the order used for indexing and component coordinates.
-    /// name : TensorName, optional
-    ///     Name identifying stored tensor data.
-    /// arguments : sequence of scalar expressions, optional
-    ///     Non-index arguments that distinguish named tensors, such as A(x, 7).
+    ///     Free axes, sorted into canonical order. Repeated unresolved spaces
+    ///     remain distinct axes. This describes a signature without contracting it.
     ///
     /// Returns
     /// -------
     /// TensorStructure
-    ///     Immutable metadata for the supplied axes and optional identity.
+    ///     Canonical signature, independent of the supplied sequence order.
     ///
     /// Examples
     /// --------
@@ -269,12 +307,10 @@ impl SpensoTensorStructure {
     /// >>> metadata.shape
     /// (2, 3)
     #[new]
-    #[pyo3(signature = (slots, *, name=None, arguments=None))]
+    #[pyo3(signature = (slots))]
     fn new(
         #[gen_stub(override_type(type_repr = "typing.Sequence[Slot | Representation]", imports = ("typing")))]
         slots: Vec<Bound<'_, PyAny>>,
-        name: Option<SpensoName>,
-        arguments: Option<Vec<ConvertibleToExpression>>,
     ) -> PyResult<Self> {
         let slots = slots
             .into_iter()
@@ -291,61 +327,16 @@ impl SpensoTensorStructure {
                 }
             })
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(Self {
-            interface: PartialStructure::from_logical_slots(slots),
-            name: name.map(|value| value.name),
-            arguments: arguments
-                .unwrap_or_default()
-                .into_iter()
-                .map(|arg| arg.to_expression().expr)
-                .collect(),
-        })
+        Ok(Self::from_interface(&PartialStructure::from_logical_slots(
+            slots,
+        )))
     }
 
-    /// Optional name identifying stored tensor data.
+    /// Free axes in canonical representation/index order.
     ///
-    /// Returns
-    /// -------
-    /// TensorName or None
-    ///     Composite expressions may have no name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(3)
-    /// >>> A = TensorName("A")(space, space)
-    /// >>> A = A.structure
-    /// >>> name = A.name
-    #[getter]
-    fn name(&self) -> Option<SpensoName> {
-        self.name.map(|name| SpensoName { name })
-    }
-
-    /// Scalar arguments that distinguish the named tensor.
-    ///
-    /// Returns
-    /// -------
-    /// tuple of Expression
-    ///     Non-index arguments, in their original order; empty if there are none.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-    /// >>> space = Representation.euc(3)
-    /// >>> A = TensorName("A")(space, space)
-    /// >>> A.structure.arguments
-    /// ()
-    #[getter]
-    #[gen_stub(override_return_type(type_repr = "tuple[Expression, ...]"))]
-    fn arguments(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        Ok(PyTuple::new(
-            py,
-            self.arguments.iter().cloned().map(PythonExpression::from),
-        )?
-        .unbind())
-    }
-
-    /// External axes, in the order used by tensor indexing.
+    /// The signature is independent of argument order, factor order, and summand
+    /// order. It describes the whole expression as an opaque tensor. Component
+    /// coordinates belong to the tensor's current view, not to this signature.
     ///
     /// Returns
     /// -------
@@ -357,33 +348,72 @@ impl SpensoTensorStructure {
     /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
     /// >>> space = Representation.euc(3)
     /// >>> A = TensorName("A")(space, space)
-    /// >>> A.structure.slots == (space, space)
+    /// >>> A.structure.axes == (space, space)
     /// True
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
-    fn slots(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        let slots = self
-            .interface
-            .logical_slots()
-            .into_iter()
-            .map(|slot| match slot.aind {
-                PartialIndex::Explicit(index) => Py::new(
-                    py,
-                    SpensoSlot {
-                        slot: slot.rep().slot(index),
-                    },
-                )
-                .map(Py::into_any),
-                PartialIndex::Open(_) => Py::new(
-                    py,
-                    SpensoRepresentation {
-                        representation: slot.rep(),
-                    },
-                )
-                .map(Py::into_any),
+    fn axes(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        axis_objects(py, self.interface.external_structure())
+    }
+
+    /// Return every external axis as an explicitly indexed slot.
+    ///
+    /// Returns
+    /// -------
+    /// list of Slot
+    ///     Slots in canonical order; an empty list for a scalar. Representations
+    ///     and dimensions may differ between axes.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If any axis is unresolved. No indices are invented or axes omitted.
+    ///     Use ``axes`` to inspect a mixed structure.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorStructure
+    /// >>> space = Representation.euc(3)
+    /// >>> metadata = TensorStructure([space("j"), space("i")])
+    /// >>> metadata.slots() == TensorStructure([space("i"), space("j")]).slots()
+    /// True
+    fn slots(&self) -> PyResult<Vec<SpensoSlot>> {
+        self.interface
+            .slots()
+            .map(|slots| slots.into_iter().map(|slot| SpensoSlot { slot }).collect())
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    /// Return every external axis as an unresolved representation.
+    ///
+    /// Returns
+    /// -------
+    /// list of Representation
+    ///     Representations in canonical order; an empty list for a scalar.
+    ///     Different spaces, dimensions, and dualities are allowed.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If any axis has an explicit index. Labels are never discarded.
+    ///     Use ``axes`` to inspect a mixed structure.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorStructure
+    /// >>> spaces = [Representation.mink(4), Representation.euc(3)]
+    /// >>> TensorStructure(spaces) == TensorStructure(spaces[::-1])
+    /// True
+    fn representations(&self) -> PyResult<Vec<SpensoRepresentation>> {
+        self.interface
+            .representations()
+            .map(|representations| {
+                representations
+                    .into_iter()
+                    .map(|representation| SpensoRepresentation { representation })
+                    .collect()
             })
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(PyTuple::new(py, slots)?.unbind())
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// Number of external tensor axes.
@@ -403,10 +433,10 @@ impl SpensoTensorStructure {
     /// 2
     #[getter]
     pub(crate) fn rank(&self) -> usize {
-        self.interface.canonical().order()
+        self.interface.order()
     }
 
-    /// Dimensions in logical axis order.
+    /// Dimensions in canonical signature order.
     ///
     /// Returns
     /// -------
@@ -424,19 +454,7 @@ impl SpensoTensorStructure {
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
     pub(crate) fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        let shape = self
-            .interface
-            .logical_slots()
-            .into_iter()
-            .map(|slot| match slot.rep().dim {
-                Dimension::Concrete(n) => n
-                    .into_pyobject(py)
-                    .map(|v| v.into_any().unbind())
-                    .map_err(Into::into),
-                dim => Py::new(py, PythonExpression::from(dim.to_symbolic())).map(Py::into_any),
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(PyTuple::new(py, shape)?.unbind())
+        axis_shape(py, self.interface.external_structure())
     }
 
     /// Whether the tensor has no external axes.
@@ -459,34 +477,6 @@ impl SpensoTensorStructure {
         self.rank() == 0
     }
 
-    /// Reorder the metadata axes.
-    ///
-    /// Parameters
-    /// ----------
-    /// axes : sequence of int
-    ///     Each old axis position exactly once, in the desired new order.
-    ///
-    /// Returns
-    /// -------
-    /// TensorStructure
-    ///     New metadata with the same name and scalar arguments.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.tensor import Representation, TensorStructure
-    /// >>> metadata = TensorStructure([Representation.euc(2), Representation.euc(3)])
-    /// >>> metadata.permute_axes([1, 0]).shape
-    /// (3, 2)
-    fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
-        validate_axis_permutation(self.rank(), &axes)?;
-        let slots = self.interface.logical_slots();
-        Ok(Self {
-            interface: PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis])),
-            name: self.name,
-            arguments: self.arguments.clone(),
-        })
-    }
-
     /// Return a readable object description for inspection.
     ///
     /// Examples
@@ -498,22 +488,12 @@ impl SpensoTensorStructure {
     fn __repr__(&self) -> String {
         let slots = self
             .interface
-            .logical_slots()
+            .external_structure()
             .iter()
             .map(|slot| idenso::tensor::composition::port_atom(*slot).to_string())
             .collect::<Vec<_>>()
             .join(", ");
-        let name = self
-            .name
-            .map(|s| format!(", name={:?}", s.get_name()))
-            .unwrap_or_default();
-        let args = self
-            .arguments
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("TensorStructure([{slots}]{name}, arguments=({args}))")
+        format!("TensorStructure([{slots}])")
     }
 
     /// Render a compact HTML view of this tensor metadata.

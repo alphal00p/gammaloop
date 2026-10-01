@@ -48,7 +48,7 @@ numerator = model.expand_couplings(
 bis, wave, index, metric, left, right = S(
     "spenso::bis", "wave_", "index_", "spenso::g", "left_", "right_"
 )
-slots = TensorExpression(numerator).structure.slots
+slots = TensorExpression(numerator).structure.axes
 color_projector = E("1")
 initial_color_states = 1
 for edge in diagram.external_edges:

@@ -20,12 +20,12 @@ assert [leg.particle.name for leg in amplitude.legs] == ["e-", "e+", "a", "a"]
 assert [leg.state for leg in amplitude.legs] == ["incoming"] * 2 + ["outgoing"] * 2
 assert isinstance(amplitude.expression(), TensorExpression)
 assert amplitude.expression().rank == 4
-assert amplitude.expression().structure.slots == tuple(
+assert amplitude.expression().axes == tuple(
     slot for leg in amplitude.legs for slot in leg.slots
 )
 for diagram in generated.diagrams:
-    assert set(diagram.numerator_expression().structure.slots) == set(
-        amplitude.expression().structure.slots
+    assert set(diagram.numerator_expression().structure.axes) == set(
+        amplitude.expression().structure.axes
     )
 assert [leg.tensor_index for leg in amplitude.legs] == [
     E(f"gammalooprs::hedge({i},1)") for i in range(4)

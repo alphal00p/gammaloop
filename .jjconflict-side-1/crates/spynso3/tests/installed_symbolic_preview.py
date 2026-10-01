@@ -161,15 +161,13 @@ class SymbolicDisplayTests(unittest.TestCase):
         value = (coefficient * tensor).with_name("full_display_tests::Named")
         original = value.to_expression()
         self.assertGreater(original.get_byte_size(), 4096)
-        slots = [slot.to_expression() for slot in value.structure.slots]
+        slots = [slot.to_expression() for slot in value.structure.axes]
         name, status = value.name.to_expression(), value.reduction_status
         self.assertEqual(value._repr_html_(), value.to_html())
         self.assertEqual(value._repr_latex_(), value.to_latex())
         self.assertEqual(value.formatted().format_plain(), value.format_tensor())
         self.assertEqual(value.to_expression(), original)
-        self.assertEqual(
-            [slot.to_expression() for slot in value.structure.slots], slots
-        )
+        self.assertEqual([slot.to_expression() for slot in value.structure.axes], slots)
         self.assertEqual(value.name.to_expression(), name)
         self.assertEqual(value.reduction_status, status)
         self.assertEqual(value.rank, 3)
@@ -180,12 +178,12 @@ class SymbolicDisplayTests(unittest.TestCase):
         zero = 0 * a
         for value in (a, zero):
             raw = value.to_expression()
-            slots = [slot.to_expression() for slot in value.structure.slots]
+            slots = [slot.to_expression() for slot in value.structure.axes]
             self.assertEqual(value._repr_html_(), value.to_html())
             self.assertEqual(value._repr_latex_(), value.to_latex())
             self.assertEqual(value.to_expression(), raw)
             self.assertEqual(
-                [slot.to_expression() for slot in value.structure.slots], slots
+                [slot.to_expression() for slot in value.structure.axes], slots
             )
 
     def test_ready_formatted_output_remains_compatible(self):

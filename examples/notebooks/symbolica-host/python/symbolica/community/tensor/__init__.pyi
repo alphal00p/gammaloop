@@ -2551,7 +2551,7 @@ class Tensor:
         Returns
         -------
         tuple of int
-            Axis sizes in the order of structure.slots.
+            Axis sizes in the order of axes, the current component view.
 
         Examples
         --------
@@ -2564,14 +2564,36 @@ class Tensor:
         (2, 2)
         """
     @property
+    def axes(self) -> tuple[Slot | Representation, ...]:
+        r"""
+        External axes in the current component and port-position order.
+
+        Returns
+        -------
+        tuple of Slot or Representation
+            Indexed or unresolved axes, respectively. Component coordinates and methods
+            taking axis positions use this order. It follows construction and explicit
+            permute_axes() calls; structure.axes instead gives the canonical signature.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> r = Representation.euc(3)
+        >>> A = TensorName("A")(r("j"), r("i"))
+        >>> A.axes == (r("j"), r("i"))
+        True
+        >>> A.permute_axes([1, 0]).axes == A.axes[::-1]
+        True
+        """
+    @property
     def structure(self) -> TensorStructure:
         r"""
-        Identity, scalar arguments, and ordered external axes.
+        Canonical external signature of the whole tensor.
 
         Returns
         -------
         TensorStructure
-            Immutable metadata, separate from the component values or computation.
+            Free axes in canonical order, independent of names and component layout.
 
         Examples
         --------
@@ -2671,7 +2693,7 @@ class Tensor:
         structure : TensorExpression
             Named descriptor with concrete dimensions matching the array shape.
         array : numpy.typing.ArrayLike
-            Real or complex array-like data. Axes follow structure.slots.
+            Real or complex array-like data. Axes follow the descriptor's current axes.
 
         Returns
         -------
@@ -2888,7 +2910,7 @@ class Tensor:
         Only ports layout and default spacing are supported in this source
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
-        Components follow logical interface order (the order of structure.slots). Large static displays show a
+        Components follow the current view (the order of axes). Large static displays show a
         bounded preview rather than every component.
 
         Examples
@@ -2922,7 +2944,7 @@ class Tensor:
         Only ports layout and default spacing are supported in this source
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
-        Components follow logical interface order (the order of structure.slots). Large static displays show a
+        Components follow the current view (the order of axes). Large static displays show a
         bounded preview rather than every component.
 
         Static Typst output remains available independently of the HTML explorer.
@@ -3618,7 +3640,7 @@ class Tensor:
 
         Notes
         -----
-        Other axes remain external. Axis numbers refer to ``structure.slots``.
+        Other axes remain external. Axis numbers refer to ``axes``.
 
         Examples
         --------
@@ -3745,7 +3767,7 @@ class Tensor:
 
         Notes
         -----
-        Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+        Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
         Examples
         --------
@@ -3778,7 +3800,7 @@ class Tensor:
 
         Notes
         -----
-        Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+        Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
         Examples
         --------
@@ -3811,7 +3833,7 @@ class Tensor:
 
         Notes
         -----
-        Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+        Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
         Examples
         --------
@@ -3845,7 +3867,7 @@ class Tensor:
 
         Notes
         -----
-        Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+        Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
         Examples
         --------
@@ -4171,14 +4193,36 @@ class TensorExpression(Expression):
         (3, 3)
         """
     @property
+    def axes(self) -> tuple[Slot | Representation, ...]:
+        r"""
+        External axes in the current component and port-position order.
+
+        Returns
+        -------
+        tuple of Slot or Representation
+            Indexed or unresolved axes, respectively. Component coordinates and methods
+            taking axis positions use this order. It follows construction and explicit
+            permute_axes() calls; structure.axes instead gives the canonical signature.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> r = Representation.euc(3)
+        >>> A = TensorName("A")(r("j"), r("i"))
+        >>> A.axes == (r("j"), r("i"))
+        True
+        >>> A.permute_axes([1, 0]).axes == A.axes[::-1]
+        True
+        """
+    @property
     def structure(self) -> TensorStructure:
         r"""
-        Identity, scalar arguments, and external axes of this expression.
+        Canonical external signature of the whole expression.
 
         Returns
         -------
         TensorStructure
-            Immutable metadata in logical axis order. Inspect this to determine
+            Immutable signature in canonical order. Inspect this to determine
             rank, representations, or existing index labels.
 
         Examples
@@ -4205,6 +4249,26 @@ class TensorExpression(Expression):
         >>> space = Representation.euc(3)
         >>> A = TensorName("A")(space, space)
         >>> name = A.name
+        """
+    @property
+    def arguments(self) -> tuple[Expression, ...]:
+        r"""
+        Scalar arguments identifying the named tensor.
+
+        Returns
+        -------
+        tuple of Expression
+            Scalar key arguments in their original order; empty for an unnamed
+            expression. These belong to the expression, not its external signature.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> x = S("x")
+        >>> A = TensorName("A")(x, 7, Representation.euc(3))
+        >>> A.arguments == (x, 7)
+        True
         """
     @property
     def reduction_status(self) -> ReductionStatus:
@@ -4249,8 +4313,9 @@ class TensorExpression(Expression):
             Existing tensor, Symbolica Expression, or scalar convertible to one.
             Tensor syntax is inferred; an ordinary scalar has no external axes.
         structure : TensorStructure, optional
-            Explicit external axes to check against the expression. This retains
-            logical axis order and can specify the rank of a symbolic zero.
+            Canonical free-axis signature to check against the expression. It does
+            not reorder arguments or component axes. For zero, it supplies the rank
+            and axes that cannot be inferred from the scalar expression alone.
         intern : {"indices", "flattened"} or None, optional
             Encode compound index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
@@ -5521,7 +5586,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        For unresolved axes, prefer ``structure.slots`` to inspect the interface.
+        For unresolved axes, prefer ``structure.axes`` to inspect the interface.
 
         Examples
         --------
@@ -7041,7 +7106,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Other axes remain external. Axis numbers refer to ``structure.slots``.
+        Other axes remain external. Axis numbers refer to ``axes``.
 
         Examples
         --------
@@ -7073,7 +7138,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Other axes remain external. Axis numbers refer to ``structure.slots``.
+        Other axes remain external. Axis numbers refer to ``axes``.
 
         Examples
         --------
@@ -8297,14 +8362,36 @@ class TensorNetwork:
     2.0
     """
     @property
+    def axes(self) -> tuple[Slot | Representation, ...]:
+        r"""
+        External axes in the current component and port-position order.
+
+        Returns
+        -------
+        tuple of Slot or Representation
+            Indexed or unresolved axes, respectively. Component coordinates and methods
+            taking axis positions use this order. It follows construction and explicit
+            permute_axes() calls; structure.axes instead gives the canonical signature.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> r = Representation.euc(3)
+        >>> A = TensorName("A")(r("j"), r("i"))
+        >>> A.axes == (r("j"), r("i"))
+        True
+        >>> A.permute_axes([1, 0]).axes == A.axes[::-1]
+        True
+        """
+    @property
     def structure(self) -> TensorStructure:
         r"""
-        Identity, scalar arguments, and ordered external axes.
+        Canonical external signature of the whole tensor.
 
         Returns
         -------
         TensorStructure
-            Immutable metadata, separate from the component values or computation.
+            Free axes in canonical order, independent of names and component layout.
 
         Examples
         --------
@@ -8370,7 +8457,7 @@ class TensorNetwork:
         Returns
         -------
         tuple of int or Expression
-            Axis sizes in the order of structure.slots.
+            Axis sizes in the order of axes, the current component view.
 
         Examples
         --------
@@ -9554,7 +9641,7 @@ class TensorNetwork:
 
         Notes
         -----
-        Other axes remain external. Axis numbers refer to ``structure.slots``.
+        Other axes remain external. Axis numbers refer to ``axes``.
 
         Examples
         --------
@@ -10419,11 +10506,14 @@ class TensorRule:
 @typing.final
 class TensorStructure:
     r"""
-    The identity, scalar arguments, and ordered axes of a tensor.
+    The canonical external signature of an opaque tensor.
 
     A Slot denotes a labeled axis; a Representation denotes an unresolved axis.
-    This immutable object stores metadata, without an expression or components.
-    Axis positions and component shapes follow the order of ``slots``.
+    This immutable signature contains only free axes: no tensor name, scalar
+    arguments, expression, component data, or layout permutation. Axes follow
+    Spenso's canonical representation/index ordering. A(i,j), A(j,i), and their
+    sum have the same structure. The expression retains argument order; tensor
+    and network component views retain their own axis order.
 
     Examples
     --------
@@ -10435,45 +10525,13 @@ class TensorStructure:
     2
     """
     @property
-    def name(self) -> typing.Optional[TensorName]:
+    def axes(self) -> tuple[Slot | Representation, ...]:
         r"""
-        Optional name identifying stored tensor data.
+        Free axes in canonical representation/index order.
 
-        Returns
-        -------
-        TensorName or None
-            Composite expressions may have no name.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(3)
-        >>> A = TensorName("A")(space, space)
-        >>> A = A.structure
-        >>> name = A.name
-        """
-    @property
-    def arguments(self) -> tuple[Expression, ...]:
-        r"""
-        Scalar arguments that distinguish the named tensor.
-
-        Returns
-        -------
-        tuple of Expression
-            Non-index arguments, in their original order; empty if there are none.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
-        >>> space = Representation.euc(3)
-        >>> A = TensorName("A")(space, space)
-        >>> A.structure.arguments
-        ()
-        """
-    @property
-    def slots(self) -> tuple[Slot | Representation, ...]:
-        r"""
-        External axes, in the order used by tensor indexing.
+        The signature is independent of argument order, factor order, and summand
+        order. It describes the whole expression as an opaque tensor. Component
+        coordinates belong to the tensor's current view, not to this signature.
 
         Returns
         -------
@@ -10485,7 +10543,7 @@ class TensorStructure:
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
         >>> space = Representation.euc(3)
         >>> A = TensorName("A")(space, space)
-        >>> A.structure.slots == (space, space)
+        >>> A.structure.axes == (space, space)
         True
         """
     @property
@@ -10510,7 +10568,7 @@ class TensorStructure:
     @property
     def shape(self) -> tuple[int | Expression, ...]:
         r"""
-        Dimensions in logical axis order.
+        Dimensions in canonical signature order.
 
         Returns
         -------
@@ -10546,23 +10604,20 @@ class TensorStructure:
         False
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def __new__(cls, slots: typing.Sequence[Slot | Representation], *, name: typing.Optional[TensorName] = None, arguments: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorStructure:
+    def __new__(cls, slots: typing.Sequence[Slot | Representation]) -> TensorStructure:
         r"""
-        Describe a tensor interface in logical axis order.
+        Describe an opaque tensor by its canonical free axes.
 
         Parameters
         ----------
         slots : sequence of Slot or Representation
-            External axes, in the order used for indexing and component coordinates.
-        name : TensorName, optional
-            Name identifying stored tensor data.
-        arguments : sequence of scalar expressions, optional
-            Non-index arguments that distinguish named tensors, such as A(x, 7).
+            Free axes, sorted into canonical order. Repeated unresolved spaces
+            remain distinct axes. This describes a signature without contracting it.
 
         Returns
         -------
         TensorStructure
-            Immutable metadata for the supplied axes and optional identity.
+            Canonical signature, independent of the supplied sequence order.
 
         Examples
         --------
@@ -10571,26 +10626,52 @@ class TensorStructure:
         >>> metadata.shape
         (2, 3)
         """
-    def permute_axes(self, axes: typing.Sequence[builtins.int]) -> TensorStructure:
+    def slots(self) -> builtins.list[Slot]:
         r"""
-        Reorder the metadata axes.
-
-        Parameters
-        ----------
-        axes : sequence of int
-            Each old axis position exactly once, in the desired new order.
+        Return every external axis as an explicitly indexed slot.
 
         Returns
         -------
-        TensorStructure
-            New metadata with the same name and scalar arguments.
+        list of Slot
+            Slots in canonical order; an empty list for a scalar. Representations
+            and dimensions may differ between axes.
+
+        Raises
+        ------
+        ValueError
+            If any axis is unresolved. No indices are invented or axes omitted.
+            Use ``axes`` to inspect a mixed structure.
 
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorStructure
-        >>> metadata = TensorStructure([Representation.euc(2), Representation.euc(3)])
-        >>> metadata.permute_axes([1, 0]).shape
-        (3, 2)
+        >>> space = Representation.euc(3)
+        >>> metadata = TensorStructure([space("j"), space("i")])
+        >>> metadata.slots() == TensorStructure([space("i"), space("j")]).slots()
+        True
+        """
+    def representations(self) -> builtins.list[Representation]:
+        r"""
+        Return every external axis as an unresolved representation.
+
+        Returns
+        -------
+        list of Representation
+            Representations in canonical order; an empty list for a scalar.
+            Different spaces, dimensions, and dualities are allowed.
+
+        Raises
+        ------
+        ValueError
+            If any axis has an explicit index. Labels are never discarded.
+            Use ``axes`` to inspect a mixed structure.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorStructure
+        >>> spaces = [Representation.mink(4), Representation.euc(3)]
+        >>> TensorStructure(spaces) == TensorStructure(spaces[::-1])
+        True
         """
     def __repr__(self) -> builtins.str:
         r"""

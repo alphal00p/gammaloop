@@ -75,25 +75,48 @@ Execution and rendering use `execute`, `step`, `status`, `result_tensor`, `resul
 `expression`, `to_dot`, `to_html`, `render`, and `to_linnest`.
 
 `Tensor`, `TensorNetwork`, and `TensorExpression` expose an immutable
-`TensorStructure` through the `.structure` property. It records an optional
-`TensorName`, scalar `.arguments`, and the ordered `.slots`, `.rank`, and `.shape`.
-Shape entries are Python integers or symbolic expressions. Unresolved ports stay
-as `Representation` objects; assigning indices produces new metadata rather than
-mutating an earlier structure snapshot.
+`TensorStructure` through `.structure`. It is the canonical free-axis signature
+of the whole expression treated as one opaque tensor. It contains `.axes`,
+`.rank`, and `.shape`, without a tensor name, scalar arguments, or a layout
+permutation. Thus `A(i,j)`, `A(j,i)`, and `A(i,j) + A(j,i)` have equal structures.
+Construction sorts the supplied free axes by Spenso's representation/index order;
+this is independent of function arguments, multiplication order, and summand order.
 
-`tensor.expression()` returns its symbolic descriptor, independently of stored
-component values. `network.expression()` returns its source computation, which
-execution does not replace with the result. These replace the former expression-returning
-`structure()` methods; the former `.interface` tuple is now `.structure.slots`.
+`structure.axes` is the canonical tuple of `Slot` and `Representation` objects.
+`structure.slots()` returns a homogeneous list of indexed `Slot` objects, raising
+`ValueError` at the first unresolved axis in canonical order.
+`structure.representations()` returns a homogeneous list of unresolved
+`Representation` objects, raising `ValueError` at the first indexed axis.
+Neither method invents indices, discards labels, or filters out axes. Different
+spaces and dimensions are allowed; scalars return empty lists. Unresolved axes
+retain their multiplicity, with occurrence-local identifiers excluded from
+signature equality. Arithmetic still checks positional compatibility of unresolved
+axes before operating: equal opaque signatures do not imply equal wiring.
+
+The expression retains its actual tensor calls and their argument order.
+`expression.name` and `expression.arguments` describe its optional data identity.
+`tensor.expression()` returns the symbolic descriptor, and `network.expression()`
+returns its source computation. A signature alone cannot reconstruct a call:
+`A(j,i)` has canonical free slots but still refers to the transposed occurrence.
+`TensorExpression(raw, structure=signature)` validates the free axes without
+reordering the expression; for a scalar zero, the signature supplies its missing rank.
+
+For component coordinates and positional operations, use `value.axes` and
+`value.shape`. Those describe the current view, following construction and
+`value.permute_axes(...)`. Permuting explicitly indexed axes preserves the
+canonical `.structure`. Permuting unresolved expression or network ports gives
+them fresh dummy labels so their occurrences remain distinct; the resulting
+signature includes those labels.
+Network parsing and evaluation retain the argument-to-component correspondence;
+there is no second mapping stored on the public signature.
 
 The metadata displays separate presentation labels from exact index expressions.
 `rep.name` is a `RepresentationName` with dimension-independent identity and
 duality; its `metric_sign(i)` queries the canonical contraction sign. Dualizable
-representations display a dual pairing rather than claiming a metric signature on
-one space. Structure displays put the named head and ordered ports in selectable
-boxes. Ordinary `TensorExpression` outputs retain their mathematical rendering.
+representations display a dual pairing. Structure displays show their canonical
+free axes in selectable boxes; expression displays retain mathematical notation.
 
-For indexed tensors, `expression.structure.slots` exposes the external `Slot` objects.
+For indexed tensors, `expression.structure.slots()` exposes the external `Slot` objects.
 The read-only `slot.representation` property returns their typed `Representation`,
 including dimension and duality. Filter slots with `slot.representation == rep`
 when constructing a projector for a particular representation.

@@ -103,7 +103,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
             initial_colors *= abs(particle.color)
             generic_initial_colors *= dA if name == "g" else Nc
         matches = []
-        for slot in operator.structure.slots:
+        for slot in operator.structure.axes:
             original = slot.to_expression()
             if original.replace(ports[position], E("0")) == original:
                 continue

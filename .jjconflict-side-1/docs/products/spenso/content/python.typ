@@ -326,10 +326,10 @@ A = TensorName("algebra::A")(Representation.euc(3))("i")
 expression = 2 * (x + y) * A
 expanded = expression.expand_num()
 factored = expanded.collect_factors()
-assert factored.structure.slots == expression.structure.slots
+assert factored.structure.axes == expression.structure.axes
 assert (factored - expression).expand().to_expression() == 0
 assert isinstance(expression, Expression)
-assert expression.replace(x, y).structure.slots == expression.structure.slots
+assert expression.replace(x, y).structure.axes == expression.structure.axes
 assert expression.derivative(x) == 2 * A
 # Coefficient extraction inherits Symbolica's ordinary Expression return type.
 assert type(expanded.coefficient(x)) is Expression
@@ -355,7 +355,9 @@ To rebuild a tensor after a structure-preserving raw operation, pass
 `structure=original.structure` to the `TensorExpression` constructor; the constructor checks
 the declared interface.
 
-All three tensor forms expose `structure`, `rank`, `shape`, and `is_scalar`.
+All three tensor forms expose `structure`, `axes`, `rank`, `shape`, and `is_scalar`.
+The immutable `structure` is the canonical signature of the free axes; `axes` and
+`shape` follow the current component or port order.
 `index(...)` (also `obj(...)`) fills only unresolved ports. `reindex(...)` assigns every
 external port and permits intentional contractions; `AUTO` leaves a port unchanged.
 `rename_indices({...})` performs simultaneous substitutions on external indices and
@@ -366,8 +368,7 @@ keep their actual stored values; they do not resolve a fresh copy from a library
 `permute_axes([2, 0, 1])` reorders the public axes. On a concrete tensor it transposes
 the data; on an expression or network it changes the external interface consistently.
 Unresolved expression/network ports acquire fresh labels to keep their occurrences
-distinct. Use `reindex(...)` afterwards to choose displayed labels. The immutable
-`TensorStructure.permute_axes(...)` method changes metadata alone.
+distinct. Use `reindex(...)` afterwards to choose displayed labels.
 
 Nested index payloads use `intern="indices"` for reversible encoding or
 `intern="flattened"` for readable flattened names. Both modes affect only indices,
@@ -382,7 +383,7 @@ accept the same literal choices.
 `copy.copy()` duplicate concrete storage or network state.
 
 Integer access uses flat logical row-major order, including negative indices.
-Coordinate tuples follow `structure.slots`. A flat slice returns a flat list;
+Coordinate tuples follow `axes`. A flat slice returns a flat list;
 coordinate slices such as `tensor[:, -1]` or `tensor[::-1, :]` return nested lists
 for the selected axes. Assignment accepts an integer or full integer coordinates,
 including negative indices. Slice assignment and ellipsis indexing are not supported.

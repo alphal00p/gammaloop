@@ -173,7 +173,7 @@ pub(crate) fn structure(
 ) -> PyResult<String> {
     let id = NEXT_INSPECTOR.fetch_add(1, Ordering::Relaxed);
     let selector = format!("[data-spenso-structure=\"{id}\"]");
-    let slots = structure.interface.logical_slots();
+    let slots = structure.interface.external_structure();
     let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind);
     for slot in &slots {
         bundle = bundle.add_arg(composition::port_atom(*slot));
@@ -183,43 +183,17 @@ pub(crate) fn structure(
     let mut details = String::new();
     let mut rules = String::new();
     let mut count = 0;
-    let mut add_tile = |caption: &str,
-                        preview: String,
-                        description: &str,
-                        detail: String,
-                        is_name: bool| {
+    let mut add_tile = |caption: &str, preview: String, description: &str, detail: String| {
         rules.push_str(&format!("{selector}:has(input[value=\"{count}\"]:checked) .sm-detail[data-choice=\"{count}\"]{{display:block}}"));
         tiles.push_str(&format!(
-            "<label class=\"sm-tile{}\"><input type=\"radio\" name=\"spenso-structure-{id}\" value=\"{count}\" aria-label=\"{}\" {}><span>{}</span><span class=\"sm-index\">{preview}</span><code>{}</code></label>",
-            if is_name { " sm-tensor-name" } else { "" }, escape_html(caption), if count == 0 { "checked" } else { "" }, escape_html(caption), escape_html(description),
+            "<label class=\"sm-tile\"><input type=\"radio\" name=\"spenso-structure-{id}\" value=\"{count}\" aria-label=\"{}\" {}><span>{}</span><span class=\"sm-index\">{preview}</span><code>{}</code></label>",
+            escape_html(caption), if count == 0 { "checked" } else { "" }, escape_html(caption), escape_html(description),
         ));
         details.push_str(&format!(
             "<div class=\"sm-detail\" data-choice=\"{count}\">{detail}</div>"
         ));
         count += 1;
     };
-    if let Some(name) = structure.name {
-        let atom = if structure.arguments.is_empty() {
-            Atom::var(name)
-        } else {
-            let mut call = FunctionBuilder::new(name);
-            for arg in &structure.arguments {
-                call = call.add_arg(arg);
-            }
-            call.finish()
-        };
-        let preview = atom_to_svg(py, &atom, settings, None)?;
-        add_tile(
-            "TensorName",
-            preview,
-            name.get_stripped_name(),
-            format!(
-                "<span class=\"sm-field\">TensorName</span><code>{}</code>",
-                escape_html(&atom.to_string()),
-            ),
-            true,
-        );
-    }
     for (position, slot) in slots.iter().enumerate() {
         let (kind, index) = match slot.aind {
             PartialIndex::Explicit(index) => (
@@ -236,7 +210,6 @@ pub(crate) fn structure(
             aliases.port_html(py, *slot, settings)?,
             &slot.rep().to_symbolic([]).to_string(),
             format!("<span class=\"sm-field\">{kind} {position}</span>{index}"),
-            false,
         );
     }
     if count == 0 {
@@ -249,7 +222,7 @@ pub(crate) fn structure(
         .join(" × ");
     Ok(format!(
         "<style>{STYLE}{rules}</style><div data-spenso-metadata data-spenso-structure=\"{id}\"><div class=\"sm-type\"><code>TensorStructure</code><span>Rank {}{}</span></div><div class=\"sm-ports\">{tiles}</div>{details}</div>",
-        structure.interface.canonical().order(),
+        structure.interface.order(),
         if shape.is_empty() {
             String::new()
         } else {

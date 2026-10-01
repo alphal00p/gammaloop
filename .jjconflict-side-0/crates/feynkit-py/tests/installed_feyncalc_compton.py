@@ -78,7 +78,7 @@ for pdg in (11, -11):
         )
 
     operator = TensorExpression(amplitude)
-    assert len(operator.structure.slots) == 4
+    assert len(operator.structure.axes) == 4
     adjoint = (
         operator.dirac_adjoint()
         .simplify_algebra(

@@ -168,7 +168,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
             )
             color_slots = [
                 slot.dual().to_expression()
-                for slot in TensorExpression(numerator).structure.slots
+                for slot in TensorExpression(numerator).structure.axes
                 if slot.to_expression().matches(rep(numeric_dim, index))
             ]
             assert len(color_slots) == 2
@@ -557,7 +557,7 @@ for kind, incoming, outgoing, count, qcd_order in [
             )
             color_slots = [
                 slot.dual().to_expression()
-                for slot in TensorExpression(numerator).structure.slots
+                for slot in TensorExpression(numerator).structure.axes
                 if slot.to_expression().matches(rep(numeric_dim, index))
             ]
             assert len(color_slots) == 2, (kind, numerator)

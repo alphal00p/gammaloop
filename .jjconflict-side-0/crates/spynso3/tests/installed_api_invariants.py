@@ -116,7 +116,7 @@ class InvariantDisplayTests(unittest.TestCase):
         gamma = TensorExpression.dirac_gamma(4)(1, 2, 1)
         tensor = coefficient * gamma
         before = tensor.to_expression()
-        slots = tensor.structure.slots
+        slots = tensor.structure.axes
         for style in ("compact", "explicit"):
             settings = DisplaySettings(invariant_style=style)
             rendered = tensor.to_html(settings=settings)
@@ -125,7 +125,7 @@ class InvariantDisplayTests(unittest.TestCase):
             self.assertTrue(list(root.iter("msup")) or list(root.iter("msubsup")))
             ET.fromstring(to_svg(coefficient, settings=settings))
             self.assertEqual(tensor.to_expression(), before)
-            self.assertEqual(tensor.structure.slots, slots)
+            self.assertEqual(tensor.structure.axes, slots)
 
     def test_unrelated_functions_are_not_color_representations(self):
         expression = E("spenso::cas(2,invariant_display_tests::cof(3))")

@@ -20,7 +20,6 @@
 [data-spenso-metadata] .sm-index { font:italic 25px/1.3 "STIX Two Math","Cambria Math",Georgia,serif; overflow-wrap:anywhere; }
 [data-spenso-metadata] .sm-ports { display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; }
 [data-spenso-metadata] .sm-tile { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:space-between; gap:7px; min-width:72px; max-width:150px; padding:9px; background:var(--sm-soft); border:1px solid transparent; border-radius:6px; overflow-wrap:anywhere; }
-[data-spenso-metadata] .sm-tile.sm-tensor-name { border-color:var(--sm-border); background:var(--sm-bg); }
 [data-spenso-metadata] .sm-tile:has(input:checked) { background:var(--sm-selected); border-color:var(--sm-accent); }
 [data-spenso-metadata] .sm-tile:has(input:focus-visible) { outline:auto; }
 [data-spenso-metadata] .sm-tile input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; }

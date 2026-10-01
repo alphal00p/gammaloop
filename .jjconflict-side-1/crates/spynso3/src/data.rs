@@ -243,7 +243,7 @@ impl Spensor {
     /// Returns
     /// -------
     /// tuple of int
-    ///     Axis sizes in the order of structure.slots.
+    ///     Axis sizes in the order of axes, the current component view.
     ///
     /// Examples
     /// --------
@@ -428,7 +428,7 @@ impl Spensor {
     /// structure : TensorExpression
     ///     Named descriptor with concrete dimensions matching the array shape.
     /// array : numpy.typing.ArrayLike
-    ///     Real or complex array-like data. Axes follow structure.slots.
+    ///     Real or complex array-like data. Axes follow the descriptor's current axes.
     ///
     /// Returns
     /// -------

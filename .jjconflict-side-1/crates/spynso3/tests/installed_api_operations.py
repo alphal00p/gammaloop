@@ -56,15 +56,15 @@ class TensorOperationsTests(unittest.TestCase):
         )
         generator = sp.TensorExpression.color_t(8, 3)("a", "i", "j")
         self.assertEqual(
-            generator.structure.slots[2].representation, sp.Representation.cof(3).dual()
+            generator.axes[2].representation, sp.Representation.cof(3).dual()
         )
 
     def test_transforms_preserve_interface_and_refresh_identity(self):
         a = self.A(self.x, self.rep("i"), self.rep("j"))
         replaced = a.replace(self.x, self.y)
         self.assertIsInstance(replaced, sp.TensorExpression)
-        self.assertEqual(replaced.structure.arguments, (self.y,))
-        self.assertEqual(replaced.structure.slots, a.structure.slots)
+        self.assertEqual(replaced.arguments, (self.y,))
+        self.assertEqual(replaced.structure.axes, a.structure.axes)
         self.assertEqual(
             a.map(T().replace(self.x, self.y)),
             replaced,
@@ -79,7 +79,7 @@ class TensorOperationsTests(unittest.TestCase):
             (a * self.x).derivative(self.x)
         weighted = a * self.y
         derivative = weighted.derivative(self.y)
-        self.assertEqual(derivative.structure.slots, a.structure.slots)
+        self.assertEqual(derivative.structure.axes, a.structure.axes)
         self.assertEqual(derivative.to_expression(), a.to_expression())
         zero = a.derivative(S("api_operations::absent"))
         self.assertEqual(zero.rank, 2)
@@ -105,12 +105,10 @@ class TensorOperationsTests(unittest.TestCase):
             ((self.y * source).derivative(self.y), source),
         ):
             self.assertIsInstance(changed, sp.TensorExpression)
-            self.assertEqual(changed.structure.slots, source.structure.slots)
+            self.assertEqual(changed.structure.axes, source.structure.axes)
             self.assertTrue(Expression.__eq__(changed, changed.to_expression()))
             self.assertEqual(changed, expected_result)
-            self.assertEqual(
-                changed.structure.arguments, expected_result.structure.arguments
-            )
+            self.assertEqual(changed.arguments, expected_result.arguments)
 
         for replacement in (E("1"), self.A(self.rep("k"), self.rep("i"))):
             for operation in (
@@ -126,9 +124,9 @@ class TensorOperationsTests(unittest.TestCase):
         # An atomic data key follows its function head, so a zero no longer has
         # that key. Explicit result metadata is retained across these rewrites.
         self.assertEqual(
-            source.replace(source, 0).structure.slots, source.structure.slots
+            source.replace(source, 0).structure.axes, source.structure.axes
         )
-        self.assertIsNone(source.replace(source, 0).structure.name)
+        self.assertIsNone(source.replace(source, 0).name)
         source = source.with_name(sp.TensorName("api_operations::RewriteMetadata")(7))
         for zero in (
             source.replace(source.to_expression(), E("0")),
@@ -148,14 +146,14 @@ class TensorOperationsTests(unittest.TestCase):
         for _ in range(2):
             changed = source.replace(rule)
             self.assertEqual(changed.to_expression(), rhs)
-            self.assertEqual(changed.structure.slots, source.structure.slots)
+            self.assertEqual(changed.structure.axes, source.structure.axes)
         self.assertEqual(source.replace(sp.TensorRule(lhs, rhs)), result)
         with self.assertRaises(TypeError):
             source.replace(rule, rhs_cache_size=0)
         self.assertEqual(source.to_expression(), lhs)
         zero = source.replace(sp.TensorRule(lhs, E("0")))
         self.assertEqual(zero.to_expression(), E("0"))
-        self.assertEqual(zero.structure.slots, source.structure.slots)
+        self.assertEqual(zero.structure.axes, source.structure.axes)
 
         repeated = self.x * source + self.y * source
         for cache_size, expected_calls in [(0, 4), (10, 2)]:
@@ -210,17 +208,17 @@ class TensorOperationsTests(unittest.TestCase):
                 self.assertIsInstance(result, sp.TensorExpression)
                 self.assertEqual(result.to_expression(), expected)
                 self.assertEqual(result.structure, source.structure)
-                self.assertEqual(result.structure.slots, tensor.structure.slots)
+                self.assertEqual(result.structure.axes, tensor.structure.axes)
                 self.assertEqual(source.to_expression(), before)
 
     def test_symbolica_algebra_preserves_unresolved_ports_metadata_and_typed_zero(self):
         tensor = self.A(7, self.rep("i"), self.other)
-        self.assertIsInstance(tensor.structure.slots[1], sp.Representation)
+        self.assertIsInstance(tensor.axes[1], sp.Representation)
         for source in (tensor, 0 * tensor):
             source = source.with_name(
                 sp.TensorName("api_operations::AlgebraMetadata")(7)
             )
-            self.assertEqual(source.structure.arguments, (E("7"),))
+            self.assertEqual(source.arguments, (E("7"),))
             for method, arguments in (
                 ("factor", ()),
                 ("expand_num", ()),
@@ -242,7 +240,7 @@ class TensorOperationsTests(unittest.TestCase):
                     self.assertEqual(result.rank, 2)
 
         opened = self.A(self.other, self.rep)
-        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        self.assertEqual(opened.axes, (self.other, self.rep))
         library = sp.TensorLibrary()
         library.register(
             sp.Tensor.dense(
@@ -255,7 +253,7 @@ class TensorOperationsTests(unittest.TestCase):
         ):
             with self.subTest(method=method, changed=True):
                 result = getattr(source, method)()
-                self.assertEqual(result.structure.slots, opened.structure.slots)
+                self.assertEqual(result.structure.axes, opened.structure.axes)
                 # Keep the declared component order as well as its shape.
                 for actual, component in zip(
                     result.to_tensor(library)[:], range(1, 7), strict=True
@@ -300,7 +298,7 @@ class TensorOperationsTests(unittest.TestCase):
                     )
 
         opened = self.A(self.other, self.rep)
-        self.assertEqual(opened.structure.slots, (self.other, self.rep))
+        self.assertEqual(opened.axes, (self.other, self.rep))
         source = self.x * opened
         mapped = source.collect(self.x, coeff_map=lambda coefficient: 2 * coefficient)
         self.assertEqual(mapped.structure, source.structure)
@@ -352,7 +350,7 @@ class TensorOperationsTests(unittest.TestCase):
             expected = sp.TensorExpression(numerator)
             quotient = denominator.__rtruediv__(numerator)
             self.assertIsInstance(quotient, sp.TensorExpression)
-            self.assertEqual(quotient.structure.slots, expected.structure.slots)
+            self.assertEqual(quotient.structure.axes, expected.structure.axes)
             self.assertEqual(
                 quotient.to_expression(), expected.to_expression() / self.x
             )
@@ -374,11 +372,11 @@ class TensorOperationsTests(unittest.TestCase):
             structure=atomic.structure,
         ).with_name("api_operations::NamedZero")
         permuted = atomic.permute_axes([1, 0])
-        self.assertEqual(atomic.structure.arguments, (E("7"),))
+        self.assertEqual(atomic.arguments, (E("7"),))
         self.assertEqual(zero.to_expression(), E("0"))
         self.assertEqual(zero.rank, 2)
         self.assertEqual(permuted.to_expression(), atomic.to_expression())
-        self.assertEqual(permuted.structure.slots, atomic.structure.slots[::-1])
+        self.assertEqual(permuted.structure, atomic.structure)
 
         for label, source in [
             ("atomic", atomic),
@@ -413,7 +411,7 @@ class TensorOperationsTests(unittest.TestCase):
     def test_simultaneous_renaming_and_explicit_reindex(self):
         a = self.A(self.rep("i"), self.rep("j"))
         swapped = a.rename_indices({"i": "j", "j": "i"})
-        self.assertEqual(swapped.structure.slots, a.structure.slots[::-1])
+        self.assertEqual(swapped.structure, a.structure)
         self.assertEqual(
             a.rename_indices({self.rep("i"): "k"}), a.reindex("k", sp.AUTO)
         )
@@ -425,7 +423,7 @@ class TensorOperationsTests(unittest.TestCase):
         tensor = self.matrix().reindex("i", "j").result_tensor()
         renamed = tensor.rename_indices({"i": "j", "j": "i"})
         self.assertEqual(renamed[:], tensor[:])
-        self.assertEqual(renamed.structure.slots, swapped.structure.slots)
+        self.assertEqual(renamed.structure.axes, swapped.structure.axes)
 
     def test_axis_permutation_retains_data_and_library_identity(self):
         for reps, shape in [
@@ -438,7 +436,7 @@ class TensorOperationsTests(unittest.TestCase):
                 tensor = sp.Tensor.dense(expression, values)
                 expected = np.array(values).reshape(shape).T
                 permuted = tensor.permute_axes([1, 0])
-                self.assertEqual(permuted.structure.shape, shape[::-1])
+                self.assertEqual(permuted.shape, shape[::-1])
                 np.testing.assert_array_equal(permuted.to_numpy(), expected)
                 self.assertEqual(permuted.permute_axes([1, 0])[:], values)
                 library = sp.TensorLibrary()
@@ -451,9 +449,11 @@ class TensorOperationsTests(unittest.TestCase):
                 np.testing.assert_array_equal(
                     network.to_tensor(library).to_numpy(), expected
                 )
+                indexed = expression("i", "j")
                 self.assertEqual(
-                    expression.structure.permute_axes([1, 0]).shape, shape[::-1]
+                    indexed.permute_axes([1, 0]).structure, indexed.structure
                 )
+                self.assertEqual(indexed.permute_axes([1, 0]).axes, indexed.axes[::-1])
                 self.assertEqual(tensor[:], values)
         with self.assertRaises(ValueError):
             self.matrix().permute_axes([0, 0])
@@ -482,9 +482,7 @@ class TensorOperationsTests(unittest.TestCase):
                     self.assertEqual(
                         expression.to_expression(), expected.to_expression()
                     )
-                    self.assertEqual(
-                        expression.structure.slots, expected.structure.slots
-                    )
+                    self.assertEqual(expression.structure.axes, expected.structure.axes)
             self.assertEqual(sp.TensorExpression(expected, intern=mode), expected)
         self.assertNotEqual(
             a(payload, intern="indices"), a(payload, intern="flattened")
@@ -644,7 +642,7 @@ class TensorOperationsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 value.rename_indices({"i": "j"})
             renamed = value.rename_indices({"i": "k", "k": "i"})
-            self.assertEqual(renamed.structure.slots, value.structure.slots[::-1])
+            self.assertEqual(renamed.structure, value.structure)
 
     def test_simplification_presets_and_expansion_control(self):
         a = self.A(self.rep("i"))

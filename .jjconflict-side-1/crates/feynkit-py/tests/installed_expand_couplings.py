@@ -32,7 +32,7 @@ for source in (
     result = model.expand_couplings(source)
     assert_type(result, TensorExpression)
     assert type(result) is TensorExpression
-    assert result.structure.slots == source.structure.slots
+    assert result.structure.axes == source.structure.axes
     assert result.to_expression() == model.expand_couplings(before)
     assert source.to_expression() == before
     assert model.expand_couplings(result) == result
@@ -48,13 +48,13 @@ next(c for c in definition["couplings"] if c["name"] == "GC_11")["expression"] =
 zero_model = hep.Model.from_json(json.dumps(definition))
 zero = zero_model.expand_couplings(coupling * ordered)
 assert isinstance(zero, TensorExpression)
-assert not zero and zero.structure.slots == ordered.structure.slots
+assert not zero and zero.structure.axes == ordered.structure.axes
 
 # Exercise a factored generated numerator without expanding its local factors.
 diagram = model.process(["e-", "e+"], ["a", "a"]).generate_diagrams(progress=None)[0]
 numerator = diagram.numerator_expression(in_lmb=True)
 expanded = model.expand_couplings(numerator)
-assert expanded.structure.slots == numerator.structure.slots
+assert expanded.structure.axes == numerator.structure.axes
 assert expanded.to_expression() == model.expand_couplings(numerator.to_expression())
 assert not expanded.to_expression().matches(S("UFO::GC_3"))
 assert model.expand_couplings(E("0")) == 0

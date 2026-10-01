@@ -6,6 +6,7 @@ use pyo3::{prelude::*, types::PyTuple};
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
+use spenso::structure::partial::PartialStructureExt;
 
 /// Read-only snapshot of a TensorNetwork's remaining work.
 ///
@@ -221,7 +222,7 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// tuple of int or Expression
-    ///     Axis sizes in the order of structure.slots.
+    ///     Axis sizes in the order of axes, the current component view.
     ///
     /// Examples
     /// --------
@@ -237,7 +238,7 @@ impl SpensoNet {
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
     fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        self.structure().shape(py)
+        crate::metadata::axis_shape(py, self.structure.structure().logical_slots())
     }
 
     /// Read a snapshot of the remaining graph work without executing it.

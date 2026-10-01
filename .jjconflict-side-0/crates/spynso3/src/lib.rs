@@ -618,12 +618,19 @@ impl Spensor {
         )
     }
 
-    /// Identity, scalar arguments, and ordered external axes.
+    #[doc = python_doc!("Tensor.axes")]
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
+    fn axes(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::metadata::axis_objects(py, self.descriptor.structure().logical_slots())
+    }
+
+    /// Canonical external signature of the whole tensor.
     ///
     /// Returns
     /// -------
     /// TensorStructure
-    ///     Immutable metadata, separate from the component values or computation.
+    ///     Free axes in canonical order, independent of names and component layout.
     ///
     /// Examples
     /// --------
@@ -636,11 +643,7 @@ impl Spensor {
     /// 2
     #[getter]
     fn structure(&self) -> metadata::SpensoTensorStructure {
-        metadata::SpensoTensorStructure {
-            interface: self.descriptor.structure().clone(),
-            name: self.descriptor_name,
-            arguments: self.descriptor_args.clone(),
-        }
+        crate::metadata::SpensoTensorStructure::from_interface(self.descriptor.structure())
     }
 
     /// Assign a data identity without rewriting the symbolic computation.
@@ -917,7 +920,7 @@ impl Spensor {
     /// Only ports layout and default spacing are supported in this source
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
-    /// Components follow logical interface order (the order of structure.slots). Large static displays show a
+    /// Components follow the current view (the order of axes). Large static displays show a
     /// bounded preview rather than every component.
     ///
     /// Examples
@@ -961,7 +964,7 @@ impl Spensor {
     /// Only ports layout and default spacing are supported in this source
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
-    /// Components follow logical interface order (the order of structure.slots). Large static displays show a
+    /// Components follow the current view (the order of axes). Large static displays show a
     /// bounded preview rather than every component.
     ///
     /// Static Typst output remains available independently of the HTML explorer.
@@ -1982,7 +1985,7 @@ impl Spensor {
     ///
     /// Notes
     /// -----
-    /// Other axes remain external. Axis numbers refer to ``structure.slots``.
+    /// Other axes remain external. Axis numbers refer to ``axes``.
     ///
     /// Examples
     /// --------

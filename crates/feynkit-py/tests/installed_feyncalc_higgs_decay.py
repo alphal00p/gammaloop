@@ -108,7 +108,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
         if particle.color == 1:
             continue
         matches = []
-        for slot in operator.structure.slots:
+        for slot in operator.structure.axes:
             original = slot.to_expression()
             if original.replace(ports[position], E("0")) == original:
                 continue

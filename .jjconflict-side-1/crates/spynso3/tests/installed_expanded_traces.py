@@ -47,7 +47,7 @@ class ExpandedTraceTests(unittest.TestCase):
             gamma=True, gamma_evaluate_traces=False, epsilon=True
         ).contract(collect_chains=False, collect_traces=False)
         self.assertEqual(inert, trace)
-        self.assertEqual(inert.structure.slots, trace.structure.slots)
+        self.assertEqual(inert.structure.axes, trace.structure.axes)
 
     def test_chain_output_is_distinct_from_disabled_trace_evaluation(self):
         chains = {"gamma": True, "gamma_output": "chains"}
@@ -64,7 +64,7 @@ class ExpandedTraceTests(unittest.TestCase):
             gamma=True, gamma_evaluate_traces=False, epsilon=True
         ).contract(collect_chains=False, collect_traces=False)
         self.assertNotEqual(joined.to_expression(), reduced.to_expression())
-        self.assertEqual(joined.structure.slots, source.structure.slots)
+        self.assertEqual(joined.structure.axes, source.structure.axes)
         self.assertEqual(
             joined.simplify_algebra(**chains).to_expression(), joined.to_expression()
         )
@@ -97,7 +97,7 @@ class ExpandedTraceTests(unittest.TestCase):
                     collect_chains=False, collect_traces=False
                 )
                 self.assertIsInstance(result, sp.TensorExpression)
-                self.assertEqual(result.structure.slots, source.structure.slots)
+                self.assertEqual(result.structure.axes, source.structure.axes)
                 expanded = result.expand()
                 self.assertEqual(
                     expanded.to_expression(), (self.scalar * body).expand()
@@ -108,7 +108,7 @@ class ExpandedTraceTests(unittest.TestCase):
                     .expand(),
                     expanded,
                 )
-                self.assertEqual(expanded.structure.slots, source.structure.slots)
+                self.assertEqual(expanded.structure.axes, source.structure.axes)
                 self.assertEqual(
                     result.to_expression().expand(),
                     expanded.to_expression(),
@@ -139,7 +139,7 @@ class ExpandedTraceTests(unittest.TestCase):
             .expand(),
             result.expand(),
         )
-        self.assertEqual(result.structure.slots, source.structure.slots)
+        self.assertEqual(result.structure.axes, source.structure.axes)
 
     def test_pipeline_preserves_factorization_and_requires_explicit_expansion(self):
         trace = self.trace_word(self.dimension, [f"pipeline{i}" for i in range(6)])
@@ -160,7 +160,7 @@ class ExpandedTraceTests(unittest.TestCase):
         )
         self.assertEqual(result.simplify_algebra(**pipeline).expand(), result.expand())
         zero = (0 * source).simplify_algebra(**pipeline)
-        self.assertEqual(zero.expand().structure.slots, source.structure.slots)
+        self.assertEqual(zero.expand().structure.axes, source.structure.axes)
         self.assertFalse(zero.expand())
 
 

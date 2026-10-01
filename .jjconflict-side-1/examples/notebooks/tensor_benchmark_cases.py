@@ -780,7 +780,7 @@ class ProductionNumerator:
         }
         slots = [
             slot.to_expression().replace(dimension, E("4")).format_plain()
-            for slot in self.source.structure.slots
+            for slot in self.source.axes
         ]
         assert len(slots) == 4 and len(set(slots)) == 4
         report = {
@@ -822,8 +822,7 @@ class ProductionNumerator:
                 network.execute(library=library)
                 tensor = network.result_tensor(library=library)
                 actual_slots = [
-                    slot.to_expression().format_plain()
-                    for slot in tensor.structure.slots
+                    slot.to_expression().format_plain() for slot in tensor.axes
                 ]
                 assert len(actual_slots) == 4 and set(actual_slots) == set(slots)
                 axes = [actual_slots.index(slot) for slot in slots]
@@ -1065,7 +1064,7 @@ class MixedColourTrace(FreeTrace):
         for axis in range(4):
             metric[axis, axis] = E("1" if axis == 0 else "-1")
         library.register(metric)
-        slots = [slot.to_expression() for slot in self.source.structure.slots]
+        slots = [slot.to_expression() for slot in self.source.axes]
         assert len(slots) == 4 and len(set(slots)) == 4
         rows = {}
         expected = None
@@ -1073,7 +1072,7 @@ class MixedColourTrace(FreeTrace):
             network = TensorNetwork(atom(expression), library=library)
             network.execute(library=library)
             tensor = network.result_tensor(library=library)
-            actual = [slot.to_expression() for slot in tensor.structure.slots]
+            actual = [slot.to_expression() for slot in tensor.axes]
             assert len(actual) == 4 and set(actual) == set(slots)
             tensor = tensor.permute_axes([actual.index(slot) for slot in slots])
             values = [tensor[list(index)] for index in product(range(4), repeat=4)]

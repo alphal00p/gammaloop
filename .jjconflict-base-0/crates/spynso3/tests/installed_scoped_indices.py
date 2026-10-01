@@ -17,7 +17,7 @@ class ScopedIndicesTests(unittest.TestCase):
         left = metric("a", "b") * p(rep("a"))
         right = metric("a", "c") * q(rep("a"))
         scoped = left.wrap_indices(lhs, dummies_only=True)
-        self.assertEqual(scoped.structure.slots, left.structure.slots)
+        self.assertEqual(scoped.structure.axes, left.structure.axes)
         self.assertEqual(scoped.wrap_indices(lhs, dummies_only=True), scoped)
         result = (scoped * right.wrap_indices(rhs, dummies_only=True)).contract(
             rank_one=False
@@ -38,10 +38,10 @@ class ScopedIndicesTests(unittest.TestCase):
         wrapped = original.wrap_indices(bra)
         self.assertIsInstance(wrapped, TensorExpression)
         self.assertEqual(wrapped.rank, 1)
-        self.assertNotEqual(wrapped.structure.slots, original.structure.slots)
+        self.assertNotEqual(wrapped.structure.axes, original.structure.axes)
         self.assertEqual(
-            TensorExpression(wrapped.to_expression()).structure.slots,
-            wrapped.structure.slots,
+            TensorExpression(wrapped.to_expression()).structure.axes,
+            wrapped.structure.axes,
         )
         self.assertEqual(wrapped.wrap_indices(bra), wrapped)
         self.assertEqual((original * wrapped).rank, 2)
@@ -53,12 +53,12 @@ class ScopedIndicesTests(unittest.TestCase):
         )
         nested = wrapped.wrap_indices(other)
         self.assertEqual(
-            TensorExpression(nested.to_expression()).structure.slots,
-            nested.structure.slots,
+            TensorExpression(nested.to_expression()).structure.axes,
+            nested.structure.axes,
         )
         zero = (0 * original).wrap_indices(bra)
         self.assertEqual(zero.rank, 1)
-        self.assertEqual(zero.structure.slots, wrapped.structure.slots)
+        self.assertEqual(zero.structure.axes, wrapped.structure.axes)
 
         for tensor in (original * wrapped, original * nested):
             html = tensor._repr_html_()

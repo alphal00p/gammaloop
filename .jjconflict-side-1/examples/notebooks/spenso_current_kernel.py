@@ -418,7 +418,7 @@ def _(mo):
 
 @app.cell
 def _(Expression, Representation, bar_components, components, kernel):
-    assert kernel.structure.slots == (Representation.mink(4)("mu"),)
+    assert kernel.structure.axes == (Representation.mink(4)("mu"),)
     assert len(kernel) == 4
     _i = Expression.I
     _weyl = (

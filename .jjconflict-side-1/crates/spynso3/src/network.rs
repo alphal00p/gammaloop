@@ -1818,12 +1818,19 @@ impl SpensoNet {
         )
     }
 
-    /// Identity, scalar arguments, and ordered external axes.
+    #[doc = python_doc!("Tensor.axes")]
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
+    fn axes(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::metadata::axis_objects(py, self.structure.structure().logical_slots())
+    }
+
+    /// Canonical external signature of the whole tensor.
     ///
     /// Returns
     /// -------
     /// TensorStructure
-    ///     Immutable metadata, separate from the component values or computation.
+    ///     Free axes in canonical order, independent of names and component layout.
     ///
     /// Examples
     /// --------
@@ -1838,15 +1845,7 @@ impl SpensoNet {
     /// 2
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
-        crate::metadata::SpensoTensorStructure {
-            interface: self.structure.structure().clone(),
-            name: self.descriptor.as_ref().map(|(name, _)| *name),
-            arguments: self
-                .descriptor
-                .as_ref()
-                .map(|(_, args)| args.clone())
-                .unwrap_or_default(),
-        }
+        crate::metadata::SpensoTensorStructure::from_interface(self.structure.structure())
     }
 
     /// Assign labels to the unresolved external axes.
@@ -2451,7 +2450,7 @@ impl SpensoNet {
     ///
     /// Notes
     /// -----
-    /// Other axes remain external. Axis numbers refer to ``structure.slots``.
+    /// Other axes remain external. Axis numbers refer to ``axes``.
     ///
     /// Examples
     /// --------

@@ -4,6 +4,26 @@
 //! overload metadata, so one literal supplies both PyO3 and the generated stubs.
 
 macro_rules! python_doc {
+    ("Tensor.axes") => {
+        r###"External axes in the current component and port-position order.
+
+Returns
+-------
+tuple of Slot or Representation
+    Indexed or unresolved axes, respectively. Component coordinates and methods
+    taking axis positions use this order. It follows construction and explicit
+    permute_axes() calls; structure.axes instead gives the canonical signature.
+
+Examples
+--------
+>>> from symbolica.community.tensor import Representation, TensorName
+>>> r = Representation.euc(3)
+>>> A = TensorName("A")(r("j"), r("i"))
+>>> A.axes == (r("j"), r("i"))
+True
+>>> A.permute_axes([1, 0]).axes == A.axes[::-1]
+True"###
+    };
     ("Representation.__call__") => {
         r###"Attach an abstract index label to this space.
 
@@ -102,7 +122,7 @@ Expression, float, complex, or list
 
 Notes
 -----
-Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
 Examples
 --------
@@ -135,7 +155,7 @@ None
 
 Notes
 -----
-Coordinates follow structure.slots; canonical storage-axis order is not exposed.
+Coordinates follow axes, the current component view; structure.axes is a canonical signature.
 
 Examples
 --------
@@ -535,7 +555,7 @@ TensorExpression or TensorNetwork
 
 Notes
 -----
-Other axes remain external. Axis numbers refer to ``structure.slots``.
+Other axes remain external. Axis numbers refer to ``axes``.
 
 Examples
 --------
