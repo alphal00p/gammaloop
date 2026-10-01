@@ -21,8 +21,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
@@ -42,7 +42,8 @@ anchor = "load_state_manifest(&save_path)?"
 # ownership are documented in architecture-current.typ.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
+# Reviewed 2026-10-01: State v11 retains printer registrations and adds inlining policies and caller-scope aliases; architecture-current.typ documents the combined format.
+digest = "b6584d4ec51e905124aaaf8a4bb89d0513c4228b"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -89,7 +90,8 @@ anchor = "pub fn warm_up(&mut self, model"
 # warm-up and numerical preparation retain their existing ownership.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "175b2d6e4d117b737887425692af2a433ff748b5"
+# Reviewed 2026-10-01: Candidate-LMB routing follows exact precision promotion into the selected member graph before native materialization and rotation; architecture-current.typ documents canonical source ownership.
+digest = "93d55e07a5bb39fee7231f66f3a92808fb07a333"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -201,8 +203,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["gammaloop"]
 topics = ["uv", "renormalization"]
 review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
@@ -214,7 +216,8 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
 # Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
-digest = "584255e4a7b014c585988265f946c730605e861a"
+# Reviewed 2026-10-01: Corrected IR support and the pre-computation mixed-prescription and integrated-OS rejections.
+digest = "7db0c071cda6bc6bb1678e5e969f165136490d13"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -225,8 +228,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-21"
-review_ref = "11fe63d82a13abc0fc16c2fc6296c880a52c0572"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
@@ -240,7 +243,8 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-09-17: Documented scalar-weighted compact vectors and fallible target materialization with canonical layouts.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-digest = "1893dbba07975a89ef771c44cb432872363bd571"
+# Reviewed 2026-10-01: Documented borrowed scalar accumulation, one n-ary addition for mixed sums, and scalar input reuse.
+digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -251,8 +255,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-14"
-review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["spenso", "idenso"]
 topics = ["parsing", "schoonschip", "rewrites"]
 review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso/src/network/**"]
@@ -263,6 +267,8 @@ symbol = "idenso::shorthands::schoonschip::Schoonschip"
 anchor = "pub trait Schoonschip {"
 # Reviewed 2026-09-14: typed network errors are documented; opaque parsing,
 # contraction settings, and fixed-point execution remain unchanged.
+# Reviewed 2026-10-01: documented opt-in slot replacement for a vector sum
+# contracted with one tensor; API and parser defaults are unchanged.
 digest = "608eb6fd27a8463bc0bbfa6383c41db3a9e95000"
 
 [[section.note]]
@@ -347,11 +353,11 @@ title = "Spenso implementation architecture"
 summary = "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests."
 source = "docs/architecture/spenso-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-09-21"
+status = "Implemented · reviewed 2026-10-01"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-21"
-review_ref = "11fe63d82a13abc0fc16c2fc6296c880a52c0572"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["spenso"]
 topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
 review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
@@ -394,7 +400,8 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # No-impact attestation 2026-09-24: fused numeric contractions now align matched
 # coordinates by dual slot identity, restoring the documented contraction semantics
 # without changing network ownership, scheduling, or factor preservation.
-digest = "324b64b163daf96819c0cdac4164f1203c3c4593"
+# Reviewed 2026-10-01: The added comment explains existing scalar extraction before summing closed lazy tensors; documented that leaf-order invariant.
+digest = "0e20e5093dbf469e9f2b11f1d272c6b6c3de9394"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -405,7 +412,8 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-09-17: Documented fallible materialization, retained sum boundaries, odd powers, and live store ownership.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-digest = "1893dbba07975a89ef771c44cb432872363bd571"
+# Reviewed 2026-10-01: Documented the scalar-sum parsing path and unchanged tensor compatibility boundary.
+digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
@@ -558,11 +566,11 @@ title = "Vakint implementation architecture"
 summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
 source = "docs/architecture/vakint-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-08-18"
+status = "Implemented · reviewed 2026-10-01"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -577,7 +585,8 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
 # Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
 # Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
-digest = "cff422193a9e8e207ca46bf7f783d175ba694359"
+# Reviewed 2026-10-01: Documented explicit zero masses, nonzero scale selection, withheld AlphaLoop massless representation, and numeric complex serialization.
+digest = "0dbb03e9c24cf4d26dfba1745c5c44fc19d3a736"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -585,7 +594,8 @@ symbol = "vakint::topologies::Topologies::match_topologies_to_user_input"
 anchor = "pub fn match_topologies_to_user_input("
 # Reviewed 2026-09-14: the new solution-set API still requires one fully
 # determined loop-basis solution; matching and replacement mappings are unchanged.
-digest = "7a1dcd23ff9116de1ec3e3a4150e81400cdf552f"
+# Reviewed 2026-10-01: Documented registered MATAD MM0 and M00 one-scale sunset topologies.
+digest = "544767ea364c0fd212718098d6f6dc285be7bcb6"
 
 [[section.note.scope]]
 path = "crates/vakint/src/graph.rs"
@@ -880,8 +890,8 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-14"
-review_ref = "2a7401d884db70c522fd9504619412f01ebb2314"
+reviewed_at = "2026-10-01"
+review_ref = "jj:xuoqsyop"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -981,7 +991,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # box subprocess fixture extend existing compile-time and runtime test inputs.
 # No-impact attestation 2026-09-29: Clinnet's runtime test sources add the
 # documentation theme imported by the portal edge style its Typst tests render.
-digest = "20ffdd801e1c84048a20339e8557dd7388ce5b6b"
+# Reviewed 2026-10-01: Retained main source ownership and added embedded GL256/GL262 and RQFT test fixtures; ci.typ documents their cache boundaries.
+digest = "eb51e18942ce44deebdee52795f9ed29140bdb2b"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

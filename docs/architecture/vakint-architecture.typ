@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-08-18.
+2026-10-01.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -84,6 +84,12 @@ to three loops and five terms; FMFT covers registered four-loop topologies up to
 pySecDec covers topologies registered for that numerical path. Failure to find a method is an
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
 
+The registered one-scale two-loop sunsets include the MM0 and M00 mass patterns.
+Canonical masses accept either zero or `msq(index)`, and scale extraction chooses
+a nonzero mass. These partially massless topologies use MATAD: AlphaLoop's
+`uvprop` representation has no mass slot and cannot preserve which lines are
+massless, so that representation is withheld for any topology with a zero mass.
+
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. Numerical parameters and optional external momenta are converted to the configured
 binary precision, and `NumericalEvaluationResult` represents the result and optional error as
@@ -95,6 +101,12 @@ AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM an
 the configured Python executable. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
 4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
+
+Backend expression serialization follows the exact atom tree and symbol identities,
+independently of display callbacks. A complex numeric atom is written from its
+explicit real and imaginary coefficients, including a unit imaginary numerator;
+the FORM adapter then maps the imaginary unit to `i_`. This preserves valid
+syntax for coefficients such as `i/16` without changing their value.
 
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
 For each run, Vakint renders those resources into a uniquely named temporary directory, launches

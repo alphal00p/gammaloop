@@ -5,7 +5,7 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-09-21 against `11fe63d8`.
+#strong[Audit status:] reviewed 2026-10-01 against jj change `xuoqsyop`.
 Lifecycle: current implementation architecture.
 
 == Entry Points
@@ -63,6 +63,12 @@ dummies cannot collide with written indices or each other.
     metric, representation, and broadcast syntax keeps its fixed
     meaning.],
 )
+
+When scalar precontraction is enabled, sum parsing collects borrowed pure-scalar
+summands and constructs their sum once with `Atom::add_many` only if tensor
+summands remain. An entirely scalar sum reuses the already normalized input
+atom. This avoids repeatedly copying a growing scalar sum; compatibility checks
+and tensor summands retain their existing meaning.
 
 == Option Examples
 <option-examples>

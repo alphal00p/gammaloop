@@ -1,0 +1,51 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/paper_figure_b1_double_triangle.dot -p paper_figure_b1_double_triangle -i paper_figure_b1_double_triangle",
+  "generate existing -p paper_figure_b1_double_triangle -i paper_figure_b1_double_triangle",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p paper_figure_b1_double_triangle -i paper_figure_b1_double_triangle --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[300.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [1, -1]
+
+[default_runtime_settings.general]
+m_uv = 20.0
+mu_r = 20.0
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "off"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false

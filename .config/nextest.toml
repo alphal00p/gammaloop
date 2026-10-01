@@ -145,10 +145,33 @@ default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/)
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
 
+# Mandatory local soft-counterterm acceptance. Keep this exact allow-list
+# separate from the broad `slow` class so unrelated long-running integration
+# tests are not swept into the CI lane.
+[profile.soft_ct_acceptance]
+inherits = "ci"
+default-filter = "test(/^slow::(paper_figure_b1_massless_bubble_uses_a_complete_soft_wood|paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture|local_nested_soft_fixture_generates|paper_appendix_b1_ir_specialization_generates_and_profiles|gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement|gamma_star_ddbar_top_bubble_has_two_power_soft_improvement)$/)"
+test-threads = 1
+# Symbolic Appendix-B.1 replay and the other soft-CT generators must not
+# contend with one another and can exceed the generic CI timeout.
+# The top-bubble acceptance recomputes a computed forest-provenance export
+# before running six matched numerical profiles; reference CI runners can
+# legitimately exceed one hour for the complete symbolic-plus-numerical test.
+slow-timeout = { period = "60m", terminate-after = 2 }
+
+[profile.soft_ct_acceptance.junit]
+path = "junit.xml"
+
 [[profile.ci_gammaloop.overrides]]
 # Vakint tests can end up running restricted Symbolica instances in nix-ci,
 # which behaves as a singleton per machine when the full license is unavailable.
 filter = "package(vakint)"
+test-group = "symbolica-singleton"
+
+[[profile.ci_gammaloop.overrides]]
+# Local UV operator tests initialize Symbolica independently. The public CI
+# fallback license is process-singleton, so nextest must not overlap them.
+filter = 'package(gammalooprs) and test(/^uv::approx::local_(3d|4d)::tests::/)'
 test-group = "symbolica-singleton"
 
 [[profile.ci_gammaloop.overrides]]
@@ -157,6 +180,14 @@ test-group = "symbolica-singleton"
 filter = "test(/^uv::hedge_poset::tests::bugblatter$/) or test(/^aaa$/)"
 test-group = "gammalooprs-diagnostics"
 slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci_gammaloop.overrides]]
+# These tests share generated-state directories. `serial_test::serial` only
+# serializes tests inside one process, while nextest launches each test in its
+# own process, so the CI scheduler must enforce the same exclusion.
+filter = 'package(gammaloop-integration-tests) and binary(uv) and test(/^(dgse_local_ir_profiles_are_non_vacuous|dgse_local_ir_generation_orientation_filter_profiles_one_orientation|massless_quark_self_energy_local_ir_profile_is_non_vacuous|massless_gluon_self_energy_local_ir_profile_is_non_vacuous|soft_cff_state_survives_a_fresh_process_reload|massive_top_self_energy_local_os_dispatch_is_deferred|paper_appendix_b1_os_child_reaches_deferred_dispatch|local_ir_disconnected_completed_components_form_nonzero_union|consecutive_soft_components_have_exact_forest_and_cli_profile|local_ir_integrated_generation_succeeds_across_local_uv_routes|genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs|local_os_integrated_generation_is_rejected_by_run_generate|local_ir_and_pole_part_wood_is_rejected_by_run_generate|local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate)$/)'
+test-group = "soft-ct-serial"
+slow-timeout = { period = "30m", terminate-after = 2 }
 
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts
@@ -269,6 +300,8 @@ flaky = { max-threads = 1 }
 symbolica-singleton = { max-threads = 1 }
 # Serialize long gammalooprs diagnostics so they do not time out under suite contention.
 gammalooprs-diagnostics = { max-threads = 1 }
+# Serialize soft-counterterm generators across nextest worker processes.
+soft-ct-serial = { max-threads = 1 }
 
 [profile.local_test]
 fail-fast = true

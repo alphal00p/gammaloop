@@ -23,6 +23,61 @@ scopes. Scalar weights, inverse denominators, selectors, and independent closed
 products keep their boundaries. Open interfaces use ordinary component
 preparation; only reachable functions and scalar aliases are retained.
 
+Family calls are lowered by their validated function head and tags. Exact formal
+arguments are bound simultaneously, including function-valued arguments; the
+catalog rejects duplicate formals. Lowering does not scan every family's generic
+replacement pattern at every node of the outer expression.
+
+After outer tensor contraction and factor collection, repeated complete scalar
+functions and powers may become retained aliases when the stored definition and
+references use fewer bytes. The root and each retained definition are visited
+once, preserving existing alias keys without unfolding the dependency graph.
+Any candidate containing a residue selector, orientation guard, theta, or IF
+remains visible,
+so subsequent branch preparation still encloses each inverse use in its lazy
+conditional. This sharing is applied after Taylor operations and formal-argument
+pruning; it does not hide momentum dependence from differentiation. Extraction
+stops at whole functions and powers, stores their bodies unchanged in
+`AliasedAtom`, and preserves exact parameter and existing-alias keys. Recursive
+subexpression extraction is unsuitable here: it can rewrite arguments used as
+exact function tags before evaluator lookup. Furthermore, Symbolica Horners
+alias definitions; candidates containing algebraic parameter or tag keys are
+excluded so that this pass cannot change their exact identity. Known ordinary
+arguments, including the `Esurface` invariant, remain eligible. FunctionMap
+enforces one tag count per function head; calls absent from the recorded catalog
+conservatively treat every argument as a tag. No numerator expansion is performed.
+Sharing reduces preparation storage; Symbolica may still inline definitions
+while building its evaluation tree.
+
+A projected-4D scalar can already be wholly stored in a Spenso alias, leaving
+only its handle at the root. Factor collection therefore also visits each
+retained scalar body before sharing. Sharing rewrites the root and existing
+bodies together, while storing every newly extracted factor verbatim. This
+closes the root-only coverage gap observed in the September 26 projected-4D
+retry; the compact-energy validation record retains that memory-limited baseline.
+
+Generated scalar numerator components and coefficient functions use Symbolica's
+`InliningPolicy::Never` for ordinary evaluators. Distinct argument tuples call
+one retained evaluator body instead of each lowering an inlined copy. Hyperdual
+builds use `Always`: the pinned Symbolica implementation cannot vectorize
+retained sub-evaluators. This choice is made after Taylor operations, so it does
+not change symbolic momentum dependence or the Taylor algebra.
+
+Function metadata records both inlining policy and caller-scope alias identity.
+Rebuilds and standalone archives preserve both; algebraic function-map
+replacement excludes `Never` definitions. Aliases still resolve in the caller's
+parameter scope. The saved-state manifest and standalone archive versions change
+with this metadata layout. Generated scripts pin Symbolica, Numerica and Graphica
+to the generator's revision.
+
+Evaluator milestones distinguish root/alias bytes from recorded function-body
+bytes and report how many functions retain shared bodies. The optional
+`evaluator_input` debug tag captures factorized roots, aliases, recorded function
+definitions, parameters and optimization settings for an isolated replay.
+Registrations supplied only through an opaque FunctionMap are outside those
+recorded-body metrics. Reported instruction operation counts cover the root
+program; retained callee bodies are additional code.
+
 Integrated UV preparation reduces color algebra before lowering chain/trace
 shorthands for Vakint. This removes reducible traces before repeated dummy-index
 materialization, without globally expanding the numerator.

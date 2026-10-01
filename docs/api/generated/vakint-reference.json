@@ -41,6 +41,16 @@
       "propagator_slots": 3
     },
     {
+      "name": "I2L_MM0",
+      "loops": 2,
+      "propagator_slots": 3
+    },
+    {
+      "name": "I2L_M00",
+      "loops": 2,
+      "propagator_slots": 3
+    },
+    {
       "name": "I3L",
       "loops": 3,
       "propagator_slots": 6
