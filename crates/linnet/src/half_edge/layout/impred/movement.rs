@@ -225,6 +225,7 @@ impl MovementDofs {
         let mut matrix = Vec::with_capacity(rows.len());
         let mut bounds = Vec::with_capacity(rows.len());
         let mut components = Components::new(count);
+        let mut joined = vec![false; self.index.len()];
         for row in rows {
             if row.point >= self.index.len()
                 || !row.bound.is_finite()
@@ -247,7 +248,12 @@ impl MovementDofs {
                     coefficients[slot].1 += normal;
                     if normal != 0.0 {
                         if let Some(first) = first {
-                            components.join(first, column);
+                            // Every row for this point couples the same two DOFs.
+                            // Repeated joins cannot change their component.
+                            if !joined[row.point] {
+                                components.join(first, column);
+                                joined[row.point] = true;
+                            }
                         } else {
                             first = Some(column);
                         }
@@ -281,6 +287,36 @@ impl MovementDofs {
         }
         if !desired.iter().chain(&bounds).all(|value| value.is_finite()) {
             return Err("Nonfinite normalized movement problem".into());
+        }
+        // If the grouped proposal satisfies every halfplane, no component
+        // matrix or polygon is needed. The sparse row has at most two entries;
+        // visit them in column order as in the dense dot product.
+        let feasible = matrix.iter().zip(&bounds).all(|(row, &bound)| {
+            let terms = row.map(|(column, coefficient)| {
+                coefficient * desired.get(column).copied().unwrap_or(0.0)
+            });
+            let values = if row[0].0 <= row[1].0 {
+                terms
+            } else {
+                [terms[1], terms[0]]
+            };
+            values.into_iter().sum::<f64>() <= bound
+        });
+        if feasible {
+            let mut roots = vec![false; count];
+            for column in 0..count {
+                roots[components.root(column)] = true;
+            }
+            evidence.components = roots.into_iter().filter(|root| *root).count();
+            return Ok((
+                self.index
+                    .iter()
+                    .map(|axes| {
+                        axes.map(|column| column.map_or(0.0, |column| desired[column] * scale))
+                    })
+                    .collect(),
+                evidence,
+            ));
         }
         let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for index in 0..count {

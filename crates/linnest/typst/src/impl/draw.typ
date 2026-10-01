@@ -2035,45 +2035,51 @@
 
 // Collision footprints use actual rendered shafts and marks. Keep separate
 // pieces: the empty space between an arrow and its text is not occupied.
-#let _annotation-bounds(ctx, elements) = {
-  let painted = cetz.process.many(ctx, elements.flatten(), compute-bounds: false)
-  let arrow-bounds = ()
-  for drawable in painted.drawables {
-    if cetz.drawable.TAG.hidden in drawable.tags { continue }
-    if drawable.type == "path" and drawable.at("stroke", default: none) == none and drawable.at("fill", default: none) == none { continue }
-    let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
-    let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
-    let pieces = ()
-    if drawable.type == "path" {
-      if cetz.drawable.TAG.mark in drawable.tags {
-        pieces.push(cetz.path-util.bounds(drawable.segments))
-      } else {
-        for (start, _, commands) in drawable.segments {
-          for command in commands {
-            pieces.push(cetz.path-util.bounds(((start, false, (command,)),)))
-            start = command.last()
+// Each group starts from the same context; candidate arrows must not inherit
+// another candidate's styles, named anchors or coordinate state.
+#let _annotation-bounds(ctx, groups) = {
+  let results = ()
+  for group in groups {
+    let painted = cetz.process.many(ctx, group.flatten(), compute-bounds: false)
+    let arrow-bounds = ()
+    for drawable in painted.drawables {
+      if cetz.drawable.TAG.hidden in drawable.tags { continue }
+      if drawable.type == "path" and drawable.at("stroke", default: none) == none and drawable.at("fill", default: none) == none { continue }
+      let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+      let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
+      let pieces = ()
+      if drawable.type == "path" {
+        if cetz.drawable.TAG.mark in drawable.tags {
+          pieces.push(cetz.path-util.bounds(drawable.segments))
+        } else {
+          for (start, _, commands) in drawable.segments {
+            for command in commands {
+              pieces.push(cetz.path-util.bounds(((start, false, (command,)),)))
+              start = command.last()
+            }
           }
         }
+      } else if drawable.type == "content" {
+        let (x, y, _) = drawable.pos
+        pieces.push(((x - drawable.width / 2, y - drawable.height / 2),
+          (x + drawable.width / 2, y + drawable.height / 2)))
       }
-    } else if drawable.type == "content" {
-      let (x, y, _) = drawable.pos
-      pieces.push(((x - drawable.width / 2, y - drawable.height / 2),
-        (x + drawable.width / 2, y + drawable.height / 2)))
+      for points in pieces {
+        if points.len() == 0 { continue }
+        let xs = ()
+        let ys = ()
+        for point in points { xs.push(point.at(0)); ys.push(point.at(1)) }
+        arrow-bounds.push((
+          left: calc.min(..xs) - radius,
+          right: calc.max(..xs) + radius,
+          bottom: calc.min(..ys) - radius,
+          top: calc.max(..ys) + radius,
+        ))
+      }
     }
-    for points in pieces {
-      if points.len() == 0 { continue }
-      let xs = ()
-      let ys = ()
-      for point in points { xs.push(point.at(0)); ys.push(point.at(1)) }
-      arrow-bounds.push((
-        left: calc.min(..xs) - radius,
-        right: calc.max(..xs) + radius,
-        bottom: calc.min(..ys) - radius,
-        top: calc.max(..ys) + radius,
-      ))
-    }
+    results.push(arrow-bounds)
   }
-  arrow-bounds
+  results
 }
 
 // Flatten only the finite attachment geometry. Affine transformation happens
@@ -2195,7 +2201,7 @@
       } else { 0 }
     }
     let path-shift = at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift }
-    let arrow-bounds = ()
+    let annotation-elements = ()
     let attachment-lines = options.lines
     if attached != none {
       let arrow-style = attached + (offset: 0, offset-side: none, shift: path-shift)
@@ -2206,9 +2212,7 @@
         attachment-lines = _label-path-lines(ctx, arrow-path, accuracy) + carrier-lines
       }
       if placement {
-        arrow-bounds = _annotation-bounds(ctx, _derived-path-elements(
-          arrow-path, arrow-style, auto, true, true,
-        ).elements)
+        annotation-elements = _derived-path-elements(arrow-path, arrow-style, auto, true, true).elements
       }
     }
     let normal-offset = if clear-box and fixed-position == none {
@@ -2235,7 +2239,7 @@
       side: candidate-side,
       path-index: path-index,
       path-shift: path-shift,
-      arrow-bounds: arrow-bounds,
+      annotation-elements: annotation-elements,
       corners: bounds,
       bounds: if base != none and position == base.position { base.bounds } else {
         let xs = ()
@@ -2282,13 +2286,24 @@
       candidates.push(candidate-at(path-index, at, sampled-frame: sampled-frame, base: base))
     }
   }
+  let footprints = if placement and attached != none {
+    _annotation-bounds(ctx, candidates.map(candidate => candidate.annotation-elements))
+  } else { candidates.map(_ => ()) }
+  for i in range(candidates.len()) {
+    let candidate = candidates.at(i)
+    let _ = candidate.remove("annotation-elements")
+    candidate.arrow-bounds = footprints.at(i)
+    candidates.at(i) = candidate
+  }
   if attached == none and sides.len() == 2 {
     let count = calc.quo(candidates.len(), 2)
     candidates = range(count).map(i => (candidates.at(i), candidates.at(i + count))).flatten()
   }
   if placement {
-    (label: label, style: label-style, candidates: candidates, edge: data.at("eid", default: none), paths: paths, path-style: attached,
-      candidate-at: candidate-at, ranges: path-options.map(options => (options.low, options.high)))
+    (
+      label: label, style: label-style, candidates: candidates,
+      edge: data.at("eid", default: none), paths: paths, path-style: attached,
+    )
   } else {
     cetz.draw.content(candidates.first().position, label, padding: 0, ..label-style)
   }
@@ -4053,7 +4068,7 @@
                 and _style-value(style, "offset") != 0
                 and (_style-value(style, "length") != none or _style-value(style, "ratio") != none)
             )) {
-              fixed-arrows += _annotation-bounds(ctx, elements.slice(layer-start))
+              fixed-arrows += _annotation-bounds(ctx, (elements.slice(layer-start),)).first()
             } else {
               edge-layers.push((ctx: ctx, elements: elements.slice(layer-start)))
             }

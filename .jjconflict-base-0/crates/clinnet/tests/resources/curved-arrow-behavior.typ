@@ -1557,8 +1557,15 @@
         (stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1),
         auto, true, true,
       ).elements
-      let fixed-bounds = drawing._annotation-bounds(native, fixed-paint)
+      let fixed-bounds = drawing._annotation-bounds(native, (fixed-paint,)).first()
       assert(fixed-bounds.len() >= 2, message: "fixed arrows retain shaft and marker footprints")
+      let shifted-paint = (cetz.draw.translate((10, 0)), fixed-paint)
+      let grouped-bounds = drawing._annotation-bounds(native, (shifted-paint, fixed-paint, cetz.draw.hide(fixed-paint.flatten())))
+      assert.eq(grouped-bounds.at(1), fixed-bounds, message: "candidate groups do not inherit another arrow's transform")
+      assert.eq(grouped-bounds.at(2), (), message: "hidden candidate groups remain empty")
+      assert.eq(grouped-bounds.first(), drawing._annotation-bounds(native, (shifted-paint,)).first(),
+        message: "batched and individual candidate footprints agree")
+
       let avoiding-fixed = drawing._relax-label-placements((pair,), (), label-padding: 0, fixed-arrows: fixed-bounds).first()
       assert.ne(avoiding-fixed.path-shift, first.path-shift, message: "a fixed standalone arrow moves the paired annotation")
       let fixed-pair = (candidates: ((bounds: (left: 100, right: 101, bottom: 100, top: 101), arrow-bounds: fixed-bounds, cost: 0),))
@@ -1567,7 +1574,7 @@
         drawing._relax-label-placements((pair, fixed-pair), (), label-padding: 0).first().position,
         message: "fixed and pinned annotation arrows have identical collision clearance",
       )
-      assert.eq(drawing._annotation-bounds(native, cetz.draw.hide(fixed-paint.flatten())), (), message: "hidden arrow geometry is not an obstacle")
+      assert.eq(drawing._annotation-bounds(native, (cetz.draw.hide(fixed-paint.flatten()),)).first(), (), message: "hidden arrow geometry is not an obstacle")
 
       let blocker-label = drawing._layer-label-element(
         native, carrier, (label: box(width: 2pt, height: 2pt, fill: black)), none, (eid: 1),

@@ -394,15 +394,22 @@ impl ImpredLayout {
     fn point_segments(&self, model: &Model) -> Vec<PointSegment> {
         let mut result =
             Vec::with_capacity(self.positions.len().saturating_sub(2) * model.segments.len());
+        let geometry: Vec<_> = model
+            .segments
+            .iter()
+            .map(|segment| {
+                let a = self.point(segment.a);
+                let ab = self.point(segment.b) - a;
+                (a, ab, ab.magnitude2().max(1e-20))
+            })
+            .collect();
         for point in 0..self.positions.len() {
             for (index, segment) in model.segments.iter().enumerate() {
                 if point == segment.a || point == segment.b {
                     continue;
                 }
-                let a = self.point(segment.a);
-                let ab = self.point(segment.b) - a;
-                let t =
-                    ((self.point(point) - a).dot(ab) / ab.magnitude2().max(1e-20)).clamp(0.0, 1.0);
+                let (a, ab, squared) = geometry[index];
+                let t = ((self.point(point) - a).dot(ab) / squared).clamp(0.0, 1.0);
                 let difference = self.point(point) - (a + t * ab);
                 let distance = difference.magnitude();
                 result.push(PointSegment {
@@ -448,18 +455,22 @@ impl ImpredLayout {
         let mut force = vec![Vector2::zero(); self.positions.len()];
         // Visit each symmetric pair once, while each point still accumulates
         // neighbors in ascending order (including its original diagonal term).
+        // Every finite self-pair has the same zero displacement and weight.
+        // Keep its addition (and exceptional coefficient values) in order, but
+        // evaluate the shared power only once per epoch.
+        let diagonal =
+            config.repulsion * (0.0 * (config.target / (config.target * 0.02)).powf(rep_exponent));
         for i in 0..self.positions.len() {
-            for j in i..self.positions.len() {
+            force[i] += diagonal * Vector2::zero();
+            for j in i + 1..self.positions.len() {
                 let difference = self.point(i) - self.point(j);
                 let coefficient = model.pair_weights[i][j]
                     * (config.target / difference.magnitude().max(config.target * 0.02))
                         .powf(rep_exponent);
                 force[i] += config.repulsion * coefficient * difference;
-                if i != j {
-                    // Recompute the reversed difference rather than negating:
-                    // equal coordinates can carry different signed zeros.
-                    force[j] += config.repulsion * coefficient * (self.point(j) - self.point(i));
-                }
+                // Recompute the reversed difference rather than negating:
+                // equal coordinates can carry different signed zeros.
+                force[j] += config.repulsion * coefficient * (self.point(j) - self.point(i));
             }
         }
         for (total, attraction) in
@@ -526,10 +537,16 @@ impl ImpredLayout {
     }
 
     fn separators(&self, model: &Model, pairs: &[PointSegment]) -> Vec<Halfplane> {
-        let mut lengths: Vec<_> = model
+        let mut lengths = Vec::with_capacity(model.segments.len());
+        let perpendiculars: Vec<_> = model
             .segments
             .iter()
-            .map(|s| (self.point(s.b) - self.point(s.a)).magnitude())
+            .map(|segment| {
+                let vector = self.point(segment.b) - self.point(segment.a);
+                let length = vector.magnitude();
+                lengths.push(length);
+                Vector2::new(-vector.y, vector.x) / length.max(1e-30)
+            })
             .collect();
         lengths.sort_by(f64::total_cmp);
         let median = if lengths.is_empty() {
@@ -544,8 +561,7 @@ impl ImpredLayout {
         let mut rows = Vec::with_capacity(3 * pairs.len() + count * count.saturating_sub(1));
         for pair in pairs {
             let segment = model.segments[pair.segment];
-            let vector = self.point(segment.b) - self.point(segment.a);
-            let perpendicular = Vector2::new(-vector.y, vector.x) / vector.magnitude().max(1e-30);
+            let perpendicular = perpendiculars[pair.segment];
             let signed = (self.point(pair.point) - self.point(segment.a)).dot(perpendicular);
             let interior = pair.t > 0.0 && pair.t < 1.0;
             let normal = if interior {
