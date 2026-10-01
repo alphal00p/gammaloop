@@ -24,7 +24,7 @@ cd vakint-quickstart
 cargo add vakint \
   --git https://github.com/alphal00p/gammaloop.git \
   --rev 6a09acd2a310b40332e5c22042a468bc18876ce5
-cargo add symbolica@3.0.0 --no-default-features
+cargo add symbolica@3.0.1 --no-default-features
 ```
 
 Replace `src/main.rs` with:

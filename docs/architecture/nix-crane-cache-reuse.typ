@@ -1452,6 +1452,13 @@ unit and it is also the terminal consumer\'s first context. The Python
 inventories remain separate because PyO3 stub registration uses a
 process-wide inventory.
 
+The terminal source set also carries Spenso's packaged tensor stub alongside
+its documentation snapshot, so the isolated exporter validates both copies.
+FeynKit's amplitude Rust reference is included in the terminal route assertions;
+its compile-time tests receive the existing model fixture directory through the
+per-package extra-source map. These inputs extend their owning package and
+documentation closures without changing the reusable producer partition.
+
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
 same relative Cargo target, compile-time Symbolica setting,
@@ -1462,14 +1469,14 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
-The terminal documentation derivation tests `linnet-py` in a virtual
+The terminal documentation derivation tests Python `linnet` in a virtual
 environment based on a Nix-composed Python that includes `typst-py`
 0.15.0. System site packages keep that wheel dependency available to
-the offline installer. `linnet-py` embeds its pinned CeTZ and oxifmt
+the offline installer. The `linnet` extension embeds its pinned CeTZ and oxifmt
 package trees and passes the staged copy to its in-process compiler, so
 its graph renderer never requires a network fetch or the documentation
 package cache. The terminal Python environment uses the same pinned docs
-package set to satisfy `linnet-py`'s exact `typst==0.15.0` dependency. Both
+package set to satisfy Python `linnet`'s exact `typst==0.15.0` dependency. Both
 Cargo and uv dependency resolution run offline; a mismatched Python package
 must fail locally instead of attempting a download inside the Nix sandbox.
 The broader documentation renderer still receives the package tree from
@@ -1754,7 +1761,7 @@ The latest Pages tree and the immutable snapshot fixture are now separate,
 independently cacheable terminal derivations over the same Cargo producer.
 The lightweight full documentation check consumes both completed trees,
 installs them through the Pages history updater, and asserts the latest and
-snapshot routes for all five products together with the portal, developer
+snapshot routes for all six products together with the portal, developer
 pages, and generated API material. The manual NixCI graph orders both render
 jobs after the shared documentation Cargo artifact and orders the merge check
 after both renders, preventing concurrent consumers from rebuilding the same
