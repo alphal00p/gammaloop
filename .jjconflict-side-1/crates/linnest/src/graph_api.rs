@@ -595,6 +595,7 @@ pub fn graph_impred_layout_bytes(
         ("contract-chord-ratio", "contract_chord_ratio"),
         ("edge-clearance", "edge_clearance"),
         ("node-edge-strength", "node_edge_strength"),
+        ("level", "level"),
     ] {
         if let Some(value) = options.get(format!("impred-{option}")) {
             settings[field] = value.clone();

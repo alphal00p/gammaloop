@@ -29,12 +29,15 @@ pub struct ImpredConfig {
     pub contract_chord_ratio: f64,
     pub edge_clearance: f64,
     pub node_edge_strength: f64,
+    /// Rotate the drawing to its external-pull optimum at every refinement
+    /// checkpoint. Overdamped forces turn a whole drawing only very slowly.
+    pub level: bool,
 }
 
 impl Default for ImpredConfig {
     fn default() -> Self {
         Self {
-            steps: 1500,
+            steps: 500,
             step_scale: 2,
             target: 2.4,
             repulsion: 2.5,
@@ -47,6 +50,7 @@ impl Default for ImpredConfig {
             contract_chord_ratio: 1.25,
             edge_clearance: 0.4,
             node_edge_strength: 4.0,
+            level: true,
         }
     }
 }
@@ -111,6 +115,16 @@ impl ImpredConfig {
 pub enum ExternalFlow {
     Incoming,
     Outgoing,
+}
+
+impl ExternalFlow {
+    /// Signed mixed-flow pull: incoming tips go left, outgoing tips right.
+    fn horizontal(self, pull: f64) -> f64 {
+        match self {
+            Self::Incoming => -pull,
+            Self::Outgoing => pull,
+        }
+    }
 }
 
 /// A dense, portable view of existing native layout coordinates.
@@ -536,27 +550,14 @@ impl ImpredLayout {
                 force[segment.b] -= pair.t * repulsion;
             }
         }
-        let mixed = self.external.contains(&Some(ExternalFlow::Incoming))
-            && self.external.contains(&Some(ExternalFlow::Outgoing));
-        let center = self
-            .node_points
-            .iter()
-            .map(|&point| self.point(point))
-            .fold(Vector2::zero(), |a, b| a + b)
-            / (self.node_points.len().max(1) as f64);
+        let mixed = self.mixed_flow();
+        let center = self.node_center();
         let mut reaction = Vector2::zero();
         for (edge, flow) in self.external.iter().enumerate() {
             if let Some(flow) = flow {
                 let anchor = self.anchor_points[edge];
                 let outward = if mixed {
-                    Vector2::new(
-                        if *flow == ExternalFlow::Incoming {
-                            -pull[edge]
-                        } else {
-                            pull[edge]
-                        },
-                        0.0,
-                    )
+                    Vector2::new(flow.horizontal(pull[edge]), 0.0)
                 } else {
                     let vector = self.point(anchor) - center;
                     let length = vector.magnitude();
@@ -687,6 +688,86 @@ impl ImpredLayout {
             }
         }
         rows
+    }
+
+    fn mixed_flow(&self) -> bool {
+        self.external.contains(&Some(ExternalFlow::Incoming))
+            && self.external.contains(&Some(ExternalFlow::Outgoing))
+    }
+
+    fn node_center(&self) -> Vector2<f64> {
+        self.node_points
+            .iter()
+            .map(|&point| self.point(point))
+            .fold(Vector2::zero(), |a, b| a + b)
+            / (self.node_points.len().max(1) as f64)
+    }
+
+    /// A rigid rotation respects only free axes and directed groups that
+    /// reference their own point; pins and alignments fix the drawing frame.
+    fn levelable(&self) -> bool {
+        self.mixed_flow()
+            && !self.nodes_fixed
+            && !self.node_points.is_empty()
+            && self.constraints.iter().enumerate().all(|(index, record)| {
+                !record.fixed_axes.iter().any(|fixed| *fixed)
+                    && record.constraints.iter().all(|axis| match axis {
+                        AxisConstraint::Free => true,
+                        AxisConstraint::Fixed => false,
+                        AxisConstraint::Grouped { point, .. } => *point == index,
+                    })
+            })
+    }
+
+    /// Rotation about the physical-vertex centroid c that minimizes the
+    /// horizontal pull potential -Σ F·(r - c) = -(A cos θ - B sin θ).
+    fn pull_rotation(&self, pull: &[f64]) -> f64 {
+        let center = self.node_center();
+        let (mut along, mut across) = (0.0, 0.0);
+        for ((flow, &anchor), &pull) in self.external.iter().zip(&self.anchor_points).zip(pull) {
+            if let Some(flow) = flow {
+                let force = flow.horizontal(pull);
+                let offset = self.point(anchor) - center;
+                along += force * offset.x;
+                across += force * offset.y;
+            }
+        }
+        -across.atan2(along)
+    }
+
+    /// Every force other than the pull depends only on distances, so the pull
+    /// rotation is the exact optimum of the rotation mode. Halve the angle
+    /// until directed coordinates keep their movement margins and the crossing
+    /// witnesses still hold.
+    fn level(&mut self, pull: &[f64], dofs: &MovementDofs, initial: &Geometry) {
+        let angle = self.pull_rotation(pull);
+        if !angle.is_finite() || angle == 0.0 {
+            return;
+        }
+        let center = self.node_center();
+        let original = self.positions.clone();
+        for halving in 0..12 {
+            let (sin, cos) = (angle * 0.5_f64.powi(halving)).sin_cos();
+            for (point, &start) in self.positions.iter_mut().zip(&original) {
+                let offset = Vector2::from(start) - center;
+                *point = (center
+                    + Vector2::new(
+                        cos * offset.x - sin * offset.y,
+                        sin * offset.x + cos * offset.y,
+                    ))
+                .into();
+            }
+            if dofs.validate(&self.positions).is_ok()
+                && dofs
+                    .sign_rows(&self.positions)
+                    .iter()
+                    .all(|row| row.bound >= 0.0)
+                && self.geometry().certify(initial).is_ok()
+            {
+                return;
+            }
+        }
+        self.positions = original;
     }
 
     fn protected(&self, point: usize) -> bool {
@@ -979,6 +1060,10 @@ impl ImpredLayout {
             dofs.validate(&self.positions)?;
             report.iterations += 1;
             if epoch % 25 == 0 || epoch + 1 == config.steps {
+                // Refinement can pin new samples, so eligibility is rechecked.
+                if config.level && self.levelable() {
+                    self.level(&pull, &dofs, &initial);
+                }
                 self.geometry().certify(&initial)?;
                 report.geometry_checks += 1;
                 if epoch % 100 == 0 || epoch + 1 == config.steps {
@@ -1262,6 +1347,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn levelling_reaches_the_external_pull_optimum_within_constraints() {
+        let fixture: Fixture = serde_json::from_str(FIXTURES[3].1).unwrap();
+        let config = ImpredConfig {
+            steps: 200,
+            ..fixture.config
+        };
+        let pull: Vec<_> = fixture
+            .layout
+            .pull_scales
+            .iter()
+            .map(|scale| config.pull * config.target * scale.powf(config.pull_balance))
+            .collect();
+        // Tilt the drawing together with its directed references. Overdamped
+        // forces alone do not turn it back within a short schedule.
+        let (sin, cos) = 25_f64.to_radians().sin_cos();
+        let turn = |[x, y]: [f64; 2]| [cos * x - sin * y, sin * x + cos * y];
+        let mut tilted = fixture.layout;
+        for point in &mut tilted.positions {
+            *point = turn(*point);
+        }
+        for record in &mut tilted.constraints {
+            record.reference = turn(record.reference);
+        }
+        assert!(tilted.levelable());
+
+        let mut drifting = tilted.clone();
+        drifting
+            .solve(ImpredConfig {
+                level: false,
+                ..config
+            })
+            .unwrap();
+        let residual = drifting.pull_rotation(&pull);
+        assert!(residual.abs() > 1_f64.to_radians(), "residual {residual}");
+
+        let mut levelled = tilted.clone();
+        levelled
+            .solve(ImpredConfig {
+                level: true,
+                ..config
+            })
+            .unwrap();
+        let residual = levelled.pull_rotation(&pull);
+        assert!(residual.abs() < 1e-9, "residual {residual}");
+
+        // Shared-coordinate external groups define the drawing frame.
+        let aligned: Fixture = serde_json::from_str(FIXTURES[2].1).unwrap();
+        assert!(!aligned.layout.levelable());
     }
 
     #[test]

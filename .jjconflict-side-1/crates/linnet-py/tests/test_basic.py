@@ -3126,6 +3126,24 @@ class TestTypedTypstSurface(unittest.TestCase):
                 with self.assertRaises((TypeError, ValueError)):
                     lp.LayoutOptions().then(impred_step_scale=value)
 
+    def test_impred_level_is_typed_and_preserved_across_passes(self):
+        layouts = lp.LayoutOptions(
+            algorithm=lp.LayoutAlgorithm.Impred, impred_level=False
+        ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_level=True)
+        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
+        source = graph.prepare_render().typst_source
+        for value in ("false", "true"):
+            self.assertIn(f'("impred-level"): {value}', source)
+        self.assertEqual(source.count('("impred-level"):'), 2)
+        for constructor in (lp.LayoutOptions, lp.LayoutOptions.then):
+            self.assertIn("impred_level", inspect.signature(constructor).parameters)
+        for value in (1, 0.0, "true"):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions(impred_level=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions().then(impred_level=value)
+
     def test_impred_step_scale_zero_is_rejected_by_shared_solver(self):
         graph, _, _, _ = sample_graph(
             render_config=lp.RenderConfig(

@@ -1044,6 +1044,15 @@
   nominal ticks. `impred-step-scale: 1` retains the reference schedule, while
   the default `2` reduces work with small numerical layout differences.
 
+  Distance-based forces cannot turn a drawing, and the weak outward pull turns
+  it only slowly; a long schedule mostly waits for that rotation. With mixed
+  incoming and outgoing legs, `impred-level` therefore rotates the whole drawing
+  about its vertex centroid to the exact external-pull optimum at every
+  refinement checkpoint, so the legs settle horizontally and the default budget
+  is `500` steps. A rotation is halved until directed coordinates and crossing
+  witnesses remain valid. Pinned or aligned coordinates define the frame and
+  skip levelling; `impred-level: false` restores the unrotated schedule.
+
   #table(
     columns: (auto, auto, 1fr),
     [Option], [Default], [Meaning],
@@ -1059,8 +1068,9 @@
     [`impred-contract-chord-ratio`], [`1.25`], [External contraction threshold; must be below the split threshold.],
     [`impred-edge-clearance`], [`0.4`], [Node-to-edge clearance scale.],
     [`impred-node-edge-strength`], [`4`], [Node-to-edge force multiplier.],
-    [`impred-steps`], [`1500`], [Nominal cooling budget.],
+    [`impred-steps`], [`500`], [Nominal cooling budget.],
     [`impred-step-scale`], [`2`], [Positive maximum integration stride; `1` uses the reference schedule.],
+    [`impred-level`], [`true`], [Rotate mixed-flow drawings to the external-pull optimum at checkpoints.],
   )
 
   The same names work through CLI input overrides:

@@ -527,10 +527,14 @@
   /// both modes. -> float
   length-scale: 0.35,
   /// ImPrEd nominal cooling budget; accelerated integration can use fewer solves. -> int
-  impred-steps: 1500,
+  impred-steps: 500,
   /// Maximum virtual-iteration stride after the first 20% of fine steps.
   /// Must be positive; 1 retains the reference integration schedule. -> int
   impred-step-scale: 2,
+  /// Rotate the drawing to its external-pull optimum at every refinement
+  /// checkpoint, levelling mixed incoming/outgoing legs. Pinned or aligned
+  /// coordinates keep their frame. -> bool
+  impred-level: true,
   /// ImPrEd target route spacing. -> float
   impred-spacing: 2.4,
   /// ImPrEd point repulsion multiplier. -> float
@@ -709,6 +713,7 @@
     let options = (
       impred-steps: impred-steps,
       impred-step-scale: impred-step-scale,
+      impred-level: impred-level,
       impred-spacing: impred-spacing,
       impred-repulsion: impred-repulsion,
       impred-attraction: impred-attraction,
