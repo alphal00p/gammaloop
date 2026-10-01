@@ -1,6 +1,7 @@
 """Tensor API contracts against the installed extension and native compiler."""
 
 import copy
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,113 @@ class TensorOperationsTests(unittest.TestCase):
             [self.x, E("1"), E("0"), self.x + 1] if symbolic else [1.0, 2.0, 3.0, 4.0]
         )
         return sp.Tensor.dense(self.A(self.rep, self.rep), values)
+
+    def test_slot_constructor_reuses_supported_index_labels(self):
+        source = self.A(self.rep)
+        scope = S("api_operations::slot_scope")
+        scoped = source("i").wrap_indices(scope).axes[0].index
+        for rep, dimension, dual in (
+            (self.rep, 2, False),
+            (sp.Representation.cof(3), 3, True),
+        ):
+            representation = rep.dual() if dual else rep
+            descriptor = self.A(representation)
+            for label in (E("7"), E("-7"), E("gammalooprs::hedge(2,1)"), scoped):
+                with self.subTest(label=label, dual=dual):
+                    admitted = descriptor(label)
+                    slot = sp.Slot(rep.name.name, dimension, label, dual=dual)
+                    self.assertEqual(slot, admitted.axes[0])
+                    self.assertEqual(self.A(slot), admitted)
+                    self.assertEqual(slot.index, label)
+
+        tensor = sp.Tensor.dense(source, [E("2"), E("3")])
+        slot = sp.Slot(self.rep.name.name, 2, scoped)
+        norm = (tensor(slot) * tensor(slot)).to_tensor()
+        self.assertEqual(norm.scalar(), E("13"))
+
+    def test_metric_helpers_reuse_supported_index_labels(self):
+        source = self.A(self.rep)
+        scoped = (
+            source("i").wrap_indices(S("api_operations::metric_scope")).axes[0].index
+        )
+        reference = S("api_operations::metric_reference")
+        for method in (self.rep.g, self.rep.flat, self.rep.id):
+            original = method(reference, "j")
+            for label in (E("7"), E("gammalooprs::hedge(2,1)"), scoped):
+                with self.subTest(method=method.__name__, label=label):
+                    expected = original.rename_indices({reference: label})
+                    result = method(label, "j")
+                    self.assertEqual(result, expected)
+                    self.assertEqual(
+                        result.to_expression(),
+                        original.to_expression().replace(reference, label),
+                    )
+                    self.assertEqual(
+                        [axis.index for axis in result.axes],
+                        [label, self.rep("j").index],
+                    )
+
+    def test_numeric_index_admission_preserves_identity_and_contractions(self):
+        source = self.A(self.rep)
+        reference = source("reference")
+        original = reference.axes[0].index
+        maximum = 2 * sys.maxsize + 1
+        labels = (
+            7,
+            2**31,
+            -(2**31),
+            2**32 + 7,
+            sys.maxsize,
+            sys.maxsize + 1,
+            -sys.maxsize - 1,
+            maximum,
+            -maximum,
+        )
+        library = sp.TensorLibrary.hep_lib_atom()
+        library.register(sp.Tensor.dense(source, [E("2"), E("3")]))
+        for label in labels:
+            if abs(label) > maximum:
+                continue
+            encoded = E(str(label))
+            raw = reference.to_expression().replace(original, encoded)
+            for value in (source(label), source(encoded), sp.TensorExpression(raw)):
+                with self.subTest(label=label, expression=value.to_expression()):
+                    self.assertEqual(value.axes[0].index, encoded)
+                    self.assertEqual(value.to_expression(), raw)
+                    self.assertEqual(sp.TensorExpression(raw).axes, value.axes)
+                    self.assertEqual(self.rep(label).index, encoded)
+                    product = value * source(7)
+                    self.assertEqual(product.rank, 0 if label == 7 else 2)
+                    components = product.to_tensor(library)
+                    self.assertEqual(
+                        components[:],
+                        [E("13")] if label == 7 else [E("4"), E("6"), E("6"), E("9")],
+                    )
+
+    def test_numeric_index_admission_rejects_lossy_rationals_and_overflow(self):
+        source = self.A(self.rep)
+        reference = source("reference")
+        original = reference.axes[0].index
+        beyond_range = 2 * sys.maxsize + 2
+        for label in (beyond_range, -beyond_range):
+            with self.assertRaises(ValueError):
+                source(label)
+        for spelling in (
+            "65537/2",
+            "1/65536",
+            "-1/2",
+            "1+𝑖",
+            str(beyond_range),
+            str(-beyond_range),
+        ):
+            encoded = E(spelling)
+            with self.subTest(label=spelling):
+                with self.assertRaises(ValueError):
+                    source(encoded)
+                with self.assertRaises(ValueError):
+                    sp.TensorExpression(
+                        reference.to_expression().replace(original, encoded)
+                    )
 
     def test_named_builtin_factories_preserve_heads_and_patterns(self):
         for api, dimensions, indices, head in (

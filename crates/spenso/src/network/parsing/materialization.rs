@@ -49,7 +49,10 @@ use crate::{
     structure::{
         HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
         representation::{LibraryRep, Representation},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
+        slot::{
+            AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatch,
+            SlotMatcher,
+        },
     },
 };
 use eyre::eyre;
@@ -724,6 +727,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
                 factor,
                 &left.to_atom(),
                 &right.dual().to_atom(),
+                &mut self.matcher.borrow_mut(),
             );
             left = right;
             factor
@@ -1030,6 +1034,7 @@ where
                 *factor,
                 &left.to_atom(),
                 &right.dual().to_atom(),
+                &mut state.matcher.borrow_mut(),
             );
             let factor = if factor_schoonschip_mode.any() {
                 SchoonschipMaterializer::<Aind, _>::with_mode(&state, factor_schoonschip_mode)
@@ -1131,7 +1136,12 @@ where
             .map(|(position, factor)| {
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
-                let factor = ChainExpansion::replace_placeholders(*factor, &left, &right);
+                let factor = ChainExpansion::replace_placeholders(
+                    *factor,
+                    &left,
+                    &right,
+                    &mut state.matcher.borrow_mut(),
+                );
                 if factor_schoonschip_mode.any() {
                     SchoonschipMaterializer::<Aind, _>::with_mode(&state, factor_schoonschip_mode)
                         .materialize_shorthand(factor.as_view())
@@ -1238,30 +1248,38 @@ impl ChainExpansion {
     /// Nested chain/trace heads are rejected before lowering, so the complete
     /// factor belongs to the current placeholder consumer. This walk only
     /// substitutes its selected endpoints and never allocates dummies.
+    /// Explicit slots and compact representations are opaque: their index labels
+    /// and dimensions never designate contextual endpoints.
     pub(super) fn replace_placeholders(
         value: AtomView<'_>,
         chain_in: &Atom,
         chain_out: &Atom,
+        slots: &mut SlotMatcher,
     ) -> Atom {
+        if !matches!(slots.classify(value), SlotMatch::Other) {
+            return value.to_owned();
+        }
         match value {
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
             AtomView::Fun(fun) => {
                 let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
                 for arg in fun.iter() {
-                    rebuilt = rebuilt.add_arg(Self::replace_placeholders(arg, chain_in, chain_out));
+                    rebuilt = rebuilt
+                        .add_arg(Self::replace_placeholders(arg, chain_in, chain_out, slots));
                 }
                 rebuilt.finish()
             }
             AtomView::Add(add) => add.iter().fold(Atom::Zero, |sum, term| {
-                sum + Self::replace_placeholders(term, chain_in, chain_out)
+                sum + Self::replace_placeholders(term, chain_in, chain_out, slots)
             }),
             AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
-                product * Self::replace_placeholders(factor, chain_in, chain_out)
+                product * Self::replace_placeholders(factor, chain_in, chain_out, slots)
             }),
             AtomView::Pow(pow) => {
                 let (base, exponent) = pow.get_base_exp();
-                Self::replace_placeholders(base, chain_in, chain_out).pow(exponent.to_owned())
+                Self::replace_placeholders(base, chain_in, chain_out, slots)
+                    .pow(exponent.to_owned())
             }
             _ => value.to_owned(),
         }
@@ -1287,6 +1305,33 @@ mod tests {
 
     fn compact_vector(name: Symbol) -> Atom {
         function!(name, mink4().to_symbolic([]))
+    }
+
+    #[test]
+    fn index_reservation_copies_admitted_labels_without_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let label = symbolica::symbol!(
+            "reservation_callback_label",
+            tag = &SPENSO_TAG.index,
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let index = function!(label, 13, 1);
+        let source = function!(
+            SPENSO_TAG.tensor_symbol("reservation_callback_tensor"),
+            mink4().to_symbolic([index.clone()])
+        );
+        let state = ParseState::<AbstractIndex>::default();
+        calls.store(0, Ordering::Relaxed);
+        state.reserve_indices(source.as_view());
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(state.reserved_indices.borrow().contains(&index));
     }
 
     #[test]
@@ -1640,6 +1685,30 @@ mod tests {
     }
 
     #[test]
+    fn placeholder_replacement_keeps_explicit_slot_payloads_opaque() {
+        let input = mink4().to_symbolic([Atom::num(47)]);
+        let output = mink4().to_symbolic([Atom::num(53)]);
+        let head = SPENSO_TAG.tensor_symbol("placeholder_opaque_tensor");
+        for index in [
+            AbstractIndex::from(SPENSO_TAG.chain_in),
+            AbstractIndex::Normal(59).scoped(SPENSO_TAG.chain_out),
+        ] {
+            let spectator = mink4().to_symbolic([index.to_atom()]);
+            let factor = function!(head, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, &spectator);
+            let expected = function!(head, &input, &output, &spectator);
+            assert_eq!(
+                ChainExpansion::replace_placeholders(
+                    factor.as_view(),
+                    &input,
+                    &output,
+                    &mut SlotMatcher::default(),
+                ),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn placeholder_replacement_descends_through_factor_wrappers() {
         let representation = mink4();
         let factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("nested_scope_factor"))
@@ -1664,7 +1733,12 @@ mod tests {
             .finish();
 
         assert_eq!(
-            ChainExpansion::replace_placeholders(wrapped.as_view(), &outer_input, &outer_output),
+            ChainExpansion::replace_placeholders(
+                wrapped.as_view(),
+                &outer_input,
+                &outer_output,
+                &mut SlotMatcher::default(),
+            ),
             expected
         );
     }
@@ -1691,7 +1765,12 @@ mod tests {
         let expected = Atom::num(3) * expected_factor;
 
         assert_eq!(
-            ChainExpansion::replace_placeholders(product.as_view(), &outer_input, &outer_output),
+            ChainExpansion::replace_placeholders(
+                product.as_view(),
+                &outer_input,
+                &outer_output,
+                &mut SlotMatcher::default(),
+            ),
             expected
         );
     }

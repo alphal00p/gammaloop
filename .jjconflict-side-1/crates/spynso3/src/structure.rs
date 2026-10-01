@@ -8,7 +8,7 @@ use pyo3::{
     exceptions::{self, PyTypeError, PyValueError},
     prelude::*,
     pybacked::PyBackedStr,
-    types::{PyAny, PyDict, PyTuple},
+    types::{PyAny, PyDict, PyInt, PyTuple},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -1128,6 +1128,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToAbstractIndex {
             }
         } else if let Ok(i) = aind.extract::<isize>() {
             ConvertibleToAbstractIndex::Aind(i.into())
+        } else if aind.is_instance_of::<PyInt>() {
+            let expression = aind.extract::<ConvertibleToExpression>()?.to_expression();
+            let index = AbstractIndex::try_from(expression.expr.as_view())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            ConvertibleToAbstractIndex::Aind(index)
         } else if let Ok(expr) = aind.extract::<PythonExpression>() {
             match expr.expr.as_view() {
                 AtomView::Var(v) => {
@@ -1140,7 +1145,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToAbstractIndex {
             ConvertibleToAbstractIndex::Aind(AbstractIndex::Symbol(id.into()))
         } else {
             return Err(PyTypeError::new_err(
-                "Argument must be convertible to an index (int, str, Symbol), an Expression,, or the separator ';'",
+                "Argument must be an index label (int, str, or Expression), or the separator ';'",
             ));
         };
 
@@ -1149,7 +1154,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToAbstractIndex {
 }
 
 #[cfg(feature = "python_stubgen")]
-impl_stub_type!(ConvertibleToAbstractIndex = isize | Symbol | PyBackedStr);
+impl_stub_type!(ConvertibleToAbstractIndex = isize | PythonExpression | PyBackedStr);
 
 pub struct ConvertibleToDimension(pub(crate) Dimension);
 
@@ -1164,7 +1169,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
                 AtomView::Var(v) => v.get_symbol(),
                 _ => {
                     return Err(exceptions::PyTypeError::new_err(
-                        "Only symbols can be abstract indices",
+                        "Symbolic dimensions must be single symbols",
                     ));
                 }
             };
@@ -1469,7 +1474,8 @@ impl SpensoRepresentation {
     /// Parameters
     /// ----------
     /// i, j : int, str, or Expression
-    ///     Abstract index labels. Expressions must be individual symbols.
+    ///     Abstract index labels accepted by the shared tensor-structure parser,
+    ///     including numeric, symbolic, tagged named, and scoped indices.
     ///
     /// Returns
     /// -------
@@ -1493,18 +1499,14 @@ impl SpensoRepresentation {
         i: ConvertibleToAbstractIndex,
         j: ConvertibleToAbstractIndex,
     ) -> PyResult<Py<TensorExpression>> {
-        match (i, j) {
-            (ConvertibleToAbstractIndex::Aind(i), ConvertibleToAbstractIndex::Aind(j)) => {
-                let structure = ShadowedStructure::<AbstractIndex>::from_iter(
-                    [self.representation.slot(i), self.representation.slot(j)],
-                    ETS.metric,
-                    None,
-                );
-
-                TensorExpression::from_indices(py, &SpensoIndices { structure })
-            }
-            _ => Err(PyValueError::new_err("indices must be abstract indices")),
-        }
+        let i = super::expression::index_value(i, None)?;
+        let j = super::expression::index_value(j, None)?;
+        let structure = ShadowedStructure::<AbstractIndex>::from_iter(
+            [self.representation.slot(i), self.representation.slot(j)],
+            ETS.metric,
+            None,
+        );
+        TensorExpression::from_indices(py, &SpensoIndices { structure })
     }
 
     /// Create the metric map used to lower or raise an index.
@@ -1512,7 +1514,8 @@ impl SpensoRepresentation {
     /// Parameters
     /// ----------
     /// i, j : int, str, or Expression
-    ///     Abstract index labels. Expressions must be individual symbols.
+    ///     Abstract index labels accepted by the shared tensor-structure parser,
+    ///     including numeric, symbolic, tagged named, and scoped indices.
     ///
     /// Returns
     /// -------
@@ -1536,18 +1539,14 @@ impl SpensoRepresentation {
         i: ConvertibleToAbstractIndex,
         j: ConvertibleToAbstractIndex,
     ) -> PyResult<Py<TensorExpression>> {
-        match (i, j) {
-            (ConvertibleToAbstractIndex::Aind(i), ConvertibleToAbstractIndex::Aind(j)) => {
-                let structure = ShadowedStructure::<AbstractIndex>::from_iter(
-                    [self.representation.slot(i), self.representation.slot(j)],
-                    ETS.flat,
-                    None,
-                );
-
-                TensorExpression::from_indices(py, &SpensoIndices { structure })
-            }
-            _ => Err(PyValueError::new_err("indices must be abstract indices")),
-        }
+        let i = super::expression::index_value(i, None)?;
+        let j = super::expression::index_value(j, None)?;
+        let structure = ShadowedStructure::<AbstractIndex>::from_iter(
+            [self.representation.slot(i), self.representation.slot(j)],
+            ETS.flat,
+            None,
+        );
+        TensorExpression::from_indices(py, &SpensoIndices { structure })
     }
 
     /// Create the identity pairing between this space and its dual.
@@ -1555,7 +1554,8 @@ impl SpensoRepresentation {
     /// Parameters
     /// ----------
     /// i, j : int, str, or Expression
-    ///     Abstract index labels. Expressions must be individual symbols.
+    ///     Abstract index labels accepted by the shared tensor-structure parser,
+    ///     including numeric, symbolic, tagged named, and scoped indices.
     ///
     /// Returns
     /// -------
@@ -1578,21 +1578,17 @@ impl SpensoRepresentation {
         i: ConvertibleToAbstractIndex,
         j: ConvertibleToAbstractIndex,
     ) -> PyResult<Py<TensorExpression>> {
-        match (i, j) {
-            (ConvertibleToAbstractIndex::Aind(i), ConvertibleToAbstractIndex::Aind(j)) => {
-                let structure = ShadowedStructure::<AbstractIndex>::from_iter(
-                    [
-                        self.representation.slot(i).dual(),
-                        self.representation.slot(j),
-                    ],
-                    ETS.metric,
-                    None,
-                );
-
-                TensorExpression::from_indices(py, &SpensoIndices { structure })
-            }
-            _ => Err(PyValueError::new_err("indices must be abstract indices")),
-        }
+        let i = super::expression::index_value(i, None)?;
+        let j = super::expression::index_value(j, None)?;
+        let structure = ShadowedStructure::<AbstractIndex>::from_iter(
+            [
+                self.representation.slot(i).dual(),
+                self.representation.slot(j),
+            ],
+            ETS.metric,
+            None,
+        );
+        TensorExpression::from_indices(py, &SpensoIndices { structure })
     }
 
     /// Return a readable object description for inspection.
@@ -1992,7 +1988,8 @@ impl SpensoSlot {
     /// dimension : int
     ///     Dimension of the index space.
     /// aind : int, str, or Expression
-    ///     Abstract index label; an Expression must be a single symbol.
+    ///     Abstract index label accepted by the shared tensor-structure parser,
+    ///     including numeric, symbolic, tagged named, and scoped indices.
     /// dual : bool, default False
     ///     Whether to use the dual of the named representation.
     ///
@@ -2026,27 +2023,14 @@ impl SpensoSlot {
             LibraryRep::new_self_dual(&name).unwrap().new_rep(dimension)
         };
 
-        match aind {
-            ConvertibleToAbstractIndex::Aind(a) => {
-                let mut slot = rep.slot(a);
-                if dual {
-                    slot = slot.dual();
-                }
-                Ok(SpensoSlot { slot })
-            }
-            ConvertibleToAbstractIndex::Atom(a) => match a.expr.as_view() {
-                AtomView::Var(v) => {
-                    let slot = rep.slot(AbstractIndex::Symbol(v.get_symbol().into()));
-                    Ok(SpensoSlot { slot })
-                }
-                _ => Err(exceptions::PyTypeError::new_err(
-                    "Only symbols can be abstract indices",
-                )),
-            },
-            ConvertibleToAbstractIndex::Separator => {
-                Err(PyValueError::new_err("separator cannot be an index"))
-            }
+        if matches!(aind, ConvertibleToAbstractIndex::Separator) {
+            return Err(PyValueError::new_err("separator cannot be an index"));
         }
+        let mut slot = rep.slot(super::expression::index_value(aind, None)?);
+        if dual {
+            slot = slot.dual();
+        }
+        Ok(SpensoSlot { slot })
     }
 
     /// Return symbolic syntax for the representation and index.

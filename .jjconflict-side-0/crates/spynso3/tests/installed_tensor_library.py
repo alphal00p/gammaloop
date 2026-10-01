@@ -195,7 +195,13 @@ class TensorLibraryTests(unittest.TestCase):
                     (structure_constant("a", "b", "c") ** 2, E("24")),
                     (gamma("a", "b", "mu") * gamma("b", "a", "mu"), E("16")),
                 ):
-                    self.assertEqual(source.to_tensor(library).scalar(), expected)
+                    result = source.to_tensor(library)
+                    self.assertIs(result.dtype, Expression)
+                    self.assertEqual(result.scalar(), expected)
+                for value in ("0", "1"):
+                    result = TensorExpression(E(value)).to_tensor(library)
+                    self.assertIs(result.dtype, Expression)
+                    self.assertEqual(result.scalar(), E(value))
 
         numerical = TensorLibrary.hep_lib()
         self.assertIs(generator.to_tensor(numerical).dtype, complex)
@@ -203,6 +209,19 @@ class TensorLibraryTests(unittest.TestCase):
         self.assertEqual(generator.to_tensor(numerical)[0, 0, 1], 0.5 + 0j)
         self.assertAlmostEqual(
             structure_constant.to_tensor(numerical)[3, 4, 7], 3**0.5 / 2
+        )
+        vector = TensorName("library_tests::numerical_vector")(Representation.euc(2))
+        data = Tensor.dense(vector, [1.0, 2.0])
+        numerical.register(data)
+        self.assertIs(data.dtype, float)
+        self.assertIs(numerical[vector].dtype, float)
+        self.assertIs(vector("i").to_tensor(numerical).dtype, float)
+        norm = (vector("i") * vector("i")).to_tensor(numerical)
+        # Shared network scalars use Symbolica Atom; result wrapping preserves it.
+        self.assertIs(norm.dtype, Expression)
+        self.assertEqual(norm.scalar(), E("5.0"))
+        self.assertEqual(
+            norm.scalar().evaluate({}, decimal_digit_precision=100).real.precision, 53
         )
 
     def test_invalid_and_missing_keys(self):

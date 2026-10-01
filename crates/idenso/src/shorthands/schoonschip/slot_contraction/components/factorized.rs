@@ -116,6 +116,32 @@ impl<'src> ContractionScope<'src> {
                 ends[position] = ends[position].max(ends[positions[&child]]);
             }
         }
+        // The parser already observed each leaf's written ports. Retain their
+        // literal index payloads when describing connected boundaries instead
+        // of rebuilding names through user-defined normalizers.
+        let mut written_slots = AHashMap::new();
+        if let Some(interfaces) = &interfaces {
+            let interfaces = interfaces.lock().unwrap();
+            let mut matcher = SlotMatcher::default();
+            for &node in &nodes {
+                if let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) =
+                    &network.graph.graph[node]
+                    && let Some((_, ports)) = interfaces.get(
+                        network.store.tensors[*index]
+                            .expression
+                            .as_atom_view()
+                            .get_data(),
+                    )
+                {
+                    for atom in ports {
+                        if let Ok(slot) = matcher.parse::<LibraryRep, AbstractIndex>(atom.as_view())
+                        {
+                            written_slots.entry(slot).or_insert_with(|| atom.clone());
+                        }
+                    }
+                }
+            }
+        }
         let mut ports = AHashMap::with_capacity(nodes.len());
         for (begin, &node) in nodes.iter().enumerate() {
             let end = ends[begin];
@@ -150,7 +176,15 @@ impl<'src> ContractionScope<'src> {
             ports.insert(
                 node,
                 (
-                    boundary.iter().map(|slot| slot.to_atom()).collect(),
+                    boundary
+                        .iter()
+                        .map(|slot| {
+                            written_slots
+                                .get(slot)
+                                .cloned()
+                                .unwrap_or_else(|| slot.to_atom())
+                        })
+                        .collect(),
                     PartialStructure::from_logical_slots(
                         boundary
                             .into_iter()

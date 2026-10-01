@@ -354,7 +354,10 @@ fn fundamental_fierz_contracts_open_and_closed_color_lines() {
                     .unwrap()
                     .into_expression();
             assert_eq!(
-                actual.expand(),
+                actual
+                    .expand()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                    .unwrap(),
                 crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
                     .unwrap()
                     .simplify_algebra(&crate::tensor::AlgebraSettings {
@@ -369,7 +372,9 @@ fn fundamental_fierz_contracts_open_and_closed_color_lines() {
                     })
                     .unwrap()
                     .into_expression()
-                    .expand(),
+                    .expand()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                    .unwrap(),
                 "Fierz identity for {expression} with {settings:?}"
             );
             assert_eq!(
@@ -457,7 +462,8 @@ fn fundamental_trace_fierz_respects_settings_and_representations() {
     ));
     assert_eq!(
         crate::color::simplify::ColorAlgebraSimplifier {
-            settings: unevaluated
+            settings: unevaluated,
+            dummies: Default::default(),
         }
         .step(invalid.as_view(), true),
         invalid

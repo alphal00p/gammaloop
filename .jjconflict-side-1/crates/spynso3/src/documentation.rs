@@ -30,9 +30,11 @@ True"###
 Parameters
 ----------
 aind : int, str, or Expression
-    An index label, not a component coordinate. A string, integer, or single
-    symbol creates a Slot. A compound Expression creates raw representation
-    syntax, which can be used with ``intern="indices"`` when constructing a tensor.
+    An index label, not a component coordinate. A string, Python integer, or
+    single symbol creates a Slot. Other Expressions retain raw representation
+    syntax: supported numeric, tagged named, and scoped labels can be admitted
+    directly; other compound payloads require ``intern="indices"`` when
+    constructing a tensor.
 
 Returns
 -------

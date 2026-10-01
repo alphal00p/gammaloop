@@ -13,7 +13,7 @@ use spenso::{
     algebra::complex::RealOrComplexRef,
     algebra::upgrading_arithmetic::FallibleSub,
     iterators::IteratableTensor,
-    network::{parsing::ParseSettings, tags::SPENSO_TAG},
+    network::{parsing::ParseSettings, store::TensorScalarStoreMapping, tags::SPENSO_TAG},
     shadowing::ProjectorExpander,
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -80,6 +80,99 @@ fn enabled_idenso_reference_cases_validate_against_explicit_tensors() {
     let mut table = Table::new(rows);
     table.with(Style::rounded());
     println!("validated enabled idenso reference cases\n{table}");
+}
+
+#[test]
+fn generated_color_and_dirac_dummies_preserve_external_named_components() {
+    test_initialize();
+    use idenso::{
+        dirac::GammaSimplifySettings,
+        tensor::{AlgebraSettings, SymbolicTensor},
+    };
+    use spenso::structure::representation::Minkowski;
+    let coad = ColorAdjoint {}.new_rep(8);
+    let cof = ColorFundamental {}.new_rep(3);
+    let external = [
+        symbolica::symbol!("idenso::x"),
+        symbolica::symbol!("capture_b"),
+        symbolica::symbol!("capture_c"),
+        symbolica::symbol!("capture_d"),
+    ]
+    .map(|name| coad.to_symbolic([Atom::var(name)]));
+    let color = trace!(&cof; external.iter().map(|slot| idenso::color_t!(slot)));
+    let mink = Minkowski {}.new_rep(4);
+    let spin = idenso::representations::Bispinor {}.new_rep(4);
+    let [mu, nu, rho] = [
+        symbolica::symbol!("idenso::sigma"),
+        symbolica::symbol!("capture_nu"),
+        symbolica::symbol!("capture_rho"),
+    ]
+    .map(|name| mink.to_symbolic([Atom::var(name)]));
+    let gamma = spenso::chain!(
+        spin.to_symbolic([Atom::var(symbolica::symbol!("capture_start"))]),
+        spin.to_symbolic([Atom::var(symbolica::symbol!("capture_end"))]);
+        [&mu, &nu, &rho].map(|slot| idenso::gamma!(slot)));
+    for (source, settings) in [
+        (
+            color,
+            AlgebraSettings {
+                color: Some(Default::default()),
+                ..Default::default()
+            },
+        ),
+        (
+            gamma,
+            AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default().with_gamma5_epsilon_expansion()),
+                ..Default::default()
+            },
+        ),
+    ] {
+        let original = SymbolicTensor::infer(source.clone()).unwrap();
+        let reduced = original.simplify_algebra(&settings).unwrap();
+        assert_eq!(original.structure(), reduced.structure());
+        assert!(!reduced.expression().is_zero());
+        // Both sides are independently evaluated with the HEP component library;
+        // the helper requires a nonzero component on each side before comparison.
+        assert_valid(source, reduced.into_expression(), &scalar_constants());
+    }
+}
+
+#[test]
+fn cyclic_color_casimir_zeros_match_exact_hep_components() {
+    use idenso::tensor::{AlgebraSettings, ReductionStatus, SymbolicTensor};
+    use spenso::structure::HasStructure;
+    test_initialize();
+    let coad = ColorAdjoint {}.new_rep(8);
+    let cof = ColorFundamental {}.new_rep(3);
+    let label = spenso::index_symbol!("hep_validation::cyclic_color_label");
+    let slots = [1, 7, 13, 21, 19, 23].map(|i| coad.to_symbolic([function!(label, i, 1)]));
+    let [x, a, b, d, e, s] = &slots;
+    for middle in [[b, d, e], [e, d, b]] {
+        let word = trace!(&cof; [a, s, middle[0], middle[1], middle[2], s]
+            .map(|index| idenso::color_t!(index)));
+        let source = idenso::color_f!(x, a, d) * idenso::color_f!(x, b, e) * word;
+        // Contract the original network directly with exact HEP components,
+        // without any color identities or arithmetic expansion in this oracle.
+        let component: Atom = source
+            .parse_to_hep_net(&ParseSettings::default())
+            .unwrap()
+            .execute_and_res()
+            .unwrap()
+            .scalar()
+            .unwrap()
+            .into();
+        assert!(component.is_zero());
+        let reduced = SymbolicTensor::infer(source)
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(Default::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(reduced.expression(), &component);
+        assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+    }
 }
 
 #[test]
@@ -717,17 +810,26 @@ fn evaluate_term(expression: Atom, constants: &HashMap<Atom, Complex64>) -> Vali
     let validation_functions = ValidationFunctions::for_expression(expression.as_view());
     let rank_one_functions = validation_functions.rank_one_functions;
     let samples = validation_functions.samples.clone();
-    let net = expression
+    let mut net = expression
         .parse_to_hep_net(&ParseSettings::default())
         .unwrap_or_else(|err| {
             panic!("failed to parse validation expression `{expression}`: {err}")
         });
 
+    // Sample the input components before contraction. Exact HEP components can
+    // cancel a Dirac identity before its symbolic vector entries reach the
+    // result; the independent numerical oracle must still exercise those inputs.
+    let mut evaluation_constants = constants.clone();
+    for tensor in net.iter_tensors() {
+        validation_functions.insert_values_for_tensor(tensor, &mut evaluation_constants);
+    }
+    let network_constants = evaluation_constants.clone().into_iter().collect();
+    net.evaluate_complex(&network_constants);
+
     let mut result = net.execute_and_res().unwrap_or_else(|err| {
         panic!("failed to execute validation expression `{expression}`: {err}")
     });
 
-    let mut evaluation_constants = constants.clone();
     validation_functions.insert_values_for_tensor(&result, &mut evaluation_constants);
     result.evaluate_complex(&evaluation_constants);
     let tensor = result.to_dense();

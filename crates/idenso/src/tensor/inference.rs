@@ -18,7 +18,7 @@ use spenso::{
         dimension::Dimension,
         partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, Minkowski, RepName, Representation},
-        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
+        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher, SlotView},
     },
 };
 use symbolica::{
@@ -916,13 +916,26 @@ impl InterfaceInference {
         metric: &mut Option<Symbol>,
     ) -> bool {
         let mut intrinsic = true;
+        let mut slots = SlotMatcher::default();
         value.visitor(&mut |node| {
             if let AtomView::Fun(function) = node {
                 intrinsic &= Self::intrinsic_head_with_metric(function.get_symbol(), metric);
+                if let SlotMatch::Explicit(slot) = slots.classify(node) {
+                    intrinsic &= Self::intrinsic_slot_metadata(slot, metric);
+                    return false;
+                }
             }
             intrinsic
         });
         intrinsic
+    }
+
+    fn intrinsic_slot_metadata(slot: SlotView<'_>, metric: &mut Option<Symbol>) -> bool {
+        // Substitution copies a complete index identity. Its payload is not
+        // rebuilt, so callbacks written inside it cannot change tensor rank.
+        (slot.representation().wrapper().is_none()
+            || Self::intrinsic_head_with_metric(slot.representation().head(), metric))
+            && Self::normalization_is_intrinsic_with_metric(slot.dimension(), metric)
     }
 
     fn normalization_is_intrinsic_cached(&mut self, value: AtomView<'_>) -> bool {
@@ -947,6 +960,10 @@ impl InterfaceInference {
                 // Preserve the visitor's original failure-tail behavior: false
                 // prunes this node, but remaining siblings are still inspected.
                 intrinsic &= Self::intrinsic_head_with_metric(function.get_symbol(), &mut metric);
+                if let SlotMatch::Explicit(slot) = self.slots.classify(node) {
+                    intrinsic &= Self::intrinsic_slot_metadata(slot, &mut metric);
+                    return false;
+                }
             }
             intrinsic
         });
@@ -987,6 +1004,10 @@ impl InterfaceInference {
                     // cyclic metadata, even when its normalization is intrinsic.
                     symbol != *shadowing::CYCLIC && Self::intrinsic_normalization_head(symbol)
                 };
+                if let SlotMatch::Explicit(slot) = self.slots.classify(node) {
+                    intrinsic &= Self::intrinsic_slot_metadata(slot, &mut None);
+                    return false;
+                }
             }
             intrinsic
         });
@@ -2923,6 +2944,75 @@ pub(crate) mod tests {
             0,
             "observing the dual wrapper must neither skip nor execute its user payload"
         );
+    }
+
+    #[test]
+    fn admitted_index_callbacks_are_opaque_to_interface_proofs_and_contraction() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let label = symbolica::symbol!(
+            "intrinsic_index_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            },
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        let a = spenso::mink!(4, symbolica::function!(label, 7, 0));
+        let b = spenso::mink!(4, symbolica::function!(label, 7, 1));
+        let spectator = symbolica::parse_lit!((intrinsic_index_x + intrinsic_index_y) ^ 9);
+        let vector = spenso::vector_symbol!("intrinsic_index_vector");
+        let expected = &spectator * symbolica::function!(vector, &b);
+        let source = SymbolicTensor::infer(
+            &spectator * spenso::g!(&a, &b) * symbolica::function!(vector, &a),
+        )
+        .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let mut inference = InterfaceInference::default();
+        assert!(InterfaceInference::normalization_is_intrinsic(
+            source.expression.as_view()
+        ));
+        assert!(inference.normalization_is_intrinsic_cached(source.expression.as_view()));
+        assert!(inference.rewrites_preserve_leaf_interfaces(source.expression.as_view()));
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            0,
+            "interface proof replayed label callbacks"
+        );
+        let result = source.contract(Default::default()).unwrap();
+        assert_eq!(result.expression, expected);
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(
+            result.reduction_status(),
+            crate::tensor::ReductionStatus::Complete
+        );
+        let again = result.contract(Default::default()).unwrap();
+        assert_eq!(again.expression, expected);
+        assert_eq!(again.structure, result.structure);
+        assert_eq!(
+            again.reduction_status(),
+            crate::tensor::ReductionStatus::Complete
+        );
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            0,
+            "copying index identities must not invoke their normalizers"
+        );
+
+        // The same function outside an index is ordinary metadata and remains
+        // a callback boundary. Its syntax alone is not a general exemption.
+        let metadata = symbolica::function!(label, 9, 0);
+        let with_metadata = symbolica::function!(vector, metadata, &b);
+        calls.store(0, Ordering::Relaxed);
+        assert!(!InterfaceInference::normalization_is_intrinsic(
+            with_metadata.as_view()
+        ));
+        assert!(!inference.normalization_is_intrinsic_cached(with_metadata.as_view()));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]

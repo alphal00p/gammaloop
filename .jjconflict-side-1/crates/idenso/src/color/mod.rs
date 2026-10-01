@@ -63,8 +63,6 @@ pub struct ColorSymbols {
     pub cas: Symbol,
     /// The degree-k Dynkin index symbol.
     pub idx: Symbol,
-    /// Dummy adjoint-index symbol used in color trace decompositions.
-    pub trace_dummy: Symbol,
     /// The number of colors symbol (i.e. the dimension of the fundamental representation) usually Nc=3
     pub nc: Symbol,
 }
@@ -549,7 +547,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
         idx: symbol!("spenso::idx"; Real, Scalar; print = |a, opt, _state| {
             ColorInvariantPrintKind::Index.print(a, opt)
         }),
-        trace_dummy: symbol!("x"),
         fundamental_rep: representation_symbol(
             ColorFundamental {}.to_symbolic(std::iter::empty::<Atom>()),
         ),

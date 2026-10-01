@@ -13,7 +13,6 @@ use pyo3::{
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use spenso::{
-    algebra::complex::{Complex, RealOrComplex},
     iterators::IteratableTensor,
     network::{
         ContractScalars, ExecutionResult, MinIntermediateCost, Network, Sequential,
@@ -24,7 +23,7 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
-        HasStructure, ScalarTensor, TensorStructure,
+        TensorStructure,
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
         slot::IsAbstractSlot,
@@ -41,12 +40,13 @@ use symbolica::{
         PythonPatternRestriction,
     },
     atom::FunctionBuilder,
-    domains::float::Complex as SymComplex,
     id::{Condition, PatternRestriction},
     prelude::*,
 };
 
 use symbolica::api::python::ConvertibleToExpression;
+#[cfg(test)]
+use symbolica::domains::float::Complex as SymComplex;
 
 use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
 use idenso::tensor::{
@@ -1308,6 +1308,8 @@ impl SpensoNet {
     /// -----
     /// This does not run pending operations. Call execute() first, or use
     /// to_tensor() to execute a copy and extract the result in one operation.
+    /// Existing component storage is preserved: exact Symbolica expressions
+    /// are not converted to floating-point values.
     ///
     /// Examples
     /// --------
@@ -1337,28 +1339,20 @@ impl SpensoNet {
                 .result_tensor(lib)
                 .map_err(|s| PyRuntimeError::new_err(s.to_string()))?
             {
-                ExecutionResult::One => Spensor::scalar_with_descriptor(1., descriptor, name, args),
-                ExecutionResult::Zero => {
-                    Spensor::scalar_with_descriptor(0., descriptor, name, args)
-                }
+                ExecutionResult::One => Spensor::scalar_with_descriptor(
+                    ConcreteOrParam::Param(Atom::one()),
+                    descriptor,
+                    name,
+                    args,
+                ),
+                ExecutionResult::Zero => Spensor::scalar_with_descriptor(
+                    ConcreteOrParam::Param(Atom::Zero),
+                    descriptor,
+                    name,
+                    args,
+                ),
                 ExecutionResult::Val(value) => {
                     let value = value.into_owned();
-                    let value = match value.clone().scalar() {
-                        Some(ConcreteOrParam::Param(atom)) => {
-                            match SymComplex::<f64>::try_from(&atom) {
-                                Ok(number) if number.im == 0. => ParamOrConcrete::new_scalar(
-                                    ConcreteOrParam::Concrete(RealOrComplex::Real(number.re)),
-                                ),
-                                Ok(number) => {
-                                    ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(
-                                        RealOrComplex::Complex(Complex::new(number.re, number.im)),
-                                    ))
-                                }
-                                Err(_) => value,
-                            }
-                        }
-                        _ => value,
-                    };
                     // Network tensors are already stored in canonical Spenso axis
                     // order. The descriptor permutations only record how that
                     // storage maps back to the public logical interface.

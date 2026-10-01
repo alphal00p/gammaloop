@@ -1422,13 +1422,30 @@ fn val_test() {
 #[test]
 fn special_dirac_matrix_conjugation_is_explicit_and_idempotent() {
     test_initialize();
+    let dummies = spenso::network::parsing::ParseState::default();
     for matrix in [AGS.gamma0, AGS.gamma5, AGS.projm, AGS.projp] {
         let tensor = function!(matrix, bis!(4, special_matrix_i), bis!(4, special_matrix_j));
-        let conjugate =
-            DiracSimplifier::conjugate_matrices::<AbstractIndex>(tensor.spenso_conj().as_view());
+        dummies.reserve_indices(tensor.as_view());
+        let conjugate = DiracSimplifier::conjugate_matrices::<AbstractIndex>(
+            tensor.spenso_conj().as_view(),
+            &dummies,
+        );
         assert_eq!(
-            DiracSimplifier::conjugate_matrices::<AbstractIndex>(conjugate.as_view()),
+            DiracSimplifier::conjugate_matrices::<AbstractIndex>(conjugate.as_view(), &dummies),
             conjugate
+        );
+        let coefficient = parse_lit!((conjugate_scalar_x + conjugate_scalar_y) ^ 3);
+        let decorated = DiracSimplifier::conjugate_matrices::<AbstractIndex>(
+            (&coefficient * tensor.spenso_conj()).as_view(),
+            &dummies,
+        );
+        assert_eq!(
+            decorated
+                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .unwrap(),
+            (&coefficient * &conjugate)
+                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .unwrap(),
         );
         let mut has_conjugate = false;
         conjugate.visitor(&mut |atom| {
@@ -1445,10 +1462,42 @@ fn special_dirac_matrix_conjugation_is_explicit_and_idempotent() {
             bis!(special_matrix_D, special_matrix_j)
         );
         assert_eq!(
-            DiracSimplifier::conjugate_matrices::<AbstractIndex>(generic.spenso_conj().as_view()),
+            DiracSimplifier::conjugate_matrices::<AbstractIndex>(
+                generic.spenso_conj().as_view(),
+                &dummies
+            ),
             generic.spenso_conj()
         );
     }
+}
+
+#[test]
+fn conjugation_preserves_unselected_callback_branches() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    test_initialize();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let callback = symbol!("idenso::conjugation_opaque_callback"; Scalar;
+        norm = move |_, _| { observed.fetch_add(1, Ordering::Relaxed); });
+    let source = function!(
+        callback,
+        function!(
+            AGS.gamma0,
+            bis!(4, untouched_conjugation_left),
+            bis!(4, untouched_conjugation_right)
+        )
+    );
+    let dummies = spenso::network::parsing::ParseState::default();
+    dummies.reserve_indices(source.as_view());
+    calls.store(0, Ordering::Relaxed);
+    assert_eq!(
+        DiracSimplifier::conjugate_matrices::<AbstractIndex>(source.as_view(), &dummies),
+        source
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
 }
 
 #[test]

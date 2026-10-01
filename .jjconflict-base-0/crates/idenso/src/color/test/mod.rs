@@ -161,6 +161,7 @@ fn untyped_structure_constants_do_not_assume_an_adjoint_dimension() {
     assert_eq!(
         super::simplify::ColorAlgebraSimplifier {
             settings: ColorSimplifySettings::default(),
+            dummies: Default::default(),
         }
         .step(atom.as_view(), true),
         atom
@@ -175,6 +176,7 @@ fn partially_typed_or_inconsistent_structure_constants_are_not_rewritten() {
     assert_eq!(
         super::simplify::ColorAlgebraSimplifier {
             settings: ColorSimplifySettings::default(),
+            dummies: Default::default(),
         }
         .step(partially_typed.as_view(), true),
         partially_typed
@@ -188,6 +190,7 @@ fn partially_typed_or_inconsistent_structure_constants_are_not_rewritten() {
     assert_eq!(
         super::simplify::ColorAlgebraSimplifier {
             settings: ColorSimplifySettings::default(),
+            dummies: Default::default(),
         }
         .step(inconsistent.as_view(), true),
         inconsistent
@@ -1610,7 +1613,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { contract: crate::tensor::AlgebraContraction::None, color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { contract: crate::tensor::AlgebraContraction::None, color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,d_0),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,d_0))*𝑖/2");
 }
 
 #[test]

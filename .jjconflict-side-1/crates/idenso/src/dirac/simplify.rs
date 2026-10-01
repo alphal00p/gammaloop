@@ -1,17 +1,19 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
+#[cfg(test)]
+use spenso::g;
 use std::{collections::HashMap, sync::LazyLock};
 
 use spenso::{
-    chain, g,
-    network::tags::SPENSO_TAG as T,
+    chain,
+    network::{library::symbolic::ETS, parsing::ParseState, tags::SPENSO_TAG as T},
     rep_,
     shadowing::{self, IntoAtom, TensorCollectFilter},
     structure::{
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
+        slot::{IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
     },
     trace,
 };
@@ -40,7 +42,9 @@ use crate::{
     },
 };
 
-use super::{AGS, id_atom};
+use super::AGS;
+#[cfg(test)]
+use super::id_atom;
 
 mod trace_kernel;
 
@@ -75,8 +79,6 @@ static MINKOWSKI_SYMBOL: LazyLock<Symbol> =
     LazyLock::new(|| LibraryRep::from(Minkowski {}).symbol());
 
 static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| LibraryRep::from(Bispinor {}).symbol());
-
-static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("sigma"));
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     [Replacement::new(
@@ -163,34 +165,55 @@ impl GammaSimplifySettings {
         self
     }
 
+    #[cfg(test)]
     fn rewrite_expression(&self, expr: Atom, output: trace_kernel::TraceOutput) -> Atom {
+        let dummies = ParseState::default();
+        dummies.reserve_indices(expr.as_view());
+        DiracSimplifier {
+            settings: self,
+            output,
+        }
+        .rewrite_expression(expr, &dummies)
+    }
+}
+
+impl DiracSimplifier<'_> {
+    fn rewrite_expression(self, expr: Atom, dummies: &ParseState<AbstractIndex>) -> Atom {
         // The shared scheduler or the full raw pass already observed an
         // eligible domain. Do not repeat its head scan on the unchanged input.
-        expr.replace_map(|a, b, c| self.rewrite_node(a, b, c, output))
+        let mut slots = SlotMatcher::default();
+        let mut opaque_level = None;
+        expr.replace_map(|node, context, out| {
+            if opaque_level.is_some_and(|level| context.function_level > level) {
+                return;
+            }
+            opaque_level = None;
+            if !matches!(slots.classify(node), SlotMatch::Other) {
+                opaque_level = Some(context.function_level);
+                return;
+            }
+            self.rewrite_node(node, context, out, dummies);
+        })
     }
 
     fn rewrite_node(
-        &self,
+        self,
         arg: AtomView,
         _context: &Context,
         out: &mut Settable<'_, Atom>,
-        output: trace_kernel::TraceOutput,
+        dummies: &ParseState<AbstractIndex>,
     ) {
         let AtomView::Fun(f) = arg else {
             return;
         };
 
-        let simplifier = DiracSimplifier {
-            settings: self,
-            output,
-        };
         if f.get_symbol() == T.chain {
-            if let Some(rewritten) = simplifier.simplify_chain_node(f) {
+            if let Some(rewritten) = self.simplify_chain_node(f, dummies) {
                 **out = rewritten;
             }
-        } else if self.evaluate_traces
+        } else if self.settings.evaluate_traces
             && f.get_symbol() == T.trace
-            && let Some(rewritten) = simplifier.simplify_trace_node(f)
+            && let Some(rewritten) = self.simplify_trace_node(f, dummies)
         {
             **out = rewritten;
         }
@@ -467,6 +490,7 @@ impl SymbolicTensor<PartialStructure> {
         );
         self.ensure_validated()?;
         let representation = Bispinor {}.into();
+        let dummies = Self::reserved_dummies([self]);
         let mut paired_metrics = HashMap::new();
         let collected = std::cell::RefCell::new(trace_kernel::collected::CollectedOutput::new(
             self.reduction_observations(),
@@ -503,7 +527,11 @@ impl SymbolicTensor<PartialStructure> {
                 };
                 let mut scalar_callback = false;
                 let mut component_callback = false;
+                let mut slots = SlotMatcher::default();
                 selected.expression.visitor(&mut |node| {
+                    if !matches!(slots.classify(node), SlotMatch::Other) {
+                        return false;
+                    }
                     if let AtomView::Fun(function) = node {
                         let symbol = function.get_symbol();
                         let callback = symbol.get_normalization_function().is_some()
@@ -519,8 +547,8 @@ impl SymbolicTensor<PartialStructure> {
                     return Ok(selected);
                 }
                 let output = trace_kernel::TraceOutput::Factored;
-                let prepared =
-                    DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
+                let prepared = DiracSimplifier::new(&settings)
+                    .prepare(selected.expression.as_view(), &dummies);
                 let expression = BracketNormalizer::normalize(prepared.as_view())
                     .chainify(representation)
                     .join_chains(representation);
@@ -541,7 +569,11 @@ impl SymbolicTensor<PartialStructure> {
                     let mut seen = std::collections::HashSet::from([current.clone()]);
                     let mut changes = 0;
                     loop {
-                        let next = settings.rewrite_expression(current.clone(), output);
+                        let next = DiracSimplifier {
+                            settings: &settings,
+                            output,
+                        }
+                        .rewrite_expression(current.clone(), &dummies);
                         if next == current {
                             break current;
                         }
@@ -561,6 +593,11 @@ impl SymbolicTensor<PartialStructure> {
                             unfinished.proofs.frontier = status;
                             return Ok(unfinished);
                         }
+                        // An uncontrolled normalizer may introduce literal
+                        // index names that were absent at admission. Reserve
+                        // that accepted replacement before another identity
+                        // allocates a dummy in this callback context.
+                        dummies.reserve_indices(next.as_view());
                         current = next;
                         changes += 1;
                     }
@@ -601,7 +638,7 @@ impl SymbolicTensor<PartialStructure> {
                             }
                             expression
                         }
-                        None => settings.rewrite_expression(expression, output),
+                        None => simplifier.rewrite_expression(expression, &dummies),
                     }
                 };
                 let rewritten = selected.with_identity_result(expression, observations)?;
@@ -653,10 +690,14 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
-    fn prepare<'a>(self, expr: AtomView<'a>) -> AtomOrView<'a> {
+    fn prepare<'a>(
+        self,
+        expr: AtomView<'a>,
+        dummies: &ParseState<AbstractIndex>,
+    ) -> AtomOrView<'a> {
         let mut result = AtomOrView::View(expr);
         if self.settings.conjugate {
-            result = Self::conjugate_matrices::<AbstractIndex>(result.as_view()).into();
+            result = Self::conjugate_matrices::<AbstractIndex>(result.as_view(), dummies).into();
         }
         if self.settings.gamma0 {
             result = Self::factor_gamma_zero(result.as_view()).into();
@@ -863,11 +904,6 @@ impl<'settings> DiracSimplifier<'settings> {
         let terminal_polynomial = !axial
             && matches!(rep, AtomView::Fun(spin) if spin.iter().all(Self::exact_scalar_leaf))
             && indices.iter().all(|&index| {
-                // Wildcards keep written diagonal metrics inert during
-                // construction, so a paired slot need not have disappeared.
-                if index.get_all_symbols(true).iter().any(|symbol| symbol.get_wildcard_level() > 0) {
-                    return false;
-                }
                 let mut slots = SlotMatcher::default();
                 if let SlotMatch::Explicit(slot) = slots.classify(index) {
                     // Encoded unresolved ports are occurrence-local axes, not
@@ -1119,7 +1155,7 @@ impl<'settings> DiracSimplifier<'settings> {
                         return None;
                     }
                 }
-                let metric = g!(original[0], original[1]);
+                let metric = ETS.metric_literal(original[0], original[1]);
                 if bound.is_empty() {
                     return Some(metric);
                 }
@@ -1232,8 +1268,8 @@ impl<'settings> DiracSimplifier<'settings> {
     /// word. The surviving explicit indices occur once per monomial and compact
     /// arguments produce scalar dots, so no outer tensor contraction remains.
     /// A scalar-product context additionally requires callback-free words
-    /// with exact leaf metadata. Free slots occur once per term; wildcard
-    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
+    /// with exact leaf metadata. Free slots occur once per term, and admitted
+    /// literal labels carry no pattern semantics. Exact scalar spectators cannot
     /// introduce further tensor cleanup.
     pub(crate) fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
         self,
@@ -1273,7 +1309,7 @@ impl<'settings> DiracSimplifier<'settings> {
         Some((result, observations))
     }
 
-    fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
+    fn simplify_chain_node(self, f: FunView, dummies: &ParseState<AbstractIndex>) -> Option<Atom> {
         let args = f.iter().collect::<Vec<_>>();
         let [start, end, factors @ ..] = args.as_slice() else {
             return None;
@@ -1290,7 +1326,7 @@ impl<'settings> DiracSimplifier<'settings> {
             .collect::<Vec<_>>();
 
         if factors.is_empty() {
-            return Some(id_atom(*start, *end));
+            return Some(ETS.metric_literal(*start, *end));
         }
 
         Self::contract_adjacent_gamma_pair(DiracWord::Chain(*start, *end), &factors)
@@ -1317,6 +1353,7 @@ impl<'settings> DiracSimplifier<'settings> {
                         Self::four_dim_three_gamma_epsilon_expansion(
                             DiracWord::Chain(*start, *end),
                             &factors,
+                            dummies,
                         )
                     })
                     .flatten()
@@ -1371,7 +1408,7 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &factors[..i]);
             Self::extend_factors(&mut rest, &factors[i + 2..]);
 
-            return Some(g!(mu, nu) * word.build(rest));
+            return Some(ETS.metric_literal(mu, nu) * word.build(rest));
         }
 
         None
@@ -1552,7 +1589,7 @@ impl DiracSimplifier<'_> {
             0 => None,
             2 => Some(
                 Atom::num(4)
-                    * g!(interior_mink_indices[0], interior_mink_indices[1])
+                    * ETS.metric_literal(interior_mink_indices[0], interior_mink_indices[1])
                     * word.build(Self::chain_factors(
                         factors,
                         left,
@@ -1601,6 +1638,7 @@ impl DiracSimplifier<'_> {
     fn four_dim_three_gamma_epsilon_expansion(
         word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
+        dummies: &ParseState<AbstractIndex>,
     ) -> Option<Atom> {
         if !word.is_four_dimensional() {
             return None;
@@ -1621,14 +1659,9 @@ impl DiracSimplifier<'_> {
             let [mu, nu, rho] = mink_indices.as_slice() else {
                 unreachable!("the window always contains three gamma factors")
             };
-            let sigma = match word {
-                DiracWord::Chain(..) => epsilon_dummy_minkowski_slot(),
-                // A longer axial trace may need several reductions before
-                // its epsilon tensors contract; each needs its own dummy.
-                DiracWord::Trace(_) => Minkowski {}
-                    .new_rep(4)
-                    .pattern(AbstractIndex::new_dummy().to_atom()),
-            };
+            let sigma = Minkowski {}
+                .new_rep(4)
+                .pattern(dummies.fresh_index().to_atom());
 
             // The chain normal form keeps gamma5 to the right of ordinary gammas.
             let epsilon_term = Atom::num(-1)
@@ -1808,7 +1841,7 @@ impl DiracSimplifier<'_> {
         nu: AtomView<'_>,
         factors: Vec<Atom>,
     ) -> Atom {
-        let metric_term = g!(mu, nu) * word.build(factors);
+        let metric_term = ETS.metric_literal(mu, nu) * word.build(factors);
         SchoonschipWithSettings {
             settings: &SchoonschipSettings::default().with_chain_like_functions(),
         }
@@ -2017,10 +2050,6 @@ fn gamma_factor(mink_index: impl IntoAtom) -> Atom {
         .finish()
 }
 
-fn epsilon_dummy_minkowski_slot() -> Atom {
-    Minkowski {}.to_symbolic([Atom::num(4), Atom::var(*EPSILON_DUMMY_SYMBOL)])
-}
-
 fn has_forward_chain_endpoints(left: AtomView, right: AtomView) -> bool {
     is_chain_endpoint(left, T.chain_in) && is_chain_endpoint(right, T.chain_out)
 }
@@ -2037,7 +2066,7 @@ impl DiracSimplifier<'_> {
     /// Generic dimensions build the factored pairing polynomial directly.
     /// Four-dimensional words of length at most fourteen use shorter generated
     /// kernels; longer 4D words recurse until those kernels apply.
-    fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
+    fn simplify_trace_node(self, f: FunView, dummies: &ParseState<AbstractIndex>) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
         if factors.is_empty() {
@@ -2129,7 +2158,7 @@ impl DiracSimplifier<'_> {
         }
 
         if factor_kinds.has_gamma5
-            && let Some(rewritten) = self.simplify_gamma5_trace_node(rep, &factors)
+            && let Some(rewritten) = self.simplify_gamma5_trace_node(rep, &factors, dummies)
         {
             return Some(rewritten);
         }
@@ -2192,7 +2221,7 @@ impl DiracSimplifier<'_> {
                 trace!(rep; rest)
             };
 
-            let term = g!(first, mu_i) * rest_trace;
+            let term = ETS.metric_literal(first, mu_i) * rest_trace;
             if sign == 1 {
                 sum += term;
             } else {
@@ -2293,6 +2322,7 @@ impl DiracSimplifier<'_> {
         self,
         rep: AtomView<'_>,
         factors: &[DiracFactor<'_>],
+        dummies: &ParseState<AbstractIndex>,
     ) -> Option<Atom> {
         if !has_four_dimensional_trace_rep(rep) {
             return None;
@@ -2306,7 +2336,7 @@ impl DiracSimplifier<'_> {
 
         match gamma5_positions.len() {
             0 => None,
-            1 => self.simplify_single_gamma5_trace(rep, factors, gamma5_positions[0]),
+            1 => self.simplify_single_gamma5_trace(rep, factors, gamma5_positions[0], dummies),
             _ => Self::reduce_gamma5_trace_pair(rep, factors, gamma5_positions[0]),
         }
     }
@@ -2316,6 +2346,7 @@ impl DiracSimplifier<'_> {
         rep: AtomView<'_>,
         factors: &[DiracFactor<'_>],
         gamma5_position: usize,
+        dummies: &ParseState<AbstractIndex>,
     ) -> Option<Atom> {
         // Use trace cyclicity to put gamma5 first, then evaluate
         // Tr(gamma5 gamma(mu_1)...gamma(mu_n)).
@@ -2343,7 +2374,7 @@ impl DiracSimplifier<'_> {
 
         // The ordinary pairing recurrence does not apply with one gamma5.
         // Reduce a triple using the same 4D identity as the short kernels.
-        Self::four_dim_three_gamma_epsilon_expansion(word, factors)
+        Self::four_dim_three_gamma_epsilon_expansion(word, factors, dummies)
     }
 
     fn reduce_gamma5_trace_pair(
@@ -3085,13 +3116,11 @@ mod tests {
             let (admitted, observations) = DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<true>(input.as_view())
                 .unwrap_or_else(|| panic!("{name}: expected scalar-context admission"));
-            if matches!(name, "index" | "dimension") {
+            if matches!(name, "index" | "dimension" | "ordinary") {
                 assert!(
-                    observations.is_none(),
-                    "{name}: an inert diagonal is not closed"
+                    observations.is_some(),
+                    "{name}: paired literal slots are closed"
                 );
-            } else if name == "ordinary" {
-                assert!(observations.is_some(), "paired concrete slots are closed");
             }
             let settings = GammaSimplifySettings::default();
             let standalone = DiracSimplifier::new(&settings)
@@ -3174,6 +3203,7 @@ mod tests {
         );
         let labels = [
             Atom::var(symbolica::symbol!("terminal_dummy_atomic")),
+            Atom::var(symbolica::symbol!("terminal_dummy_wild_")),
             Atom::num(97361),
             Atom::num(-97361),
             Atom::num((7, 13)),

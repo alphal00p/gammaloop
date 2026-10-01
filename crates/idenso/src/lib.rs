@@ -12,7 +12,7 @@ use spenso::{
         graph::{NetworkEdge, NetworkLeaf, NetworkNode},
         library::function_lib::INBUILTS,
         library::symbolic::ETS,
-        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+        parsing::{ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing},
         store::TensorScalarStore,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
@@ -27,7 +27,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
-    id::{AliasedAtom, Replacement},
+    id::{AliasedAtom, Pattern, Replacement},
     initialize,
     printer::AtomPrinter,
     symbol,
@@ -353,9 +353,9 @@ impl IndexTooling for AtomView<'_> {
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
-        // Admit the complete source before algebraic zero pruning. Callers
-        // using structured index payloads must cook_indices at this boundary,
-        // consistently for both vanishing and surviving expressions.
+        // Admit the complete source before algebraic zero pruning. The chosen
+        // index parser owns accepted label syntax; canonicalization uses those
+        // parsed identities without imposing another spelling restriction.
         let mut net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .map_err(|error| NetworkToolingError::Parse {
@@ -517,7 +517,10 @@ impl IndexTooling for AtomView<'_> {
                     break candidate;
                 }
             };
-            reps.push(Replacement::new(d.to_pattern(), target));
+            reps.push(Replacement::new(
+                Pattern::Literal(d),
+                Pattern::Literal(target),
+            ));
         }
 
         Ok(scalar_definitions
@@ -651,20 +654,26 @@ impl IndexTooling for AtomView<'_> {
         // Materialize matrix channels in this same parse before conjugation.
         // Scalar inner products stay compact, and every sum branch is retained.
         let explicit = net.simple_execute::<()>()?;
+        // Include the parser's newly materialized channel indices, then share
+        // one collision-free allocator across boundary and matrix conjugation.
+        let dummies = ParseState::<Aind>::default();
+        dummies.reserve_indices(explicit.as_view());
         let mut a = explicit.spenso_conj();
         for i in bis_dangling {
             let mut dummy = i;
-            dummy.aind = Aind::new_dummy();
-            a = a.replace(i.to_atom()).with(dummy.to_atom())
+            dummy.aind = dummies.fresh_index();
+            a = a
+                .replace(Pattern::Literal(i.to_atom()))
+                .with(Pattern::Literal(dummy.to_atom()))
                 * function!(AGS.gamma0, i.to_atom(), dummy.to_atom());
         }
         for (i, j) in transpositions {
             a = a.replace_multiple(&[
-                Replacement::new(i.to_atom().to_pattern(), j.to_atom()),
-                Replacement::new(j.to_atom().to_pattern(), i.to_atom()),
+                Replacement::new(Pattern::Literal(i.to_atom()), Pattern::Literal(j.to_atom())),
+                Replacement::new(Pattern::Literal(j.to_atom()), Pattern::Literal(i.to_atom())),
             ]);
         }
-        a = dirac::DiracSimplifier::conjugate_matrices::<Aind>(a.as_view());
+        a = dirac::DiracSimplifier::conjugate_matrices::<Aind>(a.as_view(), &dummies);
         // The generic index encoding is reversible; shared algebra sees the
         // same strict slot grammar as every other SymbolicTensor operation.
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
@@ -728,10 +737,14 @@ impl IndexTooling for AtomView<'_> {
 #[cfg(test)]
 pub mod test {
     use insta::assert_snapshot;
-    use spenso::{network::tags::SPENSO_TAG, p, slot, structure::abstract_index::AbstractIndex};
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        p, slot,
+        structure::{abstract_index::AbstractIndex, slot::ParseableAind},
+    };
     use symbolica::{
         atom::{Atom, AtomCore, FunctionBuilder},
-        parse_lit,
+        function, parse_lit,
         printer::CanonicalOrderingSettings,
         symbol,
     };
@@ -786,6 +799,57 @@ pub mod test {
                 })
                 .unwrap();
             assert_eq!(result.expression(), &expected);
+        }
+    }
+
+    #[test]
+    fn canonicalization_keeps_requested_dummy_names_literal() {
+        test_initialize();
+        let left = spenso::tensor_symbol!("canonical_literal_left");
+        let right = spenso::tensor_symbol!("canonical_literal_right");
+        let source = spenso::mink!(4, Atom::var(symbol!("canonical_input_")));
+        let target_index = AbstractIndex::Symbol(symbol!("canonical_output_").into());
+        let target = spenso::mink!(4, target_index.to_atom());
+        let expression = function!(left, &source) * function!(right, &source);
+        assert_eq!(
+            expression.canonize(|_| target_index).unwrap(),
+            function!(left, &target) * function!(right, &target)
+        );
+    }
+
+    #[test]
+    fn dirac_adjoint_treats_admitted_wildcard_spelling_as_literal_labels() {
+        test_initialize();
+        let original = [
+            crate::bis!(4, 97301),
+            crate::bis!(4, 97302),
+            spenso::mink!(4, 97303),
+        ];
+        let literal = [
+            crate::bis!(4, Atom::var(symbol!("adjoint_literal_i_"))),
+            crate::bis!(4, Atom::var(symbol!("adjoint_literal_j_"))),
+            spenso::mink!(4, Atom::var(symbol!("adjoint_literal_mu_"))),
+        ];
+        let relabel = |expression: &Atom| {
+            expression.replace_map(|node, _, out| {
+                if let Some(position) = original.iter().position(|slot| slot.as_view() == node) {
+                    **out = literal[position].clone();
+                }
+            })
+        };
+        let source = gamma!(&original[0], &original[1], &original[2]);
+        let labeled = relabel(&source);
+        crate::tensor::SymbolicTensor::infer(labeled.clone()).unwrap();
+        for preserve in [true, false] {
+            let expected = relabel(&source.dirac_adjoint::<AbstractIndex>(preserve).unwrap());
+            let actual = labeled.dirac_adjoint::<AbstractIndex>(preserve).unwrap();
+            assert_eq!(
+                actual.canonize(AbstractIndex::Dummy).unwrap(),
+                expected.canonize(AbstractIndex::Dummy).unwrap()
+            );
+            let actual = crate::tensor::SymbolicTensor::infer(actual).unwrap();
+            let expected = crate::tensor::SymbolicTensor::infer(expected).unwrap();
+            assert_eq!(actual.structure(), expected.structure());
         }
     }
 

@@ -7,6 +7,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, RepName},
+        slot::{SlotMatch, SlotMatcher},
     },
     trace,
 };
@@ -246,7 +247,19 @@ impl<'a> Chain for AtomView<'a> {
                             }
                             for factor in factors {
                                 let factor = if transpose {
-                                    factor.replace_map(|atom, _, output| {
+                                    let mut slots = SlotMatcher::default();
+                                    let mut opaque_level = None;
+                                    factor.replace_map(|atom, context, output| {
+                                        if opaque_level
+                                            .is_some_and(|level| context.function_level > level)
+                                        {
+                                            return;
+                                        }
+                                        opaque_level = None;
+                                        if !matches!(slots.classify(atom), SlotMatch::Other) {
+                                            opaque_level = Some(context.function_level);
+                                            return;
+                                        }
                                         if let AtomView::Var(symbol) = atom {
                                             if symbol.get_symbol() == T.chain_in {
                                                 **output = Atom::var(T.chain_out);
@@ -324,8 +337,22 @@ impl<'a> Chain for AtomView<'a> {
                 Match::Single(arg) => std::slice::from_ref(arg),
                 Match::FunctionName(_) => return false,
             };
-            args.iter()
-                .all(|arg| !arg.contains_symbol(T.chain_in) && !arg.contains_symbol(T.chain_out))
+            let mut slots = SlotMatcher::default();
+            let mut found = false;
+            for argument in args {
+                argument.visitor(&mut |value| {
+                    if !matches!(slots.classify(value), SlotMatch::Other) {
+                        return false;
+                    }
+                    found |= matches!(value, AtomView::Var(var)
+                        if var.get_symbol() == T.chain_in || var.get_symbol() == T.chain_out);
+                    !found
+                });
+                if found {
+                    return false;
+                }
+            }
+            true
         };
         let replacement = Replacement::new(
             function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
@@ -352,14 +379,18 @@ impl<'a> Chain for AtomView<'a> {
         // existing chain rule actually changes a node.
         fn rewrite<'a>(
             atom: AtomView<'a>,
+            slots: &mut SlotMatcher,
             opaque_heads: &[Symbol],
             apply: &impl Fn(AtomView<'_>) -> Atom,
             open: &impl Fn(symbolica::atom::representation::FunView<'_>) -> Option<Atom>,
         ) -> AtomOrView<'a> {
+            if !matches!(slots.classify(atom), SlotMatch::Other) {
+                return atom.into();
+            }
             let children = match atom {
                 AtomView::Fun(function) => {
                     if let Some(opened) = open(function) {
-                        return rewrite(opened.as_view(), opaque_heads, apply, open)
+                        return rewrite(opened.as_view(), slots, opaque_heads, apply, open)
                             .into_owned()
                             .into();
                     }
@@ -382,7 +413,7 @@ impl<'a> Chain for AtomView<'a> {
             };
             let children = children
                 .into_iter()
-                .map(|child| rewrite(child, opaque_heads, apply, open))
+                .map(|child| rewrite(child, slots, opaque_heads, apply, open))
                 .collect::<Vec<_>>();
             if children
                 .iter()
@@ -407,6 +438,7 @@ impl<'a> Chain for AtomView<'a> {
         let state = std::cell::OnceCell::new();
         rewrite(
             *self,
+            &mut SlotMatcher::default(),
             &opaque_heads,
             &|atom| atom.replace_multiple([&replacement]),
             &|function| {
@@ -805,6 +837,103 @@ mod tests {
         let actual = input.chainify(Bispinor {}.into());
         assert_eq!(actual, expected);
         assert_eq!(*calls.lock().unwrap(), expected_calls);
+    }
+
+    #[test]
+    fn chainify_preserves_chain_marker_names_inside_index_labels() {
+        use crate::{shorthands::UndoShorthands, tensor::SymbolicTensor};
+        use spenso::structure::{partial::PartialStructure, slot::ParseableAind};
+
+        let r = test_initialize();
+        let start = bis!(4, 99431);
+        let end = bis!(4, 99432);
+        for index in [
+            AbstractIndex::from(T.chain_in),
+            AbstractIndex::Normal(99433).scoped(T.chain_out),
+        ] {
+            let spectator = r.mink4.to_symbolic([index.to_atom()]);
+            let input = gamma!(&start, &end, &spectator);
+            let admitted = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+            let expected = chain!(&start, &end, gamma!(&spectator));
+            let result = input.chainify(Bispinor {}.into());
+            assert_eq!(result, expected);
+            assert_eq!(result.undo_chain::<AbstractIndex>().unwrap(), input);
+            assert_eq!(
+                SymbolicTensor::<PartialStructure>::infer(result)
+                    .unwrap()
+                    .structure,
+                admitted.structure
+            );
+        }
+    }
+
+    #[test]
+    fn chain_transpose_preserves_chain_marker_names_inside_index_labels() {
+        use spenso::structure::slot::ParseableAind;
+
+        let r = test_initialize();
+        let first = T.tensor_symbol("transpose_opaque_first");
+        let second = T.tensor_symbol("transpose_opaque_second");
+        let start = r.mink4.to_symbolic([Atom::num(99441)]);
+        let common = r.mink4.to_symbolic([Atom::num(99442)]);
+        let end = r.mink4.to_symbolic([Atom::num(99443)]);
+        let spectator = r
+            .bis4
+            .to_symbolic([AbstractIndex::Normal(99444).scoped(T.chain_in).to_atom()]);
+        let word = |head, input, output| function!(head, input, output, &spectator);
+        let input = chain!(&start, &common, word(first, T.chain_in, T.chain_out))
+            * chain!(&end, &common, word(second, T.chain_in, T.chain_out));
+        let forward = chain!(
+            &start,
+            &end,
+            word(first, T.chain_in, T.chain_out),
+            word(second, T.chain_out, T.chain_in)
+        );
+        let reverse = chain!(
+            &end,
+            &start,
+            word(second, T.chain_in, T.chain_out),
+            word(first, T.chain_out, T.chain_in)
+        );
+        let result = input.collect_chains(r.mink4.rep.into(), true, false);
+        assert!(result == forward || result == reverse, "{result}");
+    }
+
+    #[test]
+    fn chain_transpose_reuses_unchanged_callback_factors() {
+        use spenso::structure::slot::ParseableAind;
+        use std::sync::{Arc, Mutex};
+
+        let r = test_initialize();
+        let calls = Arc::new(Mutex::new(0));
+        let recorded = Arc::clone(&calls);
+        let scalar = symbol!("transpose_unchanged_callback"; Scalar;
+            norm = move |_, _| *recorded.lock().unwrap() += 1
+        );
+        let spectator = r
+            .bis4
+            .to_symbolic([AbstractIndex::Normal(99454).scoped(T.chain_in).to_atom()]);
+        let coefficient = function!(scalar, spectator);
+        let first = T.tensor_symbol("transpose_callback_first");
+        let second = T.tensor_symbol("transpose_callback_second");
+        let start = r.mink4.to_symbolic([Atom::num(99451)]);
+        let common = r.mink4.to_symbolic([Atom::num(99452)]);
+        let end = r.mink4.to_symbolic([Atom::num(99453)]);
+        let source = chain!(
+            &start,
+            &common,
+            &coefficient,
+            function!(first, T.chain_in, T.chain_out)
+        ) * chain!(
+            &end,
+            &common,
+            &coefficient,
+            function!(second, T.chain_in, T.chain_out)
+        );
+        *calls.lock().unwrap() = 0;
+        let collected = source.collect_chains(r.mink4.rep.into(), true, false);
+        assert_ne!(collected, source);
+        assert_eq!(*calls.lock().unwrap(), 0);
     }
 
     #[test]

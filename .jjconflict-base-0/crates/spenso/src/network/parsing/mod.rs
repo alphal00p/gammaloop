@@ -10,7 +10,7 @@ use crate::network::tags::SPENSO_TAG;
 
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::representation::Representation;
-use crate::structure::slot::{DummyAind, ParseableAind, Slot, SlotMatcher};
+use crate::structure::slot::{DummyAind, ParseableAind, Slot, SlotMatch, SlotMatcher};
 use crate::structure::{Canonicalized, NamedStructure, ScalarStructure, StructureError};
 use crate::tensors::parametric::ParamTensor;
 
@@ -358,8 +358,15 @@ impl<Aind: DummyAind + ParseableAind, View> ParseState<Aind, View> {
     pub fn reserve_indices(&self, value: AtomView<'_>) {
         let mut matcher = self.matcher.borrow_mut();
         value.visitor(&mut |atom| {
-            if let Ok(slot) = matcher.parse::<LibraryRep, Aind>(atom) {
-                self.reserve_index(slot.aind);
+            if matcher.parse::<LibraryRep, Aind>(atom).is_ok()
+                && let SlotMatch::Explicit(slot) = matcher.classify(atom)
+            {
+                // Reserve the admitted spelling itself. Serializing a typed
+                // label could run its normalizer again and change its identity.
+                self.reserved_indices
+                    .borrow_mut()
+                    .insert(slot.index().to_owned());
+                return false;
             }
             true
         });

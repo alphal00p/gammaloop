@@ -549,6 +549,11 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         };
         let mut exact = true;
         value.visitor(&mut |node| {
+            if matches!(self.slots.classify(node), SlotMatch::Explicit(_)) {
+                // Index labels are copied as identities, not evaluated as
+                // coefficient arithmetic or interpreted as pattern syntax.
+                return false;
+            }
             exact &= match node {
                 AtomView::Num(_) => Rational::try_from(node).is_ok(),
                 AtomView::Var(variable) => variable.get_symbol().get_wildcard_level() == 0,
@@ -869,13 +874,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             while let AbstractIndex::Scoped(scope) = base {
                 base = scope.index();
             }
-            if matches!(base, AbstractIndex::Open { .. })
-                || endpoint
-                    .index
-                    .get_all_symbols(true)
-                    .iter()
-                    .any(|symbol| symbol.get_wildcard_level() != 0)
-            {
+            if matches!(base, AbstractIndex::Open { .. }) {
                 return None;
             }
         }
@@ -1297,6 +1296,10 @@ mod tests {
             (AbstractIndex::Dualize(97361), AbstractIndex::Normal(97361)),
             (AbstractIndex::Double(17, 3), AbstractIndex::Double(19, 3)),
             (first, second),
+            (
+                AbstractIndex::Symbol(symbolica::symbol!("closed_component_test::a_").into()),
+                AbstractIndex::Symbol(SPENSO_TAG.trace.into()),
+            ),
             (first.scoped(scope), second.scoped(scope)),
             (first, first.scoped(scope)),
             (
@@ -1307,9 +1310,9 @@ mod tests {
             use spenso::structure::slot::ParseableAind;
             let source = source
                 .replace(input("a"))
-                .with(a.to_atom())
+                .with(symbolica::id::Pattern::Literal(a.to_atom()))
                 .replace(input("b"))
-                .with(b.to_atom());
+                .with(symbolica::id::Pattern::Literal(b.to_atom()));
             let admitted = SymbolicTensor::infer(source.clone()).unwrap();
             let result = contractor
                 .contract_factorized(source.as_view(), None, true)
@@ -1328,7 +1331,7 @@ mod tests {
     }
 
     #[test]
-    fn factorized_named_index_admission_retains_wildcard_refusal() {
+    fn factorized_contraction_treats_admitted_pattern_labels_as_literal_indices() {
         let contractor = setup();
         let head = symbolica::symbol!(
             "closed_component_test::wild_port_",
@@ -1342,11 +1345,38 @@ mod tests {
                     **output = index.clone();
                 }
             });
-        assert!(
-            contractor
-                .contract_factorized(source.as_view(), None, true)
-                .is_none()
+        let admitted = SymbolicTensor::infer(source.clone()).unwrap();
+        let expected = input("g(p(mink(4)),r(mink(4)))+g(q(mink(4)),r(mink(4)))");
+        let result = contractor
+            .contract_factorized(source.as_view(), None, true)
+            .expect("an admitted index is an opaque literal, including pattern-like spelling");
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(result.root, expected);
+        let result = admitted.contract(Default::default()).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(result.expression(), &expected);
+        let again = result.contract(Default::default()).unwrap();
+        assert_eq!(again.expression(), result.expression());
+        assert_eq!(again.reduction_status(), ReductionStatus::Complete);
+    }
+
+    #[test]
+    fn scalar_spectator_metadata_keeps_admitted_index_payloads_opaque() {
+        let contractor = setup();
+        let metadata = symbolica::symbol!("closed_component_test::index_metadata"; Scalar);
+        let index = Atom::var(symbolica::symbol!("closed_component_test::literal_index_"));
+        let spectator = symbolica::function!(metadata, spenso::mink!(4, &index));
+        let mut slots = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        assert!(sum.scalar_spectator(spectator.as_view()));
+        let source =
+            SymbolicTensor::infer(&spectator * input("p(mink(4,a))*q(mink(4,a))")).unwrap();
+        let result = source.contract(Default::default()).unwrap();
+        assert_eq!(
+            result.expression(),
+            &(&spectator * input("g(p(mink(4)),q(mink(4)))"))
         );
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     }
 
     #[test]
@@ -1842,7 +1872,6 @@ mod tests {
             "1+p(17,mink(4,a))*q(mink(4,a))",
             "1+f(p(mink(4,a))*q(mink(4,a)))",
             "1+p(mink(D_,a))*q(mink(D_,a))",
-            "1+p(mink(4,a_))*q(mink(4,a_))",
             "1+p(mink(4,spenso::cind(0)))*q(mink(4,spenso::cind(0)))",
             "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^-1",
             "1+p(mink(4,a))*q(mink(4,a))*g(p(mink(4)),q(mink(4)))^(1/2)",
@@ -1860,6 +1889,17 @@ mod tests {
                 "{source}"
             );
         }
+        // Once admitted, an index with a pattern-like spelling is literal data.
+        let source = input("1+p(mink(4,a_))*q(mink(4,a_))");
+        SymbolicTensor::infer(source.clone()).unwrap();
+        assert_eq!(
+            contractor.materialize_test_sum(
+                source.as_view(),
+                &mut SlotMatcher::default(),
+                Intake::ExpandedContraction,
+            ),
+            Some(input("1+g(p(mink(4)),q(mink(4)))")),
+        );
         let conflicting =
             symbolica::atom::SymbolBuilder::new(symbolica::wrap_symbol!("closed_sum_rep_vector"))
                 .with_tags([

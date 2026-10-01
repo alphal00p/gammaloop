@@ -1678,9 +1678,11 @@ class Representation:
         Parameters
         ----------
         aind : int, str, or Expression
-            An index label, not a component coordinate. A string, integer, or single
-            symbol creates a Slot. A compound Expression creates raw representation
-            syntax, which can be used with ``intern="indices"`` when constructing a tensor.
+            An index label, not a component coordinate. A string, Python integer, or
+            single symbol creates a Slot. Other Expressions retain raw representation
+            syntax: supported numeric, tagged named, and scoped labels can be admitted
+            directly; other compound payloads require ``intern="indices"`` when
+            constructing a tensor.
 
         Returns
         -------
@@ -1703,9 +1705,11 @@ class Representation:
         Parameters
         ----------
         aind : int, str, or Expression
-            An index label, not a component coordinate. A string, integer, or single
-            symbol creates a Slot. A compound Expression creates raw representation
-            syntax, which can be used with ``intern="indices"`` when constructing a tensor.
+            An index label, not a component coordinate. A string, Python integer, or
+            single symbol creates a Slot. Other Expressions retain raw representation
+            syntax: supported numeric, tagged named, and scoped labels can be admitted
+            directly; other compound payloads require ``intern="indices"`` when
+            constructing a tensor.
 
         Returns
         -------
@@ -1849,7 +1853,8 @@ class Representation:
         Parameters
         ----------
         i, j : int, str, or Expression
-            Abstract index labels. Expressions must be individual symbols.
+            Abstract index labels accepted by the shared tensor-structure parser,
+            including numeric, symbolic, tagged named, and scoped indices.
 
         Returns
         -------
@@ -1875,7 +1880,8 @@ class Representation:
         Parameters
         ----------
         i, j : int, str, or Expression
-            Abstract index labels. Expressions must be individual symbols.
+            Abstract index labels accepted by the shared tensor-structure parser,
+            including numeric, symbolic, tagged named, and scoped indices.
 
         Returns
         -------
@@ -1901,7 +1907,8 @@ class Representation:
         Parameters
         ----------
         i, j : int, str, or Expression
-            Abstract index labels. Expressions must be individual symbols.
+            Abstract index labels accepted by the shared tensor-structure parser,
+            including numeric, symbolic, tagged named, and scoped indices.
 
         Returns
         -------
@@ -2371,7 +2378,8 @@ class Slot:
         dimension : int
             Dimension of the index space.
         aind : int, str, or Expression
-            Abstract index label; an Expression must be a single symbol.
+            Abstract index label accepted by the shared tensor-structure parser,
+            including numeric, symbolic, tagged named, and scoped indices.
         dual : bool, default False
             Whether to use the dual of the named representation.
 
@@ -2791,7 +2799,7 @@ class Tensor:
         0.0
         """
     @staticmethod
-    def dense(structure: TensorExpression, data: typing.Sequence[_ScalarInput] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:
+    def dense(structure: TensorExpression, data: typing.Sequence[Expression | int | builtins.complex | float]) -> Tensor:
         r"""
         Store every component of a named tensor.
 
@@ -3853,7 +3861,7 @@ class Tensor:
         >>> tensor[-1]
         4.0
         """
-    def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | builtins.complex | float) -> None:
+    def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | int | builtins.complex | float) -> None:
         r"""
         Change one stored component in place.
 
@@ -8796,6 +8804,8 @@ class TensorNetwork:
         -----
         This does not run pending operations. Call execute() first, or use
         to_tensor() to execute a copy and extract the result in one operation.
+        Existing component storage is preserved: exact Symbolica expressions
+        are not converted to floating-point values.
 
         Examples
         --------

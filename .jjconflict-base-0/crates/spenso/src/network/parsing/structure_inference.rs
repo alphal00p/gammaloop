@@ -21,9 +21,7 @@ use crate::structure::{
     Canonicalized, HasName, NamedStructure, OrderedStructure, StructureContract, StructureError,
     TensorStructure,
     representation::{BaseRepName, LibraryRep, Minkowski},
-    slot::{
-        AbsInd, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher,
-    },
+    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher},
 };
 use crate::{
     network::tags::{SPENSO_TAG, SpensoTags},
@@ -413,14 +411,21 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
                 .collect::<Result<Vec<_>, _>>()?;
             return Ok(Self::new(slots));
         }
-        let structure = {
+        let (structure, written_slots) = {
             let _timing = crate::network::profile::span(
                 crate::network::profile::Timer::ParseStructureUncached,
             );
-            if state.chain_scope_validated {
-                Self::leaf_structure_from_atom(value, &mut matcher)
+            let infer = |matcher: &mut SlotMatcher| {
+                if state.chain_scope_validated {
+                    Self::leaf_structure_from_atom(value, matcher)
+                } else {
+                    Self::structure_from_atom(value, matcher)
+                }
+            };
+            if state.leaf_interfaces.is_some() {
+                matcher.observe_slots(infer)
             } else {
-                Self::structure_from_atom(value, &mut matcher)
+                (infer(&mut matcher), Vec::new())
             }
         };
         if let Some(cache) = &state.leaf_interfaces {
@@ -428,17 +433,23 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
                 crate::network::profile::Counter::ParseStructureCacheMiss,
                 1,
             );
+            let written_slots = written_slots
+                .into_iter()
+                .filter_map(|atom| {
+                    matcher
+                        .parse::<LibraryRep, Aind>(atom.as_view())
+                        .ok()
+                        .map(|slot| (slot, atom))
+                })
+                .collect::<std::collections::HashMap<_, _>>();
             let logical_slots = match &structure {
-                Ok(structure) => Some(
-                    structure.layout().canonical_to_logical(
-                        &structure
-                            .canonical()
-                            .external_structure()
-                            .iter()
-                            .map(|slot| slot.to_atom())
-                            .collect::<Vec<_>>(),
-                    ),
-                ),
+                Ok(structure) => structure
+                    .canonical()
+                    .external_structure()
+                    .iter()
+                    .map(|slot| written_slots.get(slot).cloned())
+                    .collect::<Option<Vec<_>>>()
+                    .map(|slots| structure.layout().canonical_to_logical(&slots)),
                 Err(StructureError::EmptyStructure(_)) => Some(Vec::new()),
                 Err(_) => None,
             };
@@ -1042,6 +1053,51 @@ mod tests {
         assert_eq!(cache.lock().unwrap().len(), 2);
         // Materialization/callback boundaries cannot inherit stale admission facts.
         assert!(state.materialized().leaf_interfaces.is_none());
+    }
+
+    #[test]
+    fn cached_interfaces_reuse_written_index_payloads_without_callback_replay() {
+        use crate::network::parsing::LeafInterfaceCache;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let label = symbol!(
+            "cached_port_literal_label",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            },
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        let ports = [
+            crate::mink!(4, function!(label, 17, 0)),
+            crate::mink!(4, function!(label, 17, 1)),
+        ];
+        let source = function!(
+            tensor_symbol!("cached_port_literal_tensor"),
+            &ports[0],
+            &ports[1]
+        );
+        let cache = LeafInterfaceCache::default();
+        let state = ParseState::<AbstractIndex> {
+            chain_scope_validated: true,
+            leaf_interfaces: Some(cache.clone()),
+            ..Default::default()
+        }
+        .with_view(source.as_view());
+        calls.store(0, Ordering::Relaxed);
+        SYNTACTIC_INFERENCE_NODES.with(|count| count.set(0));
+        let first =
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state).unwrap();
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 1);
+        assert_eq!(cache.lock().unwrap()[&source].1, ports);
+        let second =
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 1);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]

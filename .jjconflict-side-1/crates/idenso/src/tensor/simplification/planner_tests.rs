@@ -810,7 +810,10 @@ fn changed_domain_regions_keep_independent_colour_work_settled() {
     let before = source.reduction_observations();
     replacement.observe_replacement(&source);
     let after = replacement.reduction_observations();
-    assert!(!before.candidates.complete, "compound labels remain opaque");
+    assert!(
+        before.candidates.complete,
+        "compound labels do not hide tensor candidates"
+    );
     assert!(before.candidates.traversal_complete);
     let scans = (
         INITIAL_SCANS.with(|count| count.get()),

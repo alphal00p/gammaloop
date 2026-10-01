@@ -162,6 +162,57 @@ mod test {
     }
 
     #[test]
+    fn numeric_indices_round_trip_without_narrowing() {
+        for (index, written) in [
+            (AbstractIndex::Normal(0), "0".to_owned()),
+            (AbstractIndex::Normal(7), "7".to_owned()),
+            (AbstractIndex::Normal(usize::MAX), usize::MAX.to_string()),
+            (
+                AbstractIndex::Dualize(usize::MAX),
+                format!("-{}", usize::MAX),
+            ),
+            (AbstractIndex::from(isize::MIN), isize::MIN.to_string()),
+            (AbstractIndex::from(i32::MIN), i32::MIN.to_string()),
+            (AbstractIndex::Double(u16::MAX, 2), "65535/2".to_owned()),
+            (AbstractIndex::Double(1, u16::MAX), "1/65535".to_owned()),
+        ] {
+            let atom = try_parse!(&written).unwrap();
+            assert_eq!(index.to_atom(), atom, "serialization of {written}");
+            assert_eq!(AbstractIndex::try_from(atom.as_view()).unwrap(), index);
+        }
+        assert_eq!(
+            AbstractIndex::Added(usize::MAX).to_atom(),
+            try_parse!(&usize::MAX.to_string()).unwrap()
+        );
+        if usize::BITS > 32 {
+            let large = try_parse!("4294967303").unwrap();
+            assert_ne!(
+                AbstractIndex::try_from(large.as_view()).unwrap(),
+                AbstractIndex::Normal(7)
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_indices_reject_unrepresentable_values() {
+        let beyond_range = Atom::num(usize::MAX) + Atom::one();
+        for atom in [
+            beyond_range.clone(),
+            -beyond_range,
+            Atom::num((65_537, 2)),
+            Atom::num((1, 65_536)),
+            Atom::num((-1, 2)),
+            Atom::one() + Atom::i(),
+            Atom::num(usize::MAX) + Atom::i(),
+        ] {
+            assert!(
+                AbstractIndex::try_from(atom.as_view()).is_err(),
+                "accepted an inexact index: {atom}"
+            );
+        }
+    }
+
+    #[test]
     fn named_indices_preserve_identity_and_reject_malformed_calls() {
         let source = symbol!("index_test::source", tags = [SPENSO_TAG.index.clone()]);
         let sink = symbol!("index_test::sink", tags = [SPENSO_TAG.index.clone()]);
@@ -725,9 +776,9 @@ impl From<AbstractIndex> for Atom {
     fn from(value: AbstractIndex) -> Self {
         match value {
             AbstractIndex::Double(i, j) => Atom::num((i as i64, j as i64)),
-            AbstractIndex::Normal(v) => Atom::num(v as i64),
-            AbstractIndex::Dualize(v) => Atom::num(-(v as i64)),
-            AbstractIndex::Added(v) => Atom::num(v as i64),
+            AbstractIndex::Normal(v) => Atom::num(v),
+            AbstractIndex::Dualize(v) => -Atom::num(v),
+            AbstractIndex::Added(v) => Atom::num(v),
             AbstractIndex::Dummy(v) => {
                 Atom::var(symbol!(format!("d_{}", v), tag = DUMMY_INDEX_TAG))
             }
@@ -788,7 +839,7 @@ impl From<AbstractIndex> for usize {
 impl From<isize> for AbstractIndex {
     fn from(value: isize) -> Self {
         if value < 0 {
-            AbstractIndex::Dualize(-value as usize)
+            AbstractIndex::Dualize(value.unsigned_abs())
         } else {
             AbstractIndex::Normal(value as usize)
         }
@@ -798,7 +849,7 @@ impl From<isize> for AbstractIndex {
 impl From<i32> for AbstractIndex {
     fn from(value: i32) -> Self {
         if value < 0 {
-            AbstractIndex::Dualize(-value as usize)
+            AbstractIndex::Dualize(value.unsigned_abs() as usize)
         } else {
             AbstractIndex::Normal(value as usize)
         }
@@ -821,13 +872,37 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
 
     fn try_from(view: AtomView<'_>) -> Result<Self, Self::Error> {
         match view {
-            AtomView::Num(n) => match n.get_coeff_view() {
-                CoefficientView::Natural(n, 1, _, _) => Ok(AbstractIndex::from(n as i32)),
-                CoefficientView::Natural(n, d, _, _) => {
-                    Ok(AbstractIndex::Double(n as u16, d as u16))
+            AtomView::Num(number) => {
+                let invalid = || AbstractIndexError::NotIndex(view.to_string());
+                match number.get_coeff_view() {
+                    CoefficientView::Natural(n, 1, 0, _) => {
+                        let magnitude = usize::try_from(n.unsigned_abs()).map_err(|_| invalid())?;
+                        Ok(if n < 0 {
+                            Self::Dualize(magnitude)
+                        } else {
+                            Self::Normal(magnitude)
+                        })
+                    }
+                    CoefficientView::Natural(n, d, 0, _) => Ok(Self::Double(
+                        u16::try_from(n).map_err(|_| invalid())?,
+                        u16::try_from(d).map_err(|_| invalid())?,
+                    )),
+                    CoefficientView::Large(real, imaginary) if imaginary.is_zero() => {
+                        let rational = real.to_rat();
+                        if !rational.is_integer() {
+                            return Err(invalid());
+                        }
+                        let magnitude =
+                            usize::try_from(rational.numerator().abs()).map_err(|_| invalid())?;
+                        Ok(if rational.numerator().is_negative() {
+                            Self::Dualize(magnitude)
+                        } else {
+                            Self::Normal(magnitude)
+                        })
+                    }
+                    _ => Err(AbstractIndexError::NotNatural),
                 }
-                _ => Err(AbstractIndexError::NotNatural),
-            },
+            }
             AtomView::Var(v) => Ok(AbstractIndex::Symbol(v.get_symbol().into())),
             AtomView::Fun(function) if function.get_symbol() == Self::scope_symbol() => {
                 let args = function.iter().collect::<Vec<_>>();

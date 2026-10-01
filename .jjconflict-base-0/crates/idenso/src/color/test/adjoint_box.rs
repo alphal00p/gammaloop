@@ -33,7 +33,8 @@ fn fk0032_adjoint_boxes_match_form_and_preserve_spectators() {
     let spectator = function!(
         SPENSO_TAG.tensor_symbol("idenso::adjoint_box_test::spectator"),
         parse_lit!((adjoint_metadata_x + adjoint_metadata_y) ^ 7),
-        reps.mink4.to_symbolic([Atom::var(CS.trace_dummy)])
+        reps.mink4
+            .to_symbolic([Atom::var(symbolica::symbol!("idenso::x"))])
     );
     let source = SymbolicTensor::infer(&network * &scalar * &spectator).unwrap();
     let settings = color_settings();
@@ -226,7 +227,7 @@ fn adjoint_box_requires_compatible_ports_and_enabled_trace_evaluation() {
     let gamma = crate::gamma!(spin[0], spin[1], (mu)) * crate::gamma!(spin[1], spin[0], (mu));
     let foreign = function!(
         SPENSO_TAG.tensor_symbol("idenso::adjoint_box_scope::foreign"),
-        a.to_symbolic([Atom::var(CS.trace_dummy)])
+        a.to_symbolic([Atom::var(symbolica::symbol!("idenso::x"))])
     );
     let tensor = SymbolicTensor::infer(&network * &gamma * &foreign).unwrap();
     let settings = AlgebraSettings {
@@ -405,4 +406,83 @@ impl Su2Components {
             _ => panic!("Unsupported oracle atom: {expression}"),
         }
     }
+}
+
+#[test]
+fn six_generator_color_zeros_accept_compound_index_labels() {
+    let reps = test_initialize();
+    let label = spenso::index_symbol!("idenso::color_zero_labels::hedge");
+    // Both inputs have the same indexed graph. Only admitted index payloads
+    // differ. The existing separated-pair Casimir rule must also cross the
+    // cyclic boundary, regardless of the canonical rotation chosen for labels.
+    for middle in [[2, 3, 4], [4, 3, 2]] {
+        let mut results = Vec::new();
+        for compound in [false, true] {
+            let slots = [1, 7, 13, 21, 19, 23].map(|i| {
+                let index = if compound {
+                    function!(label, i, 1)
+                } else {
+                    Atom::var(symbol!(format!("idenso::color_zero_labels::i{i}")))
+                };
+                reps.coad_da.to_symbolic([index])
+            });
+            let [x, a, b, d, e, s] = &slots;
+            let word = trace!(&reps.cof_nc;
+                [a, s, &slots[middle[0]], &slots[middle[1]], &slots[middle[2]], s]
+                    .map(|index| color_t!(index)));
+            let expression = color_f!(x, a, d) * color_f!(x, b, e) * word;
+            let compact = SymbolicTensor::infer(expression).unwrap();
+            let indexed = compact.undo_trace().unwrap().undo_chain().unwrap();
+            for source in [compact, indexed] {
+                let result = source.simplify_algebra(&color_settings()).unwrap();
+                assert!(
+                    result.expression.is_zero(),
+                    "middle={middle:?}, compound={compound}, source={}, result={}, status={:?}",
+                    source.expression,
+                    result.expression,
+                    result.reduction_status(),
+                );
+                assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+                assert_eq!(result.simplify_algebra(&color_settings()).unwrap(), result);
+                results.push(result);
+            }
+        }
+        assert!(results.windows(2).all(|pair| pair[0] == pair[1]));
+    }
+}
+
+#[test]
+fn color_trace_dummy_cannot_capture_an_external_label() {
+    let reps = test_initialize();
+    let external = reps
+        .coad_da
+        .to_symbolic([Atom::var(symbolica::symbol!("idenso::x"))]);
+    let expression = trace!(&reps.cof_nc;
+        [&external, &reps.coad_da.to_symbolic([Atom::num(98211)]),
+         &reps.coad_da.to_symbolic([Atom::num(98212)]), &reps.coad_da.to_symbolic([Atom::num(98213)])]
+            .map(|index| color_t!(index)));
+    let source = SymbolicTensor::infer(expression).unwrap();
+    let reduced = source.simplify_algebra(&color_settings()).unwrap();
+    assert!(!reduced.expression.is_zero());
+    assert_eq!(reduced.structure, source.structure);
+    assert_eq!(
+        reduced.simplify_algebra(&color_settings()).unwrap(),
+        reduced
+    );
+}
+
+#[test]
+fn color_terminal_metrics_treat_wildcard_spelled_indices_as_literals() {
+    let reps = test_initialize();
+    let slot = reps
+        .coad_da
+        .to_symbolic([Atom::var(symbol!("literal_color_index_"))]);
+    let source =
+        SymbolicTensor::infer(trace!(&reps.cof_nc; [color_t!(&slot), color_t!(&slot)])).unwrap();
+    let reduced = source.simplify_algebra(&color_settings()).unwrap();
+    assert_eq!(
+        reduced.expression,
+        reps.coad_da.dim.to_symbolic() * color_idx!(2, &reps.cof_nc)
+    );
+    assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
 }

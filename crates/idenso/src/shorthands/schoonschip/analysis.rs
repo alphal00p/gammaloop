@@ -15,8 +15,8 @@ std::thread_local! {
 
 /// Call-local observations of one expression. Intrinsic dot rewrites may retain
 /// the contraction candidate: they remove indices rather than introduce them.
-/// A compound opaque payload leaves head observations incomplete; consumers
-/// must then defer to the individual simplifiers.
+/// Compound representation metadata leaves head observations incomplete; admitted
+/// index payloads are opaque identities and do not contain tensor candidates.
 #[derive(Clone, Debug)]
 pub(crate) struct SimplificationCandidates<const N: usize> {
     pub(crate) repeated_indices: bool,
@@ -118,15 +118,16 @@ impl<const N: usize> SimplificationCandidates<N> {
                                         &symbols,
                                     );
                                 }
-                                if !candidates.observe_leaf(slot.dimension(), bracket, &symbols)
-                                    || !candidates.observe_leaf(slot.index(), bracket, &symbols)
+                                // An explicit slot owns its index as one identity. Neither
+                                // its spelling nor heads inside it authorize tensor work.
+                                if !matches!(slot.dimension(), AtomView::Var(_) | AtomView::Num(_))
                                 {
                                     candidates.allow_all();
                                 }
                             }
                             SlotMatch::Opaque => {
                                 if function.iter().any(|argument| {
-                                    !candidates.observe_leaf(argument, bracket, &symbols)
+                                    !matches!(argument, AtomView::Var(_) | AtomView::Num(_))
                                 }) {
                                     candidates.allow_all();
                                 }
@@ -179,17 +180,6 @@ impl<const N: usize> SimplificationCandidates<N> {
         }
     }
 
-    fn observe_leaf(&mut self, node: AtomView<'_>, bracket: u32, symbols: &[u32; N]) -> bool {
-        match node {
-            AtomView::Var(variable) => {
-                self.observe_symbol(variable.get_symbol_id(), bracket, symbols);
-                true
-            }
-            AtomView::Num(_) => true,
-            _ => false,
-        }
-    }
-
     fn allow_all(&mut self) {
         self.brackets = true;
         self.dots = true;
@@ -208,7 +198,7 @@ mod tests {
     };
 
     #[test]
-    fn early_observation_distinguishes_unvisited_tails_from_opaque_metadata() {
+    fn early_observation_distinguishes_unvisited_tails_from_index_payloads() {
         use std::sync::{
             Arc,
             atomic::{AtomicUsize, Ordering},
@@ -264,8 +254,8 @@ mod tests {
         let early = SimplificationCandidates::scan(opaque.as_view(), [], || false);
         assert!(!early.repeated_indices && early.traversal_complete);
         assert!(
-            !early.complete,
-            "payload completeness is independent of traversal completion"
+            early.complete && early.intrinsic,
+            "an index payload does not hide tensor syntax"
         );
     }
 
@@ -286,7 +276,7 @@ mod tests {
         for expression in [callback.clone(), &plain * &callback] {
             assert!(!SimplificationCandidates::scan(expression.as_view(), [], || true).intrinsic);
         }
-        for source in ["T(mink(f(x),a))", "T(mink(4,f(a)))", "T(dind(cof(3,f(a))))"] {
+        for source in ["T(mink(f(x),a))", "T(dind(cof(f(x),a)))"] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             assert!(!SimplificationCandidates::scan(expression.as_view(), [], || true).intrinsic);
         }
@@ -325,7 +315,7 @@ mod tests {
             assert_eq!(expression.normalize_dots(), expression, "{source}");
         }
         // Continue through bases, exponents, and the remainder after a repeated
-        // index. Hidden compound slot metadata retains the conservative fallback.
+        // index. Index payloads themselves do not expose tensor syntax.
         for source in [
             "g(mink(4,a),mink(4,b))^2",
             "g(mink(4,a),mink(4,b))^(-2)",
@@ -335,7 +325,6 @@ mod tests {
             "(analysis_power_vector(mink(4,a))^2+x)^3",
             "x^(g(mink(4,a),mink(4,b))^2)",
             "scope(mink(4,a),mink(4,a),analysis_power_vector(mink(4,b))^2)",
-            "T(mink(4,opaque(analysis_power_vector(mink(4,a))^2)))",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             assert!(
@@ -367,12 +356,8 @@ mod tests {
             "g(mink(D,a),mink(D,b))",
             "g(mink(D,a),mink(D,b))*(g(mink(D,c),mink(D,d))+g(mink(D,c),mink(D,e)))",
             "T(dind(lor(4,a)))",
-            "T(mink(spenso::chain,a))",
-            "T(mink(4,spenso::trace))",
-            "T(mink(4,a,spenso::bracket))",
             "T(dind(mink(4)))",
             "T(mink(spenso::trace(4),a))",
-            "T(mink(4,f(spenso::epsilon)))",
             "g(analysis_observed_vector(mink(4)),analysis_observed_vector(mink(4)))",
             "analysis_observed_vector(mink(4,a))^2",
             "(x+y)^6*g(mink(D,a),mink(D,b))",
@@ -380,7 +365,6 @@ mod tests {
             "g(mink(4,a),mink(4,b))*T(mink(4,b))*later(spenso::trace)",
             "scope(mink(4,a),mink(4,a),bracket(analysis_observed_vector(mink(4,b))^2))",
             "scope(mink(4,a),mink(4,a),analysis_observed_vector(q(mink(4))))",
-            "scope(mink(4,a),mink(4,a),T(mink(4,f(spenso::epsilon))))",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             let candidates = SimplificationCandidates::scan(expression.as_view(), heads, || true);
@@ -415,6 +399,56 @@ mod tests {
             Atom::parse("T(dind(bis(4,a)))", "spenso", ParseSettings::symbolica()).unwrap();
         let candidates = SimplificationCandidates::scan(expression.as_view(), [head], || true);
         assert!(!candidates.complete || candidates.symbols == [expression.contains_symbol(head)]);
+    }
+
+    #[test]
+    fn index_payloads_do_not_supply_candidates_or_callback_boundaries() {
+        crate::test_support::test_initialize();
+        let callback = symbolica::symbol!("analysis_index_callback", norm = |_, _| {});
+        let heads = [SPENSO_TAG.trace, *crate::epsilon::EPSILON_SYMBOL, callback];
+        let label = symbolica::function!(callback, heads[0], heads[1]);
+        // Representation dimensions also name scalar values, not identity heads.
+        let dimensional = symbolica::function!(
+            spenso::tensor_symbol!("analysis_dimension_T"),
+            spenso::mink!(heads[0], Atom::var(heads[1]))
+        );
+        let observed = SimplificationCandidates::scan(dimensional.as_view(), heads, || true);
+        assert!(observed.complete && observed.intrinsic && observed.normalized());
+        assert_eq!(observed.counts, [0; 3]);
+        // The syntactic observer also keeps arbitrary written payloads opaque;
+        // structure admission separately decides whether these are valid indices.
+        for source in [
+            "T(mink(spenso::chain,a))",
+            "T(mink(4,spenso::trace))",
+            "T(mink(4,a,spenso::bracket))",
+            "T(mink(4,f(spenso::epsilon)))",
+            "T(mink(4,opaque(analysis_power_vector(mink(4,a))^2)))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            let observed = SimplificationCandidates::scan(expression.as_view(), heads, || true);
+            assert!(
+                observed.complete && observed.intrinsic && observed.normalized(),
+                "{source}"
+            );
+            assert_eq!(observed.counts, [0; 3], "{source}");
+            assert_eq!(expression.normalize_dots(), expression, "{source}");
+        }
+        for index in [Atom::var(heads[0]), label] {
+            for port in [
+                spenso::mink!(4, &index),
+                symbolica::function!(
+                    spenso::structure::abstract_index::AIND_SYMBOLS.dind,
+                    crate::cof!(3, &index)
+                ),
+            ] {
+                let expression =
+                    symbolica::function!(spenso::tensor_symbol!("analysis_index_T"), &port);
+                let observed = SimplificationCandidates::scan(expression.as_view(), heads, || true);
+                assert!(observed.complete && observed.traversal_complete && observed.intrinsic);
+                assert!(observed.normalized());
+                assert_eq!(observed.counts, [0; 3]);
+            }
+        }
     }
 
     #[test]

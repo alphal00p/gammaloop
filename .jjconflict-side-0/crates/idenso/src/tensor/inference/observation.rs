@@ -149,13 +149,17 @@ impl InterfaceInference {
             super::tests::OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
         }
         let mut result = ExplicitIndexOccurrences::default();
-        if scope.count_indices
-            && let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value)
-        {
-            result.add(slot.rep().base().slot(slot.aind()), 1);
-            // Index payloads are opaque to multiplicity, but the scope contract
-            // still checks placeholders and nested chains inside those payloads.
-            scope.count_indices = false;
+        if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
+            if scope.count_indices {
+                result.add(slot.rep().base().slot(slot.aind()), 1);
+            }
+            // Admission owns the complete index identity. Names such as `in`
+            // or `out` inside it are data, not chain wiring placeholders.
+            return Ok(result);
+        }
+        if slots.parse_representation::<LibraryRep>(value).is_ok() {
+            // A compact representation similarly owns its dimension metadata.
+            return Ok(result);
         }
         if !scope.count_indices && !scope.validate {
             return Ok(result);
@@ -406,6 +410,47 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn admitted_slot_labels_are_not_chain_placeholder_syntax() {
+        crate::test_support::test_initialize();
+        let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let head = spenso::tensor_symbol!("slot_scope_label_T");
+        for label in [SPENSO_TAG.chain_in, SPENSO_TAG.chain_out] {
+            for index in [
+                AbstractIndex::Symbol(label.into()),
+                AbstractIndex::Symbol(label.into()).scoped(symbolica::symbol!("slot_scope_label")),
+            ] {
+                let slot = rep.slot(index);
+                let expression = symbolica::function!(head, slot.to_atom());
+                let occurrences = InterfaceInference::scoped_occurrences(
+                    expression.as_view(),
+                    &mut SlotMatcher::default(),
+                )
+                .unwrap();
+                assert_eq!(occurrences.counts, HashMap::from([(slot, 1)]));
+                let source = SymbolicTensor::infer(expression.clone()).unwrap();
+                assert_eq!(
+                    source.structure.logical_slots(),
+                    vec![rep.slot(PartialIndex::Explicit(index))]
+                );
+                assert_eq!(
+                    source.contract(Default::default()).unwrap().expression,
+                    expression
+                );
+            }
+            let compact = symbolica::function!(head, Minkowski {}.new_rep(label).to_symbolic([]));
+            SymbolicTensor::infer(compact).unwrap();
+            let actual_placeholder = symbolica::function!(head, label);
+            assert!(
+                InterfaceInference::scoped_occurrences(
+                    actual_placeholder.as_view(),
+                    &mut SlotMatcher::default(),
+                )
+                .is_err()
+            );
+        }
     }
 
     #[test]

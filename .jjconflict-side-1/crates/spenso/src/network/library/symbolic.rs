@@ -33,7 +33,7 @@ pub type LibraryKey<Aind> = Canonicalized<ExplicitKey<Aind>>;
 struct MetricNormalization;
 
 impl MetricNormalization {
-    fn normalize(value: AtomView<'_>) -> Option<Atom> {
+    fn normalize(value: AtomView<'_>, literal: bool) -> Option<Atom> {
         let AtomView::Fun(function) = value else {
             return None;
         };
@@ -51,7 +51,7 @@ impl MetricNormalization {
                         .representation()
                         .matches(second_slot.representation())
                     && !first_slot.is_concrete_index()
-                    && !Self::has_wildcard(value)
+                    && (literal || !Self::has_wildcard(value))
                 {
                     Some(first_slot.dimension().to_owned())
                 } else {
@@ -59,10 +59,10 @@ impl MetricNormalization {
                 }
             }
             (SlotMatch::Explicit(slot), SlotMatch::Other) => {
-                Self::compact_vector(value, first, slot, second, &mut slots)
+                Self::compact_vector(value, first, slot, second, &mut slots, literal)
             }
             (SlotMatch::Other, SlotMatch::Explicit(slot)) => {
-                Self::compact_vector(value, second, slot, first, &mut slots)
+                Self::compact_vector(value, second, slot, first, &mut slots, literal)
             }
             _ => None,
         }
@@ -74,6 +74,7 @@ impl MetricNormalization {
         slot: SlotView<'_>,
         vector: AtomView<'_>,
         slots: &mut SlotMatcher,
+        literal: bool,
     ) -> Option<Atom> {
         let AtomView::Fun(vector) = vector else {
             return None;
@@ -91,7 +92,7 @@ impl MetricNormalization {
                 || (representation.head().has_tag(&SPENSO_TAG.dualizable)
                     && (representation.is_base() || representation.is_dual())))
             || slot.is_concrete_index()
-            || Self::has_wildcard(metric)
+            || (!literal && Self::has_wildcard(metric))
         {
             return None;
         }
@@ -301,6 +302,24 @@ pub struct ExplicitTensorSymbols {
 }
 
 impl ExplicitTensorSymbols {
+    /// Build a metric from literal tensor slots or compact vectors. Unlike a
+    /// pattern declaration, an admitted index is data even if its spelling has
+    /// wildcard attributes. Use the same intrinsic metric identities without
+    /// interpreting those labels as pattern variables.
+    pub fn metric_literal<'a, 'b, A: Into<AtomOrView<'a>>, B: Into<AtomOrView<'b>>>(
+        &self,
+        a: A,
+        b: B,
+    ) -> Atom {
+        let metric = self.metric(a, b);
+        if matches!(metric.as_view(), AtomView::Fun(function) if function.get_symbol() == self.metric)
+        {
+            MetricNormalization::normalize(metric.as_view(), true).unwrap_or(metric)
+        } else {
+            metric
+        }
+    }
+
     pub fn metric<'a, 'b, A: Into<AtomOrView<'a>>, B: Into<AtomOrView<'b>>>(
         &self,
         a: A,
@@ -589,7 +608,7 @@ $g(#to-eq(a),#to-eq(b))$
         }
         None
     },norm = |value, out| {
-        if let Some(normalized) = MetricNormalization::normalize(value) {
+        if let Some(normalized) = MetricNormalization::normalize(value, false) {
             **out = normalized;
         }
     }),

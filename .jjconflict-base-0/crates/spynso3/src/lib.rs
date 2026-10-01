@@ -507,13 +507,13 @@ impl Spensor {
     }
 
     pub(crate) fn scalar_with_descriptor(
-        value: f64,
+        value: ConcreteOrParam<RealOrComplex<f64>>,
         descriptor: SymbolicTensor<PartialStructure>,
         descriptor_name: Option<Symbol>,
         descriptor_args: Vec<Atom>,
     ) -> Self {
         Self::from_storage_with_descriptor(
-            ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(RealOrComplex::Real(value))),
+            ParamOrConcrete::new_scalar(value),
             descriptor,
             descriptor_name,
             descriptor_args,

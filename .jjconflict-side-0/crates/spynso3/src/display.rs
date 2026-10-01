@@ -2716,6 +2716,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use super::*;
     use spenso::{
+        algebra::complex::RealOrComplex,
         network::{parsing::ShadowedStructure, tags::SPENSO_TAG},
         structure::{
             OrderedStructure,
@@ -2726,7 +2727,10 @@ mod tests {
             representation::{ExtendibleReps, LibraryRep, RepName, Representation},
             slot::IsAbstractSlot,
         },
-        tensors::data::{DenseTensor, SparseTensor},
+        tensors::{
+            data::{DenseTensor, SparseTensor},
+            parametric::ConcreteOrParam,
+        },
         vector_symbol,
     };
     use symbolica::{atom::AtomCore, function, symbol};
@@ -3294,7 +3298,7 @@ mod tests {
     fn scalar_latex_is_a_complete_notebook_math_fragment() {
         let interface = PartialStructure::from_logical_slots([]);
         let tensor = Spensor::scalar_with_descriptor(
-            2.,
+            ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
             SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),

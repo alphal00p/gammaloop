@@ -230,26 +230,21 @@ impl RegionObservation {
                     if let Ok(index) = AbstractIndex::try_from(slot.index()) {
                         self.reserved_indices.insert(index);
                     }
-                    // The candidate walker keeps slot payloads opaque. Reserve
-                    // nested written names there without treating them as heads.
-                    for payload in [slot.dimension(), slot.index()] {
-                        if !matches!(payload, AtomView::Var(_) | AtomView::Num(_)) {
-                            self.reserve_metadata(payload, slots);
-                        }
+                    // The complete index is reserved above. Its internal spelling
+                    // is neither another index nor a tensor candidate.
+                    if !matches!(slot.dimension(), AtomView::Var(_) | AtomView::Num(_)) {
+                        self.reserve_metadata(slot.dimension(), slots);
                     }
                     if let Ok(rep) = slots.representation(*slot) {
                         self.representations.insert(rep);
                     }
                     if slot.representation().wrapper().is_some() {
-                        self.head(slot.representation().head());
+                        let head = slot.representation().head();
+                        self.head(head);
+                        self.intrinsic &=
+                            super::super::inference::InterfaceInference::intrinsic_normalization_head(head);
                     }
-                    for payload in [slot.dimension(), slot.index()] {
-                        match payload {
-                            AtomView::Var(variable) => self.head(variable.get_symbol()),
-                            AtomView::Num(_) => {}
-                            _ => self.opaque = true,
-                        }
-                    }
+                    self.opaque |= !matches!(slot.dimension(), AtomView::Var(_) | AtomView::Num(_));
                 } else if let Ok(rep) = slots.parse_representation::<LibraryRep>(node) {
                     self.representations.insert(rep.rep);
                 } else if matches!(slot, SlotMatch::Opaque) {
@@ -1424,6 +1419,48 @@ mod tests {
     }
 
     #[test]
+    fn admitted_index_identity_does_not_authorize_algebra_or_invalidate_observations() {
+        use spenso::structure::slot::ParseableAind;
+        crate::test_support::test_initialize();
+        let named = spenso::index_symbol!("index_observation::hedge");
+        let scope = symbolica::symbol!("index_observation::scope_");
+        let tensor = spenso::tensor_symbol!("index_observation::T");
+        for index in [
+            AbstractIndex::Named(named.into(), 13, 1),
+            AbstractIndex::Named(named.into(), 13, 1).scoped(scope),
+            AbstractIndex::Symbol(AGS.gamma.into()),
+            AbstractIndex::Symbol(crate::color::CS.f.into()),
+            AbstractIndex::Symbol((*crate::epsilon::EPSILON_SYMBOL).into()),
+            AbstractIndex::Symbol(SPENSO_TAG.trace.into()),
+        ] {
+            let port = spenso::mink!(4, index.to_atom());
+            let source = SymbolicTensor::infer(symbolica::function!(tensor, &port)).unwrap();
+            let observed = source.reduction_observations();
+            assert!(observed.candidates.complete && observed.candidates.intrinsic);
+            assert_eq!(observed.identity_candidates(), 0);
+            assert_eq!(observed.reserved_indices, HashSet::from([index]));
+            assert!(observed.excludes_contraction_sources(Default::default()));
+            let result = source
+                .simplify_algebra(&super::super::AlgebraSettings::hep())
+                .unwrap();
+            assert_eq!(result.expression, source.expression);
+            assert_eq!(result.structure, source.structure);
+            assert_eq!(
+                result.reduction_status(),
+                super::super::ReductionStatus::Complete
+            );
+            let again = result
+                .simplify_algebra(&super::super::AlgebraSettings::hep())
+                .unwrap();
+            assert_eq!(again.expression, source.expression);
+            assert_eq!(
+                again.reduction_status(),
+                super::super::ReductionStatus::Complete
+            );
+        }
+    }
+
+    #[test]
     fn external_incidence_proof_accepts_compound_labels_and_scalar_powers() {
         let reps = crate::test_support::test_initialize();
         let label = spenso::index_symbol!("external_incidence::hedge");
@@ -1437,7 +1474,7 @@ mod tests {
             spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
         let tensor = SymbolicTensor::infer(&scalar * &polynomial).unwrap();
         let observed = tensor.reduction_observations();
-        assert!(!observed.candidates.complete);
+        assert!(observed.candidates.complete && observed.candidates.intrinsic);
         assert!(observed.excludes_internal_connections());
         assert!(!observed.is_terminal_polynomial());
         assert!(!observed.candidates.repeated_indices);
@@ -1446,6 +1483,10 @@ mod tests {
         let contracted = tensor.contract(Default::default()).unwrap();
         assert_eq!(contracted.expression, tensor.expression);
         assert_eq!(contracted.structure, tensor.structure);
+        assert_eq!(
+            contracted.reduction_status(),
+            super::super::ReductionStatus::Complete
+        );
         super::super::super::collection::SHALLOW_BUILDS.with(|count| assert_eq!(count.get(), 0));
 
         let changed = tensor

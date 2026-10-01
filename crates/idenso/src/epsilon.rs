@@ -1,6 +1,8 @@
 use spenso::{
-    g,
-    network::parsing::{AtomStructureExt, StrictTensorFilter},
+    network::{
+        library::symbolic::ETS,
+        parsing::{AtomStructureExt, StrictTensorFilter},
+    },
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
@@ -272,7 +274,7 @@ impl EpsilonSimplifierPass {
                 .iter()
                 .enumerate()
                 .fold(Atom::num(sign), |product, (i, arg)| {
-                    product * g!(arg.clone(), right[permutation[i]].clone())
+                    product * ETS.metric_literal(arg, &right[permutation[i]])
                 });
             *sum += term;
             return;

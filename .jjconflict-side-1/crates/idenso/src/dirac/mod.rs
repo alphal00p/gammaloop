@@ -4,6 +4,7 @@ use spenso::{
     metric,
     network::{
         library::symbolic::{ETS, ExplicitKey},
+        parsing::ParseState,
         tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
@@ -11,7 +12,7 @@ use spenso::{
         Canonicalized,
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{AbsInd, DummyAind, ParseableAind},
+        slot::{AbsInd, DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
     utils::to_superscript,
 };
@@ -19,8 +20,10 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     printer::PrintState,
-    symbol,
 };
+
+#[cfg(test)]
+use symbolica::symbol;
 
 use crate::{
     IndexTooling, bis, gamma, gamma0, rep_symbols::RS, shorthands::bracket::BracketNormalizer,
@@ -545,62 +548,80 @@ impl DiracSimplifier<'_> {
         BracketNormalizer::normalize(simplified.as_view())
     }
 
-    pub(crate) fn conjugate_matrices<Aind: DummyAind + ParseableAind>(expr: AtomView<'_>) -> Atom {
-        let dummy = symbol!("dummy");
-
-        let dummypati = function!(dummy, RS.i_).to_pattern();
-        let dummypatj = function!(dummy, RS.j_).to_pattern();
-
-        let conj_gamma = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__).spenso_conj();
-
-        let conj_gamma_rhs = (gamma0!([RS.d_, RS.j_], [Atom::var(RS.d_), function!(dummy, RS.j_)])
-            * gamma!(
-                [Atom::var(RS.d_), function!(dummy, RS.j_)],
-                [Atom::var(RS.d_), function!(dummy, RS.i_)],
-                RS.a__
-            )
-            * gamma0!([Atom::var(RS.d_), function!(dummy, RS.i_)], [RS.d_, RS.i_]))
-        .to_pattern();
-
-        let mut rules = vec![(conj_gamma, conj_gamma_rhs)];
-        // These four-dimensional matrices are Hermitian. Express their
-        // transposes with gamma0 sandwiches so the usual Dirac-adjoint
-        // boundary factors cancel without reversing a matrix-chain channel.
-        // gamma0 already owns its conjugation through its Real/Symmetric tags.
+    pub(crate) fn conjugate_matrices<Aind: DummyAind + ParseableAind>(
+        expr: AtomView<'_>,
+        dummies: &ParseState<Aind>,
+    ) -> Atom {
+        let mut result = expr.to_owned();
+        // Allocate the two sandwich connections per occurrence from the
+        // enclosing tensor's reservation scope. Original endpoint labels may
+        // coincide or contain wildcard-spelled symbols; neither is a template
+        // for a generated dummy.
         for (matrix, adjoint, sign) in [
+            (AGS.gamma, AGS.gamma, 1),
             (AGS.gamma5, AGS.gamma5, -1),
             (AGS.projm, AGS.projp, 1),
             (AGS.projp, AGS.projm, 1),
         ] {
-            let tensor = function!(matrix, bis!(4, RS.i_), bis!(4, RS.j_));
-            let transpose = Atom::num(sign)
-                * gamma0!(
-                    [Atom::num(4), Atom::var(RS.j_)],
-                    [Atom::num(4), function!(dummy, RS.j_)]
-                )
-                * function!(
-                    adjoint,
-                    bis!(4, function!(dummy, RS.j_)),
-                    bis!(4, function!(dummy, RS.i_))
-                )
-                * gamma0!(
-                    [Atom::num(4), function!(dummy, RS.i_)],
-                    [Atom::num(4), Atom::var(RS.i_)]
-                );
-            rules.push((tensor.spenso_conj(), transpose.to_pattern()));
-        }
-        let mut result = expr.to_owned();
-        for (conjugate, transpose) in rules {
-            let dummypati = dummypati.clone();
-            let dummypatj = dummypatj.clone();
-            result = result.replace(conjugate).with_map(move |m| {
-                let a = transpose.replace_wildcards_with_matches(m);
-                let i = dummypati.replace_wildcards_with_matches(m);
-                let j = dummypatj.replace_wildcards_with_matches(m);
-                a.replace(i)
-                    .with(Aind::new_dummy().to_atom())
-                    .replace(j)
-                    .with(Aind::new_dummy().to_atom())
+            let dimension = if matrix == AGS.gamma {
+                Atom::var(RS.d_)
+            } else {
+                Atom::num(4)
+            };
+            let first = Bispinor {}.to_symbolic([dimension.clone(), Atom::var(RS.i_)]);
+            let last = Bispinor {}.to_symbolic([dimension.clone(), Atom::var(RS.j_)]);
+            let mut source = symbolica::atom::FunctionBuilder::new(matrix)
+                .add_arg(&first)
+                .add_arg(&last);
+            if matrix == AGS.gamma {
+                source = source.add_arg(Atom::var(RS.a__));
+            }
+            let pattern = source.finish().spenso_conj().to_pattern();
+            let root = symbolica::id::MatchSettings::new()
+                .min_level(0)
+                .max_level(Some(0));
+            let mut slots = SlotMatcher::default();
+            let mut opaque_level = None;
+            result = result.replace_map(|node, context, out| {
+                if opaque_level.is_some_and(|level| context.function_level > level) {
+                    return;
+                }
+                opaque_level = None;
+                if !matches!(slots.classify(node), SlotMatch::Other) {
+                    // Protect literal payloads without assigning an unchanged
+                    // replacement, which would rebuild callback-bearing parents.
+                    opaque_level = Some(context.function_level);
+                    return;
+                }
+                // Root-level symbolic matching may also select one factor of
+                // a product. Only a complete unary conjugate is this rule's
+                // replacement boundary; spectators belong to the outer tree.
+                if !matches!(node, AtomView::Fun(function)
+                    if function.get_symbol() == spenso::network::library::function_lib::INBUILTS.conj
+                        && function.get_nargs() == 1)
+                {
+                    return;
+                }
+                let Some(matches) = node.pattern_match(&pattern, None, &root).next() else {
+                    return;
+                };
+                let inner_first =
+                    Bispinor {}.to_symbolic([dimension.clone(), dummies.fresh_index().to_atom()]);
+                let inner_last =
+                    Bispinor {}.to_symbolic([dimension.clone(), dummies.fresh_index().to_atom()]);
+                let mut middle = symbolica::atom::FunctionBuilder::new(adjoint)
+                    .add_arg(&inner_last)
+                    .add_arg(&inner_first);
+                if matrix == AGS.gamma {
+                    middle = middle.add_arg(Atom::var(RS.a__));
+                }
+                **out = (Atom::num(sign)
+                    * function!(AGS.gamma0, &last, &inner_last)
+                    * middle.finish()
+                    * function!(AGS.gamma0, &inner_first, &first))
+                .to_pattern()
+                .replace_wildcards(&matches)
+                .expect("the conjugate pattern binds every generated matrix argument");
             });
         }
         result

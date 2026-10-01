@@ -344,6 +344,7 @@ pub struct SlotMatcher {
     wrappers: [u32; 3],
     metric: std::sync::OnceLock<Symbol>,
     projectors: [std::sync::OnceLock<Symbol>; 3],
+    observed_slots: Option<Vec<Atom>>,
 }
 
 #[cfg(feature = "shadowing")]
@@ -357,6 +358,7 @@ impl Default for SlotMatcher {
             projectors: std::array::from_fn(|_| std::sync::OnceLock::new()),
             heads: [None; 16],
             resolved: Vec::new(),
+            observed_slots: None,
             tags: &SPENSO_TAG,
             aind: wrappers.aind,
             wrappers: [wrappers.dind, wrappers.uind, wrappers.selfdualind]
@@ -431,7 +433,25 @@ impl SlotMatcher {
     /// Identify a slot or an opaque slot payload in one classification pass.
     #[inline]
     pub fn classify<'a>(&mut self, value: AtomView<'a>) -> SlotMatch<'a> {
-        SlotView::classify(value, |function| self.classify_head(function))
+        let classified = SlotView::classify(value, |function| self.classify_head(function));
+        if matches!(classified, SlotMatch::Explicit(_))
+            && let Some(observed) = &mut self.observed_slots
+        {
+            observed.push(value.to_owned());
+        }
+        classified
+    }
+
+    /// Retain written ports during an existing inference traversal. Reusing
+    /// their normalized atoms must not reconstruct opaque index callbacks.
+    pub(crate) fn observe_slots<R>(
+        &mut self,
+        infer: impl FnOnce(&mut Self) -> R,
+    ) -> (R, Vec<Atom>) {
+        let previous = self.observed_slots.replace(Vec::new());
+        let result = infer(self);
+        let observed = std::mem::replace(&mut self.observed_slots, previous).unwrap();
+        (result, observed)
     }
 
     /// Recognize exactly `rep(dimension)`, optionally inside one variance wrapper.

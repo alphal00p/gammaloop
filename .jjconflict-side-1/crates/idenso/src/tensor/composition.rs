@@ -715,6 +715,7 @@ impl PortRewriteState {
     /// Metric normalization is intrinsic; callbacks in its operands are checked too.
     fn exact_arithmetic(value: AtomView<'_>) -> bool {
         let mut exact = true;
+        let mut slots = SlotMatcher::default();
         value.visitor(&mut |node| {
             exact &= !node.needs_normalization()
                 && match node {
@@ -730,6 +731,12 @@ impl PortRewriteState {
                     }
                     _ => true,
                 };
+            if exact && let SlotMatch::Explicit(slot) = slots.classify(node) {
+                // Relabelling replaces the complete admitted port. Its index
+                // payload is an opaque identity and is never rebuilt here.
+                exact = Self::exact_arithmetic(slot.dimension());
+                return false;
+            }
             exact
         });
         exact
@@ -1205,10 +1212,10 @@ pub(crate) fn rewrite_interface_ports(
         );
     }
     // Identity rewrites still walk every summand, but need no regrouping proof.
-    state.bulk_arithmetic = replacements
-        .iter()
-        .any(|(&position, replacement)| port_atom(slots[position]) != *replacement)
-        && PortRewriteState::exact_arithmetic(value.expression.as_view())
+    state.bulk_arithmetic = replacements.iter().any(|(&position, replacement)| {
+        matching_interface_position(replacement.as_view(), &slots[position..=position], &[false])
+            .is_none()
+    }) && PortRewriteState::exact_arithmetic(value.expression.as_view())
         && replacements
             .values()
             .all(|replacement| PortRewriteState::exact_arithmetic(replacement.as_view()));
@@ -2590,6 +2597,52 @@ mod tests {
                 Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
             ));
         }
+    }
+
+    #[test]
+    fn bulk_relabeling_treats_admitted_index_payloads_as_opaque() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let label = symbolica::symbol!(
+            "bulk_relabel_index_payload",
+            tag = &SPENSO_TAG.index,
+            norm = move |_, _| {
+                seen.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Named(
+            label.into(),
+            7,
+            1,
+        )));
+        let target = rep().slot(PartialIndex::Explicit(AbstractIndex::Named(
+            label.into(),
+            7,
+            2,
+        )));
+        let head = SPENSO_TAG.tensor_symbol("bulk_relabel_opaque_index_tensor");
+        let term = |n, slot| {
+            FunctionBuilder::new(head)
+                .add_arg(n)
+                .add_arg(port_atom(slot))
+                .finish()
+        };
+        let value = SymbolicTensor::infer(Atom::add_many((0..3).map(|n| term(n, port)))).unwrap();
+        let expected = Atom::add_many((0..3).map(|n| term(n, target)));
+        let replacements = HashMap::from([(0, port_atom(target))]);
+        calls.store(0, Ordering::Relaxed);
+        assert!(PortRewriteState::exact_arithmetic(
+            value.expression.as_view()
+        ));
+        assert_eq!(
+            rewrite_interface_ports(&value, &replacements, None).unwrap(),
+            expected
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]

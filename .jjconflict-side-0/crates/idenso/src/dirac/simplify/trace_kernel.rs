@@ -9,7 +9,9 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(test)]
 use spenso::g;
+use spenso::network::library::symbolic::ETS;
 #[cfg(test)]
 use symbolica::atom::AtomCore;
 use symbolica::atom::{Atom, AtomView};
@@ -145,7 +147,7 @@ impl<const N: usize> TraceKernel<N> {
         debug_assert_eq!(indices.len(), N);
         // Each scalar product is built once and shared by all template terms.
         let mut metrics: Vec<_> = (0..N)
-            .flat_map(|a| (0..N).map(move |b| g!(indices[a], indices[b])))
+            .flat_map(|a| (0..N).map(move |b| ETS.metric_literal(indices[a], indices[b])))
             .collect();
         if output.factored() && N >= 10 {
             let factored = self.factored(axial);
@@ -628,7 +630,7 @@ pub(super) fn evaluate_generic(
         canonical_arguments,
         _output,
         None,
-        |a, b| Some(g!(a, b)),
+        |a, b| Some(ETS.metric_literal(a, b)),
     )
     .expect("intrinsic trace metrics cannot refuse evaluation")
 }
@@ -1343,8 +1345,12 @@ pub(super) mod tests {
             .collect();
         // Force one long-trace step before projection so the fallback is
         // exercised. Projecting first would only test repeated-pair reductions.
+        let dummies = spenso::network::parsing::ParseState::default();
+        for factor in &factors {
+            dummies.reserve_indices(factor.as_view());
+        }
         let mut reduced = DiracSimplifier::new(&crate::dirac::GammaSimplifySettings::default())
-            .simplify_single_gamma5_trace(spin.as_view(), &parsed, 0)
+            .simplify_single_gamma5_trace(spin.as_view(), &parsed, 0, &dummies)
             .unwrap();
         let basis = [
             p!(reps.mink4.to_symbolic([])),

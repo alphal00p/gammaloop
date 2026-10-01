@@ -74,6 +74,17 @@ available because converting a network to a symbolic descriptor would lose store
 Execution and rendering use `execute`, `step`, `status`, `result_tensor`, `result_scalar`,
 `expression`, `to_dot`, `to_html`, `render`, and `to_linnest`.
 
+Index syntax is checked when a tensor structure is admitted. Subsequent
+contraction, algebra, relabelling, and reconstruction use the admitted label as
+an opaque identity: named and scoped labels have the same capabilities as plain
+symbols. A label named `in`, `out`, or `mu_` remains literal index data; it does
+not become a chain endpoint or pattern wildcard during algebra. Explicit pattern
+APIs retain their pattern semantics. Numeric admission must preserve a label
+exactly or reject it; it must never narrow distinct labels into the same index.
+Representation compatibility, index incidence, and port order still govern
+valid tensor operations. Component coordinates and representation dimensions
+have their own input requirements; they are not abstract labels.
+
 Component evaluation uses exact HEP data by default: four-dimensional Dirac
 matrices in the Weyl basis, SU(3) generators and structure constants, and
 dimension-dependent identity and metric factories. `TensorLibrary.hep_lib_atom()`
