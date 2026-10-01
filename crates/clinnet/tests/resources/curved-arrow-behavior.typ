@@ -2019,3 +2019,109 @@
     ()
   })
 })
+
+// Native candidate footprints retain exact painted geometry.
+#cetz.canvas(length: 1pt, {
+  (ctx => {
+    let paths = (
+      curve.line((0, 0), (4, 0)),
+      curve.from-cubic((start: (0, 0), control-start: (1, 2), control-end: (3, -1), end: (4, 0))),
+      curve.path(curve.line((0, 0), (1, 1)), curve.line((3, 1), (5, 0))),
+      curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close(),
+        curve.move-to((3, 0)), curve.cubic-to((4, 1), (5, -2), (6, 0))),
+      curve.path(), curve.line((2, 2), (2, 2)),
+    )
+    let styles = (
+      (mark: (end: (symbol: "straight", length: 0.8, width: 0.4)), mark-position: 1),
+      (mark: (end: (symbol: ">", length: 0.8, width: 0.4)), mark-position: "center"),
+      (mark: (start: (symbol: "<", pos: 20%, offset: -5%), end: (symbol: "straight", pos: 35%, offset: 10%))),
+      (mark: (end: ((symbol: ">", sep: 0.15), (symbol: "straight", length: 75%, width: 50%)))),
+      (mark: (end: (symbol: "straight", reverse: true, flip: true, harpoon: true, slant: 30%)), mark-position: 0.6, mark-shift: -0.1),
+      (mark: (end: (symbol: ">", fill: red, stroke: none, length: 0.5, width: 0.2))),
+      (mark: (end: (symbol: ">", stroke: blue + 0.7pt), transform-shape: true)),
+      (mark: (end: (symbol: "straight", length: 0.8, width: 0.4)), unit: 2),
+    )
+    let transforms = (
+      cetz.matrix.ident(4),
+      cetz.matrix.transform-scale((-1.7, 0.6, 1)),
+      cetz.matrix.mul-mat(cetz.matrix.transform-translate(2, -3, 1), cetz.matrix.transform-shear-x(0.4)),
+      cetz.matrix.transform-rotate-xyz(35deg, 20deg, 0deg),
+      cetz.matrix.transform-scale((0, 0, 1)),
+    )
+    for (transform-index, transform) in transforms.enumerate() {
+      for (style-index, options) in styles.enumerate() {
+        let local = ctx + (transform: transform)
+        local.style.bezier.stroke = red + 0.5pt
+        let style = (stroke: black + 0.4pt) + options
+        if transform-index != 4 {
+          assert.ne(drawing._mark-carrier-footprint-spec(local, paths, style), none,
+            message: "ordinary matrix case must exercise the native footprint kernel")
+        }
+        let actual = drawing._annotation-candidate-bounds(local, paths, style)
+        let expected = drawing._annotation-path-bounds(local, paths.map(path => drawing._derived-path(path, style, auto, true, true)))
+        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "native candidate footprints " + repr((transform-index, style-index)))
+      }
+    }
+    let empty-prefix = curve.path(curve.move-to((9, 9)), curve.move-to((0, 0)),
+      curve.line-to((1, 0)), curve.line-to((2, 1)))
+    let empty-style = (stroke: black + 0.4pt) + styles.first()
+    assert.eq(drawing._mark-carrier-footprint-spec(ctx, (empty-prefix,), empty-style), none)
+    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(ctx, (empty-prefix,), empty-style)),
+      cbor.encode(drawing._annotation-path-bounds(ctx, (drawing._derived-path(empty-prefix, empty-style, auto, true, true),))))
+    (ctx: ctx)
+  },)
+})
+
+#let footprint-custom-mark(entry) = {
+  cetz.draw.anchor("tip", (0, 0))
+  cetz.draw.anchor("base", (entry.length, 0))
+  cetz.draw.line((0, 0), (entry.length, 0.3), stroke: entry.stroke)
+  cetz.draw.content((entry.length / 2, 0), [X], padding: 0)
+  cetz.draw.hide({ cetz.draw.line((-20, -20), (20, 20), stroke: red + 2pt) })
+}
+#cetz.canvas(length: 1pt, {
+  (ctx => {
+    let paths = (
+      curve.line((0, 0), (4, 0)),
+      curve.from-cubic((start: (0, 0), control-start: (1, 2), control-end: (3, -1), end: (4, 0))),
+      curve.path(curve.line((0, 0), (1, 1)), curve.line((3, 1), (5, 0))),
+    )
+    let custom = ctx
+    custom.marks.marks.insert("custom", footprint-custom-mark)
+    custom.marks.mnemonics.insert("my-arrow", "custom")
+    for transform in (
+      cetz.matrix.ident(4),
+      cetz.matrix.transform-scale((-1.7, 0.6, 1)),
+      cetz.matrix.mul-mat(cetz.matrix.transform-translate(2, -3, 1), cetz.matrix.transform-shear-x(0.4)),
+    ) {
+      for shape in (false, true) {
+        let local = custom + (transform: transform)
+        let style = (stroke: black + 0.4pt,
+          mark: (end: (symbol: "my-arrow", length: 0.8, width: 0.4, pos: 0.7), transform-shape: shape),
+          mark-position: 1)
+        assert.ne(drawing._mark-carrier-footprint-spec(local, paths, style), none)
+        let actual = drawing._annotation-candidate-bounds(local, paths, style)
+        let expected = drawing._annotation-path-bounds(local, paths.map(path => drawing._derived-path(path, style, auto, true, true)))
+        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "custom content, hidden pieces and transforms")
+      }
+    }
+    let relative = (stroke: black + 0.4pt,
+      mark: (end: (symbol: "my-arrow", length: 0.8, width: 0.4, pos: 25%)))
+    assert.eq(drawing._mark-carrier-footprint-spec(custom, paths, relative), none)
+    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(custom, paths, relative)),
+      cbor.encode(drawing._annotation-path-bounds(custom, paths.map(path => drawing._derived-path(path, relative, auto, true, true)))))
+    let unevaluated = ctx
+    unevaluated.marks.marks.insert("unevaluated", _ => panic("zero carriers must not evaluate custom marks"))
+    let zero-style = (stroke: black + 0.4pt, mark: (end: "unevaluated"))
+    let collapsed = unevaluated + (transform: cetz.matrix.transform-scale((0, 0, 1)))
+    assert.eq(drawing._mark-carrier-footprint-spec(collapsed, paths, zero-style), none)
+    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(collapsed, paths, zero-style)),
+      cbor.encode(drawing._annotation-path-bounds(collapsed, paths.map(path => drawing._derived-path(path, zero-style, auto, true, true)))))
+    let zero-unit = zero-style + (unit: 0)
+    let multi = (paths.last(),)
+    assert.eq(drawing._mark-carrier-footprint-spec(unevaluated, multi, zero-unit), none)
+    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(unevaluated, multi, zero-unit)),
+      cbor.encode(drawing._annotation-path-bounds(unevaluated, multi.map(path => drawing._derived-path(path, zero-unit, auto, true, true)))))
+    (ctx: ctx)
+  },)
+})

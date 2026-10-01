@@ -2,8 +2,8 @@
 
 The bundled binary is built from CeTZ `v0.5.1`, commit
 `100ea3c52342c8bf866e8f154589ce8cd309265c`, with
-`batched-bounds.patch`, `content-placement.patch`, `sampled-curves.patch`, and
-`marker-geometry.patch` applied in that order. The source remains under CeTZ's
+`batched-bounds.patch`, `content-placement.patch`, `sampled-curves.patch`,
+`marker-geometry.patch`, and `marker-footprints.patch` applied in that order. The source remains under CeTZ's
 LGPL-3.0-or-later license; see `../LICENSE`.
 
 The bounds patch adds one export that calls the existing cubic-extrema and AABB
@@ -29,6 +29,15 @@ in Typst. Invalid dimensions and nonfinite geometry are rejected before
 indexing or painting; empty unmarked carriers remain valid. The patch also
 adds the pinned `libm` dependency used by Typst's trigonometric functions.
 
+The footprint patch batches candidate arrow collision bounds from shared numeric
+marker templates. It resolves each carrier's relative stations, normalizes and
+joins its paths, and uses the same marker contact/trim and cubic-extrema owners
+as painting. Shaft bounds remain per command; each marker drawable retains one
+whole-path bound. Content keeps its original dimensions after position
+transforms. Integer and floating-point CBOR coordinates are both accepted;
+invalid dimensions, nonfinite values, and overflowing geometry are rejected.
+Style resolution and context-dependent custom shape evaluation remain in Typst.
+
 The checked-in binary uses Rust 1.98.1 (`48a229cea`, LLVM 21.1.8), the patched
 `cetz-core/Cargo.lock`, and the upstream release profile with
 `CARGO_PROFILE_RELEASE_OPT_LEVEL=3` for speed. The build uses the cached
@@ -46,6 +55,7 @@ git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/content-placement.patch"
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/sampled-curves.patch"
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-geometry.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-footprints.patch"
 (
   cd "$cetz_source" || exit
   unset RUSTC RUSTDOC RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS CARGO_TARGET_DIR
@@ -56,7 +66,7 @@ cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm"
 ```
 
 The resulting binary's SHA-256 is
-`1d2180569a835d13afa37363e3bb281ff91210b5783f071f64d8eefee2525a9c`.
+`2b9b3f9fd7a1318c1f01b057ac9cff8e09fed12229e228c999d91b8bb4a61461`.
 The bounds behavior fixture compares batched results against the scalar CeTZ
 exports, including degenerate curves, mixed dimensions, signed zeros and
 nonfinite aggregation. It runs as part of the Clinnet public Typst fixture. The identity-target fixture
@@ -71,3 +81,8 @@ and trimming algorithm, including short carriers, reversed/slanted markers,
 zero-length marks, and repeated controls. Native tests also cover malformed
 plans and empty unmarked carriers. Marker numeric output uses floating-point
 coordinates; mathematical integer values need not retain CBOR integer tags.
+
+Candidate-footprint tests compare exact CBOR bounds with the ordinary painted
+owner across relative and repeated marks, curved and short carriers, custom
+content, hidden drawables, transforms, and per-path stroke styles. Native tests
+also cover trimming, relative stations, singular transforms, and invalid inputs.

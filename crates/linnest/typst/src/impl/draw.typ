@@ -1600,21 +1600,10 @@
 }
 
 // Canonical mark geometry is independent of the candidate carrier.
-#let _mark-template(ctx, entry) = {
+#let _mark-template(ctx, entry, unresolved-placement: false) = {
   let (shape, defaults) = cetz.mark-shapes.get-mark(
     ctx,
     entry.symbol,
-  )
-  for flag in ("reverse", "flip", "harpoon") {
-    entry.at(flag) = (
-      entry.at(flag) != defaults.at(flag, default: false)
-    )
-  }
-  entry.mark = none
-  let mark = cetz.mark._eval-mark-shape-and-anchors(
-    ctx,
-    shape(entry),
-    entry,
   )
   let symbol = ctx.marks.mnemonics.at(
     entry.symbol,
@@ -1628,6 +1617,22 @@
       .at(symbol, default: (symbol, (:)))
       .first()
   }
+  // A custom shape receives the full processed entry and may use a relative
+  // pos/offset to change its geometry. It needs its actual carrier context.
+  if unresolved-placement and not builtin and (
+    type(entry.pos) == ratio or type(entry.offset) == ratio
+  ) { return none }
+  for flag in ("reverse", "flip", "harpoon") {
+    entry.at(flag) = (
+      entry.at(flag) != defaults.at(flag, default: false)
+    )
+  }
+  entry.mark = none
+  let mark = cetz.mark._eval-mark-shape-and-anchors(
+    ctx,
+    shape(entry),
+    entry,
+  )
   // Triangle/straight stroke anchors are not their geometric tip/back;
   // in particular, straight's declared base is beside its tip.
   if builtin and symbol in ("triangle", "straight") {
@@ -1663,17 +1668,35 @@
     tip: tip, back: back, length: length)
 }
 
-// Resolve styles and custom marker geometry once, before positioning the mark
-// on its carrier. Both painting and candidate collision bounds use this plan.
-#let _prepare-mark-carrier(draw-style, element, paint, ratio, shift, ctx) = {
-  let resolved = cetz.styles.resolve(
-    ctx.style,
-    merge: draw-style,
-    root: "bezier",
-  )
+#let _mark-carrier-style(draw-style, ctx) = {
+  let resolved = cetz.styles.resolve(ctx.style, merge: draw-style, root: "bezier")
   if ctx.at("_perspective-projection", default: false) {
     resolved.mark.transform-shape = true
   }
+  resolved
+}
+
+// Both painted arrows and numeric footprints use the same canonical shape
+// preparation. Only placement ratios may remain unresolved in shared templates.
+#let _mark-templates(ctx, style, path-length) = {
+  let sides = ()
+  for root in ("start", "end") {
+    let templates = ()
+    for (index, entry) in cetz.mark.process-style(ctx, style, root, path-length).enumerate() {
+      if entry.symbol == none { continue }
+      let prepared = _mark-template(ctx, entry, unresolved-placement: path-length == none)
+      if prepared == none { return none }
+      templates.push((..prepared, index: index))
+    }
+    sides.push(templates)
+  }
+  sides
+}
+
+// Resolve styles and custom marker geometry once, before positioning the mark
+// on its carrier. Both painting and candidate collision bounds use this plan.
+#let _prepare-mark-carrier(draw-style, element, paint, ratio, shift, ctx) = {
+  let resolved = _mark-carrier-style(draw-style, ctx)
   let transform = ctx.transform
   let plain = element.first()(ctx + (transform: cetz.matrix.ident(4)))
   let carrier = plain.drawables.first()
@@ -1696,23 +1719,21 @@
   let templates = ()
   let marks = ()
   if total > 0 {
-    for (side, root) in ("start", "end").enumerate() {
+    for (side, prepared-marks) in _mark-templates(mark-ctx, resolved.mark, total).enumerate() {
       let at = if ratio == none { 0 } else {
         if side == 0 { ratio * total + shift }
         else { (1 - ratio) * total - shift }
       }
-      for (index, entry) in cetz.mark.process-style(mark-ctx, resolved.mark, root, total).enumerate() {
-        if entry.symbol == none { continue }
+      for prepared in prepared-marks {
+        let entry = prepared.entry
         if entry.pos != none { at = entry.pos }
         at += entry.offset
-        let prepared = _mark-template(mark-ctx, entry)
-        entry = prepared.entry
         templates.push(prepared.mark.drawables)
         marks.push((
           tip: prepared.tip, back: prepared.back, length: prepared.length,
           at: at, side: side,
           shorten: ratio == none and entry.shorten-to != none
-            and (entry.shorten-to == auto or index <= entry.shorten-to),
+            and (entry.shorten-to == auto or prepared.index <= entry.shorten-to),
           straight: prepared.builtin and prepared.symbol == "straight",
         ))
         at += prepared.length + entry.sep
@@ -1724,6 +1745,106 @@
     paint: paint, templates: templates,
     geometry: (segments: carrier.segments, total: total, paint: paint, marks: marks),
   )
+}
+
+// The native batch receives actual canonical geometry, not an approximate head
+// envelope. Context-dependent hooks and shapes retain their drawing semantics.
+#let _mark-carrier-footprint-spec(ctx, paths, style) = {
+  if (not _has-mark(style) or _has-pattern(style) or ctx.debug
+    or (type(ctx.resolve-coordinate) == array and ctx.resolve-coordinate.len() > 0)
+    or cetz.mark.check-mark(cetz.styles.resolve(ctx.style, root: "line").mark)
+    or cetz.mark.check-mark(cetz.styles.resolve(ctx.style, root: "bezier").mark)
+    or not style.at("join", default: true) or style.at("close", default: false)) {
+    return none
+  }
+  let style = _positioned-mark-style(style)
+  let draw-style = _draw-style(style)
+  let resolved = _mark-carrier-style(draw-style, ctx)
+  let flat = not resolved.mark.transform-shape
+  let transform = ctx.transform
+  // A collapsed carrier never evaluates its custom shape when painted. Keep
+  // that conditional evaluation for singular projections of the drawing plane.
+  if (flat and transform.at(0).at(0) * transform.at(1).at(1)
+      - transform.at(0).at(1) * transform.at(1).at(0) == 0) { return none }
+  let mark-ctx = ctx + (resolve-coordinate: ())
+  let numeric-paths = ()
+  let any-nonzero = false
+  // A single cubic uses the Bezier root. Longer carriers use merge-path's
+  // unrooted style, just as _mark-carrier-input does for painting.
+  let shaft-styles = ()
+  for root in ("bezier", ()) {
+    let shaft = cetz.styles.resolve(ctx.style, merge: draw-style + (mark: none), root: root)
+    let stroke = cetz.util.resolve-stroke(shaft.stroke)
+    shaft-styles.push((
+      shaft-radius: cetz.util.resolve-number(ctx, stroke.thickness) / 2,
+      shaft-visible: shaft.stroke != none or shaft.fill != none,
+    ))
+  }
+  for path in paths {
+    let segments = curve-api.segments(path)
+    for segment in segments {
+      if (segment.start != segment.control-start or segment.start != segment.control-end
+        or segment.start != segment.end) { any-nonzero = true }
+    }
+    // Single lines/quadratics are elevated to cubics by the painted owner too.
+    let local = if segments.len() == 1 { curve-api.from-cubic(segments.first()) } else { path }
+    let unit = if segments.len() == 1 { 1 } else { draw-style.at("unit", default: 1) }
+    // Non-numeric units need coordinate resolution; a zero unit suppresses
+    // custom shape evaluation by collapsing the painted carrier.
+    if type(unit) not in (int, float) or unit == 0 { return none }
+    let subpaths = curve-api.to-cetz-data(local, unit: unit)
+    // Empty move-only subpaths use primitive processing in Kurvst; they do
+    // not contribute an origin or a connector to the painted carrier.
+    if subpaths.any(path => path.last().len() == 0) { return none }
+    numeric-paths.push((
+      segments: subpaths,
+      ..shaft-styles.at(if segments.len() == 1 { 0 } else { 1 }),
+    ))
+  }
+  // Zero-length carriers never evaluate custom mark shapes when painted.
+  if not any-nonzero { return none }
+  let templates = _mark-templates(mark-ctx, resolved.mark, none)
+  if templates == none { return none }
+  let mark-ratio = _mark-ratio(style)
+  let marks = ()
+  for (side, prepared-marks) in templates.enumerate() {
+    for prepared in prepared-marks {
+      let entry = prepared.entry
+      let distances = ()
+      for value in (entry.pos, entry.offset) {
+        distances.push(if value == none { none } else {
+          (value: if type(value) == ratio { value / 100% } else { value },
+            relative: type(value) == ratio)
+        })
+      }
+      let drawables = ()
+      for drawable in prepared.mark.drawables {
+        if cetz.drawable.TAG.hidden in drawable.tags { continue }
+        if (drawable.type == "path" and drawable.at("stroke", default: none) == none
+          and drawable.at("fill", default: none) == none) { continue }
+        let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+        let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
+        if drawable.type == "path" {
+          drawables.push((type: "path", segments: drawable.segments, radius: radius, visible: true))
+        } else if drawable.type == "content" {
+          drawables.push((type: "content", pos: drawable.pos, width: drawable.width,
+            height: drawable.height, radius: radius, visible: true))
+        }
+      }
+      marks.push((
+        tip: prepared.tip, back: prepared.back, length: prepared.length,
+        side: side,
+        shorten: mark-ratio == none and entry.shorten-to != none
+          and (entry.shorten-to == auto or prepared.index <= entry.shorten-to),
+        straight: prepared.builtin and prepared.symbol == "straight",
+        pos: distances.first(), offset: distances.last(), sep: entry.sep,
+        drawables: drawables,
+      ))
+    }
+  }
+  (paths: numeric-paths, transform: ctx.transform,
+    flat: flat,
+    ratio: mark-ratio, shift: _style-value(style, "mark-shift"), marks: marks)
 }
 
 #let _paint-mark-carrier(plan, geometry) = {
@@ -1998,6 +2119,17 @@
   results
 }
 
+// One native request owns all candidate shaft/mark bounds for this label.
+// The general rendering owner remains the reference for geometry whose custom
+// callbacks depend on the individual carrier or on CeTZ's evolving context.
+#let _annotation-candidate-bounds(ctx, paths, style) = {
+  let spec = _mark-carrier-footprint-spec(ctx, paths, style)
+  if spec == none {
+    _annotation-path-bounds(ctx, paths.map(path =>
+      _derived-path(path, style, auto, true, true)))
+  } else { cetz.mark.footprints(spec) }
+}
+
 // Flatten only the finite attachment geometry. Affine transformation happens
 // before the flatness test, so rotated text and scaled canvases use one metric.
 #let _label-path-lines(ctx, path, accuracy) = {
@@ -2098,8 +2230,8 @@
     let frames = if fixed-position != none { (frame,) } else {
       curve-api.frames(candidate-path, positions.map(at => options.total / 2 + (at - options.total / 2)), accuracy: accuracy)
     }
-    // Prepare each finite arrow once. The shared candidate batch now owns
-    // its clearance against both this arrow and the full physical carrier.
+    // Candidate arrows stay numeric. Only the selected arrow is materialized
+    // through CeTZ; the shared batch owns clearance against the finite path.
     let arrows = positions.map(at => if attached == none { none } else {
       let arrow-style = attached + (
         offset: 0, offset-side: none,
@@ -2108,7 +2240,7 @@
       let arrow-path = _path-layer(candidate-path, arrow-style, 0, 0, none, auto)
       (
         segments: if attachment { curve-api.segments(arrow-path) } else { () },
-        prepared: if placement { _derived-path(arrow-path, arrow-style, auto, true, true) } else { () },
+        path: arrow-path,
       )
     })
     let resolved = cbor(_plugin.label_candidates(cbor.encode((
@@ -2129,13 +2261,13 @@
       candidates.push((
         position: candidate.position, at: at, side: candidate-side,
         path-index: path-index, path-shift: candidate.path-shift,
-        annotation-path: if arrow == none { () } else { arrow.prepared },
+        annotation-path: if arrow == none { none } else { arrow.path },
         corners: candidate.corners, bounds: candidate.bounds, cost: candidate.cost,
       ))
     }
   }
   let footprints = if placement and attached != none {
-    _annotation-path-bounds(ctx, candidates.map(candidate => candidate.annotation-path))
+    _annotation-candidate-bounds(ctx, candidates.map(candidate => candidate.annotation-path), attached)
   } else { candidates.map(_ => ()) }
   for i in range(candidates.len()) {
     let candidate = candidates.at(i)

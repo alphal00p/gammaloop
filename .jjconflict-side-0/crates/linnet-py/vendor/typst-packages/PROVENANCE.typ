@@ -55,11 +55,19 @@ contact and transform arithmetic, validates finite geometry and dimensions,
 and returns floating-point coordinates. Typst's `libm` trigonometric dependency
 is pinned in the marker patch.
 
+Candidate marker footprints reuse shared canonical templates and resolve each
+carrier's stations in one native batch. The marker painter owns contacts and
+trimming, and the existing bounds owner supplies cubic extrema. Collision boxes
+retain per-command shafts, whole marker paths, stroke radii, and content
+position/dimension behavior. Shape callbacks that require their full carrier
+context continue through the ordinary drawing owner.
+
 The source patches and reproducible build instructions are in
 `preview/cetz/0.5.1/cetz-core/batched-bounds.patch`,
 `preview/cetz/0.5.1/cetz-core/content-placement.patch`,
 `preview/cetz/0.5.1/cetz-core/sampled-curves.patch`,
-`preview/cetz/0.5.1/cetz-core/marker-geometry.patch`, and
+`preview/cetz/0.5.1/cetz-core/marker-geometry.patch`,
+`preview/cetz/0.5.1/cetz-core/marker-footprints.patch`, and
 `preview/cetz/0.5.1/cetz-core/REBUILD.typ`. They apply to upstream CeTZ `v0.5.1`,
 commit `100ea3c52342c8bf866e8f154589ce8cd309265c`, under the same LGPL license. The core uses release optimization level 3 for
 speed; the exact compiler, linker, dependency lockfile, and override are

@@ -13,6 +13,11 @@
   path-util.bezier.cetz-core.marker_geometry_func, (carriers: carriers),
 ).carriers
 
+// Measure finite carriers and their actual canonical marks in one numeric batch.
+#let footprints(spec) = path-util.bezier.call_wasm(
+  path-util.bezier.cetz-core.marker_footprints_func, spec,
+)
+
 /// Checks if a mark should be drawn according to the current style.
 /// - style (style): The current style.
 /// -> bool
@@ -27,7 +32,8 @@
 /// - ctx (context): The context object.
 /// - style (style): The current style.
 /// - root (str): Where the mark is being placed, normally either `"start"` or `"end"`. Allows different styling for marks in different directions.
-/// - path-length (float): The length of the path. This is used for relative offsets.
+/// - path-length (float,none): The length used for relative offsets. `none`
+///   preserves path-relative ratios for shared numeric carrier preparation.
 #let process-style(ctx, style, root, path-length) = {
   let base-style = (
     symbol: auto,
@@ -93,12 +99,14 @@
       }
     }
 
+    // Preserve ratios when preparing a shared template: native carrier batches
+    // resolve them against each carrier's own sampled length.
     // Path length relative attributes
     for k in ("offset", "pos",) {
       let v = style.at(k)
       if v != none and v != auto {
         style.insert(k, if type(v) == ratio {
-          v * path-length / 100%
+          if path-length == none { v } else { v * path-length / 100% }
         } else {
           util.resolve-number(ctx, v)
         })
