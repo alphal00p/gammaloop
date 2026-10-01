@@ -1247,6 +1247,9 @@
   let edge = callbacks.edge
   let source = callbacks.source
   let sink = callbacks.sink
+  if callbacks.values().all(mapper => mapper == none) {
+    return _assert-graph(graph_)
+  }
   let records = (
     node: if node == none { () } else { _node-records(graph_, none) },
     edge: if edge == none and source == none and sink == none { () } else {
@@ -1278,21 +1281,23 @@
   let structural-changed = false
   let structural-patches = (nodes: (), edges: (), hedges: ())
   let native-data = _native-data(graph_)
-  let info = _info-record(graph_)
-  let graph-record = _record-with-fields(
-    info + (statements: info.at("global-statements", default: (:))),
-    (:),
-    (:),
-  )
-  let graph-patch = _mapped-patch(
-    graph,
-    graph-record,
-    "graph",
-    "graph.map graph",
-  )
-  if graph-patch.data != none {
-    native-data.graph = graph-patch.data
-    changed = true
+  if graph != none {
+    let info = _info-record(graph_)
+    let graph-record = _record-with-fields(
+      info + (statements: info.at("global-statements", default: (:))),
+      (:),
+      (:),
+    )
+    let graph-patch = _mapped-patch(
+      graph,
+      graph-record,
+      "graph",
+      "graph.map graph",
+    )
+    if graph-patch.data != none {
+      native-data.graph = graph-patch.data
+      changed = true
+    }
   }
 
   if node != none {
@@ -1319,23 +1324,25 @@
     for edge-source in records.edge {
       let edge-record = _record-with-fields(edge-source, (:), (:))
       let edge-fields = edge-record.fields
-      let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
-      if patch.data != none {
-        native-data.edges = _array-set(
-          native-data.edges,
-          edge-source.edge,
-          patch.data,
-        )
-        changed = true
-      }
-      if patch.structural != none {
-        let structural = patch.structural + (index: edge-source.edge)
-        structural-patches.edges.push(structural)
-        structural-changed = true
+      if edge != none {
+        let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
+        if patch.data != none {
+          native-data.edges = _array-set(
+            native-data.edges,
+            edge-source.edge,
+            patch.data,
+          )
+          changed = true
+        }
+        if patch.structural != none {
+          let structural = patch.structural + (index: edge-source.edge)
+          structural-patches.edges.push(structural)
+          structural-changed = true
+        }
       }
 
       let source-record = edge-source.at("source", default: none)
-      if source-record != none {
+      if source != none and source-record != none {
         let source-patch = _mapped-patch(
           source,
           _record-with-fields(source-record, edge-fields, (edge: edge-record)),
@@ -1360,7 +1367,7 @@
       }
 
       let sink-record = edge-source.at("sink", default: none)
-      if sink-record != none {
+      if sink != none and sink-record != none {
         let sink-patch = _mapped-patch(
           sink,
           _record-with-fields(sink-record, edge-fields, (edge: edge-record)),

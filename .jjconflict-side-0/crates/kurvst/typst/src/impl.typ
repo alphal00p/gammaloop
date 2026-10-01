@@ -130,37 +130,26 @@
     name: "coil",
     interpolation: "smooth",
     endpoint-ramp: true,
-    points: _sampled-pattern(
+    points: (),
+  )
+  if fit-length == none {
+    pattern.points = _sampled-pattern(
       samples-per-period,
       theta => (longitudinal-scale * calc.cos(theta), calc.sin(theta)),
-    ),
-  )
-  if fit-length == none { return pattern }
-  for (name, value) in (
-    ("fit-length", fit-length), ("amplitude", amplitude),
-    ("wavelength", wavelength), ("longitudinal-scale", longitudinal-scale),
-  ) {
-    assert(
-      type(value) in (int, float) and value == value and calc.abs(value) < calc.inf,
-      message: "coil: " + name + " must be finite",
     )
+    return pattern
   }
-  assert(fit-length > 0 and wavelength > 0, message: "coil: fit-length and wavelength must be positive")
-  assert(longitudinal-scale >= 0, message: "coil: fitted longitudinal-scale must be non-negative")
-  let span = fit-length + calc.abs(amplitude) * longitudinal-scale * 2
-  assert(span < calc.inf, message: "coil: fitted span must be finite")
-  // Removing half a turn preserves the visible-loop count of integer-fitted tapered coils.
-  let periods = calc.max(1, calc.round(fit-length / wavelength)) - 0.5
-  let samples = calc.max(2, int(calc.ceil(periods * calc.max(1, samples-per-period))))
-  let scale = longitudinal-scale * (fit-length / span) * if amplitude < 0 { -1 } else { 1 }
   pattern.endpoint-ramp = false
-  pattern.points = _sampled-pattern(samples, theta => {
-    let at = theta / (2 * calc.pi)
-    if at == 0 or at == 1 { return (0, 0) }
-    let phase = calc.pi + periods * theta
-    // Normalize offsets so the ordinary pattern API still applies amplitude once.
-    (scale * (1 + calc.cos(phase) - 2 * at), calc.sin(phase))
-  })
+  pattern.points = cbor(_plugin.curve_fitted_coil_points(cbor.encode((
+    kind: "fitted-coil", fit-length: fit-length, amplitude: amplitude,
+    wavelength: wavelength, longitudinal-scale: longitudinal-scale,
+    samples-per-period: calc.max(1, samples-per-period),
+  ))))
+  // Retain the public point dictionaries' integer endpoint coordinates.
+  pattern.points.at(0).x = 0
+  pattern.points.at(0).y = 0
+  pattern.points.at(-1).x = 0
+  pattern.points.at(-1).y = 0
   pattern
 }
 
@@ -824,6 +813,8 @@
 /// `pattern` may be `wave()`, `zigzag()`, `coil()`, a compatible string name,
 /// or a point pattern:
 /// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
+/// A `kind: "fitted-coil"` dictionary accepts the fitting parameters of `coil()`
+/// and samples them natively; use outer wavelength `fit-length` and phase zero.
 /// The whole input path is sampled continuously, so pattern phase does not
 /// restart at cubic segment boundaries.
 /// With `split-at`, the returned `parts` divide the finished fitted pattern at

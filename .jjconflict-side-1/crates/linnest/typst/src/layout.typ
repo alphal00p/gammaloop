@@ -2,7 +2,6 @@
 #import "subgraph.typ" as subgraph-module
 
 #let _plugin = plugin("../linnest.wasm")
-#let _embedding-plugin = plugin("../ec-layout.wasm")
 
 #let _option-rules = (
   spring: (strength: "number", length: "number", "rest-length-scale": "number"),
@@ -701,7 +700,8 @@
       graph-module.graph-bytes(graph),
       cbor.encode(settings),
     )
-    let seed = _embedding-plugin.initialize(bytes(json.encode((
+    let embedding-plugin = plugin("../ec-layout.wasm")
+    let seed = embedding-plugin.initialize(bytes(json.encode((
       diagram: json(_plugin.graph_impred_diagram(snapshot)),
       scale: impred-spacing,
       external_sides: true,

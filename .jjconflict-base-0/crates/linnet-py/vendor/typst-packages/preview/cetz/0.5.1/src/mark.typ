@@ -7,6 +7,12 @@
 #import "mark-shapes.typ": get-mark
 #import "process.typ"
 
+// Place canonical mark geometry and trim each finite carrier in one numeric
+// batch. Style and custom mark evaluation remain owned by the caller context.
+#let geometry(carriers) = path-util.bezier.call_wasm(
+  path-util.bezier.cetz-core.marker_geometry_func, (carriers: carriers),
+).carriers
+
 /// Checks if a mark should be drawn according to the current style.
 /// - style (style): The current style.
 /// -> bool

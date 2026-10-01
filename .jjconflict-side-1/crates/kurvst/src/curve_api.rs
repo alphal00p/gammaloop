@@ -198,6 +198,7 @@ pub struct PathIntersectionsSpec {
 pub enum PatternInput {
     Name(String),
     Points(PointPatternInput),
+    FittedCoil(FittedCoilInput),
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -214,7 +215,7 @@ pub struct PointPatternInput {
     pub endpoint_ramp: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PatternPointInput {
     #[serde(
         default,
@@ -227,6 +228,86 @@ pub struct PatternPointInput {
     pub x: f64,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub y: f64,
+}
+
+/// A complete natural coil, fitted before any painting splits are applied.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct FittedCoilInput {
+    pub kind: String,
+    #[serde(deserialize_with = "deserialize_f64")]
+    pub fit_length: f64,
+    #[serde(
+        default = "default_pattern_amplitude",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub amplitude: f64,
+    #[serde(
+        default = "default_pattern_wavelength",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub wavelength: f64,
+    #[serde(
+        default = "default_coil_longitudinal_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub longitudinal_scale: f64,
+    #[serde(default = "FittedCoilInput::default_samples_per_period")]
+    pub samples_per_period: i64,
+}
+
+impl FittedCoilInput {
+    fn default_samples_per_period() -> i64 {
+        default_samples_per_period() as i64
+    }
+
+    fn points(&self) -> Result<Vec<PatternPointInput>, String> {
+        if self.kind != "fitted-coil" {
+            return Err(format!("Unsupported fitted coil kind: {}", self.kind));
+        }
+        let length = validate_positive(self.fit_length, "coil fit-length")?;
+        let amplitude = validate_finite(self.amplitude, "coil amplitude")?;
+        let wavelength = validate_positive(self.wavelength, "coil wavelength")?;
+        let longitudinal_scale =
+            validate_finite(self.longitudinal_scale, "coil longitudinal-scale")?;
+        if longitudinal_scale < 0.0 {
+            return Err("coil: fitted longitudinal-scale must be non-negative".to_string());
+        }
+        let span = length + amplitude.abs() * longitudinal_scale * 2.0;
+        validate_finite(span, "coil fitted span")?;
+        // Removing half a turn preserves the visible-loop count of integer-fitted tapered coils.
+        let periods = (length / wavelength).round().max(1.0) - 0.5;
+        let samples = (periods * self.samples_per_period.max(1) as f64)
+            .ceil()
+            .max(2.0);
+        if !samples.is_finite() || samples >= usize::MAX as f64 {
+            return Err("coil: fitted sample count is too large".to_string());
+        }
+        let samples = samples as usize;
+        let scale = longitudinal_scale * (length / span) * if amplitude < 0.0 { -1.0 } else { 1.0 };
+        let mut points = Vec::new();
+        points
+            .try_reserve_exact(samples + 1)
+            .map_err(|_| "coil: fitted sample count is too large")?;
+        for index in 0..=samples {
+            let at = index as f64 / samples as f64;
+            let theta = std::f64::consts::TAU * at;
+            // Keep the public Typst callback's operation order, including its recovered parameter.
+            let position = theta / std::f64::consts::TAU;
+            let (x, y) = if position == 0.0 || position == 1.0 {
+                (0.0, 0.0)
+            } else {
+                let phase = std::f64::consts::PI + periods * theta;
+                // Normalize offsets so the ordinary pattern API still applies amplitude once.
+                (
+                    scale * (1.0 + libm::cos(phase) - 2.0 * position),
+                    libm::sin(phase),
+                )
+            };
+            points.push(PatternPointInput { at: Some(at), x, y });
+        }
+        Ok(points)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -632,6 +713,12 @@ pub fn curve_hobby_spline_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|err| format!("Failed to deserialize Hobby spline spec: {err}"))?;
     let output = hobby_spline(spec)?;
     encode_cbor(&output)
+}
+
+pub fn curve_fitted_coil_points_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: FittedCoilInput = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize fitted coil spec: {err}"))?;
+    encode_cbor(&spec.points()?)
 }
 
 pub fn curve_pattern_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -1160,7 +1247,13 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
     if spec.samples_per_period == 0 {
         return Err("pattern samples-per-period must be positive".to_string());
     }
+    let fitted_coil = matches!(&spec.pattern, PatternInput::FittedCoil(_));
     let pattern = PointPattern::from_input(spec.pattern)?;
+    let samples_per_period = if fitted_coil {
+        pattern.points.len() - 1
+    } else {
+        spec.samples_per_period
+    };
 
     let path_segments = spec.path.segments().collect::<Vec<_>>();
     let segment_lengths = path_segments
@@ -1178,7 +1271,7 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         return Ok(output);
     }
 
-    let distances = pattern.distances(length, wavelength, spec.samples_per_period);
+    let distances = pattern.distances(length, wavelength, samples_per_period);
     let mut points = Vec::with_capacity(distances.len());
     for &distance in &distances {
         let (segment, segment_distance) =
@@ -1335,6 +1428,13 @@ impl PointPattern {
                 name
             )),
             PatternInput::Points(input) => Self::from_points(input),
+            PatternInput::FittedCoil(input) => Self::from_points(PointPatternInput {
+                kind: "points".to_string(),
+                name: Some("coil".to_string()),
+                points: input.points()?,
+                interpolation: "smooth".to_string(),
+                endpoint_ramp: false,
+            }),
         }
     }
 
@@ -3098,6 +3198,126 @@ mod tests {
                     split_at: Vec::new(),
                     ..default.clone()
                 }
+            );
+        }
+    }
+
+    fn fitted_coil_input() -> FittedCoilInput {
+        FittedCoilInput {
+            kind: "fitted-coil".to_string(),
+            fit_length: 3.0,
+            amplitude: 0.12,
+            wavelength: 0.55,
+            longitudinal_scale: 1.25,
+            samples_per_period: 16,
+        }
+    }
+
+    #[test]
+    fn fitted_coil_descriptor_matches_public_points_on_curved_split_paths() {
+        let base = segment_path(CubicBez::new(
+            (0.0, 0.0),
+            (0.0, 2.0),
+            (2.0, -1.0),
+            (3.0, 0.0),
+        ));
+        let length = path_length_value(&base, 1e-9);
+        for amplitude in [-0.12, -0.0, 0.0, 0.12] {
+            for samples_per_period in [-2, 0, 1, 3, 16, 31] {
+                let coil = FittedCoilInput {
+                    fit_length: length,
+                    amplitude,
+                    samples_per_period,
+                    ..fitted_coil_input()
+                };
+                let public_bytes =
+                    curve_fitted_coil_points_bytes(&encode_cbor(&coil).unwrap()).unwrap();
+                let points: Vec<PatternPointInput> =
+                    ciborium::de::from_reader(public_bytes.as_slice()).unwrap();
+                let sample_count = points.len() - 1;
+                assert_eq!(points.first().unwrap().x, 0.0);
+                assert_eq!(points.last().unwrap().y, 0.0);
+                let descriptor = PatternPathSpec {
+                    path: base.clone(),
+                    pattern: PatternInput::FittedCoil(coil),
+                    amplitude,
+                    wavelength: length,
+                    phase: 0.0,
+                    samples_per_period: 16,
+                    coil_longitudinal_scale: 1.25,
+                    anchor_start: true,
+                    anchor_end: true,
+                    endpoint_slope: 0.0,
+                    split_at: vec![length * 0.413, length * 0.627],
+                    accuracy: 1e-9,
+                };
+                let explicit = PatternPathSpec {
+                    pattern: PatternInput::Points(PointPatternInput {
+                        kind: "points".to_string(),
+                        name: Some("coil".to_string()),
+                        points,
+                        interpolation: "smooth".to_string(),
+                        endpoint_ramp: false,
+                    }),
+                    samples_per_period: sample_count,
+                    ..descriptor.clone()
+                };
+                assert_eq!(
+                    pattern_path(descriptor).unwrap(),
+                    pattern_path(explicit).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fitted_coil_rejects_invalid_geometry_and_unrepresentable_sample_counts() {
+        let good = fitted_coil_input();
+        for bad in [
+            FittedCoilInput {
+                fit_length: 0.0,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                fit_length: f64::NAN,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                wavelength: -1.0,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                wavelength: f64::MIN_POSITIVE,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                amplitude: f64::INFINITY,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                amplitude: f64::MAX,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                longitudinal_scale: -1.0,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                longitudinal_scale: f64::NAN,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                samples_per_period: i64::MAX,
+                ..good.clone()
+            },
+            FittedCoilInput {
+                kind: "unknown".to_string(),
+                ..good
+            },
+        ] {
+            assert!(
+                bad.points().is_err(),
+                "accepted invalid fitted coil: {bad:?}"
             );
         }
     }

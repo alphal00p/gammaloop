@@ -1586,6 +1586,26 @@
       assert.eq(grouped-bounds.first(), drawing._annotation-bounds(native, (shifted-paint,)).first(),
         message: "batched and individual candidate footprints agree")
 
+      // Prepared candidates share native placement while retaining the same
+      // independent contexts and actual custom marker geometry as rendering.
+      let prepared-fixed = drawing._derived-path(
+        curve.line((4, -0.2), (4, 1.2)),
+        (stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1),
+        auto, true, true,
+      )
+      let prepared-shifted = prepared-fixed + (elements: (cetz.draw.translate((10, 0)), prepared-fixed.elements))
+      let prepared-empty = drawing._derived-path(curve.path(), (:), auto, true, true)
+      let custom-native = native
+      custom-native.marks.marks.insert("straight", cetz.mark-shapes.marks.diamond)
+      for local in (native, custom-native, native + (transform: cetz.matrix.transform-scale((-2, 0.5, 1)))) {
+        let actual = drawing._annotation-path-bounds(local, (prepared-shifted, prepared-fixed, prepared-empty))
+        let expected = drawing._annotation-bounds(local, (shifted-paint, fixed-paint, ()))
+        assert.eq(cbor.encode(actual), cbor.encode(expected),
+          message: "prepared candidate batches preserve custom marks, transforms and empty carriers")
+        assert.eq(actual.at(1), drawing._annotation-path-bounds(local, (prepared-fixed,)).first(),
+          message: "an earlier prepared candidate cannot alter a later candidate's geometry")
+      }
+
       let avoiding-fixed = drawing._relax-label-placements((pair,), (), label-padding: 0, fixed-arrows: fixed-bounds).first()
       assert.ne(avoiding-fixed.path-shift, first.path-shift, message: "a fixed standalone arrow moves the paired annotation")
       let fixed-pair = (candidates: ((bounds: (left: 100, right: 101, bottom: 100, top: 101), arrow-bounds: fixed-bounds, cost: 0),))

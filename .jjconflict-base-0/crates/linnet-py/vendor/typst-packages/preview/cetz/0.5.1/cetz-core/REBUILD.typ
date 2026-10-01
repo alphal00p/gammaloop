@@ -2,7 +2,8 @@
 
 The bundled binary is built from CeTZ `v0.5.1`, commit
 `100ea3c52342c8bf866e8f154589ce8cd309265c`, with
-`batched-bounds.patch`, `content-placement.patch` and `sampled-curves.patch` applied. The source remains under CeTZ's
+`batched-bounds.patch`, `content-placement.patch`, `sampled-curves.patch`, and
+`marker-geometry.patch` applied in that order. The source remains under CeTZ's
 LGPL-3.0-or-later license; see `../LICENSE`.
 
 The bounds patch adds one export that calls the existing cubic-extrema and AABB
@@ -21,12 +22,21 @@ and distance-to-parameter loops into the native core. It retains the same
 sample counts, Bernstein evaluation order, vector dimensions, endpoint behavior
 and integer/float return types. It does not use adaptive curve measurements.
 
-The checked-in binary uses Rust 1.98.0 (`88d9e12ae`, LLVM 22.1.8), the upstream
-`cetz-core/Cargo.lock`, and the upstream release profile with `CARGO_PROFILE_RELEASE_OPT_LEVEL=3`
-for speed. Run from the repository
-root with that toolchain and its `wasm32-unknown-unknown` target installed.
-The build runs from the temporary checkout, outside this repository's Cargo
-configuration, with no custom Rust flags or target directory:
+The marker patch batches resolved marker contacts, alignment matrices, and
+shaft trimming. It reuses the fixed-sample cubic owner and preserves the
+reference transform and subcurve arithmetic. Mark shapes and styling remain
+in Typst. Invalid dimensions and nonfinite geometry are rejected before
+indexing or painting; empty unmarked carriers remain valid. The patch also
+adds the pinned `libm` dependency used by Typst's trigonometric functions.
+
+The checked-in binary uses Rust 1.98.1 (`48a229cea`, LLVM 21.1.8), the patched
+`cetz-core/Cargo.lock`, and the upstream release profile with
+`CARGO_PROFILE_RELEASE_OPT_LEVEL=3` for speed. The build uses the cached
+`rust-lld` recorded below: LLD 22.1.8 (LLVM revision
+`52ed14fcd56afc30f9cccd8ca8ce237c2eef7e04`), from a separate Rust toolchain. Run from
+the repository root with Rust 1.98.1 and its `wasm32-unknown-unknown` target
+installed. The build runs in the temporary checkout, outside this repository's
+Cargo configuration, with no custom Rust flags or target directory:
 
 ```sh
 cetz_source=$(mktemp -d)
@@ -35,16 +45,18 @@ test "$(git -C "$cetz_source" rev-parse HEAD)" = 100ea3c52342c8bf866e8f154589ce8
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/batched-bounds.patch"
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/content-placement.patch"
 git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/sampled-curves.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-geometry.patch"
 (
   cd "$cetz_source" || exit
-  unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS CARGO_TARGET_DIR
-  CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo +1.98.0 build --locked --release --target wasm32-unknown-unknown --manifest-path cetz-core/Cargo.toml
+  unset RUSTC RUSTDOC RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS CARGO_TARGET_DIR
+  export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER=/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld
+  CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo +1.98.1 build --locked --release --target wasm32-unknown-unknown --manifest-path cetz-core/Cargo.toml
 )
 cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm" crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/cetz_core.wasm
 ```
 
 The resulting binary's SHA-256 is
-`bb5548265e34ab0fa7521c90246843e88f9b5e1ec1828ad468ea5fdb543b5061`.
+`1d2180569a835d13afa37363e3bb281ff91210b5783f071f64d8eefee2525a9c`.
 The bounds behavior fixture compares batched results against the scalar CeTZ
 exports, including degenerate curves, mixed dimensions, signed zeros and
 nonfinite aggregation. It runs as part of the Clinnet public Typst fixture. The identity-target fixture
@@ -53,3 +65,9 @@ coordinate hooks, degenerate frames and overflowing coordinates.
 
 The sampled-curve fixture compares exact CBOR results against the scalar loops
 across sample counts, signed zeros, mixed dimensions and forward/reverse distances.
+
+The marker fixture compares native placement with the original Typst contact
+and trimming algorithm, including short carriers, reversed/slanted markers,
+zero-length marks, and repeated controls. Native tests also cover malformed
+plans and empty unmarked carriers. Marker numeric output uses floating-point
+coordinates; mathematical integer values need not retain CBOR integer tags.

@@ -259,6 +259,13 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
 
     fs::write(
         base.path()
+            .join(".clinnet/templates/marker-geometry-behavior.typ"),
+        include_str!("resources/marker-geometry-behavior.typ"),
+    )
+    .unwrap();
+
+    fs::write(
+        base.path()
             .join(".clinnet/templates/weighted-cut-behavior.typ"),
         include_str!("resources/weighted-cut-behavior.typ"),
     )

@@ -362,9 +362,14 @@
   ```
 
   Fitting requires positive, finite `fit-length` and `wavelength`, finite
-  `amplitude`, and finite, nonnegative `longitudinal-scale`. Fitting happens
-  in Typst; `kurvst.pattern` has no `natural-endpoints` argument. As for other
-  point patterns, curved carriers use local tangent/normal offsets, not
+  `amplitude`, and finite, nonnegative `longitudinal-scale`. Kurvst's numeric
+  engine owns fitting and sampling. To paint a fitted coil without transferring
+  its points through Typst, pass a dictionary with `kind: "fitted-coil"`,
+  `fit-length: L`, and the same fitting parameters directly as `pattern`.
+  Keep the outer `amplitude: A`, `wavelength: L`, and `phase: 0`; the engine
+  selects the fitted sample count. The public `kurvst.coil(...).points` uses
+  that same sampler. As for other point patterns, curved carriers use local
+  tangent/normal offsets, not
   evaluation at a corrected arc distance. `endpoint-slope` has no effect
   with `endpoint-ramp: false`.
 

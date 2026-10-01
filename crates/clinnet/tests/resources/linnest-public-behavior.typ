@@ -11,6 +11,7 @@
 #import "named-map-behavior.typ"
 #include "identity-target-behavior.typ"
 #include "cetz-bounds-behavior.typ"
+#include "marker-geometry-behavior.typ"
 #import "annotation-placement-behavior.typ"
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon

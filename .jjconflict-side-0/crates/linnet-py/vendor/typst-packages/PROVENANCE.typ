@@ -45,9 +45,22 @@ coordinate transforms while retaining their arithmetic order.
 CeTZ core batches each path's cubic extrema and AABB reduction in one plugin
 call. The scalar extrema and AABB routines are unchanged. Finite paths reuse
 their two bounds corners during aggregation; nonfinite paths retain the full
-point stream. The source patch and reproducible build instructions are in
+point stream.
+
+Marker placement batches resolved reference contacts and carrier trimming in
+CeTZ core, using the existing fixed-sample cubic measurements. Shape evaluation,
+style resolution, and custom markers remain in Typst. Painting and annotation
+collision bounds consume the same placed geometry. The numeric core preserves
+contact and transform arithmetic, validates finite geometry and dimensions,
+and returns floating-point coordinates. Typst's `libm` trigonometric dependency
+is pinned in the marker patch.
+
+The source patches and reproducible build instructions are in
 `preview/cetz/0.5.1/cetz-core/batched-bounds.patch`,
-`preview/cetz/0.5.1/cetz-core/content-placement.patch` and
+`preview/cetz/0.5.1/cetz-core/content-placement.patch`,
+`preview/cetz/0.5.1/cetz-core/sampled-curves.patch`,
+`preview/cetz/0.5.1/cetz-core/marker-geometry.patch`, and
 `preview/cetz/0.5.1/cetz-core/REBUILD.typ`. They apply to upstream CeTZ `v0.5.1`,
 commit `100ea3c52342c8bf866e8f154589ce8cd309265c`, under the same LGPL license. The core uses release optimization level 3 for
-speed; the exact toolchain and override are recorded in the build instructions.
+speed; the exact compiler, linker, dependency lockfile, and override are
+recorded in the build instructions.
