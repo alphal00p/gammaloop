@@ -100,6 +100,9 @@ pub struct EvaluatorSettings {
     /// Apply function-map replacements before numerical lowering.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
+    /// Inline generated numerator functions instead of retaining shared evaluator bodies.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub inline_numerator_functions: bool,
     /// Translate compatible symbolic expressions directly into Spenso networks.
     #[serde(
         default = "evaluator_default_direct_translation",
@@ -207,6 +210,7 @@ impl Default for EvaluatorSettings {
             direct_translation: evaluator_default_direct_translation(),
             compile: false,
             do_fn_map_replacements: false,
+            inline_numerator_functions: false,
             store_atom: false,
             horner_iterations: evaluator_default_horner_iterations(),
             n_cores: evaluator_default_n_cores(),

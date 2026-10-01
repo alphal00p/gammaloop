@@ -140,6 +140,8 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
         rhs: body.clone(),
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let call = function!(family, &scope, 2);
@@ -225,6 +227,8 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
         rhs: Atom::num(2),
         args: Vec::new(),
         tags: vec![scope],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots = Integrands::from_iter([(cut, call.clone())]);
@@ -287,6 +291,8 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
                 .map(|p| Indeterminate::try_from(p).unwrap())
                 .collect(),
             tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         assert!(Integrands::from_iter([]).with_numerators([entry]).is_err());
     }
@@ -298,6 +304,8 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
         rhs: parameter.clone(),
         args: vec![Indeterminate::try_from(parameter).unwrap()],
         tags: vec![scope.clone()],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots =

@@ -354,6 +354,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         .collect::<std::result::Result<Vec<_>, _>>()
                         .map_err(|error| eyre::eyre!(error))?,
                     tags: vec![scope.1],
+                    inlining: entry.inlining,
+                    is_alias: entry.is_alias,
                 });
                 // A child's arguments can depend on the entire graph. Bind the
                 // cograph body, child body and carrier with this same outer key

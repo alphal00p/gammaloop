@@ -458,6 +458,8 @@ impl DirectResidueBranches {
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|error| eyre!(error))?,
             tags: vec![scope.1],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         Self::from_keyed(
             self.iter_keys()
@@ -911,6 +913,8 @@ impl DirectResidueBranches {
                     rhs: coefficient,
                     args: entry.args.clone(),
                     tags: vec![tag],
+                    inlining: entry.inlining,
+                    is_alias: entry.is_alias,
                 }));
             }
             replacements.push(
@@ -1087,6 +1091,8 @@ mod tests {
                     rhs: body,
                     args: vec![s.into(), z.into()],
                     tags: vec![tag.clone()],
+                    inlining: symbolica::evaluate::InliningPolicy::Always,
+                    is_alias: false,
                 });
                 let rows = [[1, 2], [-1, 0], [0, 0]];
                 let branches = DirectResidueBranches::from_keyed(
@@ -1208,6 +1214,8 @@ mod tests {
             rhs: body,
             args: vec![parameter.into()],
             tags: vec![tag.clone()],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         let cut = CutCFFIndex::new_all_none();
         let branches = DirectResidueBranches::production(
@@ -1270,6 +1278,8 @@ mod tests {
                 rhs: body.clone(),
                 args: vec![],
                 tags: vec![tag],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             let source = DirectResidueBranches::production(
                 OrientationID(0),
@@ -1374,6 +1384,8 @@ mod tests {
                             .collect::<std::result::Result<_, _>>()
                             .unwrap(),
                         tags: vec![tags[index].clone()],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
                     })
                 })
                 .collect::<Vec<_>>();
@@ -1498,6 +1510,8 @@ mod tests {
             rhs: Atom::one() + &t + t.pow(2),
             args: vec![],
             tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         let cut = CutCFFIndex::new_all_none();
         let branches = DirectResidueBranches::production(
@@ -1542,6 +1556,8 @@ mod tests {
                 rhs: body,
                 args: vec![],
                 tags: vec![tag],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             for root in [
                 &call / t.pow(7),
@@ -1598,6 +1614,8 @@ mod tests {
                         rhs: body.clone(),
                         args: Vec::new(),
                         tags: vec![tag],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
                     }),
                 ])?
             } else {
@@ -1657,6 +1675,8 @@ mod tests {
                         rhs: body,
                         args: Vec::new(),
                         tags: vec![tag],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
                     },
                 )])?;
             let branches = DirectResidueBranches::production(OrientationID(0), integrands)?;
@@ -1705,6 +1725,8 @@ mod tests {
                 rhs,
                 args: vec![parameter.into()],
                 tags: vec![tag.clone()],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             let branches = DirectResidueBranches::production(
                 OrientationID(0),

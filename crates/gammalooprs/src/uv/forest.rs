@@ -482,6 +482,8 @@ mod tests {
         let scope = Atom::var(symbol!("uv_forest_test::scope"));
         let coordinate = Atom::var(symbol!("uv_forest_test::coordinate"));
         let definition = Arc::new(FnMapEntry {
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
             lhs: function!(family, &scope, parameter),
             rhs: Atom::var(parameter) + &coordinate,
             args: vec![parameter.into()],
