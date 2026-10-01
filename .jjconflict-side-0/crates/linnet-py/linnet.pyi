@@ -729,7 +729,7 @@ class LayoutStream:
         Source and sink node indices; a missing endpoint denotes a dangling edge.
         """
     @staticmethod
-    def from_dot(dot: builtins.str, *, every: builtins.int = ..., steps: builtins.int = ..., epochs: builtins.int = ..., seed: builtins.int = ..., step: builtins.float = ..., cool: builtins.float = ..., spring_strength: builtins.float = ..., repulsion: builtins.float = ..., length_scale: builtins.float = ..., spring_length_scale: builtins.float = ..., external_pull: builtins.float = ..., external_pull_balance: builtins.float = ..., external_pull_attachment: builtins.float = ..., initial_repulsion: builtins.float = ..., repulsion_growth: builtins.float = ..., depth_scale: builtins.float = ..., flattening_end: builtins.float = ..., delta: builtins.float = ..., early_tolerance: builtins.float = ...) -> LayoutStream:
+    def from_dot(dot: builtins.str, *, every: builtins.int = 4, steps: builtins.int = 200, epochs: builtins.int = 8, seed: builtins.int = 1, step: builtins.float = 0.02, cool: builtins.float = 0.85, spring_strength: builtins.float = 1.0, repulsion: builtins.float = 1.5, length_scale: builtins.float = 1.0, spring_length_scale: builtins.float = 1.0, external_pull: builtins.float = 0.0, external_pull_balance: builtins.float = 1.0, external_pull_attachment: builtins.float = 1.0, initial_repulsion: builtins.float = 1.0, repulsion_growth: builtins.float = 0.7, depth_scale: builtins.float = 1.0, flattening_end: builtins.float = 0.5, delta: builtins.float = 0.1, early_tolerance: builtins.float = 1e-06) -> LayoutStream:
         r"""
         Start a force-layout preview from a single DOT graph.
 
