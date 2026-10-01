@@ -694,6 +694,8 @@
   ) {
     return (ctx.default)()
   }
+  // Momentum notation: a trailing power applies to the contraction of these
+  // vector labels, so the dot product needs no additional parentheses.
   _tight((left.label, math.class("normal", $dot$), right.label))
 }
 

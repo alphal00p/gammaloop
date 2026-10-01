@@ -270,6 +270,19 @@ impl SymbolicTensor<PartialStructure> {
         }
         reorder_presentation_ports(self.expression.as_view(), &slots, &mut state, false)
     }
+
+    /// Present an already selected fragment using this tensor's established
+    /// logical interface. Additive occurrence order must survive slicing; a
+    /// fragment is not a newly inferred tensor and introduces no new indices.
+    pub fn presentation_fragment(&self, fragment: AtomView<'_>) -> Atom {
+        let slots = self.structure.logical_slots();
+        let mut state = PortRewriteState::new(slots.len());
+        state.bulk_arithmetic = PortRewriteState::exact_arithmetic(fragment);
+        if slots.is_empty() && state.bulk_arithmetic {
+            return fragment.to_owned();
+        }
+        reorder_presentation_ports(fragment, &slots, &mut state, true)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

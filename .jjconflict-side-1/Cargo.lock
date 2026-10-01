@@ -6314,6 +6314,7 @@ name = "spynso3"
 version = "0.1.2"
 dependencies = [
  "ahash 0.8.12",
+ "ciborium",
  "eyre",
  "idenso",
  "itertools 0.14.0",

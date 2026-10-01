@@ -6334,12 +6334,12 @@ class TensorExpression(Expression):
         Returns
         -------
         FormattedOutput
-            Each requested backend renders the complete expression once and caches it.
+            Small expressions render once per backend; large notebook displays use bounded pages.
 
         Notes
         -----
-        Automatic HTML, LaTeX, and pretty-text representations retain the complete
-        expression, its factorization, and ordered ports.
+        Automatic representations of large expressions are bounded previews.
+        Paging retains factorization and ordered ports; explicit exports remain complete.
         Settings are captured here; custom printers run on the first request
         for each backend. Create a new formatted value after changing printers.
 
@@ -6349,6 +6349,58 @@ class TensorExpression(Expression):
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> output = A.formatted()
+        """
+    def paged(self, page_size: builtins.int = 25, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Create a bounded, interactive MathML viewer in marimo or Jupyter.
+
+        Only the current page is rendered. Nested expressions retain their
+        factorization, and omitted subexpressions can be opened independently.
+        Requires the optional notebook-display dependencies for live navigation.
+
+        Parameters
+        ----------
+        page_size : int, default 25
+            Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+            show fewer entries when an individual expression is large.
+        settings : DisplaySettings, optional
+            Tensor notation, index labels, and other presentation preferences.
+        notation_source : str, optional
+            Custom Typst notation source, with the same meaning as in to_html().
+
+        Returns
+        -------
+        object
+            Notebook viewer retaining the expression and rendering pages on demand.
+            Display it in marimo or Jupyter to navigate its widget.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> viewer = TensorExpression(1).paged(page_size=25)
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Return marimo's notebook presentation with bounded pages for large expressions.
+
+        Returns
+        -------
+        object
+            Rich notebook output or an interactive viewer, using default settings.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Return the rich representations requested by a Jupyter frontend.
+
+        Parameters
+        ----------
+        include, exclude : list of str, optional
+            MIME types to include or exclude from the returned representations.
+
+        Returns
+        -------
+        object
+            MIME bundle for the complete small expression or paged large expression.
         """
     def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""

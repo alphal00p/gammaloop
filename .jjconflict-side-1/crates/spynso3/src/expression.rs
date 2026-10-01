@@ -4026,12 +4026,12 @@ impl TensorExpression {
     /// Returns
     /// -------
     /// FormattedOutput
-    ///     Each requested backend renders the complete expression once and caches it.
+    ///     Small expressions render once per backend; large notebook displays use bounded pages.
     ///
     /// Notes
     /// -----
-    /// Automatic HTML, LaTeX, and pretty-text representations retain the complete
-    /// expression, its factorization, and ordered ports.
+    /// Automatic representations of large expressions are bounded previews.
+    /// Paging retains factorization and ordered ports; explicit exports remain complete.
     /// Settings are captured here; custom printers run on the first request
     /// for each backend. Create a new formatted value after changing printers.
     ///
@@ -4050,6 +4050,90 @@ impl TensorExpression {
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::format_structured_output_rich(Arc::clone(&self_.value), settings, notation_source)
+    }
+
+    /// Create a bounded, interactive MathML viewer in marimo or Jupyter.
+    ///
+    /// Only the current page is rendered. Nested expressions retain their
+    /// factorization, and omitted subexpressions can be opened independently.
+    /// Requires the optional notebook-display dependencies for live navigation.
+    ///
+    /// Parameters
+    /// ----------
+    /// page_size : int, default 25
+    ///     Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+    ///     show fewer entries when an individual expression is large.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation, index labels, and other presentation preferences.
+    /// notation_source : str, optional
+    ///     Custom Typst notation source, with the same meaning as in to_html().
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     Notebook viewer retaining the expression and rendering pages on demand.
+    ///     Display it in marimo or Jupyter to navigate its widget.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> viewer = TensorExpression(1).paged(page_size=25)
+    #[pyo3(signature = (page_size=25, *, settings=None, notation_source=None))]
+    fn paged(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        page_size: usize,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        display::paging::viewer(
+            py,
+            Arc::clone(&self_.value),
+            settings.as_deref().cloned().unwrap_or_default(),
+            notation_source,
+            page_size,
+        )
+    }
+
+    /// Return marimo's notebook presentation with bounded pages for large expressions.
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     Rich notebook output or an interactive viewer, using default settings.
+    fn _display_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        display::format_structured_output_rich(
+            Arc::clone(&self_.value),
+            display::DisplaySettings::default(),
+            None,
+        )
+        ._display_(py)
+    }
+
+    /// Return the rich representations requested by a Jupyter frontend.
+    ///
+    /// Parameters
+    /// ----------
+    /// include, exclude : list of str, optional
+    ///     MIME types to include or exclude from the returned representations.
+    ///
+    /// Returns
+    /// -------
+    /// object
+    ///     MIME bundle for the complete small expression or paged large expression.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        display::format_structured_output_rich(
+            Arc::clone(&self_.value),
+            display::DisplaySettings::default(),
+            None,
+        )
+        ._repr_mimebundle_(py, include, exclude)
     }
 
     /// Render the tensor as an HTML fragment.
@@ -4155,7 +4239,11 @@ impl TensorExpression {
     /// >>> A = sp.TensorName("docs::A")(r, r)
     /// >>> text = repr(A)
     fn __repr__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(Self::structured(&self_), false)
+        if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
+        } else {
+            display::format_structured(Self::structured(&self_), false)
+        }
     }
 
     /// Return a readable text representation.
@@ -4167,7 +4255,11 @@ impl TensorExpression {
     /// >>> A = sp.TensorName("docs::A")(r, r)
     /// >>> text = str(A)
     fn __str__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(Self::structured(&self_), false)
+        if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
+        } else {
+            display::format_structured(Self::structured(&self_), false)
+        }
     }
 
     fn _repr_pretty_(
@@ -4177,6 +4269,8 @@ impl TensorExpression {
     ) -> PyResult<()> {
         let text = if cycle {
             "...".to_string()
+        } else if display::paging::is_large(&self_.value) {
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into()
         } else {
             display::format_structured_backend(
                 pretty.py(),
@@ -4191,6 +4285,15 @@ impl TensorExpression {
     }
 
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
+        if display::paging::is_large(&self_.value) {
+            return display::paging::static_html(
+                py,
+                Arc::clone(&self_.value),
+                display::DisplaySettings::default(),
+                None,
+            )
+            .ok();
+        }
         let settings = display::DisplaySettings::default();
         display::format_structured_backend(
             py,
@@ -4203,7 +4306,11 @@ impl TensorExpression {
     }
 
     fn _repr_latex_(self_: PyRef<'_, Self>) -> PyResult<String> {
-        Self::to_latex(self_, None, None)
+        if display::paging::is_large(&self_.value) {
+            Ok(r"$$\text{Large tensor expression: use the paged viewer}$$".into())
+        } else {
+            Self::to_latex(self_, None, None)
+        }
     }
 }
 

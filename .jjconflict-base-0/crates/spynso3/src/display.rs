@@ -69,6 +69,7 @@ pub(crate) mod library;
 mod mathml;
 pub(crate) mod metadata;
 pub(crate) mod network;
+pub(crate) mod paging;
 
 /// Immutable presentation options for tensor notation and component displays.
 ///
@@ -1151,6 +1152,34 @@ pub(crate) fn format_structured_output_rich(
     settings: DisplaySettings,
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
+    if paging::is_large(&value) {
+        let notebook_value = Arc::clone(&value);
+        let notebook_settings = settings.clone();
+        let notebook_notation = notation_source.clone();
+        return PythonFormattedOutput::lazy(move |py, backend| match backend {
+            FormattedOutputBackend::Html => paging::static_html(
+                py,
+                Arc::clone(&value),
+                settings.clone(),
+                notation_source.clone(),
+            )
+            .map(Some),
+            FormattedOutputBackend::Text => Ok(Some(
+                "Tensor expression (large; use the paged notebook viewer or explicit export)"
+                    .into(),
+            )),
+            FormattedOutputBackend::Latex => Ok(None),
+        })
+        .with_notebook(move |py| {
+            paging::viewer(
+                py,
+                Arc::clone(&notebook_value),
+                notebook_settings.clone(),
+                notebook_notation.clone(),
+                paging::DEFAULT_PAGE_SIZE,
+            )
+        });
+    }
     PythonFormattedOutput::lazy(move |py, backend| {
         let result =
             format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend);
