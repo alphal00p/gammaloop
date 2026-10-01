@@ -508,6 +508,10 @@ impl FeynmanDiagramBuilder {
             },
             |(_, data)| Ok(*data),
         )?;
+        let numerator = match &self.numerator {
+            Some(numerator) => translate(numerator)?,
+            None => FeynmanDiagram::fragment_numerator(&graph),
+        };
         let mut diagram = FeynmanDiagram {
             model: self.model.clone(),
             id: DiagramId(0),
@@ -515,7 +519,7 @@ impl FeynmanDiagramBuilder {
             graph,
             symmetry_factor: self.symmetry_factor,
             overall_factor: translate(&self.overall_factor)?,
-            numerator: translate(&self.numerator)?,
+            numerator,
             numerator_prefactor: translate(&self.numerator_prefactor)?,
             projector: translate(&self.projector)?,
             loop_momentum_basis: LoopMomentumBasis {
@@ -527,6 +531,7 @@ impl FeynmanDiagramBuilder {
             },
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
+            validation: OnceLock::new(),
         };
         if generated {
             let mut incoming = BTreeSet::new();
@@ -574,6 +579,8 @@ impl FeynmanDiagramBuilder {
                 diagram.loop_momentum_basis = basis;
                 diagram
             }
+        } else if self.canonical_loop_momentum_basis {
+            diagram.with_canonical_loop_momentum_basis()?
         } else {
             let basis = diagram
                 .loop_momentum_bases_with_limit(1)?
