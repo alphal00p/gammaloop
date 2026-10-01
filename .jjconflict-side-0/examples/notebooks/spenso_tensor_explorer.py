@@ -70,7 +70,7 @@ def _(Representation, mo):
 
 @app.cell
 def _(TensorExpression):
-    TensorExpression.dirac_gamma(4)(1, 2, 1).structure
+    TensorExpression.dirac_gamma(4)(1, 2, 1)
     return
 
 

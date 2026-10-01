@@ -294,7 +294,7 @@ pub trait FastTensorSumContractible<Sc>: Sized {
     fn contraction_pair_estimate(
         &self,
         _other: &Self,
-        _left_match_permutation: &Permutation,
+        _right_to_left_match_permutation: &Permutation,
         _left_matches: &[bool],
         _right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -522,7 +522,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
-        left_match_permutation: &Permutation,
+        right_to_left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -533,7 +533,7 @@ where
         sparse_atom_pair_estimate(
             self,
             other,
-            left_match_permutation,
+            right_to_left_match_permutation,
             left_matches,
             right_matches,
             left_profile,
@@ -600,7 +600,7 @@ where
 fn sparse_atom_pair_estimate<S>(
     left: &ParamTensor<S>,
     right: &ParamTensor<S>,
-    left_match_permutation: &Permutation,
+    right_to_left_match_permutation: &Permutation,
     left_matches: &[bool],
     right_matches: &[bool],
     left_profile: TensorContractionProfile,
@@ -627,9 +627,13 @@ where
         return fallback;
     }
 
-    let left_groups =
-        sparse_free_keys_by_match(left_sparse, left_matches, Some(left_match_permutation));
-    let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
+    // match_indices sorts the right matched coordinates into the left order.
+    let left_groups = sparse_free_keys_by_match(left_sparse, left_matches, None);
+    let right_groups = sparse_free_keys_by_match(
+        right_sparse,
+        right_matches,
+        Some(right_to_left_match_permutation),
+    );
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
             estimated_products: 0,
@@ -784,7 +788,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
-        left_match_permutation: &Permutation,
+        right_to_left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -797,7 +801,7 @@ where
                 sparse_atom_pair_estimate(
                     left,
                     right,
-                    left_match_permutation,
+                    right_to_left_match_permutation,
                     left_matches,
                     right_matches,
                     left_profile,
@@ -1123,6 +1127,13 @@ where
             .included_iter()
             .map(|axis| axis.0)
             .collect::<Vec<_>>();
+        // Storage order groups base and dual slots separately, so matched
+        // coordinates need not occupy corresponding positions in both tensors.
+        // Align the right-hand keys with the left-hand matched-slot order.
+        let (permutation, _, _) = left_structure
+            .match_indices(right_structure)
+            .expect("merged structures contain matching slots");
+        let right_match_axes = permutation.apply_slice(&right_match_axes);
         let (sum_match_axes, numeric_match_axes) = if terms_on_left {
             (left_match_axes.clone(), right_match_axes.clone())
         } else {

@@ -9,8 +9,8 @@ use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
 use crate::{
     algebra::ScalarMul,
     network::{
-        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, Network, Ref, Sequential,
-        SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
+        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost,
+        Network, Ref, Sequential, TensorNetworkError, TensorOrScalarOrKey,
         library::{FunctionLibrary, Library, LibraryTensor},
         store::NetworkStore,
     },
@@ -32,7 +32,7 @@ use crate::{
 /// inference decides the exposed slots, then this trait decides how the target
 /// tensor type represents the original expression. Symbolic tensors can keep
 /// the expression directly, while concretized tensor types may parse and
-/// execute an expanded sub-network here.
+/// execute an expanded sub-network here with the MinIntermediateCost policy.
 pub trait TensorFromExpression<'src, S, Sc, K, FK, Aind, Lib, FunLib>: Sized
 where
     S: TensorStructure,
@@ -125,7 +125,8 @@ where
     FunLib: FunctionLibrary<T, Sc, Key = symbolica::atom::Symbol>,
     NetworkStore<T, Sc>:
         ExecuteOp<FunLib, Lib, K, symbolica::atom::Symbol, Aind, Tensor = T, Scalar = Sc>,
-    SmallestDegree: ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
+    MinIntermediateCost:
+        ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
 {
     fn tensor_from_leaf(
         _expression: AtomOrView<'src>,
@@ -160,7 +161,7 @@ where
                 function_library,
                 &expanded_settings,
             )?;
-        network.execute::<Sequential, SmallestDegree, Lib::LibraryTensor, Lib, FunLib>(
+        network.execute::<Sequential, MinIntermediateCost, Lib::LibraryTensor, Lib, FunLib>(
             tensor_library,
             function_library,
         )?;

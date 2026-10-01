@@ -13,7 +13,7 @@ use pyo3::{
     PyClass,
     exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
     prelude::*,
-    types::{PyComplex, PyDict, PyFloat, PySlice, PyTuple, PyType},
+    types::{PyComplex, PyDict, PyFloat, PyInt, PySlice, PyTuple, PyType},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -58,7 +58,7 @@ use symbolica::{
     prelude::*,
 };
 
-use symbolica::api::python::{PythonExpression, PythonFormattedOutput};
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression, PythonFormattedOutput};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
@@ -364,27 +364,46 @@ impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
     fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         // Check typed interfaces before inherited numeric coercion can erase them,
         // particularly for tensor-valued zeros.
-        for component in value.extract::<Vec<Bound<'py, PyAny>>>()? {
-            TensorElements::validate_scalar(&component)?;
+        let components = value.extract::<Vec<Bound<'py, PyAny>>>()?;
+        for component in &components {
+            TensorElements::validate_scalar(component)?;
         }
-        if let Ok(values) = value.extract::<Vec<f64>>() {
-            Ok(Self::Floats(values))
-        } else if let Ok(values) = value.extract::<Vec<Complex<f64>>>() {
-            Ok(Self::Complex(values))
-        } else if let Ok(values) = value.extract::<Vec<PythonExpression>>() {
-            Ok(Self::Atoms(
-                values.into_iter().map(|value| value.expr).collect(),
-            ))
-        } else {
-            Err(PyTypeError::new_err(
-                "data must be a list of floats, complex numbers, or Expressions",
-            ))
+        // Explicit symbolic data must not go through Expression.__float__.
+        // Integer-only input is exact too; explicitly floating-point input
+        // continues to select numerical storage.
+        let exact = components
+            .iter()
+            .any(|value| value.is_instance_of::<PythonExpression>())
+            || (!components.is_empty()
+                && components
+                    .iter()
+                    .all(|value| value.is_instance_of::<PyInt>()));
+        if !exact {
+            if let Ok(values) = value.extract::<Vec<f64>>() {
+                return Ok(Self::Floats(values));
+            }
+            if let Ok(values) = value.extract::<Vec<Complex<f64>>>() {
+                return Ok(Self::Complex(values));
+            }
         }
+        let values = value
+            .extract::<Vec<ConvertibleToExpression>>()
+            .map_err(|_| {
+                PyTypeError::new_err(
+                    "data must be a list of integers, floats, complex numbers, or Expressions",
+                )
+            })?;
+        Ok(Self::Atoms(
+            values
+                .into_iter()
+                .map(|value| value.to_expression().expr)
+                .collect(),
+        ))
     }
 }
 
 #[cfg(feature = "python_stubgen")]
-impl_stub_type!(AtomsOrFloats = Vec<PythonExpression> | Vec<f64> | Vec<Complex<f64>>);
+impl_stub_type!(AtomsOrFloats = Vec<TensorElements>);
 
 fn tensor_data_layout_error(error: TensorDataLayoutError) -> PyErr {
     match error {
@@ -554,7 +573,10 @@ impl TensorElements {
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for TensorElements {
     fn type_input() -> pyo3_stub_gen::TypeInfo {
-        PythonExpression::type_input() | Complex::type_input() | PyFloat::type_input()
+        PythonExpression::type_input()
+            | PyInt::type_input()
+            | Complex::type_input()
+            | PyFloat::type_input()
     }
 
     fn type_output() -> TypeInfo {
@@ -690,8 +712,9 @@ impl Spensor {
     /// structure : TensorExpression
     ///     Named descriptor with concrete dimensions in logical axis order.
     /// type_info : type
-    ///     Component type: float, complex, or Expression. Assigned values must
-    ///     match this type.
+    ///     Component type: float or Expression. Expression storage preserves
+    ///     exact symbolic values and accepts integer assignments without rounding.
+    ///     Floating-point storage requires numerical assignments.
     ///
     /// Returns
     /// -------
@@ -754,9 +777,12 @@ impl Spensor {
     /// structure : TensorExpression
     ///     Named descriptor with concrete dimensions and the desired logical
     ///     axis order. Use with_name() to give a composite expression a name.
-    /// data : sequence of float, complex, or Expression
+    /// data : sequence of int, float, complex, or Expression
     ///     Flat component data in logical row-major order. The length must equal
-    ///     the product of the dimensions. Use a consistent component type.
+    ///     the product of the dimensions. An explicit Expression selects symbolic
+    ///     storage for the sequence, preserving exact rational and algebraic
+    ///     values. Integer-only input is exact too. Float or complex sequences
+    ///     without Expressions retain numerical storage.
     ///
     /// Returns
     /// -------
@@ -920,8 +946,9 @@ impl Spensor {
     /// Only ports layout and default spacing are supported in this source
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
-    /// Components follow the current view (the order of axes). Large static displays show a
-    /// bounded preview rather than every component.
+    /// Components follow the current view's logical interface order (the order
+    /// of axes), independently of the canonical structure signature. Large
+    /// static displays show a bounded preview rather than every component.
     ///
     /// Examples
     /// --------
@@ -964,8 +991,9 @@ impl Spensor {
     /// Only ports layout and default spacing are supported in this source
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
-    /// Components follow the current view (the order of axes). Large static displays show a
-    /// bounded preview rather than every component.
+    /// Components follow the current view's logical interface order (the order
+    /// of axes), independently of the canonical structure signature. Large
+    /// static displays show a bounded preview rather than every component.
     ///
     /// Static Typst output remains available independently of the HTML explorer.
     ///
@@ -1246,7 +1274,14 @@ impl Spensor {
         value: Bound<'py, PyAny>,
     ) -> eyre::Result<()> {
         TensorElements::validate_scalar(&value)?;
-        let value = if let Ok(v) = value.extract::<PythonExpression>() {
+        let value = if matches!(&self.tensor, ParamOrConcrete::Param(_)) {
+            ConcreteOrParam::Param(
+                value
+                    .extract::<ConvertibleToExpression>()?
+                    .to_expression()
+                    .expr,
+            )
+        } else if let Ok(v) = value.extract::<PythonExpression>() {
             ConcreteOrParam::Param(v.expr)
         } else if let Ok(v) = value.extract::<f64>() {
             ConcreteOrParam::Concrete(RealOrComplex::Real(v))

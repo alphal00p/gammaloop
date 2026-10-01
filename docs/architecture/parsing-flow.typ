@@ -503,7 +503,7 @@ let mut network = Network::try_from_view_with_function_library(
     function_library,
     &expanded_settings,
 )?;
-network.execute::<Sequential, SmallestDegree, ...>(...)?;
+network.execute::<Sequential, MinIntermediateCost, ...>(...)?;
 ```
 
 #link("../../crates/idenso/src/tensor/mod.rs#L118")[crates/idenso/src/tensor/mod.rs:118]

@@ -128,6 +128,83 @@ class TensorLibraryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             library[TensorExpression.g(Representation.mink(S("library_tests::D")))]
 
+    def test_explicit_symbolic_and_integer_component_data_remain_exact(self):
+        rep = Representation.mink(4)
+        momentum = TensorName.vector("library_tests::exact_momentum")(rep)
+        values = [E("1/3"), E("2/7"), E("3/11"), E("5/13")]
+        for tensor in (
+            Tensor.dense(momentum, values),
+            Tensor.sparse(momentum, Expression),
+        ):
+            for index, value in enumerate(values):
+                tensor[index] = value
+            self.assertIs(tensor.dtype, Expression)
+            self.assertEqual(tensor[:], values)
+            library = TensorLibrary.hep_lib_atom()
+            library.register(tensor)
+            self.assertEqual(library[momentum][:], values)
+            square = momentum("mu") * momentum("mu")
+            result = square.to_tensor(library)
+            self.assertIs(result.dtype, Expression)
+            self.assertEqual(result.scalar(), E("1/9-4/49-9/121-25/169"))
+
+        large = 2**80 + 1
+        vector = TensorName("library_tests::integer_vector")(Representation.euc(2))
+        for values in ([large, -2], [E(str(large)), -2]):
+            tensor = Tensor.dense(vector, values)
+            self.assertIs(tensor.dtype, Expression)
+            self.assertEqual(tensor[:], [E(str(large)), E("-2")])
+            tensor[1] = 3
+            self.assertEqual(tensor[1], E("3"))
+            norm = (tensor("i") * tensor("i")).to_tensor()
+            self.assertEqual(norm.scalar(), E(str(large**2 + 9)))
+        sparse = Tensor.sparse(vector, Expression)
+        sparse[0] = large
+        self.assertEqual(sparse[:], [E(str(large)), E("0")])
+        self.assertIs(Tensor.dense(vector, [1.0, 2.0]).dtype, float)
+        self.assertIs(Tensor.dense(vector, [1j, 2j]).dtype, complex)
+
+    def test_default_and_explicit_exact_hep_components_and_contractions(self):
+        gamma = TensorExpression.dirac_gamma(4)
+        generator = TensorExpression.color_t(8, 3)
+        structure_constant = TensorExpression.color_f(8)
+        metric = TensorExpression.g(Representation.mink(2))
+        for library in (None, TensorLibrary.hep_lib_atom()):
+            with self.subTest(library=library):
+                components = [
+                    descriptor.to_tensor(library)
+                    for descriptor in (gamma, generator, structure_constant, metric)
+                ]
+                for tensor in components:
+                    self.assertIs(tensor.dtype, Expression)
+                    self.assertTrue(
+                        all(isinstance(value, Expression) for value in tensor)
+                    )
+                gamma_data, generator_data, f_data, metric_data = components
+                self.assertEqual(gamma_data[0, 2, 0], E("1"))
+                self.assertEqual(gamma_data[0, 3, 2], E("-𝑖"))
+                self.assertEqual(generator_data[0, 0, 1], E("1/2"))
+                self.assertEqual(generator_data[7, 0, 0], E("sqrt(3)/6"))
+                self.assertEqual(f_data[3, 4, 7], E("sqrt(3)/2"))
+                self.assertEqual(metric_data[:], [E("1"), E("0"), E("0"), E("-1")])
+                for source, expected in (
+                    (
+                        generator("a", "i", "j") * generator("a", "j", "i"),
+                        E("4"),
+                    ),
+                    (structure_constant("a", "b", "c") ** 2, E("24")),
+                    (gamma("a", "b", "mu") * gamma("b", "a", "mu"), E("16")),
+                ):
+                    self.assertEqual(source.to_tensor(library).scalar(), expected)
+
+        numerical = TensorLibrary.hep_lib()
+        self.assertIs(generator.to_tensor(numerical).dtype, complex)
+        self.assertIs(structure_constant.to_tensor(numerical).dtype, float)
+        self.assertEqual(generator.to_tensor(numerical)[0, 0, 1], 0.5 + 0j)
+        self.assertAlmostEqual(
+            structure_constant.to_tensor(numerical)[3, 4, 7], 3**0.5 / 2
+        )
+
     def test_invalid_and_missing_keys(self):
         library = TensorLibrary()
         signature = TensorName("library_tests::missing")(Representation.euc(2))

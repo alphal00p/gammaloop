@@ -1488,7 +1488,8 @@ pub type ParamNet<Aind> =
 
 impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
     /// Realize independent scalar expressions with the existing component parser
-    /// and executor. Each input keeps its own dummy namespace and admission error.
+    /// and MinIntermediateCost executor. Each input keeps its own dummy namespace
+    /// and admission error.
     ///
     /// Parsing precedes execution for a batch. Callers whose inputs can run user
     /// code must submit one input at its original evaluation position instead;
@@ -1569,7 +1570,8 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
                     // In particular, execute a callback-produced open result
                     // before reporting NoScalar, just like ordinary execution.
                     let mut network = construction.finish(root);
-                    network.execute::<Sequential, SmallestDegree, _, _, _>(&library, &missing)?;
+                    network
+                        .execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &missing)?;
                     return Ok(vec![network.result_scalar().map(Atom::from)]);
                 }
                 Ok(root) if !construction.state(root).is_scalar() => {
@@ -1588,7 +1590,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
         if !roots.is_empty() {
             let root = construction.sum(roots)?;
             let mut network = construction.finish(root);
-            network.execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)?;
+            network.execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &functions)?;
             let result = Atom::from(network.result_scalar()?);
             let terms = match result.as_view() {
                 AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
@@ -1623,10 +1625,11 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
             .collect())
     }
 
+    /// Materialize all components using the MinIntermediateCost policy.
     pub fn simple_execute(&mut self) {
         let lib = DummyLibrary::<_>::new();
 
-        self.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &ErroringLibrary::new())
+        self.execute::<Sequential, MinIntermediateCost, _, _, _>(&lib, &ErroringLibrary::new())
             .unwrap();
     }
 }

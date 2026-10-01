@@ -1048,6 +1048,83 @@ fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
 
 #[cfg(feature = "shadowing")]
 #[test]
+fn fused_numeric_contraction_matches_dual_indices_in_storage_order() {
+    use symbolica::{atom::Atom, parse};
+
+    use super::{FastTensorSumContract, fused_numeric_tensor_sum_contract};
+    use crate::{
+        structure::{
+            HasStructure, OrderedStructure, TensorDataLayout,
+            representation::{LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot, Slot},
+        },
+        tensors::{
+            data::{SetTensorData, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+
+    let tensor = |slots: Vec<Slot<LibraryRep>>, coefficient: Atom| {
+        let coordinates = (0..slots.len()).collect::<Vec<_>>();
+        let structure = OrderedStructure::new(slots);
+        let layout = TensorDataLayout::from_canonicalized(&structure).unwrap();
+        let mut tensor = SparseTensor::empty(structure.into_canonical(), Atom::Zero);
+        tensor
+            .set(
+                &layout
+                    .logical_expanded_to_storage_expanded(&coordinates)
+                    .unwrap(),
+                coefficient,
+            )
+            .unwrap();
+        ParamTensor::composite(tensor.into())
+    };
+
+    // Canonical storage groups base and dual slots separately. Closing these
+    // indices requires a transposition or a three-cycle, not equal positions.
+    for rank in [2, 3] {
+        let slots = (0..rank)
+            .map(|i| {
+                if i + 1 == rank {
+                    Lorentz {}.dual().new_slot(3, i).to_lib()
+                } else {
+                    Lorentz {}.new_slot(3, i).to_lib()
+                }
+            })
+            .collect::<Vec<_>>();
+        let numeric = tensor(slots.iter().map(|slot| slot.dual()).collect(), Atom::num(3));
+        for factor in [Atom::num(1), parse!("x+y")] {
+            let term = tensor(slots.clone(), Atom::num(2) * &factor);
+            for count in [1, 2, 8] {
+                let terms = vec![&term; count];
+                for terms_on_left in [false, true] {
+                    let result = fused_numeric_tensor_sum_contract(&terms, &numeric, terms_on_left)
+                        .expect("sparse numeric contraction uses the fused path")
+                        .unwrap();
+                    let actual = match result {
+                        FastTensorSumContract::Materialized(tensor) => tensor.scalar().unwrap(),
+                        FastTensorSumContract::Terms(terms) => {
+                            Atom::add_many(terms.into_iter().map(|tensor| tensor.scalar().unwrap()))
+                        }
+                        FastTensorSumContract::ScaledTerms(terms) => {
+                            Atom::add_many(terms.into_iter().map(|term| {
+                                term.tensor.scalar().unwrap() * term.scale.unwrap_or(Atom::num(1))
+                            }))
+                        }
+                    };
+                    assert_eq!(
+                        actual,
+                        Atom::num(6 * count as i64) * &factor,
+                        "rank={rank}, count={count}, terms_on_left={terms_on_left}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
 fn sparse_pair_estimate_counts_shared_output_coordinates() {
     use linnet::permutation::Permutation;
     use symbolica::atom::Atom;
@@ -1126,6 +1203,80 @@ fn sparse_pair_estimate_counts_shared_output_coordinates() {
             1,
         );
         assert_eq!(estimate.estimated_products, products);
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
+fn sparse_pair_estimate_aligns_three_cycle_matches_with_open_axes() {
+    use symbolica::atom::Atom;
+
+    use super::FastTensorSumContractible;
+    use crate::{
+        structure::{
+            HasStructure, OrderedStructure, TensorDataLayout, TensorStructure,
+            representation::{Euclidean, LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot, Slot},
+        },
+        tensors::{
+            data::{SetTensorData, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+
+    let matched = [
+        Lorentz {}.new_slot(3, 0).to_lib(),
+        Lorentz {}.new_slot(3, 1).to_lib(),
+        Lorentz {}.dual().new_slot(3, 2).to_lib(),
+    ];
+    let tensor = |slots: Vec<Slot<LibraryRep>>, support: &[[usize; 4]]| {
+        let structure = OrderedStructure::new(slots);
+        let layout = TensorDataLayout::from_canonicalized(&structure).unwrap();
+        let mut tensor = SparseTensor::empty(structure.into_canonical(), Atom::Zero);
+        for coordinates in support {
+            tensor
+                .set(
+                    &layout
+                        .logical_expanded_to_storage_expanded(coordinates)
+                        .unwrap(),
+                    Atom::num(1),
+                )
+                .unwrap();
+        }
+        ParamTensor::composite(tensor.into())
+    };
+    let left = tensor(
+        std::iter::once(Euclidean {}.new_slot(2, 4).to_lib())
+            .chain(matched)
+            .collect(),
+        &[[0, 0, 1, 2], [1, 0, 1, 2], [1, 2, 0, 1]],
+    );
+    let right = tensor(
+        std::iter::once(Euclidean {}.new_slot(2, 5).to_lib())
+            .chain(matched.map(|slot| slot.dual()))
+            .collect(),
+        &[[0, 0, 1, 2], [1, 0, 1, 2], [0, 2, 0, 1]],
+    );
+
+    // The shared coordinate (0,1,2) contributes to all four output coordinates;
+    // (2,0,1) contributes once more at (1,0). Storage groups base/dual slots,
+    // so matching the same logical coordinates requires a three-cycle.
+    for (left, right) in [(&left, &right), (&right, &left)] {
+        let (permutation, left_matches, right_matches) =
+            left.structure().match_indices(right.structure()).unwrap();
+        let estimate = left.contraction_pair_estimate(
+            right,
+            &permutation,
+            &left_matches,
+            &right_matches,
+            left.contraction_profile(),
+            right.contraction_profile(),
+            4,
+            5,
+        );
+        assert_eq!(estimate.estimated_products, 5);
+        assert_eq!(estimate.estimated_output_entries, 4);
+        assert_eq!(estimate.max_output_entry_products, 2);
     }
 }
 

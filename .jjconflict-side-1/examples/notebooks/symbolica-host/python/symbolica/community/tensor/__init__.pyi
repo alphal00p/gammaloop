@@ -2770,8 +2770,9 @@ class Tensor:
         structure : TensorExpression
             Named descriptor with concrete dimensions in logical axis order.
         type_info : type
-            Component type: float, complex, or Expression. Assigned values must
-            match this type.
+            Component type: float or Expression. Expression storage preserves
+            exact symbolic values and accepts integer assignments without rounding.
+            Floating-point storage requires numerical assignments.
 
         Returns
         -------
@@ -2790,7 +2791,7 @@ class Tensor:
         0.0
         """
     @staticmethod
-    def dense(structure: TensorExpression, data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:
+    def dense(structure: TensorExpression, data: typing.Sequence[_ScalarInput] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:
         r"""
         Store every component of a named tensor.
 
@@ -2799,9 +2800,12 @@ class Tensor:
         structure : TensorExpression
             Named descriptor with concrete dimensions and the desired logical
             axis order. Use with_name() to give a composite expression a name.
-        data : sequence of float, complex, or Expression
+        data : sequence of int, float, complex, or Expression
             Flat component data in logical row-major order. The length must equal
-            the product of the dimensions. Use a consistent component type.
+            the product of the dimensions. An explicit Expression selects symbolic
+            storage for the sequence, preserving exact rational and algebraic
+            values. Integer-only input is exact too. Float or complex sequences
+            without Expressions retain numerical storage.
 
         Returns
         -------
@@ -2910,8 +2914,9 @@ class Tensor:
         Only ports layout and default spacing are supported in this source
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
-        Components follow the current view (the order of axes). Large static displays show a
-        bounded preview rather than every component.
+        Components follow the current view's logical interface order (the order
+        of axes), independently of the canonical structure signature. Large
+        static displays show a bounded preview rather than every component.
 
         Examples
         --------
@@ -2944,8 +2949,9 @@ class Tensor:
         Only ports layout and default spacing are supported in this source
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
-        Components follow the current view (the order of axes). Large static displays show a
-        bounded preview rather than every component.
+        Components follow the current view's logical interface order (the order
+        of axes), independently of the canonical structure signature. Large
+        static displays show a bounded preview rather than every component.
 
         Static Typst output remains available independently of the HTML explorer.
 
@@ -7814,7 +7820,9 @@ class TensorLibrary:
 
         Notes
         -----
-        Values use double-precision real or complex numbers.
+        Values use double-precision real or complex numbers. This explicitly
+        selects numerical components; omitted HEP libraries and hep_lib_atom()
+        use exact Symbolica expressions.
 
         Examples
         --------
@@ -7844,7 +7852,9 @@ class TensorLibrary:
         Notes
         -----
         Components are Symbolica Expressions, retaining exact rational and
-        algebraic constants for symbolic component calculations.
+        algebraic constants for symbolic component calculations. This is the
+        same component convention used when tensor-network evaluation omits a
+        library. Use hep_lib() to request floating-point HEP data explicitly.
 
         Examples
         --------
@@ -8733,8 +8743,10 @@ class TensorNetwork:
         n_steps : int, optional
             Number of execution rounds. None runs the selected strategy to completion.
         mode : ExecutionMode, default ExecutionMode.All
-            All contracts according to the default schedule. Single selects one
-            contraction at a time. Scalar restricts contraction to scalar work.
+            All uses MinIntermediateCost, which estimates sparse overlap and
+            symbolic intermediate cost when choosing each contraction. Single
+            selects one minimum-degree contraction at a time. Scalar restricts
+            contraction to scalar work.
             Preprocessing and ready operations may also run in an execution round.
 
         Returns

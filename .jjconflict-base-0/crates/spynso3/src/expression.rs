@@ -5916,18 +5916,25 @@ mod tests {
                 let AtomView::Fun(function) = tensor.atom().as_view() else {
                     panic!("a predefined tensor factory must remain an atomic leaf")
                 };
-                let canonical_slots = function
+                let canonical_representations = function
                     .iter()
                     .map(|argument| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(argument)
-                            .expect("factory ports must carry distinct open indices")
+                        if function.get_symbol() == ETS.metric {
+                            // The slot-aware metric factory keeps unresolved
+                            // arguments compact; its interface owns their
+                            // distinct occurrence-local identities.
+                            assert!(Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_err());
+                            Representation::<LibraryRep>::try_from(argument)
+                                .expect("an unresolved metric argument must be a representation")
+                        } else {
+                            Slot::<LibraryRep, AbstractIndex>::try_from(argument)
+                                .expect("factory ports must carry distinct open indices")
+                                .rep()
+                        }
                     })
                     .collect::<Vec<_>>();
                 assert_eq!(
-                    canonical_slots
-                        .iter()
-                        .map(IsAbstractSlot::rep)
-                        .collect::<Vec<_>>(),
+                    canonical_representations,
                     structure
                         .canonical()
                         .external_reps_iter()
@@ -6059,10 +6066,12 @@ mod tests {
                 assert!(
                     function
                         .iter()
-                        .all(
-                            |argument| Slot::<LibraryRep, AbstractIndex>::try_from(argument)
-                                .is_ok()
-                        )
+                        .all(|argument| if function.get_symbol() == ETS.metric {
+                            Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_err()
+                                && Representation::<LibraryRep>::try_from(argument).is_ok()
+                        } else {
+                            Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+                        })
                 );
             }
             Ok(())

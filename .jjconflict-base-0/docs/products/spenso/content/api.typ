@@ -74,6 +74,32 @@ available because converting a network to a symbolic descriptor would lose store
 Execution and rendering use `execute`, `step`, `status`, `result_tensor`, `result_scalar`,
 `expression`, `to_dot`, `to_html`, `render`, and `to_linnest`.
 
+Component evaluation uses exact HEP data by default: four-dimensional Dirac
+matrices in the Weyl basis, SU(3) generators and structure constants, and
+dimension-dependent identity and metric factories. `TensorLibrary.hep_lib_atom()`
+constructs an independent library with that same exact convention. Its entries
+are Symbolica `Expression` values, including rational coefficients and algebraic
+constants such as $sqrt(3)/2$. `TensorLibrary.hep_lib()` explicitly selects the
+corresponding double-precision real or complex data. Selecting a component
+library does not enable symbolic colour or gamma identities.
+
+`Tensor.dense(descriptor, values)` preserves explicitly supplied Expressions;
+it does not convert `E("1/3")` into a floating-point approximation. Integer-only
+sequences are exact too. Sequences of floats or complex numbers retain numerical
+storage. `Tensor.sparse(descriptor, Expression)` stores exact symbolic components
+and accepts exact integer assignments. Libraries retain the component storage
+chosen during registration.
+
+```python
+from symbolica import E
+from symbolica.community.tensor import Representation, Tensor, TensorLibrary, TensorName
+
+p = TensorName.vector("p")(Representation.mink(2))
+library = TensorLibrary.hep_lib_atom()
+library.register(Tensor.dense(p, [E("1/3"), E("2/7")]))
+(p("mu") * p("mu")).to_tensor(library).scalar()  # 13/441 exactly
+```
+
 `Tensor`, `TensorNetwork`, and `TensorExpression` expose an immutable
 `TensorStructure` through `.structure`. It is the canonical free-axis signature
 of the whole expression treated as one opaque tensor. It contains `.axes`,

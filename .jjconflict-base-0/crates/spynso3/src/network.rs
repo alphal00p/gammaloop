@@ -16,8 +16,8 @@ use spenso::{
     algebra::complex::{Complex, RealOrComplex},
     iterators::IteratableTensor,
     network::{
-        ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree,
-        SmallestDegree, Steps,
+        ContractScalars, ExecutionResult, MinIntermediateCost, Network, Sequential,
+        SingleSmallestDegree, Steps,
         library::symbolic::{ExplicitKey, TensorLibrary},
         parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
@@ -1204,8 +1204,10 @@ impl SpensoNet {
     /// n_steps : int, optional
     ///     Number of execution rounds. None runs the selected strategy to completion.
     /// mode : ExecutionMode, default ExecutionMode.All
-    ///     All contracts according to the default schedule. Single selects one
-    ///     contraction at a time. Scalar restricts contraction to scalar work.
+    ///     All uses MinIntermediateCost, which estimates sparse overlap and
+    ///     symbolic intermediate cost when choosing each contraction. Single
+    ///     selects one minimum-degree contraction at a time. Scalar restricts
+    ///     contraction to scalar work.
     ///     Preprocessing and ready operations may also run in an execution round.
     ///
     /// Returns
@@ -1248,7 +1250,7 @@ impl SpensoNet {
                 match mode {
                     ExecutionMode::All => {
                         self.network
-                            .execute::<Steps<1>, SmallestDegree, _, _, _>(lib, fn_lib)
+                            .execute::<Steps<1>, MinIntermediateCost, _, _, _>(lib, fn_lib)
                             .map_err(|a| PyRuntimeError::new_err(a.to_string()))?;
                     }
                     ExecutionMode::Scalar => {
@@ -1267,7 +1269,7 @@ impl SpensoNet {
             match mode {
                 ExecutionMode::All => {
                     self.network
-                        .execute::<Sequential, SmallestDegree, _, _, _>(lib, fn_lib)
+                        .execute::<Sequential, MinIntermediateCost, _, _, _>(lib, fn_lib)
                         .map_err(|a| PyRuntimeError::new_err(a.to_string()))?;
                 }
                 ExecutionMode::Scalar => {
@@ -2720,7 +2722,15 @@ mod tests {
 
             network.execute(None, None, None, ExecutionMode::All)?;
             let result = network.result_tensor(None)?;
-            assert!(matches!(&result.tensor, ParamOrConcrete::Concrete(_)));
+            assert!(matches!(&result.tensor, ParamOrConcrete::Param(_)));
+            let result = Py::new(py, result)?;
+            for (indices, expected) in [((0, 0), -1), ((2, 2), 1), ((0, 1), 0)] {
+                let component = result
+                    .bind(py)
+                    .get_item(indices)?
+                    .extract::<PythonExpression>()?;
+                assert_eq!(component.expr, Atom::num(expected));
+            }
             Ok(())
         })
         .unwrap();

@@ -1028,7 +1028,9 @@ impl SpensorLibrary {
     ///
     /// Notes
     /// -----
-    /// Values use double-precision real or complex numbers.
+    /// Values use double-precision real or complex numbers. This explicitly
+    /// selects numerical components; omitted HEP libraries and hep_lib_atom()
+    /// use exact Symbolica expressions.
     ///
     /// Examples
     /// --------
@@ -1039,7 +1041,7 @@ impl SpensorLibrary {
     #[staticmethod]
     pub fn hep_lib() -> Self {
         Self {
-            library: spenso_hep_lib::hep_lib(1., 0.),
+            library: spenso_hep_lib::hep_lib_su3(),
             references: storage_hep_references(),
         }
     }
@@ -1062,7 +1064,9 @@ impl SpensorLibrary {
     /// Notes
     /// -----
     /// Components are Symbolica Expressions, retaining exact rational and
-    /// algebraic constants for symbolic component calculations.
+    /// algebraic constants for symbolic component calculations. This is the
+    /// same component convention used when tensor-network evaluation omits a
+    /// library. Use hep_lib() to request floating-point HEP data explicitly.
     ///
     /// Examples
     /// --------

@@ -757,23 +757,43 @@ impl<
     where
         T::SetData: TensorLibraryData,
     {
+        self.update_ids_from::<T>();
+    }
+
+    /// Install identity and metric factories using `U`'s component arithmetic.
+    ///
+    /// A mixed concrete/symbolic library can select an exact tensor type here
+    /// without changing its carrier or duplicating dimension-dependent factories.
+    pub fn update_ids_from<U>(&mut self)
+    where
+        U: LibraryTensor<Structure = ExplicitKey<Aind>>
+            + SetTensorData<SetData = <U as LibraryTensor>::Data>
+            + Clone
+            + Into<T>,
+        U::SetData: TensorLibraryData,
+    {
         initialize();
         for r in LibraryRep::all_dualizables() {
-            self.insert_generic(Self::id(*r), Self::checked_identity);
+            self.insert_generic(Self::id(*r), |key| {
+                TensorLibrary::<U, Aind>::checked_identity(key).into()
+            });
         }
 
         for r in LibraryRep::all_self_duals() {
             let id_metric = GenericKey::new(ETS.metric, None, vec![*r, *r]);
-            self.insert_generic(id_metric, Self::checked_identity);
+            self.insert_generic(id_metric, |key| {
+                TensorLibrary::<U, Aind>::checked_identity(key).into()
+            });
         }
 
         for r in LibraryRep::all_inline_metrics() {
-            self.insert_generic(
-                GenericKey::new(ETS.flat, None, vec![*r, *r]),
-                Self::checked_identity,
-            );
+            self.insert_generic(GenericKey::new(ETS.flat, None, vec![*r, *r]), |key| {
+                TensorLibrary::<U, Aind>::checked_identity(key).into()
+            });
             let id_metric = GenericKey::new(ETS.metric, None, vec![*r, *r]);
-            self.insert_generic(id_metric, Self::diag_unimodular_metric);
+            self.insert_generic(id_metric, |key| {
+                TensorLibrary::<U, Aind>::diag_unimodular_metric(key).into()
+            });
         }
     }
 
