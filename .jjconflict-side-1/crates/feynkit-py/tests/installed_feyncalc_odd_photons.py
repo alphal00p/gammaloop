@@ -115,7 +115,7 @@ for count in (1, 3, 5):
         mapping = families[0].mapping_to(families[0], [-K(0)])
         assert mapping is not None
         assert (mapping.apply(traces[0]) + traces[0]).expand() == E("0")
-        vacuum = hep.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
+        vacuum = hep.TensorReducer(D, integrated=[K(0, mink(D))])
         assert vacuum.reduce(traces[0]).expand() == E("0")
         pairs = [(0, 0, mapping)]
     else:

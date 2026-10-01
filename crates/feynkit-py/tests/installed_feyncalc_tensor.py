@@ -24,7 +24,7 @@ mu, nu, rho, sigma = S(
     "tensor_check::mu", "tensor_check::nu", "tensor_check::rho", "tensor_check::sigma"
 )
 kc, pc, rc = k(mink(D)), p(mink(D)), r(mink(D))
-reducer = fk.TensorReducer(D).with_integrated_vector(kc).with_external_vector(pc)
+reducer = fk.TensorReducer(D, integrated=[kc], external=[pc])
 
 parallel = dot(kc, pc) * dot(rc, pc) / dot(pc, pc)
 transverse = (dot(kc, kc) - dot(kc, pc) ** 2 / dot(pc, pc)) * (
@@ -50,7 +50,7 @@ for rank, result in enumerate(expected, 1):
     assert (compact_result - result).together() == E("0")
     assert (reducer.reduce(compact_result) - compact_result).together() == E("0")
 
-vacuum = fk.TensorReducer(D).with_integrated_vector(kc)
+vacuum = fk.TensorReducer(D, integrated=[kc])
 assert vacuum.reduce(dot(kc, rc)) == E("0")
 assert (
     vacuum.reduce(dot(kc, rc) ** 2) - dot(kc, kc) * dot(rc, rc) / D
@@ -71,7 +71,9 @@ assert (
 null_kin = (
     fk.Kinematics(D).with_scalar_product(p, p, E("0")).with_scalar_product(r, r, E("0"))
 )
-null_result = reducer.with_external_vector(rc).reduce(k(mink(D, mu)))
+null_result = fk.TensorReducer(D, integrated=[kc], external=[pc, rc]).reduce(
+    k(mink(D, mu))
+)
 null_expected = (dot(kc, rc) * p(mink(D, mu)) + dot(kc, pc) * r(mink(D, mu))) / dot(
     pc, rc
 )

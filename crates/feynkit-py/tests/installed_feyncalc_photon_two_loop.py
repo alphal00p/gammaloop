@@ -57,11 +57,7 @@ family = hep.IntegralFamily(
     ],
     kinematics=vacuum_kinematics,
 )
-reducer = (
-    hep.TensorReducer(d)
-    .with_integrated_vector(k(0, mink(d)))
-    .with_integrated_vector(k(1, mink(d)))
-)
+reducer = hep.TensorReducer(d, integrated=[k(0, mink(d)), k(1, mink(d))])
 
 
 xi, nu = S("photon_2l::xi", "photon_2l::nu")
@@ -325,7 +321,7 @@ ct_family = hep.IntegralFamily(
     [ct_vacuum.scalar_product(k(0), k(0)) - mass_squared],
     kinematics=ct_vacuum,
 )
-ct_reducer = hep.TensorReducer(d).with_integrated_vector(k(0, mink(d)))
+ct_reducer = hep.TensorReducer(d, integrated=[k(0, mink(d))])
 # Supplied one-loop field counterterm; the bubble and insertion sum are computed.
 zpsi_one = -xi / eps
 insertions = [

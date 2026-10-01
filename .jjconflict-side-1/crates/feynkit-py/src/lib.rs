@@ -196,9 +196,18 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
         })?;
     // Type overrides preserve Rust default expressions verbatim in stubgen.
     // Render the automatic policy sentinel as its Python Ellipsis spelling,
-    // and automatic notebook progress as a Python string literal.
+    // automatic notebook progress as a Python string literal, and empty
+    // tensor selector sequences as Python tuples.
     for class in module.class.values_mut() {
         for method in class.methods.values_mut().flatten() {
+            if class.name == "TensorReducer" && method.name == "__new__" {
+                for parameter in &mut method.parameters.keyword_only {
+                    if matches!(parameter.name, "integrated" | "external") {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("()".to_owned());
+                    }
+                }
+            }
             if matches!(
                 method.name,
                 "generate_diagrams"

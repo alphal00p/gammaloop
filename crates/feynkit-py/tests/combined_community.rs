@@ -237,9 +237,7 @@ tensor_input = (
     * projector_momentum(mink(tensor_dimension, tensor_mu))
     * projector_momentum(mink(tensor_dimension, tensor_nu))
 )
-tensor_reducer = feynkit.TensorReducer(tensor_dimension).with_integrated_head(
-    "feynkit_py_test::k"
-)
+tensor_reducer = feynkit.TensorReducer(tensor_dimension, integrated=[loop_momentum])
 tensor_reduced = tensor_reducer.reduce(tensor_input)
 diagram_tensor_reduced = diagram.reduce_tensor_numerator(tensor_reducer)
 scalar_graphs = diagram.reduce_tensor_graphs(tensor_reducer)

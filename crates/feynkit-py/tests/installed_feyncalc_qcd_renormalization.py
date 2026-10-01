@@ -79,7 +79,7 @@ vacuum = hep.Kinematics(D, momenta=[K(0)])
 family = hep.IntegralFamily(
     [K(0)], [], [vacuum.scalar_product(K(0), K(0)) - M], kinematics=vacuum
 )
-reducer = hep.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
+reducer = hep.TensorReducer(D, integrated=[K(0, mink(D))])
 gmunu = metric(mink(D, mu), mink(D, nu))
 ppmunu = P(0, mink(D, mu)) * P(0, mink(D, nu))
 zero, one = E("0"), E("1")

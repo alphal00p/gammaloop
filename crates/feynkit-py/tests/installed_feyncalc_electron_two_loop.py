@@ -63,11 +63,7 @@ family = hep.IntegralFamily(
     ],
     kinematics=vacuum_kinematics,
 )
-reducer = (
-    hep.TensorReducer(d)
-    .with_integrated_vector(k(0, mink(d)))
-    .with_integrated_vector(k(1, mink(d)))
-)
+reducer = hep.TensorReducer(d, integrated=[k(0, mink(d)), k(1, mink(d))])
 
 # Pin the 1PI convention independently at one loop, before any UV expansion.
 # Vertices (-ie)^2, electron i*slash(k), photon -i*g give -e^2 gamma_mu slash(k) gamma^mu.

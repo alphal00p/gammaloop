@@ -3039,7 +3039,7 @@ class FeynmanDiagram:
         >>> from symbolica.community import hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
-        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
+        >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
 
         Parameters
@@ -3070,7 +3070,7 @@ class FeynmanDiagram:
         >>> from symbolica.community import hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
-        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
+        >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
 
         Parameters
@@ -9330,7 +9330,7 @@ class TensorReducer:
     the rank, dimension-specific identities make the universal metric basis
     singular. The all-equal isotropic fast path remains well defined.
     For denominators depending on external momenta, add an independent basis
-    with :meth:`with_external_vector`. Only the transverse components are then
+    with the ``external`` constructor keyword. Only the transverse components are then
     rotationally averaged; odd total ranks need not vanish.
 
     Examples
@@ -9344,7 +9344,7 @@ class TensorReducer:
     >>> D, mu, nu = S("D", "mu", "nu")
     >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
     >>> lorentz = Representation.mink(D)
-    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+    >>> reducer = hep.TensorReducer(D, integrated=[k(PortPattern.exact(lorentz))])
     >>> numerator = k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
     >>> projected = reducer.reduce(numerator)
 
@@ -9364,25 +9364,30 @@ class TensorReducer:
 
         >>> assert reducer.dimension == D
         """
-    def __new__(cls, dimension: Expression) -> TensorReducer:
+    def __new__(cls, dimension: Expression, *, integrated: typing.Sequence[symbolica.community.tensor.TensorName | symbolica.Expression | symbolica.community.tensor.TensorExpression] = (), external: typing.Sequence[symbolica.Expression | symbolica.community.tensor.TensorExpression] = ()) -> TensorReducer:
         r"""
-        Construct a reducer without selecting an integrated momentum.
+        Configure the integrated momenta and independent external basis.
 
-        Add selectors with :meth:`with_integrated_head` or
-        :meth:`with_integrated_vector`. The object is immutable; each selector
-        returns a new reducer.
+        Bare symbols and ``TensorName`` entries in ``integrated`` select every
+        vector with that head. Compact vector expressions select one exact
+        momentum, including its scalar arguments. External entries are compact
+        vectors and take precedence over integrated-head selections.
 
         Examples
         --------
         Using the setup in the ``TensorReducer`` class example:
 
-        >>> from symbolica import E
-        >>> reducer = hep.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
+        >>> reducer = hep.TensorReducer(D, integrated=[k])
+        >>> reducer = hep.TensorReducer(D, integrated=[k(PortPattern.exact(lorentz))], external=[p(PortPattern.exact(lorentz))])
 
         Parameters
         ----------
         dimension : Expression
             Lorentz-space dimension used by every ``spenso::mink`` slot.
+        integrated : sequence of TensorName or Expression or TensorExpression, optional
+            Whole vector heads or exact compact vectors to integrate.
+        external : sequence of Expression or TensorExpression, optional
+            Independent compact vectors in the denominator's external basis.
         """
     @staticmethod
     def feynkit(dimension: Expression) -> TensorReducer:
@@ -9394,7 +9399,7 @@ class TensorReducer:
         ``gammalooprs::Q`` head and is therefore intended for pure vacuum
         numerators, where every such momentum is integrated. If a graph still
         contains external ``gammalooprs::Q`` tensors, construct a reducer
-        with exact :meth:`with_integrated_vector` selectors for its internal
+        with exact compact vectors in ``integrated`` for its internal
         momenta instead.
 
         Examples
@@ -9405,7 +9410,7 @@ class TensorReducer:
         >>> from symbolica.community import hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
-        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
+        >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
 
         Parameters
@@ -9413,64 +9418,6 @@ class TensorReducer:
         dimension : Expression
             Lorentz-space dimension used by every ``spenso::mink`` slot. It
             must match the dimension carried by the input expression.
-        """
-    def with_integrated_head(self, head: builtins.str) -> TensorReducer:
-        r"""
-        Select all rank-one tensors with the qualified Symbolica head name.
-
-        Examples
-        --------
-        Using the setup in the ``TensorReducer`` class example:
-
-        >>> reducer = hep.TensorReducer(D).with_integrated_head("Loop::k")
-        >>> scalar = reducer.reduce(numerator)
-
-        Parameters
-        ----------
-        head : str
-            Qualified function name of the integrated vector.
-        """
-    def with_integrated_vector(self, vector: Expression) -> TensorReducer:
-        r"""
-        Select one exact compact Spenso vector.
-
-        A compact vector has a representation but no explicit index, for
-        example ``K(1, PortPattern.exact(lorentz))``. This distinguishes different loop
-        momenta that share one tensor head.
-
-        Examples
-        --------
-        Using the setup in the ``TensorReducer`` class example:
-
-        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
-        >>> projected = reducer.reduce(k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu)))
-
-        Parameters
-        ----------
-        vector : Expression
-            Exact indexed-free vector to integrate.
-        """
-    def with_external_vector(self, vector: Expression) -> TensorReducer:
-        r"""
-        Include an independent external momentum in the denominator's basis.
-
-        With an external basis, only transverse loop components are rotationally
-        averaged. Longitudinal components remain scalar products with that
-        basis. The Gram matrix must be invertible; supply an auxiliary momentum
-        for a degenerate basis. Entries override integrated-head selectors.
-
-        Examples
-        --------
-        Using the setup in the ``TensorReducer`` class example:
-
-        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
-        >>> reducer = reducer.with_external_vector(p(PortPattern.exact(lorentz)))
-        >>> reduced = reducer.reduce(k(PortPattern.exact(lorentz, mu)))
-
-        Parameters
-        ----------
-        vector : Expression
-            Compact Spenso vector, for example ``p(PortPattern.exact(lorentz))``.
         """
     def with_pairing_limit(self, limit: builtins.int) -> TensorReducer:
         r"""
@@ -9552,7 +9499,7 @@ class TensorReducer:
         ...     k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
         ...     * p(PortPattern.exact(lorentz, mu)) * p(PortPattern.exact(lorentz, nu))
         ... )
-        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k_compact)
+        >>> reducer = hep.TensorReducer(D, integrated=[k_compact])
         >>> reduced = reducer.reduce(numerator)
         >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
         >>> assert reduced == expected
@@ -9601,7 +9548,7 @@ class TensorReductionError(FeynkitError):
     >>> from symbolica.community import hep
     >>> D, k, mu = S("D", "k", "mu")
     >>> mink = S("spenso::mink")
-    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
+    >>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
     >>> try:
     ...     scalar = reducer.reduce(k(mink(D, mu))**2)
     ... except hep.TensorReductionError as error:

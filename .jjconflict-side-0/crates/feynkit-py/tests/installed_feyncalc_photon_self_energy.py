@@ -48,11 +48,7 @@ trace = (
 )
 kinematics = fk.Kinematics(D, momenta=[K(0), P(0)]).with_scalar_product(P(0), P(0), s)
 family = diagram.integral_family(kinematics=kinematics)
-reducer = (
-    fk.TensorReducer(D)
-    .with_integrated_vector(K(0, mink(D)))
-    .with_external_vector(P(0, mink(D)))
-)
+reducer = fk.TensorReducer(D, integrated=[K(0, mink(D))], external=[P(0, mink(D))])
 reduced = kinematics.apply(reducer.reduce(trace.to_expression()))
 d0, d1, a0, b0 = S("d0", "d1", "a0", "b0")
 scalar = (
@@ -66,7 +62,7 @@ scalar = (
 # moments with the existing family map and vacuum projector, before using them.
 shift = family.sector([0, 1]).mapping_to(family.sector([1, 0]), [K(0) + P(0)])
 assert shift is not None
-vacuum = fk.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
+vacuum = fk.TensorReducer(D, integrated=[K(0, mink(D))])
 for moment in (shift.apply(family.denominators[0]), family.denominators[1]):
     averaged = kinematics.apply(vacuum.reduce(moment))
     assert (averaged - family.denominators[0] - s).expand() == 0

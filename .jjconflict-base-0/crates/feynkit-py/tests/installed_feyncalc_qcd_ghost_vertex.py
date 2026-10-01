@@ -68,7 +68,7 @@ vacuum = hep.Kinematics(D, momenta=[K(0)])
 family = hep.IntegralFamily(
     [K(0)], [], [vacuum.scalar_product(K(0), K(0)) - M], kinematics=vacuum
 )
-reducer = hep.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
+reducer = hep.TensorReducer(D, integrated=[K(0, mink(D))])
 color = f(coad(dA, a), coad(dA, b), coad(dA, c))
 terms_by_diagram, trees, generated_diagrams = {}, {}, {}
 for pdg in (9000005, -9000005):

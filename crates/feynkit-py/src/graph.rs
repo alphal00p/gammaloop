@@ -3068,7 +3068,7 @@ impl PyFeynmanDiagram {
     /// >>> from symbolica.community import hep
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
-    /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
+    /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
     ///
     /// Parameters
@@ -3106,7 +3106,7 @@ impl PyFeynmanDiagram {
     /// >>> from symbolica.community import hep
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
-    /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
+    /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
     ///
     /// Parameters

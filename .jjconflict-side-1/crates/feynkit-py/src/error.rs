@@ -70,7 +70,7 @@ define_exception!(
     TensorReductionError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while parsing or reducing a Lorentz tensor.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hep\n>>> D, k, mu = S(\"D\", \"k\", \"mu\")\n>>> mink = S(\"spenso::mink\")\n>>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))\n>>> try:\n...     scalar = reducer.reduce(k(mink(D, mu))**2)\n... except hep.TensorReductionError as error:\n...     message = str(error)"
+    "Failure while parsing or reducing a Lorentz tensor.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hep\n>>> D, k, mu = S(\"D\", \"k\", \"mu\")\n>>> mink = S(\"spenso::mink\")\n>>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])\n>>> try:\n...     scalar = reducer.reduce(k(mink(D, mu))**2)\n... except hep.TensorReductionError as error:\n...     message = str(error)"
 );
 #[cfg(feature = "ufo")]
 define_exception!(

@@ -14,7 +14,7 @@ Without an external basis, the denominator must have vacuum rotational symmetry.
 `TensorReducer.feynkit(dimension)` selects every `gammalooprs::Q` tensor. Use it only for a
 pure vacuum numerator whose momenta are all integrated. A generated scattering diagram still
 contains external momenta; calling it a vacuum diagram does not change that. Construct
-`TensorReducer(dimension)` and add exact compact vectors with `with_integrated_vector(...)`
+`TensorReducer(dimension, integrated=[...])` with exact compact vectors
 when integrated and external momenta share a head.
 
 This self-contained example integrates `k` and leaves `p` external:
@@ -37,7 +37,7 @@ numerator = (
     k(mink(D, mu)) * k(mink(D, nu))
     * p(mink(D, mu)) * p(mink(D, nu))
 )
-reducer = fk.TensorReducer(D).with_integrated_vector(k_compact)
+reducer = fk.TensorReducer(D, integrated=[k_compact])
 scalar = reducer.reduce(numerator)
 expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
 assert scalar == expected
@@ -55,14 +55,17 @@ limit applies before repeated contraction legs are allocated.
 
 For native generated momenta, select the corresponding exact
 `gammalooprs::Q(edge_id,spenso::mink(D))` vectors from your vacuum/routing construction.
-Selecting an entire head with `with_integrated_head(...)` is appropriate only when every vector
-under that qualified name is integrated. Ordinary generated FeynKit rules carry dimension `4`;
+Selecting an entire head with `TensorReducer(D, integrated=[k])` is appropriate only when every vector
+under that symbol is integrated. Pass a `TensorName` or a bare Symbolica `Expression`, such as
+`S("Loop::k")`. Compact vectors may be `Expression` or `TensorExpression` objects.
+Ordinary generated FeynKit rules carry dimension `4`;
 a Taylor-expanded expression whose slots carry symbolic `D` requires that same `D` instead.
 
 == Denominators with external momenta
 
-Add every independent external direction in the denominator using
-`with_external_vector(p_compact)`. The reducer decomposes loop vectors into
+Supply every independent external direction in the denominator through the constructor
+keyword `external=[p_compact]`. Both `Expression` and `TensorExpression` entries are accepted.
+The reducer decomposes loop vectors into
 components parallel and perpendicular to that span. Symbolica inverts the
 external Gram matrix, and the existing vacuum projector averages the transverse
 components in dimension `D - n`, where `n` is the basis size. Odd total ranks can
@@ -76,7 +79,7 @@ import symbolica.community.feynkit as fk
 D, k, p, mu = S("external_docs::D", "external_docs::k", "external_docs::p", "external_docs::mu")
 mink, dot = S("spenso::mink", "spenso::dot")
 kc, pc = k(mink(D)), p(mink(D))
-reducer = fk.TensorReducer(D).with_integrated_vector(kc).with_external_vector(pc)
+reducer = fk.TensorReducer(D, integrated=[kc], external=[pc])
 result = reducer.reduce(k(mink(D, mu)))
 expected = dot(kc, pc) / dot(pc, pc) * p(mink(D, mu))
 assert (result - expected).together() == E("0")

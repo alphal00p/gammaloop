@@ -78,11 +78,8 @@ kinematics = (
     .with_scalar_product(P(1), P(1), E("0"))
     .with_scalar_product(P(0), P(1), s / 2)
 )
-reducer = (
-    hep.TensorReducer(D)
-    .with_integrated_vector(K(0, mink(D)))
-    .with_external_vector(P(0, mink(D)))
-    .with_external_vector(P(1, mink(D)))
+reducer = hep.TensorReducer(
+    D, integrated=[K(0, mink(D))], external=[P(0, mink(D)), P(1, mink(D))]
 )
 family = result.diagrams[0].integral_family(kinematics=kinematics)
 coordinates = S("hgg::d0", "hgg::d1", "hgg::d2")

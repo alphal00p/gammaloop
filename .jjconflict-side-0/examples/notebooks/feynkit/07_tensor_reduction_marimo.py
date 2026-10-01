@@ -107,7 +107,7 @@ def _(D, S, TensorReducer, external, mink, momentum):
     _nu = S("tr_nu")
     _k = momentum(10, mink(D))
 
-    rank_two_reducer = TensorReducer(D).with_integrated_vector(_k)
+    rank_two_reducer = TensorReducer(D, integrated=[_k])
     rank_two_input = (
         momentum(10, mink(D, _mu))
         * momentum(10, mink(D, _nu))
@@ -172,9 +172,7 @@ def _(D, S, TensorReducer, external, mink, momentum):
     for _factor in _factors[1:]:
         rank_six_input *= _factor
 
-    rank_six_reducer = (
-        TensorReducer(D).with_integrated_vector(_k).with_integrated_vector(_q)
-    )
+    rank_six_reducer = TensorReducer(D, integrated=[_k, _q])
     rank_six_output = rank_six_reducer.reduce(rank_six_input)
     return rank_six_input, rank_six_output
 
@@ -234,7 +232,7 @@ def _(D, S, TensorReducer, external, math, mink, momentum, time):
     for _factor in _rank_twenty_factors[1:]:
         _rank_twenty_input *= _factor
 
-    _reducer = TensorReducer(D).with_integrated_vector(_compact_loop_momentum)
+    _reducer = TensorReducer(D, integrated=[_compact_loop_momentum])
     _started = time.perf_counter()
     rank_twenty_output = _reducer.reduce(_rank_twenty_input)
     rank_twenty_seconds = time.perf_counter() - _started
@@ -281,7 +279,7 @@ def _(mo):
     The reducer dimension must match the graph's `spenso::mink` slots; native
     generated rules currently carry `4`, while a vacuum expression prepared
     directly in symbolic dimension uses `D` as above. Use exact
-    `with_integrated_vector(...)` selectors when a numerator also contains
+    `integrated=[...]` constructor selectors when a numerator also contains
     external objects with the `gammalooprs::Q` head.
 
     `reduce_tensor_numerator` reduces the product of the stored numerator and

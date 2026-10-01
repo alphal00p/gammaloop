@@ -592,8 +592,8 @@ do not cover off-shell vector decays at the physical 125 GeV Higgs mass.
 
 == Reduce tensors with external momentum dependence
 
-`TensorReducer(D).with_integrated_vector(k(mink(D)))` selects a loop vector.
-Add independent denominator directions with `with_external_vector(p(mink(D)))`.
+`TensorReducer(D, integrated=[k(mink(D))])` selects a loop vector.
+Supply independent denominator directions through the constructor keyword `external=[p(mink(D))]`.
 The reducer retains longitudinal components and applies its existing vacuum
 projection only in the transverse space. This supports free indices, multiple
 loop vectors and odd total ranks without a second projector implementation.

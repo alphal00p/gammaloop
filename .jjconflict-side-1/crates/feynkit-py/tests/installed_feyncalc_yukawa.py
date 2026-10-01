@@ -72,7 +72,7 @@ master_reduction = oneloop.reduce(family, [1])
 master = master_reduction.terms[0][1].to_expression(one)
 master_pole = oneloop.get_expression(master, coefficient=-1)
 assert master_pole == M
-reducer = hep.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
+reducer = hep.TensorReducer(D, integrated=[K(0, mink(D))])
 options = {
     "maximum_bridges": 0,
     "self_energy": None,

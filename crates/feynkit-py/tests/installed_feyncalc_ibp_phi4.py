@@ -39,7 +39,7 @@ mink, dot = S("spenso::mink", "spenso::dot")
 qc, pc = q(mink(d)), p(mink(d))
 shifted_line = 1 / (denominator + 2 * scaling * dot(qc, pc) + scaling**2 * dot(pc, pc))
 taylor = shifted_line.series(scaling, 0, 2).to_expression().replace(scaling, E("1"))
-taylor = hep.TensorReducer(d).with_integrated_vector(qc).reduce(taylor)
+taylor = hep.TensorReducer(d, integrated=[qc]).reduce(taylor)
 taylor = (
     taylor.replace(dot(qc, qc), denominator + mass_squared)
     .replace(dot(pc, pc), p_squared)
@@ -98,11 +98,7 @@ den, edge_, mom_, mass_, quad_ = S(
 )
 coordinates = S("ibp_phi4::x1", "ibp_phi4::x2", "ibp_phi4::x3")
 external_kinematics = kinematics.with_scalar_product(P(0), P(0), p_squared)
-reducer = (
-    hep.TensorReducer(d)
-    .with_integrated_vector(k1(mink(d)))
-    .with_integrated_vector(k2(mink(d)))
-)
+reducer = hep.TensorReducer(d, integrated=[k1(mink(d)), k2(mink(d))])
 bare_input = zero
 bare_terms = []
 raw_checks = []
