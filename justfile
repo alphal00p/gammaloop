@@ -272,6 +272,7 @@ docs-check:
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
     just docs-svg-assets-check

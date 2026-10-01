@@ -331,6 +331,7 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true

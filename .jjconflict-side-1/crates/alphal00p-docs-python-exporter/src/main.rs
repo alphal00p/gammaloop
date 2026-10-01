@@ -490,10 +490,8 @@ def validate(runtime_module, stub_source):
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
             "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
-            "node_selector: _NodeSelector = ...",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
-            "show_node_index: _Boolean = ...",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
