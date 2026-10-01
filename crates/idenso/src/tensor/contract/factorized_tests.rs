@@ -161,6 +161,114 @@ fn factored_contract_preserves_common_scalar_spectator_factorization() {
 }
 
 #[test]
+fn disconnected_antisymmetric_spectators_preserve_sum_contractions() {
+    setup();
+    let pair = input(
+        "(p(spenso::mink(4,mu))+q(spenso::mink(4,mu)))*(p(17,spenso::mink(4,mu))-q(23,spenso::mink(4,mu)))",
+    );
+    let contracted = input(
+        "spenso::g(p(spenso::mink(4)),p(17,spenso::mink(4)))-spenso::g(p(spenso::mink(4)),q(23,spenso::mink(4)))+spenso::g(q(spenso::mink(4)),p(17,spenso::mink(4)))-spenso::g(q(spenso::mink(4)),q(23,spenso::mink(4)))",
+    );
+    let color = input("spenso::f(spenso::coad(8,a),spenso::coad(8,b),spenso::coad(8,c))");
+    let coefficient = input("(x+y)^3");
+    let settings = crate::tensor::ContractSettings {
+        collect_chains: false,
+        collect_traces: false,
+        ..Default::default()
+    };
+    for power in [1, 2] {
+        let spectator = &coefficient * color.pow(power);
+        let source = SymbolicTensor::infer(&pair * &spectator).unwrap();
+        let expected = &contracted * spectator;
+        let direct = crate::shorthands::schoonschip::SlotContraction::new()
+            .contract_factorized(source.expression.as_view(), None, true)
+            .expect("an unsupported component must not discard independent work");
+        assert_eq!(direct.root, expected);
+        assert!(direct.observations.is_none(), "colour indices still remain");
+        let result = source.contract(settings).unwrap();
+        assert_eq!(result.expression, expected);
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(result.contract(settings).unwrap().expression, expected);
+    }
+}
+
+#[test]
+fn disconnected_refusal_retains_local_metric_fallback_and_finished_components() {
+    setup();
+    let source = input(
+        "(x+y)^3*(3*p(spenso::mink(4,mu))+2*q(spenso::mink(4,mu)))*q(spenso::mink(4,mu))*p(11,spenso::mink(4,nu))*q(13,spenso::mink(4,nu))*spenso::g(spenso::coad(8,a),spenso::coad(8,d))*spenso::f(spenso::coad(8,a),spenso::coad(8,b),spenso::coad(8,c))",
+    );
+    let expected = input(
+        "(x+y)^3*(3*spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))+2*spenso::g(q(spenso::mink(4)),q(spenso::mink(4))))*spenso::g(p(11,spenso::mink(4)),q(13,spenso::mink(4)))*spenso::f(spenso::coad(8,d),spenso::coad(8,b),spenso::coad(8,c))",
+    );
+    let typed = SymbolicTensor::infer(source.clone()).unwrap();
+    let AtomView::Mul(product) = source.as_view() else {
+        unreachable!();
+    };
+    let count = product.iter().len();
+    for order in [(0..count).collect::<Vec<_>>(), (0..count).rev().collect()] {
+        let direct = crate::shorthands::schoonschip::SlotContraction::new()
+            .contract_factorized(source.as_view(), Some(&order), true)
+            .expect("component refusal retains an exact partial result");
+        assert_eq!(direct.root, expected);
+        assert!(direct.observations.is_none());
+        let result = typed
+            .contract(crate::tensor::ContractSettings {
+                order: Some(&order),
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(result.expression, expected);
+        assert_eq!(result.structure, typed.structure);
+    }
+}
+
+#[test]
+fn disconnected_components_do_not_bypass_callback_interface_checks() {
+    setup();
+    let a = spenso::mink!(4, 78901);
+    let b = spenso::mink!(4, 78903);
+    let target = b.clone();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&calls);
+    let head = spenso::tensor_symbol!(
+        "fused_raw_disconnected_callback_rank_loss",
+        norm = move |value, output| {
+            observed.lock().unwrap().push(value.to_owned());
+            if let AtomView::Fun(function) = value
+                && function.iter().next() == Some(target.as_view())
+            {
+                **output = Atom::num(7);
+            }
+        }
+    );
+    let source = ETS.metric(&a, &b)
+        * FunctionBuilder::new(head).add_arg(&a).finish()
+        * input(
+            "(p(spenso::mink(4,mu))+q(spenso::mink(4,mu)))*q(spenso::mink(4,mu))*spenso::f(spenso::coad(8,a),spenso::coad(8,b),spenso::coad(8,c))^2",
+        );
+    let typed = SymbolicTensor::infer(source.clone()).unwrap();
+    calls.lock().unwrap().clear();
+    let _ = source.schoonschip();
+    let expected_calls = calls.lock().unwrap().clone();
+    assert!(!expected_calls.is_empty());
+    calls.lock().unwrap().clear();
+    assert!(
+        typed
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .is_err()
+    );
+    assert_eq!(*calls.lock().unwrap(), expected_calls);
+}
+
+#[test]
 fn factored_contract_keeps_completed_dot_coefficients_opaque() {
     setup();
     let coefficient = input(

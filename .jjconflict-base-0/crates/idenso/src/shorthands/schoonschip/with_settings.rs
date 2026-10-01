@@ -14,13 +14,18 @@ pub(crate) struct SchoonschipWithSettings<'a> {
 
 impl SchoonschipWithSettings<'_> {
     pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
-        self.run_observed::<0>(view, None)
+        let contractor = SlotContraction::configured(
+            self.settings.metrics,
+            self.settings.representations.as_deref(),
+        );
+        self.run_observed::<0>(view, None, &contractor)
     }
 
     pub(crate) fn run_observed<const N: usize>(
         &self,
         view: AtomView<'_>,
         observed: Option<&SimplificationCandidates<N>>,
+        contractor: &SlotContraction,
     ) -> Atom {
         let mut current = view.to_owned();
         let mut pending_candidates = observed.map(|observed| SimplificationCandidates::<0> {
@@ -70,11 +75,9 @@ impl SchoonschipWithSettings<'_> {
                 normalized.has_repeated_explicit_indices()
             };
             if repeated {
-                let contracted = SlotContraction::configured(
-                    self.settings.metrics,
-                    self.settings.representations.as_deref(),
-                )
-                .run(
+                // A component fallback retains the domain owner's reserved
+                // indices and fresh allocations, including unrelated spectators.
+                let contracted = contractor.run(
                     normalized.as_view(),
                     self.settings.simplify_chain_like_functions,
                     self.settings.schoonschip_rank1_tensors,

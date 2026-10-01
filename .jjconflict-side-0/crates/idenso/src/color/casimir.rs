@@ -225,17 +225,35 @@ impl CofDimensionInvariantRewriter {
         right_rep: AtomView<'_>,
     ) -> Option<Atom> {
         let degree = Self::positive_integer(degree)?;
-        let left_dimension = Self::fundamental_dimension(left_rep)?;
-        let right_dimension = Self::fundamental_dimension(right_rep)?;
-        if left_dimension != right_dimension {
-            return None;
+        if let (Some(left), Some(right)) = (
+            Self::fundamental_dimension(left_rep),
+            Self::fundamental_dimension(right_rep),
+        ) {
+            if left != right {
+                return None;
+            }
+            return match degree {
+                3 => Some(Self::fundamental_gram_three(left)),
+                4 => Some(Self::fundamental_gram_four(left)),
+                _ => None,
+            };
         }
 
-        match degree {
-            3 => Some(Self::fundamental_gram_three(left_dimension)),
-            4 => Some(Self::fundamental_gram_four(left_dimension)),
-            _ => None,
+        if degree != 4 {
+            return None;
         }
+        let left = Self::adjoint_dimension(left_rep)?;
+        if Self::adjoint_dimension(right_rep)? != left {
+            return None;
+        }
+        let n = Self::fundamental_dimension_from_adjoint_dimension(left.as_view())?;
+        let n_squared = n.pow(Atom::num(2));
+        // Full contraction of normalized symmetric adjoint traces, as in
+        // color.h's d44(A,A); this invariant is not divided by d_A.
+        Some(
+            n_squared.clone() * (n_squared.clone() - Atom::one()) * (n_squared + Atom::num(36))
+                / Atom::num(24),
+        )
     }
 
     fn fundamental_quadratic_casimir(n: Atom) -> Atom {
@@ -349,6 +367,55 @@ mod tests {
     use crate::representations::{ColorAdjoint, ColorFundamental};
     use spenso::structure::representation::RepName;
     use symbolica::{function, symbol};
+
+    #[test]
+    fn adjoint_quartic_gram_uses_explicit_su_n_conventions() {
+        crate::test_support::test_initialize();
+        for (dimension, expected) in [(3, 20), (8, 135), (15, 520)] {
+            let rep = ColorAdjoint {}.to_symbolic([Atom::num(dimension)]);
+            let invariant = CS.gram(Atom::num(4), rep.clone(), rep);
+            assert_eq!(invariant.to_cof_dimension_invariants(), Atom::num(expected));
+        }
+
+        let n = Atom::var(symbol!("adjoint_quartic_n"));
+        let n_squared = n.pow(2);
+        let dimension = n_squared.clone() - Atom::one();
+        let rep = ColorAdjoint {}.to_symbolic([dimension.clone()]);
+        let invariant = CS.gram(Atom::num(4), rep.clone(), rep);
+        let expected = n_squared.clone() * dimension * (n_squared + Atom::num(36)) / Atom::num(24);
+        let spectator = (Atom::var(symbol!("adjoint_quartic_x"))
+            + Atom::var(symbol!("adjoint_quartic_y")))
+        .pow(10);
+        let result = (&invariant * &spectator).to_cof_dimension_invariants();
+        assert_eq!(result, expected * spectator);
+        assert_eq!(result.to_cof_dimension_invariants(), result);
+    }
+
+    #[test]
+    fn adjoint_quartic_gram_retains_unrecognized_or_mixed_spaces() {
+        crate::test_support::test_initialize();
+        let adjoint = |dimension| ColorAdjoint {}.to_symbolic([dimension]);
+        let a8 = adjoint(Atom::num(8));
+        for invariant in [
+            CS.gram(Atom::num(4), a8.clone(), adjoint(Atom::num(3))),
+            CS.gram(
+                Atom::num(4),
+                a8.clone(),
+                ColorFundamental {}.to_symbolic([Atom::num(3)]),
+            ),
+            CS.gram(Atom::num(3), a8.clone(), a8),
+            {
+                let unknown = adjoint(Atom::var(symbol!("adjoint_quartic_dA")));
+                CS.gram(Atom::num(4), unknown.clone(), unknown)
+            },
+            {
+                let unknown = adjoint(Atom::num(7));
+                CS.gram(Atom::num(4), unknown.clone(), unknown)
+            },
+        ] {
+            assert_eq!(invariant.to_cof_dimension_invariants(), invariant);
+        }
+    }
 
     #[test]
     fn casimir_substitution_preserves_factored_tensor_spectators() {

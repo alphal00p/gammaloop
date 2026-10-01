@@ -1978,6 +1978,7 @@ fn symmetric_trace_d44_full_contraction() {
     assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
 }
 
+mod adjoint_box;
 mod feyncalc_reference;
 mod form_reference;
 

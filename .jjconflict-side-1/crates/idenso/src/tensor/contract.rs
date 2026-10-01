@@ -11,8 +11,7 @@ use super::{
     simplification::observation::DomainObservations,
 };
 use crate::shorthands::schoonschip::{
-    DotNormalizer, ReductionStatus, SchoonschipSettings, SchoonschipWithSettings,
-    SimplificationCandidates, SlotContraction,
+    DotNormalizer, ReductionStatus, SimplificationCandidates, SlotContraction,
 };
 
 #[cfg(test)]
@@ -542,17 +541,8 @@ impl SymbolicTensor<PartialStructure> {
         // The typed interface includes ports inside chain/trace words. Their
         // builtin projectors can decline intrinsic graph admission; the ordered
         // reducer must still apply substitutions to those established ports.
-        let mut rewrite = SchoonschipSettings::default().with_chain_like_functions();
-        rewrite.schoonschip_rank1_tensors = settings.rank_one;
-        rewrite.metrics = settings.metrics;
-        rewrite.representations = settings.representations.map(<[LibraryRep]>::to_vec);
-        let rewritten = match source.as_view() {
-            AtomView::Add(sum) => Atom::add_many(sum.iter().map(|term| {
-                SchoonschipWithSettings { settings: &rewrite }.run_observed(term, Some(observed))
-            })),
-            _ => SchoonschipWithSettings { settings: &rewrite }
-                .run_observed(source.as_view(), Some(observed)),
-        };
+        let rewritten =
+            contractor.contract_ordered(source.as_view(), settings.rank_one, Some(observed));
         if rewritten != source
             && let Some(contracted) =
                 contractor.contract_factorized(rewritten.as_view(), None, settings.rank_one)

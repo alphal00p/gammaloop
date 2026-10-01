@@ -56,8 +56,10 @@ impl SymbolicTensor<PartialStructure> {
         let simplifier = ColorAlgebraSimplifier { settings };
         self.collect_with_map(None, atom_contains_color_node, |selected, complete, _| {
             settled.run(selected, complete, |selected| {
-                let expression = simplifier.step(selected.expression.as_view(), complete);
-                let mut network = expression
+                // Recognize signed graph zeros before a loop identity opens
+                // them into sums and hides their antisymmetric automorphisms.
+                let mut network = selected
+                    .expression
                     .as_view()
                     .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
                     .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
@@ -66,8 +68,9 @@ impl SymbolicTensor<PartialStructure> {
                         .simple_execute::<()>()
                         .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
                 } else {
-                    expression
+                    selected.expression.clone()
                 };
+                let expression = simplifier.step(expression.as_view(), complete);
                 let expression = restore_explicit_su_n_generator_chains(expression);
                 let rewritten = selected.with_rewritten_expression(expression)?;
                 // Every structural request is limited to this selected colour
@@ -275,13 +278,33 @@ impl ColorAlgebraSimplifier {
         // reduces by the adjacent or separated Casimir rules below. Preserve open
         // symmetric invariants and higher-degree projectors without factorial expansion.
         if let [factor] = factors.as_slice()
-            && let Some(args) = color_symmetric_trace_arg_views(factor.as_view())
+            && let Some(args) = color_symmetric_trace_arg_views(rep.as_view(), factor.as_view())
             && args.len() <= 4
-            && args
-                .iter()
-                .enumerate()
-                .any(|(i, a)| args[i + 1..].contains(a))
+            && let Some((left, right)) = args.iter().enumerate().find_map(|(i, a)| {
+                args[i + 1..]
+                    .iter()
+                    .position(|b| a == b)
+                    .map(|j| (i, i + 1 + j))
+            })
         {
+            if let AtomView::Fun(representation) = rep.as_view()
+                && representation.get_symbol() == CS.adjoint_rep
+            {
+                // The degree-four adjoint invariant has a direct contracted
+                // trace identity (color.h); raw f words are not fundamental T
+                // matrices and must not enter the fundamental trace expansion.
+                let open = args
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != left && *i != right)
+                    .map(|(_, slot)| (*slot).to_owned())
+                    .collect::<Vec<_>>();
+                return Some(
+                    Atom::num((5, 6))
+                        * quadratic_casimir(rep.clone()).pow(2)
+                        * color_metric(open[0].clone(), open[1].clone()),
+                );
+            }
             return Some(trace.expand_projectors());
         }
 
@@ -532,6 +555,12 @@ impl ColorAlgebraSimplifier {
             .or_else(|| Self::simplify_symmetric_structure_product(&product))
             .or_else(|| self.simplify_two_f_loop_product(&product))
             .or_else(|| self.simplify_three_f_loop_product(&product))
+            .or_else(|| {
+                self.settings
+                    .evaluate_traces
+                    .then(|| Self::simplify_four_f_loop_product(&product))
+                    .flatten()
+            })
             .or_else(|| Self::simplify_symmetric_invariant_product(&product))
             .or_else(|| {
                 self.settings
@@ -1064,6 +1093,110 @@ impl ColorAlgebraSimplifier {
         None
     }
 
+    fn simplify_four_f_loop_product(product: &ProductView) -> Option<Atom> {
+        let structures = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter_map(|(index, factor)| {
+                let args = factor.structure.as_ref()?.args.map(|arg| arg.to_owned());
+                let dimension = color_structure_dimension(&args)?;
+                Some((index, args, dimension))
+            })
+            .collect::<Vec<_>>();
+        if structures.len() < 4 {
+            return None;
+        }
+
+        // Build adjacency from complete typed slots, not index labels alone.
+        // A cubic graph has at most three neighbours per vertex; following its
+        // edges avoids enumerating every quadruple in a large colour product.
+        let mut neighbours = vec![Vec::new(); structures.len()];
+        for (left, (_, left_args, left_dimension)) in structures.iter().enumerate() {
+            for (right, (_, right_args, right_dimension)) in
+                structures.iter().enumerate().skip(left + 1)
+            {
+                if left_dimension == right_dimension
+                    && common_structure_positions(left_args, right_args).len() == 1
+                {
+                    neighbours[left].push(right);
+                    neighbours[right].push(left);
+                }
+            }
+        }
+        for first in 0..structures.len() {
+            for &second in &neighbours[first] {
+                if second <= first {
+                    continue;
+                }
+                for &third in &neighbours[second] {
+                    if third <= first {
+                        continue;
+                    }
+                    for &fourth in &neighbours[third] {
+                        // Each cycle is visited once, in either orientation.
+                        if fourth <= second || !neighbours[fourth].contains(&first) {
+                            continue;
+                        }
+                        let cycle = [first, second, third, fourth];
+                        let links: [_; 4] = std::array::from_fn(|i| {
+                            common_structure_positions(
+                                &structures[cycle[i]].1,
+                                &structures[cycle[(i + 1) % 4]].1,
+                            )[0]
+                        });
+                        let mut external = Vec::with_capacity(4);
+                        let mut prefactor = Atom::num(1);
+                        for i in 0..4 {
+                            let args = &structures[cycle[i]].1;
+                            let incoming = links[(i + 3) % 4].right;
+                            let outgoing = links[i].left;
+                            if incoming == outgoing {
+                                break;
+                            }
+                            let open = (0..3).find(|p| *p != incoming && *p != outgoing)?;
+                            external.push(args[open].clone());
+                            let actual = color_f!(&args[0], &args[1], &args[2]);
+                            let oriented = color_f!(&args[incoming], &args[outgoing], &args[open]);
+                            prefactor *= oriented.coefficient(actual.as_view());
+                        }
+                        if external.len() != 4 || prefactor.is_zero() {
+                            continue;
+                        }
+                        let [a, b, c, d] = external.as_slice() else {
+                            unreachable!();
+                        };
+                        // Both occurrences of this admitted dummy disappear with
+                        // the selected cycle. Reuse its typed slot for the new
+                        // f*f connection, so no spectator or other copy can be
+                        // captured by a fixed globally named trace dummy.
+                        let dummy = &structures[first].1[links[0].left];
+                        let dimension = &structures[first].2;
+                        // color.h's four-adjoint-loop decomposition: the fully
+                        // symmetric trace stays as an invariant; only the two
+                        // commutator terms introduce local sums.
+                        // Four raw adjoint f matrices give (-i)^4=1:
+                        // this is the normalized Hermitian adjoint trace.
+                        let symmetric = trace_sym!(adjoint_rep(dimension.clone()); external.iter().map(|port| {
+                            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), port)
+                        }));
+                        let replacement = prefactor
+                            * (symmetric
+                                + adjoint_casimir_for_dimension(dimension.clone()) / Atom::num(6)
+                                    * (color_f!(a, b, dummy) * color_f!(d, c, dummy)
+                                        + color_f!(a, dummy, d) * color_f!(c, b, dummy)));
+                        let mut excluded = vec![false; product.len()];
+                        for vertex in cycle {
+                            excluded[structures[vertex].0] = true;
+                        }
+                        return Some(product.excluding(&excluded) * replacement);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn simplify_symmetric_invariant_product(product: &ProductView) -> Option<Atom> {
         for (left_index, left_factor) in product.factors.iter().enumerate() {
             let Some(left) = &left_factor.symmetric_invariant else {
@@ -1199,7 +1332,7 @@ impl<'a> SymmetricInvariantView<'a> {
             let [factor] = trace.factors.as_slice() else {
                 return None;
             };
-            let args = color_symmetric_trace_arg_views(*factor)?;
+            let args = color_symmetric_trace_arg_views(trace.rep, *factor)?;
             return Some(Self {
                 rep: trace.rep,
                 args,
@@ -1389,7 +1522,7 @@ fn color_symmetric_invariant(invariant: AtomView) -> Option<ColorSymmetricInvari
         let [factor] = factors.as_slice() else {
             return None;
         };
-        let args = color_symmetric_trace_args(factor.as_view())?;
+        let args = color_symmetric_trace_args(rep.as_view(), factor.as_view())?;
         return Some(ColorSymmetricInvariant { rep, args });
     }
 
@@ -1407,15 +1540,18 @@ fn color_symmetric_invariant(invariant: AtomView) -> Option<ColorSymmetricInvari
     })
 }
 
-fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
-    color_symmetric_trace_arg_views(projector).map(|args| {
+fn color_symmetric_trace_args(rep: AtomView, projector: AtomView) -> Option<Vec<Atom>> {
+    color_symmetric_trace_arg_views(rep, projector).map(|args| {
         args.into_iter()
             .map(|arg| arg.to_owned())
             .collect::<Vec<_>>()
     })
 }
 
-fn color_symmetric_trace_arg_views(projector: AtomView<'_>) -> Option<Vec<AtomView<'_>>> {
+fn color_symmetric_trace_arg_views<'a>(
+    rep: AtomView<'a>,
+    projector: AtomView<'a>,
+) -> Option<Vec<AtomView<'a>>> {
     let AtomView::Fun(f) = projector else {
         return None;
     };
@@ -1423,6 +1559,40 @@ fn color_symmetric_trace_arg_views(projector: AtomView<'_>) -> Option<Vec<AtomVi
         return None;
     }
 
+    if let AtomView::Fun(representation) = rep
+        && representation.get_symbol() == CS.adjoint_rep
+        && representation.get_nargs() == 1
+        && f.get_nargs() == 4
+    {
+        let dimension = representation.iter().next()?;
+        // Only the degree-four adjoint symmetric trace is represented by raw
+        // f words: its Hermitian-generator phase is (-i)^4=1. Ordinary trace
+        // and fundamental-generator matching must not mistake raw f matrices
+        // for T matrices at other degrees.
+        return f
+            .iter()
+            .map(|factor| {
+                let AtomView::Fun(structure) = factor else {
+                    return None;
+                };
+                if structure.get_symbol() != CS.f || structure.get_nargs() != 3 {
+                    return None;
+                }
+                let args = structure.iter().collect::<Vec<_>>();
+                let AtomView::Fun(slot) = args[2] else {
+                    return None;
+                };
+                if !has_chain_endpoints(args[0], args[1])
+                    || slot.get_symbol() != CS.adjoint_rep
+                    || slot.get_nargs() != 2
+                    || slot.iter().next()? != dimension
+                {
+                    return None;
+                }
+                Some(args[2])
+            })
+            .collect();
+    }
     f.iter()
         .map(color_generator_adjoint_view)
         .collect::<Option<Vec<_>>>()

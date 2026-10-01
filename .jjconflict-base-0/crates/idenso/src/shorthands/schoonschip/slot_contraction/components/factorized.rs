@@ -990,9 +990,9 @@ impl SlotContraction {
         )
     }
 
-    fn contract_graph<'a>(
+    fn contract_graph(
         &self,
-        scope: &'a ContractionScope<'_>,
+        scope: &ContractionScope<'_>,
         root: NodeIndex,
         order: Option<&[usize]>,
         rank_one: bool,
@@ -1065,18 +1065,117 @@ impl SlotContraction {
                 }
             }
         }
-        let node_positions = nodes
-            .iter()
-            .copied()
+        let ranks = selected
+            .into_iter()
             .enumerate()
-            .map(|(i, n)| (n, i))
+            .map(|(rank, position)| (nodes[position], rank))
             .collect::<AHashMap<_, _>>();
+        let mut roots = Vec::with_capacity(components.len());
+        let mut status = ReductionStatus::Complete;
+        let mut scalar_form = Some(false);
+        let mut changed = false;
+        let mut refused = Vec::new();
+        for component in components {
+            let mut selected = component
+                .iter()
+                .enumerate()
+                .filter_map(|(position, node)| ranks.get(node).map(|&rank| (position, rank)))
+                .collect::<Vec<_>>();
+            selected.sort_unstable_by_key(|&(_, rank)| rank);
+            let selected = selected
+                .into_iter()
+                .map(|(position, _)| position)
+                .collect::<Vec<_>>();
+            let result =
+                self.contract_component(scope, &component, &selected, &exposed_sums, rank_one);
+            let (result, component_changed) = match result {
+                Some(result) => result,
+                None => {
+                    // A refusal can follow tentative port substitutions or
+                    // coefficient emission. Retain the exact source, discarding
+                    // this component's scratch and tentative observations.
+                    let root = Atom::mul_many(
+                        component
+                            .iter()
+                            .map(|&node| scope.literal(node).map(|value| value.to_owned()))
+                            .collect::<Option<Vec<_>>>()?,
+                    );
+                    refused.push(roots.len());
+                    (
+                        FactorizedContraction {
+                            root,
+                            status: ReductionStatus::Deferred,
+                            observations: None,
+                        },
+                        false,
+                    )
+                }
+            };
+            changed |= component_changed;
+            status = status.max(result.status);
+            scalar_form = scalar_form
+                .zip(result.observations.as_ref())
+                .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
+            roots.push(result.root);
+        }
+        if !refused.is_empty() {
+            if !changed {
+                // Preserve the checked whole-source fallback when factorized
+                // planning made no independent progress. In particular, an
+                // inexact coefficient must not become an admitted polynomial.
+                return None;
+            }
+            for position in refused {
+                // Independent work is already exact. Rewrite only the refused
+                // components, with the same dummy owner as the whole domain.
+                roots[position] = self.contract_ordered(
+                    roots[position].as_view(),
+                    rank_one,
+                    self.observations
+                        .as_ref()
+                        .map(|observed| &observed.candidates),
+                );
+            }
+        }
+        let root = if status == ReductionStatus::Complete && !changed {
+            let source = scope.literal(root)?;
+            // The bracket normalizer owns whether a product can be exposed:
+            // closed scalar wrappers disappear, while AUTO operand order stays.
+            if matches!(source, AtomView::Fun(function)
+                if function.get_symbol() == self.tags.bracket)
+            {
+                crate::shorthands::bracket::BracketNormalizer::normalize(source)
+            } else {
+                source.to_owned()
+            }
+        } else {
+            Atom::mul_many(roots)
+        };
+        Some(FactorizedContraction {
+            root,
+            status,
+            observations: scalar_form
+                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
+                .map(DomainObservations::closed_scalar),
+        })
+    }
+
+    /// Execute one connected component on the admitted graph. Scratch bindings,
+    /// compiled factors and tentative proofs cannot escape a refused component.
+    fn contract_component<'a>(
+        &self,
+        scope: &'a ContractionScope<'_>,
+        nodes: &[NodeIndex],
+        selected: &[usize],
+        exposed_sums: &AHashSet<NodeIndex>,
+        rank_one: bool,
+    ) -> Option<(FactorizedContraction, bool)> {
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(self, Intake::Contraction, &mut slots);
         sum.rank_one = rank_one;
         let mut positions = AHashMap::new();
-        let mut remaining = Vec::new();
-        for &node in &nodes {
+        let mut remaining = Vec::with_capacity(nodes.len());
+        for &node in nodes {
             let position = sum.register_factor(scope, node, &mut positions)?;
             remaining.push((
                 position,
@@ -1088,14 +1187,33 @@ impl SlotContraction {
                     .collect::<Vec<_>>(),
             ));
         }
+        if selected.is_empty() {
+            // Untouched components need neither a polynomial frontier nor a
+            // unit coefficient. Keep the admitted scalar facts and exact leaves.
+            let mut scalar_form = Some(false);
+            let mut factors = Vec::with_capacity(remaining.len());
+            for (position, arguments) in remaining {
+                scalar_form = scalar_form
+                    .zip(sum.scalar_form(sum.opaque_factors[position].0))
+                    .filter(|_| sum.opaque_factors[position].1.is_empty())
+                    .map(|(first, second)| first || second);
+                factors.push(sum.emit_factor(position, &arguments)?);
+            }
+            return Some((
+                FactorizedContraction {
+                    root: Atom::mul_many(factors),
+                    status: ReductionStatus::Complete,
+                    observations: scalar_form.map(DomainObservations::closed_scalar),
+                },
+                false,
+            ));
+        }
         let mut scoped = AHashMap::new();
         let mut compile = |sum: &mut ComponentSum<'a, '_>, position: usize| {
             let mut tape = std::mem::take(&mut sum.input);
-            sum.exposed_sum = if exposed_sums.contains(&nodes[position]) {
-                Some((scope as *const _ as usize, nodes[position]))
-            } else {
-                None
-            };
+            sum.exposed_sum = exposed_sums
+                .contains(&nodes[position])
+                .then_some((scope as *const _ as usize, nodes[position]));
             let result = self.compile_scope(
                 scope,
                 nodes[position],
@@ -1108,83 +1226,43 @@ impl SlotContraction {
             sum.input = tape;
             result.map(|(node, _)| node)
         };
-        let mut roots = Vec::new();
-        let mut status = ReductionStatus::Complete;
-        let mut scalar_form = Some(false);
-        for component in components {
-            sum.alpha_terms.clear();
-            let component = component
-                .into_iter()
-                .map(|node| node_positions[&node])
-                .collect::<Vec<_>>();
-            let selected = selected
-                .iter()
-                .copied()
-                .filter(|position| component.contains(position))
-                .collect::<Vec<_>>();
-            if selected.is_empty() {
-                for &position in &component {
-                    scalar_form = scalar_form
-                        .zip(sum.scalar_form(sum.opaque_factors[position].0))
-                        .map(|(first, second)| first || second);
-                    if !sum.opaque_factors[position].1.is_empty() {
-                        scalar_form = None;
-                    }
-                }
-                roots.push(Atom::mul_many(
-                    component
-                        .iter()
-                        .map(|&position| sum.emit_factor(position, &remaining[position].1))
-                        .collect::<Option<Vec<_>>>()?,
-                ));
-                continue;
-            }
-            let result = sum.contract_states(
-                Remaining {
-                    factors: component
-                        .into_iter()
-                        .map(|position| remaining[position].clone())
-                        .collect(),
-                    residual: Vec::new(),
-                },
-                &selected,
-                &mut compile,
-            )?;
-            roots.push(result.root);
-            status = status.max(result.status);
-            scalar_form = scalar_form
-                .zip(result.observations.as_ref())
-                .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
+        let mut result = sum.contract_states(
+            Remaining {
+                factors: remaining,
+                residual: Vec::new(),
+            },
+            selected,
+            &mut compile,
+        )?;
+        for replacement in scoped.values() {
+            result.status = result.status.max(replacement.status);
         }
-        for result in scoped.values() {
-            status = status.max(result.status);
+        Some((result, sum.contracted || !scoped.is_empty()))
+    }
+
+    /// The ordered rewrite is shared by refused intrinsic components and the
+    /// checked callback path. Keep existing additive branches independently scoped.
+    pub(crate) fn contract_ordered<const N: usize>(
+        &self,
+        source: AtomView<'_>,
+        rank_one: bool,
+        observed: Option<&SimplificationCandidates<N>>,
+    ) -> Atom {
+        use crate::shorthands::schoonschip::{SchoonschipSettings, SchoonschipWithSettings};
+        let mut settings = SchoonschipSettings::default().with_chain_like_functions();
+        settings.schoonschip_rank1_tensors = rank_one;
+        settings.metrics = self.metrics;
+        settings.representations = self.representations.clone();
+        let rewrite = SchoonschipWithSettings {
+            settings: &settings,
+        };
+        match source {
+            AtomView::Add(sum) => Atom::add_many(
+                sum.iter()
+                    .map(|term| rewrite.run_observed(term, observed, self)),
+            ),
+            _ => rewrite.run_observed(source, observed, self),
         }
-        if status == ReductionStatus::Complete && scoped.is_empty() && !sum.contracted {
-            let source = scope.literal(root)?;
-            // The bracket normalizer owns whether a product can be exposed:
-            // closed scalar wrappers disappear, while AUTO operand order stays.
-            let root = if matches!(source, AtomView::Fun(function)
-                if function.get_symbol() == self.tags.bracket)
-            {
-                crate::shorthands::bracket::BracketNormalizer::normalize(source)
-            } else {
-                source.to_owned()
-            };
-            return Some(FactorizedContraction {
-                root,
-                status,
-                observations: scalar_form
-                    .filter(|_| scalar_boundary)
-                    .map(DomainObservations::closed_scalar),
-            });
-        }
-        Some(FactorizedContraction {
-            root: Atom::mul_many(roots),
-            status,
-            observations: scalar_form
-                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
-                .map(DomainObservations::closed_scalar),
-        })
     }
 }
 

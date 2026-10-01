@@ -5998,7 +5998,7 @@ mod tests {
             };
             let cases = vec![
                 (
-                    TensorExpression::g(py, &euc_object, None)?,
+                    TensorExpression::g(py, SpensoSlotOrArgOrRep::Rep(euc_object.clone()), None)?,
                     vec![dimension; 2],
                 ),
                 (TensorExpression::flat(py, &euc_object)?, vec![dimension; 2]),
@@ -6205,7 +6205,8 @@ mod tests {
                     .new_rep(Dimension::Concrete(3))
                     .cast(),
             };
-            let metric = TensorExpression::g(py, &representation, None)?;
+            let metric =
+                TensorExpression::g(py, SpensoSlotOrArgOrRep::Rep(representation.clone()), None)?;
             let tensor_type = py.get_type::<TensorExpression>();
             let kwargs = pyo3::types::PyDict::new(py);
             kwargs.set_item("intern", "indices")?;
@@ -7917,7 +7918,11 @@ mod tests {
         }
 
         Python::attach(|py| -> PyResult<()> {
-            let metric = TensorExpression::g(py, &SpensoRepresentation { representation }, None)?;
+            let metric = TensorExpression::g(
+                py,
+                SpensoSlotOrArgOrRep::Rep(SpensoRepresentation { representation }),
+                None,
+            )?;
             let right = metric.clone_ref(py);
             let TensorDispatch::Expression(composed) = TensorExpression::compose(
                 metric.bind(py).borrow(),

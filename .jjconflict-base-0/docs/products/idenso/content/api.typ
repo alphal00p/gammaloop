@@ -272,10 +272,22 @@ cross-chain Fierz identities. Disabling it does not disable other colour
 identities or guarantee a sum-free result.
 
 `color_substitute_cof_dimension_invariants=False` retains symbolic group
-invariants. Set it to `True` to express supported fundamental SU($N$) invariants
-using $T_R=1/2$ and $C_F=(N^2-1)/(2N)$, and $C_A=N$ when the adjoint dimension is
-recognized. It is not a blanket SU(3) substitution: the representation dimensions
-choose $N$. Compare independent results using the same invariant convention.
+invariants. Set it to `True` to express supported SU($N$) invariants for recognized
+fundamental or adjoint dimensions using $T_R=1/2$, $C_F=(N^2-1)/(2N)$ and $C_A=N$.
+It is not a blanket SU(3) substitution: the representation dimensions choose $N$.
+Compare independent results using the same invariant convention.
+
+Closed products of structure constants can require quartic invariants. The
+scalar `gram(4,coad(N_A),coad(N_A))` denotes the full contraction
+$d_A^(a b c d) d_A^(a b c d)$, without division by $N_A$. The symmetric trace
+defining each $d_A$ uses normalized symmetrization. Retaining this invariant is a
+completed colour reduction, not an unresolved tensor contraction. With explicit dimension
+substitution, recognized adjoint dimensions $N_A=N^2-1$ give
+$d_A^(a b c d) d_A^(a b c d)=N^2(N^2+36)(N^2-1)/24$.
+For example, the closed colour factor of the four-loop ghost graph FK0032 is
+$N_A C_A^4/24 - d_A^(a b c d) d_A^(a b c d)$; for SU(3) the two contributions are
+$27$ and $135$, giving $-108$. Its independent Lorentz momentum factors remain
+factorized under both output conventions.
 
 ```python
 fundamental = Representation.cof(3)

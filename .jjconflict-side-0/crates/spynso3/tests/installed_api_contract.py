@@ -1,8 +1,9 @@
 """Typed factorized contraction against the installed Python extension."""
 
 import unittest
+from pathlib import Path
 
-from symbolica import E
+from symbolica import E, S
 from symbolica.community import tensor as sp
 
 
@@ -147,6 +148,93 @@ class FactorizedContractionTests(unittest.TestCase):
         self.assertNotEqual(
             generator_trace.simplify_algebra(color=False).to_expression(), E("0")
         )
+
+    def test_fk0032_reduces_color_and_lorentz_components_without_expansion(self):
+        from symbolica.community.hep import Model
+
+        # Register the generated momentum and compound-index heads. The saved
+        # original numerator avoids generating all 4970 four-loop diagrams.
+        Model.qcd()
+        fixture = (
+            Path(__file__).resolve().parents[2]
+            / "idenso/benches/data/fk0032-projected.expr"
+        )
+        original = E(fixture.read_text())
+        na = S("fk0032::N_A")
+        # Change the typed slots before admission and normalize the colour
+        # projector by N_A. No SU(N) relation between N_A and C_A is assumed.
+        generic = original.replace(
+            E("spenso::coad(8,index_)"),
+            E("spenso::coad(fk0032::N_A,index_)"),
+        ) * (8 / na)
+        lorentz = sp.Representation.mink(S("D"))
+        k = sp.TensorName("gammalooprs::K")
+        p = sp.TensorName("gammalooprs::P")
+        k0, k1, k2, k3 = [k(index, lorentz) for index in range(4)]
+        p0 = p(0, lorentz)
+
+        def dot(left, right):
+            return sp.dot(left, right).to_expression()
+
+        # Contract the four independent Lorentz pairs directly. Colour is
+        # independently fixed by exact Gell-Mann components and the adjoint
+        # four-generator trace identity: N_A*C_A^4/24 - d_A^{abcd}d_A^{abcd}.
+        factors = [
+            dot(p0, p0) + dot(k0, p0) - dot(k1, p0) - dot(k0, k1),
+            dot(k2, k2) - dot(k1, k2) - dot(k2, k3) + dot(k2, p0),
+            dot(k0, k0) - dot(k0, k1) - dot(k0, k3) + dot(k0, p0),
+            dot(k1, k3),
+        ]
+        kinematics = E("1")
+        for factor in factors:
+            kinematics *= factor
+        color = E(
+            "fk0032::N_A*spenso::cas(2,spenso::coad(fk0032::N_A))^4/24"
+            "-spenso::gram(4,spenso::coad(fk0032::N_A),spenso::coad(fk0032::N_A))"
+        )
+        cases = (
+            (na, generic, False),
+            (E("8"), original, False),
+            (E("8"), original, True),
+        )
+        for mode in ("fully", "dots"):
+            for dimension, expression, explicit_su3 in cases:
+                source = sp.TensorExpression(expression)
+                options = {"contract": mode}
+                if explicit_su3:
+                    options["color_substitute_cof_dimension_invariants"] = True
+                with self.subTest(
+                    mode=mode, dimension=dimension, explicit_su3=explicit_su3
+                ):
+                    result = source.simplify_algebra(**options)
+                    self.assertEqual(
+                        result.reduction_status, sp.ReductionStatus.Complete
+                    )
+                    self.assertTrue(result.contraction_complete)
+                    self.assertEqual(result.structure.slots(), source.structure.slots())
+                    self.assertEqual(result.rank, 0)
+                    self.assertEqual(result.simplify_algebra(**options), result)
+                    # This only converts existing scalar-product notation.
+                    raw = result.to_dots().to_expression()
+                    expected = (
+                        E("𝑖*UFO::G^8")
+                        / dimension
+                        * (-108 if explicit_su3 else color.replace(na, dimension))
+                        * kinematics
+                    )
+                    self.assertEqual(
+                        (raw - expected).collect_factors().factor(), E("0")
+                    )
+                    for factor in factors:
+                        self.assertEqual(
+                            raw.replace(factor, E("0")).replace(-factor, E("0")), E("0")
+                        )
+                    for head in ("spenso::f(", "spenso::chain(", "spenso::trace("):
+                        self.assertNotIn(head, raw.format_plain())
+                    if explicit_su3:
+                        self.assertNotIn("spenso::gram(", raw.format_plain())
+                    else:
+                        self.assertIn("spenso::gram(", raw.format_plain())
 
     def test_algebra_contraction_modes(self):
         from symbolica import S
