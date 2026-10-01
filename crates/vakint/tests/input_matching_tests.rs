@@ -139,6 +139,67 @@ fn test_2l_matching_3prop() {
 }
 
 #[test_log::test]
+fn partly_massless_sunsets_preserve_mass_labels_and_exclude_alphaloop() {
+    use symbolica::atom::AtomCore;
+    use vakint::{EvaluationOrder, vakint_parse};
+
+    let vakint = get_vakint(VakintSettings {
+        allow_unknown_integrals: false,
+        evaluation_order: EvaluationOrder::alphaloop_only(),
+        ..VakintSettings::default()
+    });
+    for (family, second_mass, massless_count) in [("I2L_MM0", "muvsq", 1), ("I2L_M00", "0", 2)] {
+        // Put the massless line first and use arbitrary labels. Canonicalizing
+        // must permute its momentum and incidence with its physical mass.
+        let input = vakint_parse!(format!(
+            "(a+b)*(c+d)*topo(\
+             prop(9,edge(7,10),k(11),0,1)*\
+             prop(33,edge(7,10),k(22),muvsq,2)*\
+             prop(55,edge(10,7),k(11)+k(22),{second_mass},1))"
+        ))
+        .unwrap();
+        let canonical = vakint.to_canonical(input.as_view(), false).unwrap();
+        assert_eq!(
+            canonical
+                .pattern_match(
+                    &vakint_parse!("prop(id_,edge(a_,b_),q_,0,power_)")
+                        .unwrap()
+                        .to_pattern(),
+                    None,
+                    None,
+                )
+                .count(),
+            massless_count
+        );
+        for factor in ["a+b", "c+d"] {
+            assert!(
+                canonical
+                    .pattern_match(&vakint_parse!(factor).unwrap().to_pattern(), None, None,)
+                    .next()
+                    .is_some()
+            );
+        }
+        let short = vakint.to_canonical(input.as_view(), true).unwrap();
+        assert!(
+            short
+                .pattern_match(
+                    &vakint_parse!(format!("topo({family}(muvsq,powers__))"))
+                        .unwrap()
+                        .to_pattern(),
+                    None,
+                    None,
+                )
+                .next()
+                .is_some()
+        );
+        assert!(matches!(
+            vakint.evaluate_integral(short.as_view()),
+            Err(VakintError::NoEvaluationMethodFound(_, _))
+        ));
+    }
+}
+
+#[test_log::test]
 fn test_2l_matching_pinched() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,

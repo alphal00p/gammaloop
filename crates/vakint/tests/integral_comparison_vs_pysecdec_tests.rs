@@ -98,7 +98,7 @@ fn test_integrate_1l_pysecdec_num_rank_two() {
         ((&EvaluationOrder::analytic_only() ,true),
         (&EvaluationOrder::pysecdec_only(Some(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/pysecdec_comparison_1l_pysecdec_num_rank_two".into()),..PySecDecOptions::default() })) ,false)),
         vakint_parse!(
-            "((k(1,33)*k(1,33))^2+k(1,55)*p(1,55))*topo(\
+            "(dot(k(1),k(1))^2+k(1,55)*p(1,55))*topo(\
             prop(1,edge(1,1),k(1),muvsq,1)\
         )"
         ).unwrap().as_view(),
