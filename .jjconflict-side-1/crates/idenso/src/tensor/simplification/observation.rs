@@ -127,6 +127,18 @@ impl RegionObservation {
             || (settings.rank_one && self.vector_sources.iter().any(|rep| settings.permits(*rep)))
     }
 
+    /// A complete regional inventory can rule out metric/vector work without
+    /// opening its arithmetic. Brackets can expose additional endpoints when
+    /// unfolded, so their existing contraction path remains authoritative.
+    pub(crate) fn excludes_contraction_sources(
+        &self,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> bool {
+        // A terminal producer can certify sources without enumerating leaves.
+        // Its surviving ports conservatively populate both source inventories.
+        !self.opaque && self.counts[7] == 0 && !self.contraction_sources(settings)
+    }
+
     fn head(&mut self, head: Symbol) {
         for (count, candidate) in self.counts.iter_mut().zip(DOMAIN_HEADS.iter()) {
             *count += usize::from(head == *candidate);
@@ -860,12 +872,15 @@ impl DomainObservations {
         if self.is_terminal_polynomial() {
             return true;
         }
-        self.candidates.complete
-            && self.candidates.traversal_complete
+        // Composed terminal outputs retain conservative source inventories even
+        // when arbitrary leaf enumeration is unavailable. Require complete
+        // regional coverage, rather than inventing a syntactic traversal proof.
+        self.identity_inventory_complete
+            && !self.regions.is_empty()
             && self
                 .regions
                 .values()
-                .all(|region| !region.contraction_sources(settings))
+                .all(|region| region.excludes_contraction_sources(settings))
     }
 
     pub(crate) fn identity_candidates(&self) -> u8 {
@@ -1248,6 +1263,82 @@ mod tests {
     }
 
     #[test]
+    fn terminal_scalar_product_keeps_structural_completion_beside_color_invariants() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
+        let reps = crate::test_support::test_initialize();
+        let selected = SymbolicTensor::infer(
+            spenso::dot!(spenso::p!(spenso::mink!(4)), spenso::q!(spenso::mink!(4)))
+                + spenso::dot!(spenso::p!(spenso::mink!(4)), spenso::p!(spenso::mink!(4))),
+        )
+        .unwrap();
+        let ports = [98961, 98962, 98963].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let color = SymbolicTensor::infer(spenso::trace_sym!(
+            reps.cof_nc.to_symbolic([] as [Atom; 0]);
+            ports.iter().chain(&ports).map(|port| crate::color_t!(port))
+        ))
+        .unwrap();
+        let combined = SymbolicTensor::infer(&selected.expression * &color.expression).unwrap();
+        let facts = DomainObservations::compose_terminal_product(
+            combined.expression.as_view(),
+            &combined.structure,
+            selected.expression.as_view(),
+            &DomainObservations::closed_scalar(false),
+            std::slice::from_ref(&color),
+        )
+        .unwrap();
+        assert!(!facts.candidates.complete && !facts.candidates.traversal_complete);
+        assert!(
+            facts
+                .region(selected.expression.as_view())
+                .unwrap()
+                .leaves()
+                .is_none()
+        );
+        assert_eq!(facts.identity_candidates(), super::super::COLOR);
+        assert!(facts.excludes_contraction_sources(Default::default()));
+        // A changed spectator must reuse the scalar certificate without making
+        // its unenumerated leaves look like a newly scanned expression.
+        let changed_expression =
+            &combined.expression * Atom::var(symbolica::symbol!("terminal_color_weight"));
+        let changed = facts.updated(changed_expression.as_view());
+        assert!(changed.excludes_contraction_sources(Default::default()));
+        assert!(
+            changed
+                .region(selected.expression.as_view())
+                .unwrap()
+                .leaves()
+                .is_none()
+        );
+
+        let cached = SymbolicTensor::from_validated_parts(
+            combined.expression.clone(),
+            combined.structure.clone(),
+        );
+        cached.proofs.observations.set(Arc::new(facts)).unwrap();
+        let settings = AlgebraSettings {
+            contract: AlgebraContraction::Dots,
+            ..Default::default()
+        };
+        for result in [
+            cached.contract(Default::default()).unwrap(),
+            cached.simplify_algebra(&settings).unwrap(),
+        ] {
+            assert_eq!(result.expression, combined.expression);
+            assert_eq!(result.structure, combined.structure);
+            assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+            let repeated = result.simplify_algebra(&settings).unwrap();
+            assert_eq!(repeated, result);
+            assert_eq!(repeated.reduction_status(), ReductionStatus::Complete);
+            let admitted = SymbolicTensor::infer(result.expression.clone())
+                .unwrap()
+                .simplify_algebra(&settings)
+                .unwrap();
+            assert_eq!(admitted, result);
+            assert_eq!(admitted.reduction_status(), ReductionStatus::Complete);
+        }
+    }
+
+    #[test]
     fn terminal_product_retains_nested_scalar_scopes_without_rescanning() {
         crate::test_support::test_initialize();
         let [a, b, c, d] =
@@ -1324,6 +1415,7 @@ mod tests {
         )
         .unwrap();
         assert!(!observed.excludes_internal_connections());
+        assert!(!observed.excludes_contraction_sources(Default::default()));
         assert!(observed.candidates.repeated_indices);
         assert!(
             observed

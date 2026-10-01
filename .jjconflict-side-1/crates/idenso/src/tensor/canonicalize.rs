@@ -84,6 +84,11 @@ struct SlotCopies<Aind> {
 
 type SlotsByHedge<Aind> = BTreeMap<Hedge, SlotCopies<Aind>>;
 
+#[cfg(test)]
+thread_local! {
+    static PROJECTED_SLOT_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Prune signed zeros on the already parsed network, without distributing sums.
 ///
 /// Each mutation removes an operation/subtree, or replaces a nonzero tensor by
@@ -376,12 +381,6 @@ fn has_odd_automorphism<Aind: AbsInd + ParseableAind>(
     let Some(graph) = project_network(network, tree, root) else {
         return false;
     };
-    if !graph.nodes().iter().any(|node| {
-        matches!(&node.data,
-        TensorGraphNode::Tensor(color) if color.head.is_antisymmetric())
-    }) {
-        return false;
-    }
     // An odd stabilizer generator proves that the monomial equals its negative.
     let canonical = graph.canonize();
     canonical
@@ -398,6 +397,14 @@ fn project_network<Aind: AbsInd + ParseableAind>(
     let mut graph = Graph::new();
     let mut slot_copies = BTreeMap::new();
     project_expression(network, tree, root, &mut graph, &mut slot_copies)?;
+    // An antisymmetric tensor elsewhere in the network cannot make this
+    // projected region vanish. Avoid wiring an unrelated region's slots.
+    if !graph.nodes().iter().any(|node| {
+        matches!(&node.data,
+        TensorGraphNode::Tensor(color) if color.head.is_antisymmetric())
+    }) {
+        return None;
+    }
     connect_slots(network, &mut graph, &slot_copies)?;
     Some(graph)
 }
@@ -578,11 +585,20 @@ fn connect_slots<Aind: AbsInd>(
     graph: &mut TensorGraph<Aind>,
     slot_copies: &SlotsByHedge<Aind>,
 ) -> Option<()> {
-    for (pair, _, data) in network.graph.graph.iter_edges() {
-        let NetworkEdge::Slot(slot) = data.data else {
+    // Projected tensor ports already identify every relevant network edge.
+    // Visiting the whole network for each small region repeats unrelated sums
+    // and opaque leaves. Keep the stored source/sink orientation, including an
+    // edge whose only projected endpoint is its sink.
+    for &hedge in slot_copies.keys() {
+        #[cfg(test)]
+        PROJECTED_SLOT_VISITS.with(|visits| visits.set(visits.get() + 1));
+        let HedgePair::Paired { source, sink } = network.graph.graph.hedge_pair(hedge) else {
             continue;
         };
-        let HedgePair::Paired { source, sink } = pair else {
+        if hedge == sink && slot_copies.contains_key(&source) {
+            continue;
+        }
+        let NetworkEdge::Slot(slot) = network.graph.graph[[&source]] else {
             continue;
         };
         let source_copies = slot_copies.get(&source);
@@ -735,6 +751,8 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
 #[cfg(test)]
 mod typed_tests {
     use super::*;
+    use crate::tensor::SymbolicNetParse;
+    use spenso::network::parsing::ParseSettings;
     use spenso::structure::{
         partial::{PartialIndex, PartialStructureExt},
         representation::Minkowski,
@@ -750,6 +768,97 @@ mod typed_tests {
         atom::{AtomCore, FunctionBuilder},
         function, symbol,
     };
+
+    #[test]
+    fn signed_zero_projection_visits_only_incident_slots() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let [a, b, c] = [86401, 86402, 86403].map(|index| {
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let cycle = spenso::antisym!(a.clone(), b.clone())
+            * spenso::antisym!(b, c.clone())
+            * spenso::antisym!(c, a);
+
+        for size in [0, 128] {
+            let spectator = if size == 0 {
+                Atom::one()
+            } else {
+                Atom::add_many((0..size).map(|i| {
+                    let slot = rep
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(86500 + i))
+                        .to_atom();
+                    spenso::tensor!(signed_projection_spectator_left, slot.clone())
+                        * spenso::tensor!(signed_projection_spectator_right, slot)
+                }))
+            };
+            let expression = &cycle * spectator;
+            let network = expression
+                .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            if size != 0 {
+                assert!(network.graph.graph.iter_edges().count() > 2 * size);
+            }
+            let tree = network.graph.expr_tree().cast();
+            let root = network.graph.graph.node_id(network.graph.head());
+            PROJECTED_SLOT_VISITS.with(|visits| visits.set(0));
+            assert!(has_odd_automorphism(&network, &tree, root));
+            // The closed three-cycle has six tensor ports. None of the
+            // hundreds of edges inside the opaque spectator is revisited.
+            assert_eq!(PROJECTED_SLOT_VISITS.with(|visits| visits.get()), 6);
+        }
+    }
+
+    #[test]
+    fn projection_without_antisymmetric_tensors_skips_slot_connections() {
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, signed_projection_plain_a);
+        let b = spenso::mink!(4, signed_projection_plain_b);
+        let expression =
+            spenso::sym!(a.clone(), b.clone()) * spenso::tensor!(signed_projection_plain, a, b);
+        let network = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        let tree = network.graph.expr_tree().cast();
+        let root = network.graph.graph.node_id(network.graph.head());
+        PROJECTED_SLOT_VISITS.with(|visits| visits.set(0));
+        assert!(!has_odd_automorphism(&network, &tree, root));
+        assert_eq!(PROJECTED_SLOT_VISITS.with(|visits| visits.get()), 0);
+    }
+
+    #[test]
+    fn incident_slot_projection_keeps_opaque_sum_endpoints_external() {
+        crate::test_support::test_initialize();
+        let a = spenso::lor!(4, signed_projection_opaque_a);
+        let b = spenso::lor!(4, signed_projection_opaque_b);
+        let sum = spenso::sym!(spenso::dind!(a.clone()), spenso::dind!(b.clone()))
+            + spenso::tensor!(
+                signed_projection_opaque_ordered,
+                spenso::dind!(a.clone()),
+                spenso::dind!(b.clone())
+            );
+        let expression = spenso::antisym!(a, b) * &sum;
+        let mut network = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        // The symmetric arm would vanish after distribution, but the ordered
+        // arm can have a nonzero antisymmetric part. An opaque sum must not
+        // identify its parent's distinct boundary ports with internal slots.
+        assert!(!remove_antisymmetric_zero_terms(&mut network));
+        let canonical = expression
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .unwrap();
+        assert!(!canonical.is_zero());
+        assert!(matches!(canonical.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| matches!(factor, AtomView::Add(_)))));
+        assert!(
+            canonical
+                .list_dangling::<AbstractIndex>()
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn typed_canonize_preserves_declared_order_and_factorized_spectators() {

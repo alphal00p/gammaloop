@@ -303,9 +303,10 @@ fn main() {
 }
 
 /// Diagnose an exact production input without distributing its numerator.
-/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra] [collected|nested]` records admission and
-/// each exact continuation separately. `algebra` matches the public gamma/colour
-/// defaults with full contraction; `gamma` retains the trace-only diagnostic.
+/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra|algebra-dots] [collected|nested]`
+/// records admission and each exact continuation separately. `algebra` matches
+/// the public gamma/colour defaults with full contraction; `algebra-dots` also
+/// forms canonical dots. `gamma` retains the trace-only diagnostic.
 fn reduce_input(arguments: &[String]) {
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
 
@@ -337,12 +338,15 @@ fn reduce_input(arguments: &[String]) {
     });
     std::fs::write(output.join("admission.json"), clocks.to_string()).unwrap();
     let mode = arguments.get(2).map(String::as_str);
-    assert!(matches!(mode, None | Some("gamma" | "algebra")));
+    assert!(matches!(
+        mode,
+        None | Some("gamma" | "algebra" | "algebra-dots")
+    ));
     let coefficients = arguments.get(3).map(String::as_str);
     assert!(matches!(coefficients, None | Some("collected" | "nested")));
     let settings = AlgebraSettings {
         gamma: mode.map(|_| Default::default()),
-        color: (mode == Some("algebra")).then(Default::default),
+        color: matches!(mode, Some("algebra" | "algebra-dots")).then(Default::default),
         collect_coefficients: coefficients != Some("nested"),
         contract: if mode == Some("algebra") {
             AlgebraContraction::Fully
@@ -376,6 +380,7 @@ fn reduce_input(arguments: &[String]) {
         if reduced.reduction_status() == ReductionStatus::Complete {
             let start = Instant::now();
             let rerun = reduced.simplify_algebra(&settings).unwrap();
+            assert_eq!(rerun.reduction_status(), ReductionStatus::Complete);
             println!(
                 "rerun_seconds={:.9} stable={}",
                 start.elapsed().as_secs_f64(),

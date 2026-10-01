@@ -221,15 +221,6 @@ impl SymbolicTensor<PartialStructure> {
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::Contraction,
         );
-        if !self.reduction_observations().candidates.repeated_indices
-            && !self.structural_work_permitted(settings)
-        {
-            return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.clone(),
-                status: ReductionStatus::Complete,
-                observations: None,
-            });
-        }
         self.contract_prerequisite_scopes(settings, &mut selected, &allowed_vector)
     }
 
@@ -242,6 +233,16 @@ impl SymbolicTensor<PartialStructure> {
     {
         use super::inference::InterfaceInference;
         use spenso::structure::TensorStructure;
+        let observed = self.reduction_observations();
+        if observed.excludes_contraction_sources(settings)
+            || (!observed.candidates.repeated_indices && !self.structural_work_permitted(settings))
+        {
+            return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                root: self.clone(),
+                status: ReductionStatus::Complete,
+                observations: None,
+            });
+        }
         let mut result = self.contract_prerequisite_boundary(settings, selected, allowed_vector)?;
         if result.root != *self || result.status == ReductionStatus::Capped {
             // Let the shared planner reconsider the changed outer boundary
@@ -251,14 +252,22 @@ impl SymbolicTensor<PartialStructure> {
         // Only an unchanged outer boundary admits work inside a selected
         // arithmetic child. Additive branches and scalar power bases own their
         // independent dummy scopes and remain factorized.
+        let needs_sources = |value: AtomView<'_>| {
+            observed
+                .region(value)
+                .is_none_or(|region| !region.excludes_contraction_sources(settings))
+        };
         let power_selected = match self.expression.as_view() {
-            AtomView::Pow(power) => selected(power.get_base()),
+            AtomView::Pow(power) => needs_sources(power.get_base()) && selected(power.get_base()),
             _ => true,
         };
         let mut visit = |value: AtomView<'_>,
                          interface: Option<PartialStructure>|
          -> Result<Atom, TensorInferenceError> {
-            if !selected(value) {
+            // Repeated indices in an algebraic word do not themselves permit
+            // structural work. Inspect retained regional facts before inferring
+            // a child interface or building another shallow graph.
+            if !needs_sources(value) || !selected(value) {
                 return Ok(value.to_owned());
             }
             let interface = match interface {
@@ -1389,6 +1398,94 @@ mod policy_tests {
                 count.get()
             );
         });
+    }
+
+    #[test]
+    fn prerequisites_reuse_source_free_factored_color_regions() {
+        use super::super::{collection::SHALLOW_BUILDS, inference::tests::SCOPE_VALIDATIONS};
+        use crate::{color_f, color_t, test_support::test_initialize};
+        use std::sync::Arc;
+        let reps = test_initialize();
+        let ports = [98521, 98522, 98523].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+        let word = spenso::trace!(&rep; ports.iter().map(|port| color_t!(port)));
+        let symmetric = spenso::trace_sym!(&rep; ports.iter().map(|port| color_t!(port)));
+        let closed = color_f!(&ports[0], &ports[1], &ports[2]) * (word + symmetric);
+        let source = SymbolicTensor::infer((Atom::one() + closed).pow(3)).unwrap();
+        let settings = ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        };
+        let selected = |value: AtomView<'_>| value.contains_symbol(crate::color::CS.t);
+        let observed = source.reduction_observations();
+        assert!(observed.candidates.repeated_indices);
+        SHALLOW_BUILDS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let result = source
+            .contract_prerequisites(settings, selected, |_| true)
+            .unwrap();
+        assert_eq!(result.root, source);
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert!(Arc::ptr_eq(result.root.reduction_observations(), observed));
+        SHALLOW_BUILDS.with(|count| assert_eq!(count.get(), 0));
+        SCOPE_VALIDATIONS.with(|count| assert_eq!(count.get(), 0));
+
+        // A source elsewhere in the domain must not reopen the colour scope.
+        // Warm the actual boundary graph so the counter isolates child intake.
+        let mu = mink!(4, 98524);
+        let nu = mink!(4, 98525);
+        let mixed =
+            SymbolicTensor::infer(&source.expression * g!(&mu, &nu) * spenso::p!(&nu)).unwrap();
+        mixed.shallow_graph().unwrap();
+        mixed.reduction_observations();
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let result = mixed
+            .contract_prerequisites(settings, selected, |_| true)
+            .unwrap();
+        assert_eq!(result.root, mixed);
+        assert_eq!(result.status, ReductionStatus::Complete);
+        SCOPE_VALIDATIONS.with(|count| assert_eq!(count.get(), 0));
+    }
+
+    #[test]
+    fn prerequisites_contract_metrics_inside_selected_scalar_powers() {
+        use crate::{color_t, test_support::test_initialize};
+        let reps = test_initialize();
+        let [a, b] = [98531, 98532].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
+        let trace = spenso::trace!(&rep, color_t!(&a), color_t!(&b));
+        let source = SymbolicTensor::infer((Atom::one() + g!(&a, &b) * trace).pow(2)).unwrap();
+        let settings = ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        };
+        let selected = |value: AtomView<'_>| value.contains_symbol(crate::color::CS.t);
+        let filtered = source
+            .contract_prerequisites(
+                ContractSettings {
+                    representations: Some(&[]),
+                    ..settings
+                },
+                selected,
+                |_| true,
+            )
+            .unwrap();
+        assert_eq!(filtered.root, source);
+        let result = source
+            .contract_prerequisites(settings, selected, |_| true)
+            .unwrap();
+        let expected = (Atom::one() + spenso::trace!(&rep, color_t!(&b), color_t!(&b))).pow(2);
+        assert_eq!(result.root.expression, expected);
+        assert_eq!(result.root.structure(), source.structure());
+        assert_eq!(result.status, ReductionStatus::Complete);
+        let rerun = result
+            .root
+            .contract_prerequisites(settings, selected, |_| true)
+            .unwrap();
+        assert_eq!(rerun.root, result.root);
+        assert_eq!(rerun.status, ReductionStatus::Complete);
     }
 
     #[test]
