@@ -27,14 +27,19 @@ def mathml(expression):
 
 
 class TensorPrintTests(unittest.TestCase):
-    def test_complex_coefficients_keep_their_mathml_grouping(self):
-        for source in (
-            "(1+1i)*x",
-            "(-1+2i)*x",
-            "(1/2+1i/3)*x",
-            "x+(-1+2i)*y",
-            "(1+1i)^x",
-            "(2i)^x",
+    def test_grouped_factors_keep_their_mathml_parentheses(self):
+        for source, expected_groups in (
+            ("(1+1i)*x", 1),
+            ("(-1+2i)*x", 1),
+            ("(1/2+1i/3)*x", 1),
+            ("x+(-1+2i)*y", 1),
+            ("(1+1i)^x", 1),
+            ("(2i)^x", 1),
+            ("x-(a+b)", 1),
+            ("-(-a+b)-(a-b+c)", 2),
+            ("-(a+b)", 1),
+            ("x-2*(a+b)", 1),
+            ("x-a", 0),
         ):
             with self.subTest(source=source):
                 expression = TensorExpression(E(source))
@@ -49,7 +54,7 @@ class TensorPrintTests(unittest.TestCase):
                     and node[-1].tag == "mo"
                     and node[-1].text == ")"
                 ]
-                self.assertEqual(len(groups), 1)
+                self.assertEqual(len(groups), expected_groups)
                 self.assertEqual(expression.to_expression(), original)
                 if "^" in source:
                     self.assertIs(root.find(".//msup")[0], groups[0])

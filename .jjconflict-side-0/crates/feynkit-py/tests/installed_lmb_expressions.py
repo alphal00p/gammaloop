@@ -71,11 +71,9 @@ mu, nu = lorentz("routing_type_mu"), lorentz("routing_type_nu")
 Q = TensorName.vector("gammalooprs::Q", tags=S("gammalooprs::Q").get_tags())
 for selected_basis in (basis, alternate):
     indexed = Q(loop_edge.id, mu)
-    # Expose numerical signs before routing, which only substitutes momenta.
+    # Routing collects numerical signs after substitution, including the
+    # cancellation to a zero tensor whose open port must be retained.
     cancelling = indexed - selected_basis.route_expression(indexed.to_expression())
-    cancelling = TensorExpression(
-        cancelling.to_expression().expand_num(), structure=cancelling.structure
-    )
     for tensor in (
         indexed,
         Q(loop_edge.id, lorentz),

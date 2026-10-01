@@ -3158,6 +3158,29 @@ mod tests {
     }
 
     #[test]
+    fn routing_collects_numeric_signs_without_distributing_products() {
+        use symbolica::atom::AtomView;
+
+        let diagram = one_loop();
+        let basis = diagram.loop_momentum_basis();
+        let q = symbols::momentum().call(basis.tree_edges[0].0);
+        let routed = basis.route_expression(&q);
+        assert!(matches!(routed.as_view(), AtomView::Add(_)));
+        let a = Atom::var(symbolica::symbol!("routing_test::a"));
+        let b = Atom::var(symbolica::symbol!("routing_test::b"));
+        let c = Atom::var(symbolica::symbol!("routing_test::c"));
+        let factors = (&a + &b) * (&a + &c);
+
+        // Substitution exposes a negated momentum sum. Cancel its components
+        // while leaving the other numerator factors as a product of sums.
+        let expression = (-&q + &routed + &c) * &factors;
+        let expected = &c * factors;
+        assert_eq!(basis.route_expression(&expression), expected);
+        assert_eq!(basis.route_expression(&(-q + routed)), Atom::Zero);
+        assert_eq!(basis.route_expression(&expected), expected);
+    }
+
+    #[test]
     fn uv_expansion_preserves_boundary_momenta() {
         let bubble = one_loop();
         let full = bubble

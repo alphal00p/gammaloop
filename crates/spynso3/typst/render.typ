@@ -617,6 +617,11 @@
           (negative: false, node: term)
         } else { _split-sign(term) }
         let visual = render-node(signed.node, exact: exact)
+        // Extracting -1 can leave a lone sum in the product. The outer
+        // subtraction still applies to that entire sum.
+        if signed.negative and _has-additive-terms(visual) {
+          visual = _parenthesize(visual)
+        }
         if index == 0 {
           result = if signed.negative { _math-body($-#visual$) } else { visual }
         } else if signed.negative {

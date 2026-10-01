@@ -1426,9 +1426,13 @@ impl crate::LoopMomentumBasis {
             .collect()
     }
 
+    /// Route momenta and collect numerical multiples of sums without
+    /// distributing products of numerator factors.
     pub fn route_expression(&self, expression: &Atom) -> Atom {
         use symbolica::atom::AtomCore;
-        expression.replace_multiple(self.momentum_replacements())
+        expression
+            .replace_multiple(self.momentum_replacements())
+            .expand_num()
     }
 }
 
