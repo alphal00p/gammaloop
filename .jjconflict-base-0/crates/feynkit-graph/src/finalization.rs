@@ -532,6 +532,7 @@ impl FeynmanDiagramBuilder {
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
             validation: OnceLock::new(),
+            routing_validation: OnceLock::new(),
         };
         if generated {
             let mut incoming = BTreeSet::new();
@@ -590,6 +591,9 @@ impl FeynmanDiagramBuilder {
             diagram.loop_momentum_basis = basis;
             diagram
         };
+        // Each branch above either constructs a routing from a spanning forest
+        // or validates an imported routing against that same construction.
+        let _ = diagram.routing_validation.set(());
         if generated {
             let ignored = diagram.initial_state_tree().0;
             let excluded = diagram

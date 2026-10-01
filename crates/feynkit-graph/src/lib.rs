@@ -598,6 +598,8 @@ pub struct FeynmanDiagram {
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
     // Structural, routing, or numerator edits must invalidate this certificate.
     validation: OnceLock<()>,
+    // Numerator and cut edits preserve the routing of the unchanged graph.
+    routing_validation: OnceLock<()>,
 }
 
 impl Serialize for FeynmanDiagram {
@@ -799,6 +801,7 @@ impl FeynmanDiagram {
     {
         let mut diagram = self.clone();
         diagram.validation.take();
+        diagram.routing_validation.take();
         let endpoints = self
             .edges()
             .map(|(id, endpoints, _)| (id, endpoints))
@@ -1483,6 +1486,7 @@ impl FeynmanDiagram {
     /// Select a spanning-forest routing by its ordered independent edges.
     pub fn with_loop_momentum_edges(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
         self.validation.take();
+        self.routing_validation.take();
         let requested_set: BTreeSet<_> = requested.iter().copied().collect();
         let internal = self.internal_subgraph();
         let tree_edges = self
@@ -1495,6 +1499,7 @@ impl FeynmanDiagram {
         self.loop_momentum_basis = self
             .basis_from_tree(&tree_edges)?
             .with_loop_edge_order(requested)?;
+        let _ = self.routing_validation.set(());
         Ok(self)
     }
 
@@ -1508,7 +1513,9 @@ impl FeynmanDiagram {
         requested: &[EdgeId],
     ) -> Result<Self, DiagramError> {
         self.validation.take();
+        self.routing_validation.take();
         self.loop_momentum_basis = self.basis_from_tree(requested)?;
+        let _ = self.routing_validation.set(());
         Ok(self)
     }
 
@@ -1875,7 +1882,10 @@ impl FeynmanDiagram {
         {
             return Err(DiagramError::NumeratorFragmentMismatch);
         }
-        self.loop_momentum_basis.validate(self)?;
+        if self.routing_validation.get().is_none() {
+            self.loop_momentum_basis.validate(self)?;
+            let _ = self.routing_validation.set(());
+        }
         let _ = self.validation.set(());
         Ok(())
     }
@@ -4179,6 +4189,96 @@ mod tests {
                 .values()
                 .all(|signature| signature.loops.len() == 1 && signature.external.len() == 2)
         }));
+    }
+
+    #[test]
+    fn requested_forests_match_enumerated_bases() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "disconnected_cycles");
+        let vertices = (0..5)
+            .map(|i| {
+                builder.add_vertex(DiagramVertex {
+                    name: format!("v{i}"),
+                    interaction: None,
+                    numerator: Atom::one(),
+                })
+            })
+            .collect::<Vec<_>>();
+        // Parallel edges, a separate component with a self-loop, and an
+        // isolated vertex exercise both acyclicity and component coverage.
+        for (source, target) in [(0, 1), (0, 1), (2, 3), (2, 2)] {
+            builder
+                .add_edge(
+                    vertices[source],
+                    vertices[target],
+                    DiagramEdge::new(particle, false),
+                )
+                .unwrap();
+        }
+        for diagram in [one_loop(), builder.build().unwrap()] {
+            let expected = diagram
+                .loop_momentum_bases()
+                .unwrap()
+                .into_iter()
+                .map(|basis| (basis.tree_edges.clone(), basis))
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(expected.len(), 2);
+            let edges = diagram.edges().count();
+            for mask in 0..(1 << edges) {
+                let requested = (0..edges)
+                    .filter(|edge| mask & (1 << edge) != 0)
+                    .map(EdgeId)
+                    .collect::<Vec<_>>();
+                match diagram.basis_from_tree(&requested) {
+                    Ok(basis) => assert_eq!(Some(&basis), expected.get(&requested)),
+                    Err(_) => assert!(!expected.contains_key(&requested)),
+                }
+            }
+            assert!(diagram.basis_from_tree(&[EdgeId(edges)]).is_err());
+            let edge = expected.keys().next().unwrap()[0];
+            assert!(diagram.basis_from_tree(&[edge, edge]).is_err());
+        }
+    }
+
+    #[test]
+    fn routing_validation_survives_numerator_edits_and_checks_metadata_edits() {
+        use feynkit_kinematics::SignOrZero;
+
+        let diagram = one_loop();
+        diagram.validate().unwrap();
+        let updated = diagram
+            .with_numerator_fragments([(VertexId(0), Atom::num(7))], [])
+            .unwrap();
+        updated.loop_momentum_basis().validate(&updated).unwrap();
+        let tree_edge = updated.loop_momentum_basis().tree_edges[0];
+        let changed = updated
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |edge, _, data| {
+                    let mut data = data.clone();
+                    data.is_dummy |= edge == tree_edge;
+                    data
+                },
+            )
+            .unwrap();
+        let error = changed.validate().unwrap_err();
+        assert!(
+            matches!(error, DiagramError::InvalidLoopMomentumBasis(_)),
+            "{error}"
+        );
+
+        let mut basis = updated.loop_momentum_basis().clone();
+        let loop_edge = basis.loop_edges[0];
+        basis.edge_signatures.get_mut(&loop_edge).unwrap().loops =
+            Signature::new([SignOrZero::Zero]);
+        assert!(basis.validate(&updated).is_err());
+        let json = updated.to_json().unwrap();
+        let mut serialized: serde_json::Value = serde_json::from_str(&json).unwrap();
+        serialized["loop_momentum_basis"] = serde_json::to_value(basis).unwrap();
+        assert!(
+            FeynmanDiagram::from_json(updated.model().clone(), &serialized.to_string()).is_err()
+        );
     }
 
     #[test]

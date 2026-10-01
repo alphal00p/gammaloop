@@ -10,10 +10,11 @@ use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
     subgraph::{
         Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
-        SubSetLike, SubSetOps, cycle::SignedCycle,
+        SubSetLike, SubSetOps,
     },
     tree::SimpleTraversalTree,
 };
+use linnet::union_find::UnionFind;
 use symbolica::{
     atom::{Atom, AtomOrView, FunctionBuilder, Symbol},
     id::Replacement,
@@ -76,12 +77,6 @@ pub enum LmbError {
     NoCompatibleSubLmb {
         subgraph_dot: String,
         parent_lmb_dot: String,
-    },
-    #[error("failed to get cycle from tree:{is_circuit}\n{cycle_dot}\n{cover_dot}")]
-    InvalidCycle {
-        is_circuit: bool,
-        cycle_dot: String,
-        cover_dot: String,
     },
     #[error("split edge on full graph")]
     SplitEdgeOnFullGraph,
@@ -781,20 +776,12 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                             // An omitted chord has two endpoints in this component.
                             // Its momentum is independent and flows between those
                             // endpoints, rather than to the dependent external root.
-                            let cycle = tree.get_cycle(source, self).ok_or_else(|| {
+                            let signed = tree.get_signed_cycle(source, self).ok_or_else(|| {
                                 LmbError::MissingCycle {
                                     hedge: source,
                                     tree_dot: self.dot(&tree.tree_subgraph),
                                 }
                             })?;
-                            let signed =
-                                SignedCycle::from_cycle(&cycle, source, self).ok_or_else(|| {
-                                    LmbError::InvalidCycle {
-                                        is_circuit: false,
-                                        cycle_dot: self.dot(&cycle.filter),
-                                        cover_dot: self.dot(&external_cover),
-                                    }
-                                })?;
                             for hedge in signed.filter.included_iter() {
                                 path_to_dep.add(hedge);
                             }
@@ -857,31 +844,13 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                             externals.sub(h);
                         }
                         if !tree.tree_subgraph.includes(&p) {
-                            let signed_cycle = if self.node_id(source) == self.node_id(sink) {
-                                // A contracted UV component can turn a retained edge into
-                                // a tadpole. Its positive generator follows the same source
-                                // half-edge convention as `SignedCycle::from_cycle` below.
-                                let mut filter: SuBitGraph = self.empty_subgraph();
-                                filter.add(source);
-                                SignedCycle {
-                                    filter,
-                                    loop_count: Some(1),
-                                }
-                            } else {
-                                let cycle = tree.get_cycle(source, self).ok_or_else(|| {
+                            let signed_cycle =
+                                tree.get_signed_cycle(source, self).ok_or_else(|| {
                                     LmbError::MissingCycle {
                                         hedge: source,
                                         tree_dot: self.dot(&tree.tree_subgraph),
                                     }
                                 })?;
-                                SignedCycle::from_cycle(&cycle, source, self).ok_or_else(|| {
-                                    LmbError::InvalidCycle {
-                                        is_circuit: cycle.is_circuit(self),
-                                        cycle_dot: self.dot(&cycle.filter),
-                                        cover_dot: self.dot(&cover),
-                                    }
-                                })?
-                            };
                             cycles.push(signed_cycle);
                             loop_edges.push(e);
                         }
@@ -1339,33 +1308,46 @@ impl crate::FeynmanDiagram {
                 "tree edges contain duplicates".into(),
             ));
         }
+        let invalid_forest = || {
+            crate::DiagramError::InvalidLoopMomentumBasis(format!(
+                "requested tree edges {requested:?} do not form a spanning forest"
+            ))
+        };
+        let mut components = UnionFind::new(vec![(); self.graph.n_nodes()]);
         for edge in requested {
-            let Some((pair, _, _)) = self.graph.iter_edges().find(|(_, id, _)| id.0 == edge.0)
-            else {
+            if edge.0 >= self.graph.n_edges() {
                 return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
                     "unknown tree edge {}",
                     edge.0
                 )));
-            };
+            }
+            let pair = self.graph[&EdgeIndex(edge.0)].1;
             if !pair.is_paired() || !internal.includes(&pair) {
                 return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
                     "tree edge {} is not internal",
                     edge.0
                 )));
             }
+            let HedgePair::Paired { source, sink } = pair else {
+                unreachable!("tree edges are paired");
+            };
+            let source = Hedge(self.graph.node_id(source).0);
+            let sink = Hedge(self.graph.node_id(sink).0);
+            if components.find(source) == components.find(sink) {
+                return Err(invalid_forest());
+            }
+            components.union(source, sink, |(), ()| ());
             forest.add(pair);
         }
-        let missing_nodes = self
-            .graph
-            .number_of_nodes_in_subgraph(&internal)
-            .saturating_sub(self.graph.number_of_nodes_in_subgraph(&forest));
-        if self.graph.cyclotomatic_number(&forest) != 0
-            || self.graph.count_connected_components(&forest) + missing_nodes
-                != self.graph.count_connected_components(&internal)
-        {
-            return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
-                "requested tree edges {requested:?} do not form a spanning forest"
-            )));
+        // An acyclic subset spans exactly when every internal edge joins nodes
+        // already connected by the forest, including singleton components.
+        for (pair, _, _) in self.graph.iter_edges_of(&internal) {
+            if let HedgePair::Paired { source, sink } = pair
+                && components.find(Hedge(self.graph.node_id(source).0))
+                    != components.find(Hedge(self.graph.node_id(sink).0))
+            {
+                return Err(invalid_forest());
+            }
         }
         let selected = self.momentum_subgraph();
         let externals = self.routing_externals(&selected);

@@ -26,7 +26,6 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     graph::{GenerationSettings, Graph, HalfEdge},
-    parser::ParseSettings,
     symbol,
 };
 use thiserror::Error;
@@ -2771,16 +2770,19 @@ impl Generator {
     ) -> Result<FeynmanDiagram, GenerationError> {
         // Symbolica's automorphism factor is a denominator in the overall
         // multiplier.
-        let mut overall_factor = if topology.multiplicity == 1 {
-            format!("1/AutG({})", topology.symmetry)
-        } else {
-            format!(
-                "CouplingsMultiplicity({})/AutG({})",
-                topology.multiplicity, topology.symmetry
-            )
-        };
+        let mut factors = vec![
+            symbol!("feynkit_generator_factor::AutG")
+                .call(topology.symmetry)
+                .pow(-1),
+        ];
+        if topology.multiplicity != 1 {
+            factors.push(
+                symbol!("feynkit_generator_factor::CouplingsMultiplicity")
+                    .call(topology.multiplicity),
+            );
+        }
         if fermion_signs.internal_loop_negative {
-            overall_factor = format!("InternalFermionLoopSign(-1)*{overall_factor}");
+            factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
         }
         if fermion_signs.include_external_ordering {
             let sign = if fermion_signs.external_ordering_negative {
@@ -2788,7 +2790,8 @@ impl Generator {
             } else {
                 1
             };
-            overall_factor = format!("ExternalFermionOrderingSign({sign})*{overall_factor}");
+            factors
+                .push(symbol!("feynkit_generator_factor::ExternalFermionOrderingSign").call(sign));
         }
         if fermion_signs.include_antifermion_spin_sum {
             let sign = if fermion_signs.antifermion_spin_sum_negative {
@@ -2796,18 +2799,9 @@ impl Generator {
             } else {
                 1
             };
-            overall_factor = format!("AntiFermionSpinSumSign({sign})*{overall_factor}");
+            factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
         }
-        let overall_factor = Atom::parse(
-            &overall_factor,
-            "feynkit_generator_factor",
-            ParseSettings::default(),
-        )
-        .map_err(|message| GenerationError::NumeratorParse {
-            owner: "diagram overall factor".to_owned(),
-            expression: overall_factor,
-            message,
-        })?;
+        let overall_factor = Atom::mul_many(factors);
         let incoming_count = topology
             .graph
             .nodes()
@@ -4680,6 +4674,7 @@ impl ResolvedProcess {
 mod tests {
     use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping};
     use feynkit_model::Model;
+    use symbolica::parser::ParseSettings;
 
     use super::*;
 
