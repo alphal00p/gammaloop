@@ -543,7 +543,7 @@ fn closed_trace_observations_keep_generated_leaves_available_to_collection() {
                 selected_target |= selected;
                 selected
             },
-            |value, _| {
+            |value, _, _| {
                 mapped_target |= value.expression == target;
                 Ok(value)
             },
@@ -791,6 +791,134 @@ fn unchanged_kernel_regions_are_reused_after_an_independent_family_changes() {
     );
     assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     assert!(REUSED_KERNEL_REGIONS.with(|count| count.get()) > 0);
+}
+
+#[test]
+fn changed_domain_regions_keep_independent_colour_work_settled() {
+    use observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+
+    crate::test_support::test_initialize();
+    let label = spenso::index_symbol!("dirty_family::edge");
+    let port = |index| mink!(4, { symbolica::function!(label, 99500, Atom::num(index)) });
+    let color = crate::color_t!([8, 99501], [3, 99502], [3, 99503]);
+    let gamma = gamma!(crate::bis!(4, 99504), crate::bis!(4, 99505), port(1));
+    let source = SymbolicTensor::infer(&color * &gamma).unwrap();
+    let replacement = SymbolicTensor::infer(
+        &color * gamma!(crate::bis!(4, 99504), crate::bis!(4, 99505), port(2)),
+    )
+    .unwrap();
+    let before = source.reduction_observations();
+    replacement.observe_replacement(&source);
+    let after = replacement.reduction_observations();
+    assert!(!before.candidates.complete, "compound labels remain opaque");
+    assert!(before.candidates.traversal_complete);
+    let scans = (
+        INITIAL_SCANS.with(|count| count.get()),
+        REPLACEMENT_SCANS.with(|count| count.get()),
+    );
+    assert_eq!(after.changed_identity_families(before), Some(GAMMA));
+    assert_eq!(
+        scans,
+        (
+            INITIAL_SCANS.with(|count| count.get()),
+            REPLACEMENT_SCANS.with(|count| count.get()),
+        ),
+        "scheduling must consume observations without another candidate scan"
+    );
+    assert!(source.normalization_is_intrinsic());
+    assert!(replacement.normalization_is_intrinsic());
+}
+
+#[test]
+fn changed_connections_revisit_unchanged_identity_bodies() {
+    crate::test_support::test_initialize();
+    let a = mink!(4, 99511);
+    let b = mink!(4, 99512);
+    let c = mink!(4, 99513);
+    let gamma = gamma!(crate::bis!(4, 99514), crate::bis!(4, 99515), &a);
+    let source = SymbolicTensor::infer(&gamma * g!(&b, &c)).unwrap();
+    let replacement = SymbolicTensor::infer(&gamma * g!(&a, &c)).unwrap();
+    replacement.observe_replacement(&source);
+    assert_eq!(
+        replacement
+            .reduction_observations()
+            .changed_identity_families(source.reduction_observations()),
+        Some(GAMMA),
+        "a new Lorentz connection can expose work in the unchanged gamma"
+    );
+}
+
+#[test]
+fn newly_emitted_and_removed_identity_occurrences_invalidate_their_families() {
+    let reps = crate::test_support::test_initialize();
+    let color = crate::color_t!([8, 99521], [3, 99522], [3, 99523]);
+    let first = trace!(reps.bis4.to_symbolic([]), gamma!(mink!(4, 99524)));
+    let second = trace!(reps.bis4.to_symbolic([]), gamma!(mink!(4, 99525)));
+    let source = SymbolicTensor::infer(&color * &first * &second).unwrap();
+    let survivor = SymbolicTensor::infer(&color * &second).unwrap();
+    survivor.observe_replacement(&source);
+    assert_eq!(
+        survivor
+            .reduction_observations()
+            .changed_identity_families(source.reduction_observations()),
+        Some(GAMMA)
+    );
+    assert_ne!(
+        survivor.reduction_observations().identity_candidates() & GAMMA,
+        0
+    );
+    let epsilon = crate::epsilon!(
+        mink!(4, 99526),
+        mink!(4, 99527),
+        mink!(4, 99528),
+        mink!(4, 99529)
+    );
+    let emitted = SymbolicTensor::infer(&color * &second * epsilon).unwrap();
+    emitted.observe_replacement(&survivor);
+    let dirty = emitted
+        .reduction_observations()
+        .changed_identity_families(survivor.reduction_observations())
+        .unwrap();
+    assert_eq!(dirty & (GAMMA | EPSILON | COLOR), GAMMA | EPSILON);
+}
+
+#[test]
+fn a_gamma_rewrite_does_not_recollect_an_unchanged_colour_sector() {
+    let reps = crate::test_support::test_initialize();
+    let color = SymbolicTensor::infer(crate::color_t!([8, 99531], [3, 99532], [3, 99533]))
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        })
+        .unwrap()
+        .expression;
+    let word = trace!(reps.bis4.to_symbolic([]);
+        (0..8).map(|index| gamma!(mink!(4, { Atom::num(99540 + index) }))));
+    let source = SymbolicTensor::infer(&color * &word).unwrap();
+    IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+    let settings = AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::default()),
+        color: Some(ColorSimplifySettings::default()),
+        contract: AlgebraContraction::None,
+        ..Default::default()
+    };
+    let result = source.simplify_algebra(&settings).unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), 1);
+    let gamma = SymbolicTensor::infer(word)
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: None,
+            ..settings
+        })
+        .unwrap();
+    assert!(
+        (&result.expression - color * gamma.expression)
+            .expand()
+            .is_zero()
+    );
 }
 
 #[test]

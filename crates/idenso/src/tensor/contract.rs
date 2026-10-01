@@ -98,7 +98,7 @@ impl SymbolicTensor<PartialStructure> {
         {
             return true;
         }
-        if observed.is_closed_scalar() {
+        if observed.excludes_internal_connections() {
             return false;
         }
         if settings
@@ -387,7 +387,7 @@ impl SymbolicTensor<PartialStructure> {
             .proofs
             .observations
             .get()
-            .is_some_and(|observed| observed.is_closed_scalar())
+            .is_some_and(|observed| observed.excludes_internal_connections())
         {
             return Ok(result);
         }
@@ -484,8 +484,8 @@ impl SymbolicTensor<PartialStructure> {
             }
         }
         let observations = self.reduction_observations();
-        let closed_scalar = observations.is_closed_scalar();
-        if closed_scalar
+        let terminal_polynomial = observations.is_terminal_polynomial();
+        if observations.excludes_internal_connections()
             || (settings
                 .representations
                 .is_some_and(<[LibraryRep]>::is_empty)
@@ -499,10 +499,13 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
                 root: self.with_identity_result(
                     source,
-                    closed_scalar.then(|| {
+                    terminal_polynomial.then(|| {
                         // Structural normalization can retain compact metrics;
                         // only the notation owner can discharge their dot work.
-                        DomainObservations::closed_scalar(observations.needs_dot_normalization())
+                        DomainObservations::terminal_polynomial(
+                            &self.structure,
+                            observations.needs_dot_normalization(),
+                        )
                     }),
                 )?,
                 status: ReductionStatus::Complete,

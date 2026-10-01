@@ -203,7 +203,11 @@ impl<const N: usize> TraceKernel<N> {
 
 /// Build the ordinary pairing polynomial without intermediate trace nodes.
 /// Repeated subwords share their result for this evaluation only.
-struct PairingTrace<'a, Output: TraceAlgebra = FactoredOutput> {
+struct PairingTrace<
+    'a,
+    Output: TraceAlgebra = FactoredOutput,
+    Metric = fn(AtomView<'a>, AtomView<'a>) -> Option<Atom>,
+> {
     width: usize,
     arguments: Vec<AtomView<'a>>,
     metrics: Vec<Option<Atom>>,
@@ -212,6 +216,8 @@ struct PairingTrace<'a, Output: TraceAlgebra = FactoredOutput> {
     output: Output,
     canonical_arguments: bool,
     summed_indices: Vec<usize>,
+    metric_value: Metric,
+    metric_refused: bool,
 }
 
 /// Scalar output operations shared by both representations. The word evaluator
@@ -292,15 +298,34 @@ impl TraceAlgebra for FactoredOutput {
     }
 }
 
-impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
+impl<'a, Output: TraceAlgebra, Metric> PairingTrace<'a, Output, Metric>
+where
+    Metric: FnMut(AtomView<'a>, AtomView<'a>) -> Option<Atom>,
+{
+    fn metric_position(&mut self, left: usize, right: usize) -> usize {
+        let (left, right) = (left.min(right), left.max(right));
+        let position = left * self.width + right;
+        if self.metrics[position].is_none() {
+            self.metrics[position] = Some(if self.metric_refused {
+                Atom::Zero
+            } else {
+                (self.metric_value)(self.arguments[left], self.arguments[right]).unwrap_or_else(
+                    || {
+                        self.metric_refused = true;
+                        Atom::Zero
+                    },
+                )
+            });
+        }
+        position
+    }
+
     fn metric(&mut self, left: usize, right: usize) -> AtomView<'_> {
         // Summed endpoints often disappear before any metric involving them is
         // needed. In particular, do not construct indexed vector components for
         // a dummy that a word identity is about to eliminate.
-        let (left, right) = (left.min(right), left.max(right));
-        self.metrics[left * self.width + right]
-            .get_or_insert_with(|| g!(self.arguments[left], self.arguments[right]))
-            .as_view()
+        let position = self.metric_position(left, right);
+        self.metrics[position].as_ref().unwrap().as_view()
     }
 
     #[cfg(test)]
@@ -346,15 +371,14 @@ impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
         coefficient: i32,
         value: Output::Value,
     ) -> Output::Value {
-        let (left, right) = (left.min(right), left.max(right));
-        let metric = self.metrics[left * self.width + right]
-            .get_or_insert_with(|| g!(self.arguments[left], self.arguments[right]));
+        let position = self.metric_position(left, right);
+        let metric = self.metrics[position].as_ref().unwrap();
         self.output
             .metric_product(metric.as_view(), coefficient, value)
     }
 
     #[cfg(test)]
-    fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other> {
+    fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other, Metric> {
         debug_assert!(self.subwords.is_empty());
         PairingTrace {
             width: self.width,
@@ -365,10 +389,15 @@ impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
             output,
             canonical_arguments: self.canonical_arguments,
             summed_indices: self.summed_indices,
+            metric_value: self.metric_value,
+            metric_refused: self.metric_refused,
         }
     }
 
     fn evaluate(&mut self, remaining: &[usize]) -> Output::Value {
+        if self.metric_refused {
+            return self.output.unit(Atom::Zero.as_view());
+        }
         let Some(&first) = remaining.first() else {
             return self.output.unit(self.trace_unit);
         };
@@ -593,8 +622,24 @@ pub(super) fn evaluate_generic(
     canonical_arguments: bool,
     _output: TraceOutput,
 ) -> Atom {
+    evaluate_generic_with_metrics(indices, trace_unit, canonical_arguments, _output, |a, b| {
+        Some(g!(a, b))
+    })
+    .expect("intrinsic trace metrics cannot refuse evaluation")
+}
+
+/// Evaluate the same recurrence with occurrence-local pairing values supplied
+/// by the shared contraction owner. Only requested pairs are materialized, once
+/// each; a refused contraction discards the entire tentative trace result.
+pub(super) fn evaluate_generic_with_metrics<'a>(
+    indices: &[AtomView<'a>],
+    trace_unit: AtomView<'a>,
+    canonical_arguments: bool,
+    _output: TraceOutput,
+    metric_value: impl FnMut(AtomView<'a>, AtomView<'a>) -> Option<Atom>,
+) -> Option<Atom> {
     if indices.len() % 2 == 1 {
-        return Atom::Zero;
+        return Some(Atom::Zero);
     }
     // Ordered argument identities, including their dimension and metadata,
     // determine a subtrace. Equal arguments can share states across positions.
@@ -633,18 +678,22 @@ pub(super) fn evaluate_generic(
         output: FactoredOutput,
         canonical_arguments,
         summed_indices,
+        metric_value,
+        metric_refused: false,
     };
     #[cfg(test)]
     if matches!(_output, TraceOutput::Expanded) {
         return if trace.supports_sparse_output(&word) {
             let mut trace = trace.with_output(sparse::SparseOutput::default());
             let result = trace.evaluate(&word);
-            trace.output.finish(result)
+            (!trace.metric_refused).then(|| trace.output.finish(result))
         } else {
-            trace.evaluate(&word).expand()
+            let result = trace.evaluate(&word);
+            (!trace.metric_refused).then(|| result.expand())
         };
     }
-    trace.evaluate(&word)
+    let result = trace.evaluate(&word);
+    (!trace.metric_refused).then_some(result)
 }
 
 impl Monomial {
@@ -783,6 +832,89 @@ short_trace_dispatch!(2, 4, 6, 8, 10, 12, 14);
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    #[test]
+    fn supplied_pairings_reuse_the_recurrence_and_match_clifford_components() {
+        crate::test_support::test_initialize();
+        let labels = ["lazy_pair_a", "lazy_pair_b", "lazy_pair_c", "lazy_pair_d"]
+            .map(|name| Atom::var(symbolica::symbol!(name)));
+        let vectors = [[1, 2, 0, -1], [0, 3, 1, 2], [2, -1, 4, 0], [1, 0, -2, 3]];
+        let unit = Atom::num(4);
+        for word in [vec![0, 1, 2, 3], vec![0, 1, 0, 1, 2, 3]] {
+            let indices = word
+                .iter()
+                .map(|&i| labels[i].as_view())
+                .collect::<Vec<_>>();
+            let mut calls = std::collections::HashSet::new();
+            let result = evaluate_generic_with_metrics(
+                &indices,
+                unit.as_view(),
+                true,
+                TraceOutput::Factored,
+                |a, b| {
+                    let a = labels
+                        .iter()
+                        .position(|label| label.as_view() == a)
+                        .unwrap();
+                    let b = labels
+                        .iter()
+                        .position(|label| label.as_view() == b)
+                        .unwrap();
+                    assert!(calls.insert((a.min(b), a.max(b))), "pairing rebuilt");
+                    Some(Atom::num(
+                        vectors[a]
+                            .iter()
+                            .zip(vectors[b])
+                            .map(|(a, b)| a * b)
+                            .sum::<i64>(),
+                    ))
+                },
+            )
+            .unwrap();
+            let inputs = word.iter().map(|&i| vectors[i]).collect::<Vec<_>>();
+            assert_eq!(result, Atom::num(clifford_trace(&inputs, false)));
+        }
+    }
+
+    #[test]
+    fn supplied_pairings_are_lazy_and_refusal_never_publishes_a_partial_result() {
+        let reps = crate::test_support::test_initialize();
+        let a = reps.mink_d.to_symbolic([Atom::num(93901)]);
+        let b = reps.mink_d.to_symbolic([Atom::num(93902)]);
+        let unit = Atom::num(4);
+        let mut calls = 0;
+        let result = evaluate_generic_with_metrics(
+            &[a.as_view(), a.as_view(), b.as_view(), b.as_view()],
+            unit.as_view(),
+            true,
+            TraceOutput::Factored,
+            |left, right| {
+                calls += 1;
+                assert_eq!(
+                    left, right,
+                    "contracted word requested an unused cross pairing"
+                );
+                Some(g!(left, right))
+            },
+        )
+        .unwrap();
+        assert_eq!(calls, 2);
+        assert_eq!(result, Atom::num(4) * g!(&a, &a) * g!(&b, &b));
+
+        calls = 0;
+        let refused = evaluate_generic_with_metrics(
+            &[a.as_view(), b.as_view(), a.as_view(), b.as_view()],
+            unit.as_view(),
+            false,
+            TraceOutput::Factored,
+            |_, _| {
+                calls += 1;
+                None
+            },
+        );
+        assert!(refused.is_none());
+        assert_eq!(calls, 1);
+    }
 
     #[test]
     fn factored_output_matches_the_explicit_sparse_trace_oracle() {
@@ -972,6 +1104,8 @@ pub(super) mod tests {
                 output: FactoredOutput,
                 canonical_arguments: false,
                 summed_indices: Vec::new(),
+                metric_value: |a, b| Some(g!(a, b)),
+                metric_refused: false,
             };
             let result = trace.evaluate(&(0..N).collect::<Vec<_>>());
             assert_eq!(
@@ -1036,6 +1170,8 @@ pub(super) mod tests {
                     output: FactoredOutput,
                     canonical_arguments: true,
                     summed_indices: Vec::new(),
+                    metric_value: |a, b| Some(g!(a, b)),
+                    metric_refused: false,
                 };
                 let factors: Vec<_> = word.iter().map(|&index| vectors[index]).collect();
                 assert_eq!(

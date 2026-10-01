@@ -1076,3 +1076,128 @@ case and comparison limits above remain unchanged. Residual costs include
 interface discovery, ordinary planning and explicitly requested materialization;
 the initial global-registry reconstruction and latest-policy-only rerun costs
 are no longer present on these paths.
+
+== Massive routed fermion ladder: 2026-10-01
+
+This follow-up measures the complete four-loop fermion ladder with three gluon
+rungs: eight massive propagator numerators, expanded Standard Model couplings,
+LMB momentum routing, symbolic Lorentz dimension, and four open external ports.
+The bottom-quark mass, scalar prefactor and external Lorentz/colour indices are
+retained. It is a different workload from the older massless, projected,
+unrouted 525-term scalar benchmark. The request is
+`simplify_algebra(gamma=True, color=True, epsilon=False, contract="fully")`,
+with no work limit and no arithmetic expansion.
+
+The implementation keeps the shared carrier, planner, contractor and Dirac
+recurrence. Selected spinor factors are assembled before reducing a growing
+prefix. The recurrence requests occurrence-local pair contractions from the
+existing contraction owner and reuses each requested pair. Weighted routed
+vectors remain factored; equivalent vector bodies with different external dummy
+labels share their identity without identifying those dummy scopes. Selected
+collection can consume incident coefficient ports while checking the combined
+ordered boundary. Unrelated scalar and tensor spectators remain outside that
+work.
+
+Intrinsic replacements forward regional observations and interface proofs.
+Successful contraction of a connection does not itself justify rescanning a
+large emitted polynomial or revalidating unchanged spectators. Typed zero keeps
+its admitted interface, while callbacks and unsupported rewrites retain the
+checks needed for their actual result. These changes do not introduce aliases,
+a second trace recurrence, or another contraction implementation.
+
+#table(
+  columns: (2fr, 1fr, 1.3fr),
+  [Measurement], [Reduction seconds], [Completed rerun seconds],
+  [Historical Python extension], [23.710816], [Not captured in this sample],
+  [Candidate Python, sample 1], [0.848985], [0.025762],
+  [Candidate Python, sample 2], [0.740976], [0.003168],
+  [Candidate Python, sample 3], [0.681896], [0.009260],
+  [Installed Python, sample 1], [0.797951], [0.015423],
+  [Installed Python, sample 2], [0.768791], [0.003064],
+  [Installed Python, sample 3], [0.886420], [0.017785],
+  [Candidate native Rust runner], [0.777609], [0.001558],
+)
+
+The Python comparison uses the same admitted full input and requested settings;
+all three measured calls and completed reruns are retained. The median falls
+from the 23.71 s baseline sample to 0.798 s in the installed module, about 30 times
+faster. The earlier candidate's median is 0.741 s. Each call
+reports `Complete`, retains the exact logical port order, and reruns stably.
+The native row is a separate frontend measurement. The historical extension is
+identified by source revision `fe9263cf65e5c67259e010ccf2d01f9378c29453` and
+core hash `ccff4edd64869690c92eec7989d15e2bbc8418a671cf12856368383a23a0cb67`.
+The native receipt uses the release profile with LTO disabled on the same
+AMD EPYC 9754 host. Startup, compilation, text parsing, admission, formatting,
+and component materialization are outside the reduction clock.
+
+The older saved projected fermion control remains at 106.1 ms median over three
+calls; the saved projected gluon control takes 246.0 ms. Both match their exact
+525-term and 6001-term references by factor-preserving cancellation and report
+stable completion. Their settings are retained in the receipt; they are separate
+workloads from the full massive ladder.
+
+Native admission took 2.922 ms. A separate instrumented reduction took
+718.598 ms, including an inclusive gamma clock of 598.080 ms, contraction of
+131.272 ms, and candidate observations of 82.350 ms. Nested phase clocks overlap
+and must not be added. This diagnostic replay follows the timed call, so caches
+and observations can be warm. Regional candidate observations are included in
+its scan counter; that counter is not a count of initial domain scans.
+
+The small, source-controlled input is
+`crates/idenso/benches/data/massive-fermion-ladder.expr`. Its companion
+`massive-fermion-ladder-baseline.json` records exact hashes, build/environment
+metadata, settings, phase receipts and reproduction commands. The existing
+runner replays it without executing a notebook:
+
+```sh
+cargo build --release --locked -p idenso --features reference-cases \
+  --example contraction_phase_benchmark --config profile.release.lto=false
+
+target/release/examples/contraction_phase_benchmark --reduce-input \
+  crates/idenso/benches/data/massive-fermion-ladder.expr \
+  /tmp/massive-fermion-ladder-replay algebra
+```
+
+The release Idenso run passes 844 tests; 22 tests are ignored and the separately
+established baseline failure `tensor::tests::parsing::infinite_execution` is
+excluded. New regressions check massive routed sums, distinct compound dummy
+labels, repeated weighted vectors, coefficient consumption, untouched
+spectators, ordered ports and stable completion against independent exact
+Clifford components. The full fixture additionally agrees in all 1024 components
+at three momentum/mass points with explicit Weyl and Gell-Mann matrices.
+Its exact difference from the baseline factors to zero without explicit global
+expansion. The final output is byte-identical to that independently checked
+intermediate output, with SHA-256
+`07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab`;
+the receipt explicitly records reuse of those correctness certificates.
+
+The first rebuilt Python result was also checked directly at all three numerical
+points, including its actual carrier interface. All 1024 components agree,
+with relative maximum-norm error below 1.1e-15. The final installed result has the
+same exact plain and canonical output hashes; its carrier ports are checked
+again. Its exact difference from the saved baseline factors to zero in 3.65 s
+outside the timing window. The different serialization order is recorded
+separately from the native output hash.
+
+All 82 Python API tests pass in the actual notebook virtual environment,
+including the restored Expression inheritance, tensor-preserving operations,
+display, generated signatures and documentation examples. Idenso Clippy with
+warning denial and formatting of the modified sources pass. The generated
+stubs are synchronized into the bundled and live notebook packages. Both
+notebook servers restart with HTTP 200; no notebook source is executed or edited
+for this benchmark. The receipt records the loaded extension hash and verifies
+that its inode and contents stay unchanged during measurement. The optimized
+Idenso sources are unchanged across the display-related extension refreshes.
+
+This report compiles with Typst. The repository-wide documentation gate retains
+its preexisting GammaLoop API attestation failure for
+`crates/gammaloop-api/src/python.rs`; this check is not reported as passing.
+
+The output tradeoff is substantial: the candidate retains about 24.2 MB of Atom
+data in Python (23.4 MB in the native runner), compared with about 0.98 MB in the
+historical result, because the
+contraction polynomial is left factored differently. Atom byte counts also
+vary with process-local symbol IDs. The new representation is exact and complete,
+but rendering, evaluator construction and later materialization may have
+additional costs; those costs are not included in the reduction measurement.
+No fresh FORM comparison or FORM timing is claimed for this fixture.

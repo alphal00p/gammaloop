@@ -528,11 +528,14 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             && let Some(region) = observed.region(value)
             && observed.candidates.complete
             && observed.candidates.intrinsic
+            && !region.structural_work()
         {
-            return !region.structural_work();
+            return true;
         }
-        // Opaque metadata was intentionally absent from the domain walk. Only
-        // inspect that selected payload now; never rescan its enclosing body.
+        // Regional structural candidates are not proof of pending work: one
+        // literal slot or already compact vectors can be inert metadata. Use
+        // the existing precise certificate for this selected payload whenever
+        // the coarse observation cannot establish that it is source-free.
         if let Some(&inert) = self.metadata_certificates.get(&value) {
             return inert;
         }
@@ -2464,6 +2467,36 @@ mod tests {
             crate::test_support::contracted_atom(result.as_view()).unwrap(),
             result
         );
+    }
+
+    #[test]
+    fn observed_metadata_candidates_do_not_refuse_inert_payloads() {
+        let contractor = setup();
+        let _ = symbolica::symbol!("closed_component_test::observed_metadata"; Scalar);
+        for metadata in [
+            "observed_metadata(mink(4,a))",
+            "observed_metadata(p(mink(4))-q(mink(4)))",
+            "g(p(mink(4)),q(mink(4)))",
+        ] {
+            let metadata = input(metadata);
+            let source = input("t(mink(4,a))") * &metadata;
+            let tensor = SymbolicTensor::infer(source).unwrap();
+            let observed = tensor.reduction_observations();
+            assert!(
+                observed
+                    .region(metadata.as_view())
+                    .unwrap()
+                    .structural_work()
+            );
+            let contractor = SlotContraction::new().observed(observed);
+            let mut slots = SlotMatcher::default();
+            let mut state = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+            assert!(state.metadata_is_inert(metadata.as_view()));
+        }
+        let active = input("p(mink(4,a))*q(mink(4,a))");
+        let mut slots = SlotMatcher::default();
+        let mut state = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        assert!(!state.metadata_is_inert(active.as_view()));
     }
 
     #[test]

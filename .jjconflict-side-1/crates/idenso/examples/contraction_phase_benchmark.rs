@@ -303,8 +303,9 @@ fn main() {
 }
 
 /// Diagnose an exact production input without distributing its numerator.
-/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma]` records admission and each
-/// exact continuation separately; optional gamma uses the public default family.
+/// `--reduce-input INPUT OUTPUT_DIRECTORY [gamma|algebra]` records admission and
+/// each exact continuation separately. `algebra` matches the public gamma/colour
+/// defaults with full contraction; `gamma` retains the trace-only diagnostic.
 fn reduce_input(arguments: &[String]) {
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus};
 
@@ -322,6 +323,7 @@ fn reduce_input(arguments: &[String]) {
             SPENSO_TAG.rank_one_tensor_symbol(head);
         }
         let _ = spenso::index_symbol!("gammalooprs::hedge");
+        let _ = spenso::index_symbol!("gammalooprs::edge");
         let source = std::fs::read_to_string(&arguments[0]).unwrap();
         Atom::parse(
             &source,
@@ -334,13 +336,16 @@ fn reduce_input(arguments: &[String]) {
         SymbolicTensor::infer(atom).unwrap()
     });
     std::fs::write(output.join("admission.json"), clocks.to_string()).unwrap();
+    let mode = arguments.get(2).map(String::as_str);
+    assert!(matches!(mode, None | Some("gamma" | "algebra")));
     let settings = AlgebraSettings {
-        gamma: arguments
-            .get(2)
-            .filter(|flag| *flag == "gamma")
-            .map(|_| Default::default()),
-        contract: AlgebraContraction::Dots,
-        max_passes: Some(128),
+        gamma: mode.map(|_| Default::default()),
+        color: (mode == Some("algebra")).then(Default::default),
+        contract: if mode == Some("algebra") {
+            AlgebraContraction::Fully
+        } else {
+            AlgebraContraction::Dots
+        },
         ..Default::default()
     };
     let mut current = input;

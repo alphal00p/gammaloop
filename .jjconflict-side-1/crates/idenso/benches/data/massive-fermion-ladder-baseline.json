@@ -1,0 +1,806 @@
+{
+  "schema_version": 1,
+  "capture_date": "2026-10-01",
+  "fixture": {
+    "path": "crates/idenso/benches/data/massive-fermion-ladder.expr",
+    "format": "Symbolica format_plain, namespaces retained",
+    "file_bytes": 7505,
+    "sha256": "71b901a8b7a14ab411085c96e1dac850a9033c5d7958594d71fbb466c267ef2f",
+    "canonical_sha256": "e92ce6158e1f0de931afc74e58e297814ec40cd61a277a7341a29af82412df2f",
+    "generation": {
+      "model": "standard_model",
+      "incoming": [
+        "g"
+      ],
+      "outgoing": [
+        "g"
+      ],
+      "vertex_allow": [
+        "V_76"
+      ],
+      "loops": 4,
+      "max_vertices": 8,
+      "topology": "outer fermion loop with three gluon rungs",
+      "allow_self_loops": false,
+      "self_energy": null,
+      "tadpoles": null,
+      "zero_snails": null,
+      "numerator_grouping": null,
+      "progress": null,
+      "preparation": "expand_couplings(diagram.numerator_expression(in_lmb=True)).with_lorentz_dimension(D)",
+      "dimension_symbol": "subclass_preservation_benchmark::D",
+      "mass_symbol": "UFO::MB",
+      "coupling_symbol": "UFO::G",
+      "external_projector": false,
+      "scalar_prefactors_retained": true,
+      "automatic_aliases": false
+    },
+    "external_ports": [
+      "mink(D,hedge(1,1))",
+      "mink(D,hedge(0,1))",
+      "coad(8,hedge(0,1))",
+      "coad(8,hedge(1,1))"
+    ],
+    "scope": "Massive, LMB-routed, open-index full numerator. This differs from the older projected massless 525-term benchmark."
+  },
+  "settings": {
+    "gamma": true,
+    "color": true,
+    "epsilon": false,
+    "contract": "fully",
+    "max_steps_per_domain": null
+  },
+  "recipe": {
+    "working_directory": "repository root",
+    "build": [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "idenso",
+      "--features",
+      "reference-cases",
+      "--example",
+      "contraction_phase_benchmark",
+      "--config",
+      "profile.release.lto=false"
+    ],
+    "run": [
+      "target/release/examples/contraction_phase_benchmark",
+      "--reduce-input",
+      "crates/idenso/benches/data/massive-fermion-ladder.expr",
+      "/tmp/massive-fermion-ladder-replay",
+      "algebra"
+    ],
+    "requirements": "Workspace dependency setup and a valid Symbolica user license. CARGO_TARGET_DIR may change the executable path.",
+    "initialization": "The existing runner initializes tensor semantics and registers the momentum heads and compound index heads before parsing.",
+    "timing": "The printed step time measures simplify_algebra only. Parsing and admission are outside it. admission.json measures structural admission after text parsing. step-N.json is a separate instrumented reduction of the same input; observations and process caches may be warm. Startup and compilation are excluded.",
+    "outputs": "Exact unexpanded step-N.expr, phase timings step-N.json, admission.json, completion status and stable completed-rerun timing. Output files are deliberately not checked in."
+  },
+  "baseline": {
+    "source_revision": "fe9263cf65e5c67259e010ccf2d01f9378c29453",
+    "extension_sha256": "ccff4edd64869690c92eec7989d15e2bbc8418a671cf12856368383a23a0cb67",
+    "environment": {
+      "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "python": "Python 3.11.16",
+      "maturin": "maturin 1.15.0",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "profile": "release",
+      "features": [
+        "native"
+      ]
+    },
+    "dependencies": {
+      "workspace_lock_sha256": "4aad0685b232d95d793a80bfba81a1955bb5bb597f55d34d0d5236b0283e16ae",
+      "symbolica_host_lock_sha256": "1b1cabef68a1fb5e5ae5faf7dedf2c84f45c4ff44f37fdf3757ef7487c64fcf0",
+      "symbolica_manifest_sha256": "c59b1346d45dd71d4b5639ea170552f7fe85b4297939cd9af03a90e9393d1578"
+    },
+    "python": "3.11.16 (main, Aug 14 2026, 15:35:36) [Clang 22.1.3 ]",
+    "measurement": "One Python TensorExpression.simplify_algebra call on the admitted generated numerator, before formatting or materialization; unpinned shared host. time.perf_counter and process_time.",
+    "wall_seconds": 23.71081626508385,
+    "cpu_seconds": 23.50075595,
+    "status": "Complete",
+    "logical_port_order_preserved": true,
+    "input_atom_bytes": 3653,
+    "output_atom_bytes": 983124,
+    "output_canonical_sha256": "eb288302756a43a7f82d4fee58ebf916ebd5af64e68ee56780dab49ea3dc3b57",
+    "output_plain_sha256": "effc50ed272c25bc68c2167ccd499d2ce990c02eb4b115b130d0e7d4d75cd446",
+    "atom_size_note": "Atom byte size depends on process-local symbol IDs; use canonical or plain text hashes for expression identity.",
+    "process_peak_rss_kib": 2674820,
+    "rss_scope": "Process cumulative, including model generation and setup; not isolated reduction allocation."
+  },
+  "correctness": {
+    "native_regression_source": "crates/idenso/src/dirac/simplify/tests/contracted_trace.rs",
+    "native_regressions": [
+      "massive_routed_ladder_preserves_open_compound_ports_and_component_values",
+      "gamma_collection_consumes_incident_coefficients_once_and_keeps_spectators",
+      "repeated_weighted_routes_with_distinct_dummy_ports_preserve_components"
+    ],
+    "native_oracle": "Independent exact Clifford-blade products and the two-gamma trace identity; no global production numerator expansion.",
+    "full_fixture_oracle": {
+      "method": "NumPy einsum of finite original leaf components with explicit Weyl gamma and Gell-Mann matrices. Compare all 4x4x8x8 components against reduced metrics/vectors evaluated in four dimensions. No simplify_algebra on the oracle input.",
+      "baseline_points": [
+        {
+          "mass": 2,
+          "coordinates": "K=[(3,1,2,-1),(5,-2,1,3),(2,1,-3,2),(7,3,-1,4)], P=[(4,2,1,-2)]"
+        },
+        {
+          "mass": 3,
+          "numpy_default_rng_seed": 37
+        },
+        {
+          "mass": 1,
+          "numpy_default_rng_seed": 83
+        }
+      ],
+      "seeded_coordinates": "rng.integers(-3,5,size=(4,4)) for K, then size=(1,4) for P; coupling=1.",
+      "comparison": "External axes aligned by representation and exact index identity after raw-text re-admission; actual carrier port preservation checked separately.",
+      "local_audit_script": "/tmp/fermion-ladder-optimization/numpy-oracle.py",
+      "local_audit_script_sha256": "c10196e0f2c346e77f8e97ae0172b19efa3ac8832d9c81190f1da979d2ded58c",
+      "local_audit_note": "Local validation artifact, not required by the source-controlled native replay or regression tests.",
+      "error_measure": "max(abs(actual-expected)) / max(1, max(abs(expected))); every component also passes numpy.allclose with atol=1e-6 and rtol=1e-10."
+    }
+  },
+  "native_candidate_receipt": {
+    "capture_date": "2026-10-01",
+    "label": "spectator-proof-native",
+    "scope": "Native Rust release benchmark of the source-controlled full fixture; not a rebuilt Python extension measurement.",
+    "build_profile": "release",
+    "profile_override": {
+      "lto": false
+    },
+    "features": [
+      "native",
+      "reference-cases"
+    ],
+    "binary_sha256": "843cabec477f1ce6cc9a9162dc28f1ea43552f5dfbf5167b71f4b40648f7f5ce",
+    "settings": {
+      "gamma": true,
+      "color": true,
+      "epsilon": false,
+      "contract": "fully",
+      "max_steps_per_domain": null
+    },
+    "wall_seconds": 0.777609354,
+    "status": "Complete",
+    "completed_rerun_seconds": 0.001558124,
+    "completed_rerun_stable": true,
+    "output_atom_bytes": 23377307,
+    "output_text_bytes": 63632701,
+    "output_plain_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab",
+    "output_form": "Exact factorized tensor; no aliases. The expression is larger than the former distributed scalar coefficients. Neither arithmetic expansion nor materialization is included.",
+    "admission": {
+      "elapsed_ns": 2922398,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 2911758,
+          "outermost_ns": 2911758
+        },
+        "interface_discovery": {
+          "calls": 165,
+          "inclusive_ns": 4212197,
+          "outermost_ns": 2215556
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "planning": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "shallow_graph": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "dummy_reservation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 109,
+          "inclusive_ns": 133040,
+          "outermost_ns": 83730
+        },
+        "contraction_states": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "coefficient_merge": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction_emission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        }
+      }
+    },
+    "instrumented_reduction": {
+      "elapsed_ns": 718597746,
+      "clock": "same_thread_wall_nested_inclusive",
+      "phases": {
+        "admission": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "interface_discovery": {
+          "calls": 605,
+          "inclusive_ns": 6584869,
+          "outermost_ns": 2807562
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 14605,
+          "inclusive_ns": 82349702,
+          "outermost_ns": 82349702
+        },
+        "planning": {
+          "calls": 1,
+          "inclusive_ns": 718596846,
+          "outermost_ns": 718596846
+        },
+        "shallow_graph": {
+          "calls": 771,
+          "inclusive_ns": 50815976,
+          "outermost_ns": 50815976
+        },
+        "gamma_kernel": {
+          "calls": 1,
+          "inclusive_ns": 598079692,
+          "outermost_ns": 598079692
+        },
+        "color_kernel": {
+          "calls": 5,
+          "inclusive_ns": 13730037,
+          "outermost_ns": 13730037
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 455,
+          "inclusive_ns": 131272352,
+          "outermost_ns": 130094408
+        },
+        "dummy_reservation": {
+          "calls": 130,
+          "inclusive_ns": 2114902,
+          "outermost_ns": 2114902
+        },
+        "materialization": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "output_normalization": {
+          "calls": 1251,
+          "inclusive_ns": 94066697,
+          "outermost_ns": 94046339
+        },
+        "contraction_states": {
+          "calls": 564,
+          "inclusive_ns": 6261015,
+          "outermost_ns": 6261015
+        },
+        "coefficient_merge": {
+          "calls": 234,
+          "inclusive_ns": 168842,
+          "outermost_ns": 168842
+        },
+        "contraction_emission": {
+          "calls": 35,
+          "inclusive_ns": 449394,
+          "outermost_ns": 449394
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "simplify_algebra",
+          "status": "Complete"
+        }
+      ]
+    },
+    "phase_note": "Separate instrumented replay after the uninstrumented timed call; cached observations may be warm. Nested inclusive phase values overlap and must not be summed. Candidate-scan counters include regional observations, not only initial domain scans.",
+    "correctness": {
+      "candidate_output_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab",
+      "previously_validated_output_sha256": "07a2a503443675b48a5f65d283069f3a3c716c1456c33237c86e39a99fe780ab",
+      "byte_identical": true,
+      "exact_baseline_equality": {
+        "method": "(candidate - baseline).collect_factors().factor() == 0; no explicit expansion",
+        "passed": true,
+        "reused_audit": "exact-compare-bound-native.json",
+        "reused_audit_sha256": "79eaf66ca199de78dae67d25272f8c9b36a7ee1e763cfec7687b3adf36d54405"
+      },
+      "component_points": [
+        {
+          "label": "bound-native",
+          "seed": null,
+          "mass": 2,
+          "max_absolute_error": 7.275957614183426e-11,
+          "max_relative_error": 1.070677227418332e-15,
+          "component_count": 1024,
+          "passed": true,
+          "audit_sha256": "25c1f18758b4f3ceb4f5e5ce6279f32200072499b4e48059d8df80f9223368a0"
+        },
+        {
+          "label": "bound-native-seed37",
+          "seed": 37,
+          "mass": 3,
+          "max_absolute_error": 1.0186340659856796e-10,
+          "max_relative_error": 1.0381019376565308e-15,
+          "component_count": 1024,
+          "passed": true,
+          "audit_sha256": "cddeb346e064b706b762ce6059c5273a984aa596163ad3d81780ac1addf136f3"
+        },
+        {
+          "label": "bound-native-seed83",
+          "seed": 83,
+          "mass": 1,
+          "max_absolute_error": 5.4569682106375694e-12,
+          "max_relative_error": 9.397763852992362e-16,
+          "component_count": 1024,
+          "passed": true,
+          "audit_sha256": "c3ef6f3cc39680cf832110f50109d4fd0b0599a7b115fdf59bb0ca11b486ae5e"
+        }
+      ],
+      "reuse_note": "Reused exact and independent component certificates only after verifying byte-for-byte output SHA256 identity. No new numerical runs were needed."
+    },
+    "receipt_note": "This native receipt is distinct from the historical Python baseline above. Final installed-extension end-to-end timings are recorded separately when available."
+  },
+  "python_candidate_receipt": {
+    "extension_sha256": "cb8b768c669f1410bd8df995c4866eb073184edb538f40bfd43a484e8012cb53",
+    "wheel_sha256": "961ac48f08accb22afd5c307e04ba6b51d8d68178064ec70ce429631cb361d40",
+    "environment": {
+      "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "python": "Python 3.11.16",
+      "maturin": "maturin 1.15.0",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "profile": "release",
+      "features": [
+        "native"
+      ]
+    },
+    "dependencies": {
+      "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "be9b9e655871c7608600a3cce2029585cf9bbe7c424be279521947d36c23e1ba",
+      "/common/dev/symbolica-community/main/Cargo.lock": "4a92c34e0b0d32a106f4d450278077edfc7abc42b399f33e206b4cf7f1b4b8ae"
+    },
+    "input_canonical_sha256": "e92ce6158e1f0de931afc74e58e297814ec40cd61a277a7341a29af82412df2f",
+    "settings": {
+      "gamma": true,
+      "color": true,
+      "epsilon": false,
+      "contract": "fully",
+      "max_steps_per_domain": null
+    },
+    "protocol": "Three calls on the same admitted original full numerator; CPU and wall time exclude serialization, correctness checks, formatting and component materialization. No timed warmup or discarded first sample. Model initialized and saved input loaded outside the clock. Shared unpinned host.",
+    "samples": [
+      {
+        "seconds": 0.8489851537160575,
+        "cpu_seconds": 0.8415802450000001,
+        "rerun_seconds": 0.025761895813047886,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      },
+      {
+        "seconds": 0.7409763657487929,
+        "cpu_seconds": 0.7346239960000001,
+        "rerun_seconds": 0.0031678788363933563,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      },
+      {
+        "seconds": 0.6818963941186666,
+        "cpu_seconds": 0.6762216550000002,
+        "rerun_seconds": 0.009259893093258142,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      }
+    ],
+    "median_wall_seconds": 0.7409763657487929,
+    "admission_seconds": 0.0015053441748023033,
+    "output": {
+      "bytes": 24213378,
+      "slots": [
+        "mink(D,hedge(1,1))",
+        "mink(D,hedge(0,1))",
+        "coad(8,hedge(0,1))",
+        "coad(8,hedge(1,1))"
+      ],
+      "rank": 4,
+      "canonical_sha256": "aa8d2be931d38cc050cd73fb76c6ccc562d0ceb04116313abb97d7b6398bdfda",
+      "plain_sha256": "e0c49589cc1efe79255538ff34031f6b792676c6405acdff105dcae375d45c96"
+    },
+    "baseline_equivalence": {
+      "method": "(result-baseline).collect_factors().factor() == 0",
+      "passed": true,
+      "seconds": 3.694354732055217,
+      "explicit_expansion": false
+    },
+    "component_checks": [
+      {
+        "receipt": "/tmp/fermion-ladder-optimization/numpy-oracle-python-candidate.json",
+        "mass": 2,
+        "seed": null,
+        "components": 1024,
+        "maximum_absolute_error": 7.275957614183426e-11,
+        "maximum_relative_error": 1.070677227418332e-15,
+        "ordered_ports_preserved": true
+      },
+      {
+        "receipt": "/tmp/fermion-ladder-optimization/numpy-oracle-python-candidate-seed37.json",
+        "mass": 3,
+        "seed": 37,
+        "components": 1024,
+        "maximum_absolute_error": 1.0186340659856796e-10,
+        "maximum_relative_error": 1.0381019376565308e-15,
+        "ordered_ports_preserved": true
+      },
+      {
+        "receipt": "/tmp/fermion-ladder-optimization/numpy-oracle-python-candidate-seed83.json",
+        "mass": 1,
+        "seed": 83,
+        "components": 1024,
+        "maximum_absolute_error": 5.4569682106375694e-12,
+        "maximum_relative_error": 9.397763852992362e-16,
+        "ordered_ports_preserved": true
+      }
+    ],
+    "process_peak_rss_kib": 1131384,
+    "rss_scope": "Cumulative process, including correctness checks; baseline also includes diagram generation, so RSS values are not matched allocation measurements.",
+    "source_changes_during_build": [
+      "/common/dev/gammaloop/feynkit-rich-display/crates/spynso3/src/display/paging.rs",
+      "/common/dev/gammaloop/feynkit-rich-display/crates/spynso3/typst/paging.js",
+      "/common/dev/gammaloop/feynkit-rich-display/crates/spynso3/typst/paging.py",
+      "/common/dev/symbolica-lazy-formatting/src/api/python.rs"
+    ],
+    "source_note": "Reduction sources remained unchanged during this build. Concurrent display source changes triggered a subsequent extension refresh before installation.",
+    "local_build_receipt": "/tmp/fermion-ladder-optimization/first-build.json",
+    "local_build_receipt_sha256": "2a6d21e6b2d08d2d864665a3938b4a39ae957e14e6344c70cf1d02032d625573"
+  },
+  "saved_control_receipts": [
+    {
+      "case": "quark",
+      "core": "/tmp/fermion-ladder-optimization/python/symbolica/core.abi3.so",
+      "core_sha256": "cb8b768c669f1410bd8df995c4866eb073184edb538f40bfd43a484e8012cb53",
+      "input": "/tmp/alias-ladder/quark-matrix-20260930/original.bin",
+      "input_file_sha256": "4b1ec049431e4c0f2996303356129f5fc07a5f9cdc99de67ff770827798b8b62",
+      "input_plain_sha256": "63aa5a69fa6aa6214a1a63cb89d1b74bda78da41e7170f43903470d145ef1c19",
+      "input_bytes": 1616,
+      "input_ports": [],
+      "reference": "/tmp/plain-quark-plain-128.expr",
+      "reference_sha256": "ffc113d8376ffcd6bc3d393b6c56c97736e9d514cac7587940c46b8c949a417f",
+      "reference_terms": 525,
+      "settings": {
+        "gamma": true,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots"
+      },
+      "protocol": "Three simplify_algebra calls on the unchanged admitted saved input; no preliminary contraction, relabeling, or global arithmetic expansion. Checks and serialization outside timers. This is the older projected control workload, not the massive open-index target.",
+      "samples": [
+        {
+          "wall_seconds": 0.10929753072559834,
+          "cpu_seconds": 0.10862369499999996,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 1387316
+        },
+        {
+          "wall_seconds": 0.10511620016768575,
+          "cpu_seconds": 0.10449331099999992,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 1387316
+        },
+        {
+          "wall_seconds": 0.10608244268223643,
+          "cpu_seconds": 0.10543086700000004,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 1387316
+        }
+      ],
+      "exact_reference_check": {
+        "method": "(result-reference).collect_factors().factor() == 0",
+        "seconds": 0.274864146951586,
+        "passed": true
+      },
+      "completed_rerun": {
+        "wall_seconds": 0.00015074992552399635,
+        "cpu_seconds": 0.00014683999999998143,
+        "exact_same": true,
+        "ports_same": true,
+        "status": "ReductionStatus.Complete"
+      },
+      "median_wall_seconds": 0.10608244268223643,
+      "max_rss_kib": 288920
+    },
+    {
+      "case": "gluon",
+      "core": "/tmp/fermion-ladder-optimization/python/symbolica/core.abi3.so",
+      "core_sha256": "cb8b768c669f1410bd8df995c4866eb073184edb538f40bfd43a484e8012cb53",
+      "input": "/tmp/alias-ladder/production-gluon.bin",
+      "input_file_sha256": "8e7fbc9a69b89727b036e46308747877f2978fc6d4edbacc39bc2d0d2d45c130",
+      "input_plain_sha256": "00ade8fec1f556f083638e6a5f0b9b09c526602a418a6bffc7763ef8ff22bc30",
+      "input_bytes": 6960,
+      "input_ports": [],
+      "reference": "/tmp/plain-gluon-alias-expanded.bin",
+      "reference_sha256": "8acf8feee289b1776506064c3fddefdc5fe56e5270d48de7b09a4d31528390df",
+      "reference_terms": 6001,
+      "settings": {
+        "gamma": false,
+        "color": false,
+        "epsilon": false,
+        "contract": "dots"
+      },
+      "protocol": "Three simplify_algebra calls on the unchanged admitted saved input; no preliminary contraction, relabeling, or global arithmetic expansion. Checks and serialization outside timers. This is the older projected control workload, not the massive open-index target.",
+      "samples": [
+        {
+          "wall_seconds": 0.24704891489818692,
+          "cpu_seconds": 0.24553200899999994,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 951622
+        },
+        {
+          "wall_seconds": 0.24600414279848337,
+          "cpu_seconds": 0.24410793600000003,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 951622
+        },
+        {
+          "wall_seconds": 0.24033011822029948,
+          "cpu_seconds": 0.238559701,
+          "status": "ReductionStatus.Complete",
+          "output_atom_bytes": 951622
+        }
+      ],
+      "exact_reference_check": {
+        "method": "(result-reference).collect_factors().factor() == 0",
+        "seconds": 5.772474884986877,
+        "passed": true
+      },
+      "completed_rerun": {
+        "wall_seconds": 9.20998863875866e-05,
+        "cpu_seconds": 8.927000000014118e-05,
+        "exact_same": true,
+        "ports_same": true,
+        "status": "ReductionStatus.Complete"
+      },
+      "median_wall_seconds": 0.24600414279848337,
+      "max_rss_kib": 292000
+    }
+  ],
+  "installed_candidate_receipt": {
+    "core": "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so",
+    "core_sha256": "81ef213c607c842c89266b9e6ac620110d724b52629535d82bf33d2a6e6ec846",
+    "input": {
+      "slots": [
+        "mink(D,hedge(1,1))",
+        "mink(D,hedge(0,1))",
+        "coad(8,hedge(0,1))",
+        "coad(8,hedge(1,1))"
+      ],
+      "canonical_sha256": "e92ce6158e1f0de931afc74e58e297814ec40cd61a277a7341a29af82412df2f"
+    },
+    "admission_seconds": 0.0025215470232069492,
+    "settings": {
+      "gamma": true,
+      "color": true,
+      "epsilon": false,
+      "contract": "fully"
+    },
+    "samples": [
+      {
+        "seconds": 0.7979505588300526,
+        "cpu_seconds": 0.79134142,
+        "rerun_seconds": 0.015423380769789219,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      },
+      {
+        "seconds": 0.7687908411026001,
+        "cpu_seconds": 0.7623749980000001,
+        "rerun_seconds": 0.003064188174903393,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      },
+      {
+        "seconds": 0.8864199928939342,
+        "cpu_seconds": 0.8801047859999998,
+        "rerun_seconds": 0.017785267904400826,
+        "status": "ReductionStatus.Complete",
+        "stable_rerun": true,
+        "ordered_ports_preserved": true
+      }
+    ],
+    "output": {
+      "bytes": 24213378,
+      "slots": [
+        "mink(D,hedge(1,1))",
+        "mink(D,hedge(0,1))",
+        "coad(8,hedge(0,1))",
+        "coad(8,hedge(1,1))"
+      ],
+      "rank": 4,
+      "canonical_sha256": "aa8d2be931d38cc050cd73fb76c6ccc562d0ceb04116313abb97d7b6398bdfda",
+      "plain_sha256": "e0c49589cc1efe79255538ff34031f6b792676c6405acdff105dcae375d45c96"
+    },
+    "exact_comparison_seconds": 3.649362466763705,
+    "max_rss_kib": 1215148,
+    "loaded_binary_stable": true,
+    "median_wall_seconds": 0.7979505588300526,
+    "wheel_sha256": "e95133f6aab1cce72507d435e7e81e63cd5c64102dd7f430bd92e44a0547935b",
+    "environment": {
+      "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "python": "Python 3.11.16",
+      "maturin": "maturin 1.15.0",
+      "cpu": "AMD EPYC 9754 128-Core Processor",
+      "profile": "release",
+      "features": [
+        "native"
+      ]
+    },
+    "dependencies": {
+      "/common/dev/gammaloop/feynkit-rich-display/Cargo.lock": "be9b9e655871c7608600a3cce2029585cf9bbe7c424be279521947d36c23e1ba",
+      "/common/dev/symbolica-community/main/Cargo.lock": "4a92c34e0b0d32a106f4d450278077edfc7abc42b399f33e206b4cf7f1b4b8ae"
+    },
+    "source_changes_during_build": [
+      "/common/dev/gammaloop/feynkit-rich-display/crates/spynso3/src/display/paging.rs"
+    ],
+    "local_build_receipt": "/tmp/fermion-ladder-optimization/build.json",
+    "local_build_receipt_sha256": "92d13483438783b6aae4aceed8c1980ea176f30fbecdc3081766e632092f2890",
+    "exact_baseline_equivalence": true,
+    "independent_component_certificate": "Exact plain and canonical output hashes match the separately checked first Python candidate at all three points. Actual ordered carrier ports are checked again.",
+    "installed_targets": [
+      "/common/dev/symbolica-community/main/python/symbolica/core.abi3.so",
+      "/common/dev/symbolica-community/main/.venv-feynkit/lib/python3.11/site-packages/symbolica/core.abi3.so"
+    ],
+    "stub_sha256": "9786e8e9d433a5b38192581df10828ad7f4493f7ebf1f38cf2649aa903a20b70",
+    "server_restart": [
+      {
+        "port": "2726",
+        "source": "examples/hep_showcase.py",
+        "previous_pid": 3646318,
+        "pid": 3849708,
+        "log": "/tmp/fermion-ladder-optimization/notebook-server-2726.log",
+        "http_status": 200
+      },
+      {
+        "port": "2727",
+        "source": "examples/",
+        "previous_pid": 3646333,
+        "pid": 3850040,
+        "log": "/tmp/fermion-ladder-optimization/notebook-server-2727.log",
+        "http_status": 200
+      }
+    ]
+  },
+  "validation": {
+    "idenso_release_tests": {
+      "passed": 844,
+      "ignored": 22,
+      "excluded_baseline_failure": "tensor::tests::parsing::infinite_execution",
+      "run_id": "4462903f-6af2-474e-a303-7b8a52fda931"
+    },
+    "installed_python_tests": {
+      "passed": 82,
+      "suites": [
+        {
+          "test": "installed_api_operations",
+          "exit_code": 0,
+          "seconds": 1.5182654890231788,
+          "log": "/tmp/fermion-ladder-optimization/installed_api_operations.log"
+        },
+        {
+          "test": "installed_typed_surface",
+          "exit_code": 0,
+          "seconds": 0.16510587790980935,
+          "log": "/tmp/fermion-ladder-optimization/installed_typed_surface.log"
+        },
+        {
+          "test": "installed_subclass_components",
+          "exit_code": 0,
+          "seconds": 0.06495495326817036,
+          "log": "/tmp/fermion-ladder-optimization/installed_subclass_components.log"
+        },
+        {
+          "test": "installed_open_port_display",
+          "exit_code": 0,
+          "seconds": 0.8662219792604446,
+          "log": "/tmp/fermion-ladder-optimization/installed_open_port_display.log"
+        },
+        {
+          "test": "installed_tensor_print",
+          "exit_code": 0,
+          "seconds": 0.41506501100957394,
+          "log": "/tmp/fermion-ladder-optimization/installed_tensor_print.log"
+        },
+        {
+          "test": "installed_api_contract",
+          "exit_code": 0,
+          "seconds": 0.21468367893248796,
+          "log": "/tmp/fermion-ladder-optimization/installed_api_contract.log"
+        },
+        {
+          "test": "installed_api_invariants",
+          "exit_code": 0,
+          "seconds": 0.6655703163705766,
+          "log": "/tmp/fermion-ladder-optimization/installed_api_invariants.log"
+        },
+        {
+          "test": "installed_api_surface",
+          "exit_code": 0,
+          "seconds": 1.9686508746817708,
+          "log": "/tmp/fermion-ladder-optimization/installed_api_surface.log"
+        },
+        {
+          "test": "installed_documentation",
+          "exit_code": 0,
+          "seconds": 8.83511196821928,
+          "log": "/tmp/fermion-ladder-optimization/installed_documentation.log"
+        }
+      ]
+    },
+    "idenso_clippy": "pass: --lib --tests --no-deps -- -D warnings",
+    "rustfmt": "pass for modified optimization and binding documentation sources",
+    "generated_stubs": "canonical, bundled, source-host and installed-venv copies synchronized; runtime API and documentation consistency pass",
+    "report_typst_compilation": "pass",
+    "repository_docs_gate": "Blocked by pre-existing gammaloop-architecture attestation mismatch for crates/gammaloop-api/src/python.rs (b3398b339c6f52399406f3882ec4b9b67343a22d versus 46d2cf2c0e2ea99234caa6d07050640d66f0cfa1).",
+    "new_form_comparison": false
+  }
+}

@@ -101,20 +101,34 @@ impl<'src> ContractionScope<'src> {
             .iter_preorder_tree_nodes(&network.graph.graph, root)
             .collect::<Vec<_>>();
         let external: SuBitGraph = network.graph.graph.external_filter();
-        let mut ports = AHashMap::new();
-        for &node in &nodes {
-            let members = tree
-                .iter_preorder_tree_nodes(&network.graph.graph, node)
-                .collect::<std::collections::BTreeSet<_>>();
+        // Preorder makes each arithmetic subtree a contiguous interval. Reuse
+        // those intervals for every boundary instead of allocating a descendant
+        // set and traversing the same tree for each node.
+        let positions = nodes
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(position, node)| (node, position))
+            .collect::<AHashMap<_, _>>();
+        let mut ends = (1..=nodes.len()).collect::<Vec<_>>();
+        for (position, &node) in nodes.iter().enumerate().rev() {
+            for child in tree.iter_children(node, &network.graph.graph) {
+                ends[position] = ends[position].max(ends[positions[&child]]);
+            }
+        }
+        let mut ports = AHashMap::with_capacity(nodes.len());
+        for (begin, &node) in nodes.iter().enumerate() {
+            let end = ends[begin];
             let mut boundary = Vec::new();
-            for &member in &members {
+            for &member in &nodes[begin..end] {
                 for hedge in network.graph.graph.iter_crown(member) {
                     let NetworkEdge::Slot(slot) = network.graph.graph[[&hedge]] else {
                         continue;
                     };
                     if !external.includes(&hedge)
-                        && members
-                            .contains(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                        && positions
+                            .get(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                            .is_some_and(|&other| begin <= other && other < end)
                     {
                         continue;
                     }
@@ -808,6 +822,57 @@ impl SlotContraction {
         Some(planned)
     }
 
+    /// Compile selected, admitted arithmetic on the existing contraction tape.
+    /// The outer shallow graph already supplied topology and factor order.
+    /// Selected sums and products use the same tape as their parsed graph;
+    /// indexed powers and transparent brackets retain the scoped graph path.
+    fn compile_arithmetic<'a>(
+        &self,
+        value: AtomView<'a>,
+        tape: &mut TermTape<InputLeaf<'a>>,
+        sum: &mut ComponentSum<'a, '_>,
+    ) -> Option<(usize, (usize, usize))> {
+        if let AtomView::Num(number) = value {
+            return if let Ok(coefficient) = Rational::try_from(value) {
+                tape.number(InputLeaf::Atom(value), coefficient)
+            } else if matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            ) {
+                tape.leaf(InputLeaf::Scalar(value))
+            } else {
+                None
+            };
+        }
+        if self
+            .observations
+            .as_ref()
+            .and_then(|observed| observed.region(value))
+            .is_some_and(|region| region.certifies_scalar_interface_syntax())
+        {
+            sum.scalar_interfaces.insert(value, true);
+            return tape.leaf(InputLeaf::Scalar(value));
+        }
+        match value {
+            AtomView::Add(add) => {
+                let children = add
+                    .iter()
+                    .map(|child| self.compile_arithmetic(child, tape, sum))
+                    .collect::<Option<Vec<_>>>()?;
+                tape.group(children.into_iter(), true)
+            }
+            AtomView::Mul(product) => {
+                let children = product
+                    .iter()
+                    .map(|child| self.compile_arithmetic(child, tape, sum))
+                    .collect::<Option<Vec<_>>>()?;
+                tape.group(children.into_iter(), false)
+            }
+            AtomView::Pow(_) => None,
+            _ => tape.leaf(InputLeaf::Atom(value)),
+        }
+    }
+
     fn compile_scope<'a>(
         &self,
         scope: &'a ContractionScope<'_>,
@@ -864,6 +929,15 @@ impl SlotContraction {
                     AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
                 ) || matches!(literal, AtomView::Fun(function) if function.get_symbol() == self.tags.bracket) {
                     if scope.contains_work(node, self) {
+                        if self.expand
+                            && matches!(literal, AtomView::Add(_) | AtomView::Mul(_))
+                            && self.observations.as_ref()
+                                .and_then(|observed| observed.region(literal))
+                                .is_some_and(|region| !region.has_indexed_powers() && region.counts[7] == 0)
+                        {
+                            let (node, size) = self.compile_arithmetic(literal, tape, sum)?;
+                            return Some(TermLeaf::Reference(node, size));
+                        }
                         let opened = scope.open(node)?;
                         if !self.expand && sum.exposed_sum != Some((scope as *const _ as usize, node)) && self.tensor_alternatives(literal) {
                             // Reduce this existing scope independently; its
@@ -1979,6 +2053,128 @@ mod lazy_tests {
             assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
             assert!(scope.opened.values().all(|entry| entry.get().is_none()));
         }
+    }
+
+    #[test]
+    fn selected_arithmetic_reuses_admission_without_nested_graphs() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let scalar = Atom::add_many(
+            (0..512).map(|i| Atom::var(symbolica::symbol!(&format!("selected_tape::s{i}")))),
+        );
+        let source = (&scalar * input("p(mink(4,a))") + input("q(mink(4,a))"))
+            * input("t(mink(4,a),mink(4,b))");
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root,
+            &scalar * input("t(p(mink(4)),mink(4,b))") + input("t(q(mink(4)),mink(4,b))")
+        );
+        assert!(
+            scope.opened.values().all(|entry| entry.get().is_none()),
+            "admitted arithmetic needs a tape traversal, not new port graphs"
+        );
+    }
+
+    #[test]
+    fn direct_selected_arithmetic_keeps_independent_dummy_scopes() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "(p(mink(4,a))*q(mink(4,a))*r(mink(4,b))+s(mink(4,b)))*(p(mink(4,a))*q(mink(4,a))*t(mink(4,b),mink(4,c))+u(mink(4,b),mink(4,c)))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        let dot = input("g(p(mink(4)),q(mink(4)))");
+        let expected = dot.pow(2) * input("t(r(mink(4)),mink(4,c))")
+            + &dot * input("t(s(mink(4)),mink(4,c))")
+            + &dot * input("u(r(mink(4)),mink(4,c))")
+            + input("u(s(mink(4)),mink(4,c))");
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(result.root.expand(), expected.expand());
+        assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+    }
+
+    #[test]
+    fn scalar_powers_in_selected_sums_do_not_rebuild_graphs() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "(m^4*p(mink(4,a))+m^2*g(q(mink(4)),s(mink(4)))^2*r(mink(4,a)))*t(mink(4,a),mink(4,b))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root,
+            input(
+                "m^4*t(p(mink(4)),mink(4,b))+m^2*g(q(mink(4)),s(mink(4)))^2*t(r(mink(4)),mink(4,b))",
+            )
+        );
+        assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+    }
+
+    #[test]
+    fn compact_tensor_sums_do_not_enter_the_scalar_coefficient_tape() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input("p(mink(4))+q(mink(4))");
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        assert_eq!(tensor.structure.logical_slots().len(), 1);
+        let contractor = setup.observed(tensor.reduction_observations());
+        let mut slots = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+        let mut tape = TermTape::default();
+        contractor
+            .compile_arithmetic(source.as_view(), &mut tape, &mut sum)
+            .unwrap();
+        // The rank-one alternatives keep their tensor ports. Zero written
+        // indices does not establish the scalar interface required by a
+        // coefficient, even before unresolved ports have been materialized.
+        assert!(sum.scalar_interfaces.is_empty());
+        assert_eq!(tape.leaves().len(), 2);
+        assert!(
+            tape.leaves()
+                .iter()
+                .all(|leaf| matches!(leaf, InputLeaf::Atom(_)))
+        );
+    }
+
+    #[test]
+    fn indexed_powers_in_selected_sums_keep_the_scoped_graph() {
+        let setup = super::super::tests::setup();
+        let input = super::super::tests::input;
+        let source = input(
+            "((p(mink(4,a))*q(mink(4,a))+x)^2*r(mink(4,b))+s(mink(4,b)))*t(mink(4,b),mink(4,c))",
+        );
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let contractor = setup.observed(tensor.reduction_observations());
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert_eq!(result.status, ReductionStatus::Complete);
+        assert_eq!(
+            result.root.expand(),
+            input(
+                "(g(p(mink(4)),q(mink(4)))+x)^2*t(r(mink(4)),mink(4,c))+t(s(mink(4)),mink(4,c))",
+            )
+            .expand()
+        );
+        assert!(scope.opened.values().any(|entry| entry.get().is_some()));
     }
 
     #[test]

@@ -13,6 +13,11 @@ use symbolica::atom::AtomView;
 pub(crate) mod observation;
 use observation::{DomainObservations, SettledRegions};
 
+#[cfg(test)]
+thread_local! {
+    static IDENTITY_KERNEL_CALLS: std::cell::Cell<[usize; 3]> = const { std::cell::Cell::new([0; 3]) };
+}
+
 /// Completion is relative to the requested capabilities and output forms.
 /// A deferred or capped result retains the exact expression.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -308,8 +313,10 @@ impl SymbolicTensor<PartialStructure> {
                     let counts = &plan.observed.candidates.counts;
                     match *operation {
                         STRUCTURE => usize::MAX - 1,
-                        GAMMA => 1 + counts[8..17].iter().sum::<usize>(),
-                        COLOR => 2 + counts[1..4].iter().sum::<usize>(),
+                        GAMMA => (1 + counts[8..17].iter().sum::<usize>())
+                            .saturating_mul(plan.observed.identity_branch_cost(GAMMA)),
+                        COLOR => (2 + counts[1..4].iter().sum::<usize>())
+                            .saturating_mul(plan.observed.identity_branch_cost(COLOR)),
                         DOTS => usize::MAX,
                         _ => 8 + counts[4].saturating_mul(counts[4]),
                     }
@@ -360,13 +367,24 @@ impl SymbolicTensor<PartialStructure> {
                         {
                             (prerequisites.root, prerequisites.status)
                         } else {
+                            #[cfg(test)]
+                            IDENTITY_KERNEL_CALLS.with(|calls| {
+                                let mut counts = calls.get();
+                                counts[match operation {
+                                    GAMMA => 0,
+                                    COLOR => 1,
+                                    EPSILON => 2,
+                                    _ => unreachable!(),
+                                }] += 1;
+                                calls.set(counts);
+                            });
                             let value = match operation {
                                 GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), plan.settled.entry(GAMMA).or_default(), settings.max_passes.map(|limit| limit.saturating_sub(plan.changes)))?,
                                 COLOR => before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
                                 EPSILON if observed.epsilon_degree < 2 => before.clone(),
                                 EPSILON => before.collect_with_map(None,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
-                                    |selected, complete| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
+                                    |selected, complete, _| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
                                         let expression = EpsilonSimplifierPass::step(selected.expression.as_view());
                                         let rewritten = selected.with_identity_result(expression, None)?;
                                         if rewritten == selected { return Ok(rewritten); }
@@ -389,10 +407,24 @@ impl SymbolicTensor<PartialStructure> {
             }
             if value != before {
                 value.observe_replacement(&before);
-                plan.observed = Arc::clone(value.reduction_observations());
+                let observed = Arc::clone(value.reduction_observations());
+                let dirty = if std::mem::discriminant(&before.expression.as_view())
+                    == std::mem::discriminant(&value.expression.as_view())
+                    && before.normalization_is_intrinsic()
+                    && value.normalization_is_intrinsic()
+                {
+                    observed.changed_identity_families(&plan.observed)
+                } else {
+                    None
+                };
+                plan.observed = observed;
                 plan.value = value;
                 plan.changes += 1;
-                plan.pending = enabled;
+                // Preserve work not yet visited. A disjoint intrinsic rewrite
+                // does not unset another family's settled inputs; structural
+                // output and newly affected identities still need consideration.
+                plan.pending |=
+                    enabled & dirty.map_or(enabled, |families| STRUCTURE | DOTS | families);
             }
             if operation_status == ReductionStatus::Deferred {
                 plan.deferred |= operation;

@@ -15,12 +15,12 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, RepName},
-        slot::{SlotMatch, SlotMatcher},
+        slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
 };
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, RwLock},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
@@ -61,9 +61,11 @@ thread_local! {
     pub(crate) static REPLACEMENT_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static REUSED_KERNEL_REGIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static REUSED_REGIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static OBSERVED_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static REUSED_SCOPES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RegionObservation {
     pub(crate) counts: [usize; HEAD_COUNT],
     pub(crate) representations: HashSet<LibraryRep>,
@@ -71,12 +73,14 @@ pub(crate) struct RegionObservation {
     // mentioning a representation in a vector or scalar dot is insufficient.
     chain_channels: HashSet<LibraryRep>,
     pub(crate) leaves: HashSet<Atom>,
+    leaf_inventory_complete: bool,
     reserved_indices: HashSet<AbstractIndex>,
     indices: usize,
     max_indices: usize,
     metric_sources: HashSet<LibraryRep>,
     vector_sources: HashSet<LibraryRep>,
-    powered: bool,
+    indexed_power: bool,
+    scalar_interface: bool,
     epsilon_degree: u8,
     intrinsic: bool,
     opaque: bool,
@@ -90,12 +94,14 @@ impl Default for RegionObservation {
             representations: HashSet::new(),
             chain_channels: HashSet::new(),
             leaves: HashSet::new(),
+            leaf_inventory_complete: true,
             reserved_indices: HashSet::new(),
             indices: 0,
             max_indices: 0,
             metric_sources: HashSet::new(),
             vector_sources: HashSet::new(),
-            powered: false,
+            indexed_power: false,
+            scalar_interface: true,
             epsilon_degree: 0,
             intrinsic: true,
             opaque: false,
@@ -105,6 +111,10 @@ impl Default for RegionObservation {
 }
 
 impl RegionObservation {
+    pub(crate) fn leaves(&self) -> Option<&HashSet<Atom>> {
+        self.leaf_inventory_complete.then_some(&self.leaves)
+    }
+
     pub(crate) fn has_chain_channel(&self, representation: LibraryRep) -> bool {
         self.chain_channels.contains(&representation.base())
     }
@@ -124,14 +134,33 @@ impl RegionObservation {
     }
 
     fn observe(&mut self, node: AtomView<'_>, slot: &SlotMatch<'_>, slots: &mut SlotMatcher) {
+        #[cfg(test)]
+        OBSERVED_NODES.with(|count| count.set(count.get() + 1));
         match node {
             AtomView::Var(variable) => {
-                self.head(variable.get_symbol());
+                let head = variable.get_symbol();
+                self.head(head);
+                self.scalar_interface &=
+                    !head.has_tag(&SPENSO_TAG.tensor) && !head.has_tag(&SPENSO_TAG.representation);
             }
             AtomView::Fun(function) => {
                 let head = function.get_symbol();
                 self.head(head);
-                self.epsilon_degree = u8::from(head == *crate::epsilon::EPSILON_SYMBOL);
+                self.scalar_interface &= head.is_scalar()
+                    || !(head.has_tag(&SPENSO_TAG.tensor)
+                        || head.has_tag(&SPENSO_TAG.rank1)
+                        || head.has_tag(&SPENSO_TAG.representation)
+                        || [
+                            SPENSO_TAG.chain,
+                            SPENSO_TAG.trace,
+                            SPENSO_TAG.bracket,
+                            SPENSO_TAG.dot,
+                            ETS.metric,
+                        ]
+                        .contains(&head));
+                self.epsilon_degree = (self.epsilon_degree
+                    + u8::from(head == *crate::epsilon::EPSILON_SYMBOL))
+                .min(2);
                 // Reuse these observed function boundaries for arbitrary
                 // collector predicates as well as built-in identity heads.
                 // Opaque slot metadata remains outside this traversal.
@@ -231,7 +260,6 @@ impl RegionObservation {
                 }
             }
             AtomView::Pow(power) => {
-                self.powered = true;
                 self.dots |= matches!(power.get_base(), AtomView::Fun(base) if base.get_symbol() == ETS.metric);
             }
             _ => {}
@@ -270,6 +298,7 @@ impl RegionObservation {
         self.chain_channels
             .extend(other.chain_channels.iter().copied());
         self.leaves.extend(other.leaves.iter().cloned());
+        self.leaf_inventory_complete &= other.leaf_inventory_complete;
         self.reserved_indices
             .extend(other.reserved_indices.iter().copied());
         self.indices += other.indices;
@@ -278,7 +307,8 @@ impl RegionObservation {
             .extend(other.metric_sources.iter().copied());
         self.vector_sources
             .extend(other.vector_sources.iter().copied());
-        self.powered |= other.powered;
+        self.indexed_power |= other.indexed_power;
+        self.scalar_interface &= other.scalar_interface;
         self.epsilon_degree = (self.epsilon_degree + other.epsilon_degree).min(2);
         self.intrinsic &= other.intrinsic;
         self.opaque |= other.opaque;
@@ -289,17 +319,25 @@ impl RegionObservation {
         self.indices > 0
     }
 
+    pub(crate) fn has_indexed_powers(&self) -> bool {
+        self.indexed_power
+    }
+
     pub(crate) fn structural_work(&self) -> bool {
         self.indices > 0 || self.dots || self.counts[7] > 0 || self.counts[17] > 0
     }
 
-    fn certifies_scalar_syntax(&self) -> bool {
+    pub(crate) fn certifies_scalar_interface_syntax(&self) -> bool {
         self.intrinsic
             && !self.opaque
-            && self.identity_candidates() == 0
+            && self.scalar_interface
             && self.counts[5..8].iter().all(|&count| count == 0)
             && !self.has_indices()
             && self.reserved_indices.is_empty()
+    }
+
+    fn certifies_scalar_syntax(&self) -> bool {
+        self.certifies_scalar_interface_syntax() && self.identity_candidates() == 0
     }
 }
 
@@ -307,10 +345,18 @@ impl RegionObservation {
 pub(crate) struct DomainObservations {
     pub(crate) candidates: SimplificationCandidates<HEAD_COUNT>,
     regions: HashMap<Atom, Arc<RegionObservation>>,
-    scopes: HashMap<Atom, Arc<RegionObservation>>,
-    // A producer can establish scalar closure without collecting syntactic
+    // Exact syntax facts survive replacements independently of live candidate
+    // multiplicities. Share this memo instead of cloning every unchanged scope.
+    scopes: Arc<RwLock<HashMap<Atom, Arc<RegionObservation>>>>,
+    // A producer can establish terminal polynomial form without collecting syntactic
     // regions. Missing regions remain unknown to arbitrary collector predicates.
-    scalar_form: Option<ScalarPolynomialForm>,
+    polynomial_form: Option<TerminalPolynomialForm>,
+    // Candidate eligibility can be complete even when a kernel certified a
+    // terminal region without enumerating its syntactic leaves.
+    identity_inventory_complete: bool,
+    // The admitted interface accounts for every explicit incidence. Unlike
+    // terminal polynomial form, this says nothing about remaining identities.
+    excludes_internal_connections: bool,
     pub(crate) representations: HashSet<LibraryRep>,
     pub(crate) epsilon_degree: u8,
     max_indices: usize,
@@ -318,7 +364,7 @@ pub(crate) struct DomainObservations {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum ScalarPolynomialForm {
+enum TerminalPolynomialForm {
     Metrics,
     Dots,
 }
@@ -327,7 +373,7 @@ impl DomainObservations {
     /// The regional inventory was collected with the initial candidate walk or
     /// replacement observation. Unknown producer facts must remain conservative.
     pub(crate) fn has_chain_channel(&self, representation: LibraryRep) -> bool {
-        !self.is_closed_scalar()
+        !self.is_terminal_polynomial()
             && (!self.candidates.traversal_complete
                 || self
                     .regions
@@ -338,6 +384,29 @@ impl DomainObservations {
     /// Certify intrinsic scalar syntax with no local identity or contraction work.
     /// The producer owns this proof, including its compact vector metadata.
     pub(crate) fn closed_scalar(needs_dots: bool) -> Self {
+        Self::terminal_polynomial(&PartialStructure::from_logical_slots([]), needs_dots)
+    }
+
+    /// A kernel has removed all internal connections and identity candidates.
+    /// The remaining free ports are still needed for subsequent composition and
+    /// dummy reservation. This proof cannot be propagated through a composition
+    /// that connects those ports, or through an uncontrolled rewrite.
+    ///
+    /// Unlike an initial observation, this does not claim a complete syntactic
+    /// inventory. Arbitrary collector predicates must inspect unknown regions.
+    pub(crate) fn terminal_polynomial(structure: &PartialStructure, needs_dots: bool) -> Self {
+        let slots = structure.logical_slots();
+        let reserved_indices = slots
+            .iter()
+            .filter_map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => Some(index),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+        let max_indices = slots
+            .iter()
+            .filter(|slot| matches!(slot.aind, PartialIndex::Explicit(_)))
+            .count();
         Self {
             candidates: SimplificationCandidates {
                 repeated_indices: false,
@@ -350,27 +419,133 @@ impl DomainObservations {
                 intrinsic: true,
             },
             regions: HashMap::new(),
-            scopes: HashMap::new(),
-            scalar_form: Some(if needs_dots {
-                ScalarPolynomialForm::Metrics
+            scopes: Arc::default(),
+            polynomial_form: Some(if needs_dots {
+                TerminalPolynomialForm::Metrics
             } else {
-                ScalarPolynomialForm::Dots
+                TerminalPolynomialForm::Dots
             }),
-            representations: HashSet::new(),
+            identity_inventory_complete: true,
+            excludes_internal_connections: true,
+            representations: slots.iter().map(IsAbstractSlot::rep_name).collect(),
             epsilon_degree: 0,
-            max_indices: 0,
-            reserved_indices: HashSet::new(),
+            max_indices,
+            reserved_indices,
         }
     }
 
+    pub(crate) fn is_terminal_polynomial(&self) -> bool {
+        self.polynomial_form.is_some()
+    }
+
+    fn terminal_region(&self) -> Arc<RegionObservation> {
+        debug_assert!(self.is_terminal_polynomial());
+        Arc::new(RegionObservation {
+            representations: self.representations.clone(),
+            reserved_indices: self.reserved_indices.clone(),
+            indices: self.max_indices,
+            max_indices: self.max_indices,
+            // Free polynomial ports can acquire partners during composition.
+            // The producer excludes internal connections, not those new paths.
+            metric_sources: self.representations.clone(),
+            vector_sources: self.representations.clone(),
+            scalar_interface: self.is_closed_scalar(),
+            dots: self.needs_dot_normalization(),
+            leaf_inventory_complete: false,
+            ..Default::default()
+        })
+    }
+
+    /// Retain a produced terminal region beside exactly observed spectators.
+    /// Normalization must preserve its opaque boundary; newly merged factors
+    /// decline this shortcut. Arbitrary predicates still inspect the terminal
+    /// region because its leaf inventory has deliberately not been collected.
+    pub(crate) fn compose_terminal_product(
+        expression: AtomView<'_>,
+        structure: &PartialStructure,
+        terminal_expression: AtomView<'_>,
+        terminal: &Self,
+        spectators: &[SymbolicTensor<PartialStructure>],
+    ) -> Option<Self> {
+        if !terminal.is_terminal_polynomial()
+            || spectators
+                .iter()
+                .any(|value| !value.normalization_is_intrinsic())
+        {
+            return None;
+        }
+        let observed = spectators
+            .iter()
+            .map(|value| (value.expression.as_view(), value.reduction_observations()))
+            .collect::<Vec<_>>();
+        let factors = match expression {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            _ => vec![expression],
+        };
+        let mut regions = HashMap::new();
+        let mut retained = false;
+        for factor in factors {
+            let region = if factor == terminal_expression {
+                retained = true;
+                terminal.terminal_region()
+            } else {
+                observed.iter().find_map(|(body, facts)| {
+                    facts.region(factor).or_else(|| {
+                        (factor == *body && facts.is_terminal_polynomial())
+                            .then(|| facts.terminal_region())
+                    })
+                })?
+            };
+            regions.insert(factor.to_owned(), region);
+        }
+        if !retained {
+            return None;
+        }
+        let counts = std::array::from_fn(|i| regions.values().map(|region| region.counts[i]).sum());
+        let candidates = SimplificationCandidates {
+            repeated_indices: regions.values().map(|region| region.indices).sum::<usize>() > 1,
+            brackets: counts[7] > 0,
+            dots: regions.values().any(|region| region.dots),
+            symbols: counts.map(|count| count > 0),
+            counts,
+            complete: false,
+            traversal_complete: false,
+            intrinsic: true,
+        };
+        let mut result = Self::from_regions(candidates, regions, Arc::default(), false);
+        result.identity_inventory_complete = terminal.identity_inventory_complete
+            && observed
+                .iter()
+                .all(|(_, facts)| facts.identity_inventory_complete);
+        // The collector has established the combined logical interface. A rank
+        // drop signals new cross-boundary connections and invalidates closure.
+        let ports = terminal.max_indices
+            + spectators
+                .iter()
+                .map(|value| value.structure.logical_slots().len())
+                .sum::<usize>();
+        result.excludes_internal_connections = ports == structure.logical_slots().len()
+            && observed
+                .iter()
+                .all(|(_, facts)| facts.excludes_internal_connections());
+        if result.excludes_internal_connections {
+            result.candidates.repeated_indices = false;
+        }
+        Some(result)
+    }
+
+    pub(crate) fn excludes_internal_connections(&self) -> bool {
+        self.excludes_internal_connections
+    }
+
     pub(crate) fn is_closed_scalar(&self) -> bool {
-        self.scalar_form.is_some()
+        self.is_terminal_polynomial() && self.representations.is_empty()
     }
 
     pub(crate) fn needs_dot_normalization(&self) -> bool {
-        match self.scalar_form {
-            Some(ScalarPolynomialForm::Metrics) => true,
-            Some(ScalarPolynomialForm::Dots) => false,
+        match self.polynomial_form {
+            Some(TerminalPolynomialForm::Metrics) => true,
+            Some(TerminalPolynomialForm::Dots) => false,
             None => self.candidates.dots || self.candidates.symbols[17],
         }
     }
@@ -410,36 +585,71 @@ impl DomainObservations {
         INITIAL_SCANS.with(|count| count.set(count.get() + 1));
         #[cfg(test)]
         INITIAL_DOMAINS.with(|domains| domains.borrow_mut().push(expression.to_owned()));
-        Self::scan_regions(expression)
+        Self::scan_regions(expression, None)
     }
 
-    fn scan_regions(expression: AtomView<'_>) -> Self {
+    fn is_scope(value: AtomView<'_>) -> bool {
+        matches!(
+            value,
+            AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+        ) || matches!(value, AtomView::Fun(function)
+            if function.get_symbol().is_scalar()
+                || [SPENSO_TAG.bracket, SPENSO_TAG.scalar, SPENSO_TAG.pure_scalar, SPENSO_TAG.dot, ETS.metric]
+                    .contains(&function.get_symbol()))
+    }
+
+    fn scan_regions(
+        expression: AtomView<'_>,
+        cached: Option<&HashMap<Atom, Arc<RegionObservation>>>,
+    ) -> Self {
         let wanted = Self::regions(expression)
             .into_iter()
-            .map(|region| region.to_owned())
+            .map(|region| region.get_data().as_ptr() as usize)
             .collect::<HashSet<_>>();
         let mut regions = HashMap::new();
         let mut slots = SlotMatcher::default();
         let mut scopes = HashMap::new();
-        let mut stack = Vec::<(usize, usize, Atom, RegionObservation)>::new();
+        let mut stack = Vec::<(usize, usize, Atom, Arc<RegionObservation>)>::new();
+        let mut reused = None::<(usize, usize)>;
         let candidates = SimplificationCandidates::scan_observing(
             expression,
             *DOMAIN_HEADS,
             || true,
             |node, slot| {
                 // Contiguous subtree bytes provide exit events during the same
-                // traversal. The stack retains no full arithmetic tree.
+                // traversal. Only retained scopes need aggregate frames; ordinary
+                // function arguments and slot metadata update their owner directly.
                 let begin = node.get_data().as_ptr() as usize;
                 let end = begin + node.get_data().len();
+                if reused.is_some_and(|(start, stop)| begin >= start && end <= stop) {
+                    return;
+                }
+                reused = None;
                 while stack
                     .last()
                     .is_some_and(|(start, stop, _, _)| begin < *start || end > *stop)
                 {
                     Self::finish_observation(&mut stack, &wanted, &mut regions, &mut scopes);
                 }
-                let mut observation = RegionObservation::default();
-                observation.observe(node, slot, &mut slots);
-                stack.push((begin, end, node.to_owned(), observation));
+                // Each additive branch needs a separate maximum for incidence
+                // and epsilon degree, including branches that are simple leaves.
+                let retain = stack.is_empty()
+                    || wanted.contains(&begin)
+                    || Self::is_scope(node)
+                    || stack.last().is_some_and(|(_, _, parent, _)| {
+                        matches!(parent.as_view(), AtomView::Add(_))
+                    });
+                if retain {
+                    if let Some(observation) = cached.and_then(|cache| cache.get(node.get_data())) {
+                        #[cfg(test)]
+                        REUSED_SCOPES.with(|count| count.set(count.get() + 1));
+                        stack.push((begin, end, node.to_owned(), Arc::clone(observation)));
+                        reused = Some((begin, end));
+                        return;
+                    }
+                    stack.push((begin, end, node.to_owned(), Arc::default()));
+                }
+                Arc::make_mut(&mut stack.last_mut().unwrap().3).observe(node, slot, &mut slots);
             },
         );
         while !stack.is_empty() {
@@ -448,24 +658,57 @@ impl DomainObservations {
         Self::from_regions(
             candidates,
             regions,
-            scopes,
+            Arc::new(RwLock::new(scopes)),
             matches!(expression, AtomView::Add(_)),
         )
     }
 
     fn finish_observation(
-        stack: &mut Vec<(usize, usize, Atom, RegionObservation)>,
-        wanted: &HashSet<Atom>,
+        stack: &mut Vec<(usize, usize, Atom, Arc<RegionObservation>)>,
+        wanted: &HashSet<usize>,
         regions: &mut HashMap<Atom, Arc<RegionObservation>>,
         scopes: &mut HashMap<Atom, Arc<RegionObservation>>,
     ) {
-        let (_, _, value, mut observed) = stack.pop().unwrap();
-        // A power can contribute multiple epsilon copies. Retaining a candidate
-        // for unsupported exponents is conservative; the kernel decides legality.
-        if matches!(value.as_view(), AtomView::Pow(_)) && observed.epsilon_degree > 0 {
-            observed.epsilon_degree = 2;
+        let (begin, _, value, mut observed) = stack.pop().unwrap();
+        if let AtomView::Fun(function) = value.as_view() {
+            let head = function.get_symbol();
+            // Scalar owners hide representation metadata from their interface.
+            // A metric consumes the sole compact port of each vector in a dot.
+            // Generic compact tensor leaves keep their unresolved interfaces.
+            let scalar = head.is_scalar()
+                || head == SPENSO_TAG.scalar
+                || head == SPENSO_TAG.pure_scalar
+                || ([ETS.metric, SPENSO_TAG.dot].contains(&head) && function.get_nargs() == 2 && {
+                    let mut slots = SlotMatcher::default();
+                    function.iter().all(|argument| {
+                        matches!(argument, AtomView::Fun(vector)
+                            if vector.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                                && slots.vector_argument(vector)
+                                    .and_then(|port| slots.compact_representation(port))
+                                    .is_some())
+                    })
+                });
+            if scalar && !observed.scalar_interface {
+                Arc::make_mut(&mut observed).scalar_interface = true;
+            }
+        }
+        if matches!(value.as_view(), AtomView::Pow(_)) {
+            // Scalar coefficient powers stay opaque to contraction. Anything
+            // without that certificate retains the existing per-copy scope,
+            // including indices hidden in metadata and tensor shorthands.
+            let indexed_power = !observed.certifies_scalar_interface_syntax();
+            if (indexed_power && !observed.indexed_power) || observed.epsilon_degree == 1 {
+                let observed = Arc::make_mut(&mut observed);
+                observed.indexed_power |= indexed_power;
+                // A power can contribute multiple epsilon copies. Retaining a candidate
+                // for unsupported exponents is conservative; the kernel decides legality.
+                if observed.epsilon_degree == 1 {
+                    observed.epsilon_degree = 2;
+                }
+            }
         }
         if let Some((_, _, parent, aggregate)) = stack.last_mut() {
+            let aggregate = Arc::make_mut(aggregate);
             let degree = if matches!(parent.as_view(), AtomView::Add(_)) {
                 aggregate.epsilon_degree.max(observed.epsilon_degree)
             } else {
@@ -480,15 +723,10 @@ impl DomainObservations {
             aggregate.epsilon_degree = degree;
             aggregate.max_indices = max_indices;
         }
-        let observed = Arc::new(observed);
-        if wanted.contains(&value) {
+        if wanted.contains(&begin) {
             regions.insert(value.clone(), Arc::clone(&observed));
         }
-        if matches!(
-            value.as_view(),
-            AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
-        ) || matches!(value.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.bracket)
-        {
+        if Self::is_scope(value.as_view()) {
             scopes.insert(value, observed);
         }
     }
@@ -496,7 +734,7 @@ impl DomainObservations {
     fn from_regions(
         candidates: SimplificationCandidates<HEAD_COUNT>,
         regions: HashMap<Atom, Arc<RegionObservation>>,
-        scopes: HashMap<Atom, Arc<RegionObservation>>,
+        scopes: Arc<RwLock<HashMap<Atom, Arc<RegionObservation>>>>,
         additive: bool,
     ) -> Self {
         let epsilon_degree = if additive {
@@ -528,10 +766,12 @@ impl DomainObservations {
             .flat_map(|region| region.representations.iter().copied())
             .collect();
         Self {
+            identity_inventory_complete: candidates.traversal_complete,
             candidates,
             regions,
             scopes,
-            scalar_form: None,
+            polynomial_form: None,
+            excludes_internal_connections: false,
             representations,
             epsilon_degree,
             max_indices,
@@ -543,24 +783,26 @@ impl DomainObservations {
     /// only newly written regions lose their syntactic and interface facts.
     pub(crate) fn updated(&self, expression: AtomView<'_>) -> Self {
         let mut regions = HashMap::new();
-        let mut scopes = self.scopes.clone();
         for view in Self::regions(expression) {
-            let region = if let Some(region) = self.regions.get(view.get_data()) {
+            let region = if let Some(region) = self.region(view) {
                 #[cfg(test)]
                 REUSED_REGIONS.with(|count| count.set(count.get() + 1));
-                Arc::clone(region)
+                region
             } else {
                 #[cfg(test)]
                 REPLACEMENT_SCANS.with(|count| count.set(count.get() + 1));
-                let replacement = Self::scan_regions(view);
-                let mut region = RegionObservation::default();
-                for part in replacement.regions.values() {
-                    region.merge(part);
-                }
-                region.epsilon_degree = replacement.epsilon_degree;
-                region.max_indices = replacement.max_indices;
-                scopes.extend(replacement.scopes);
-                Arc::new(region)
+                let replacement = {
+                    let cached = self.scopes.read().unwrap();
+                    Self::scan_regions(view, Some(&cached))
+                };
+                let region = replacement
+                    .region(view)
+                    .expect("the replacement root is observed");
+                self.scopes
+                    .write()
+                    .unwrap()
+                    .extend(std::mem::take(&mut *replacement.scopes.write().unwrap()));
+                region
             };
             regions.insert(view.to_owned(), region);
         }
@@ -568,23 +810,31 @@ impl DomainObservations {
         candidates.counts =
             std::array::from_fn(|i| regions.values().map(|region| region.counts[i]).sum());
         candidates.symbols = candidates.counts.map(|count| count > 0);
-        candidates.complete = regions.values().all(|region| !region.opaque);
+        candidates.complete = regions
+            .values()
+            .all(|region| !region.opaque && region.leaf_inventory_complete);
         candidates.intrinsic = regions
             .values()
             .all(|region| region.intrinsic && !region.opaque);
-        candidates.traversal_complete = true;
+        candidates.traversal_complete = regions
+            .values()
+            .all(|region| region.leaf_inventory_complete);
         // Index incidence is a graph fact. Conservatively invalidate it after a
         // replacement; the contraction graph decides compatibility and scope.
         candidates.repeated_indices =
             regions.values().map(|region| region.indices).sum::<usize>() > 1;
         candidates.brackets = candidates.symbols[7];
         candidates.dots = regions.values().any(|region| region.dots);
-        Self::from_regions(
+        let mut result = Self::from_regions(
             candidates,
             regions,
-            scopes,
+            Arc::clone(&self.scopes),
             matches!(expression, AtomView::Add(_)),
-        )
+        );
+        // Each replacement root is either observed now or reuses this domain's
+        // exact regional inventory, including certified identity-free regions.
+        result.identity_inventory_complete = self.identity_inventory_complete;
+        result
     }
 
     /// No permitted metric/vector endpoint remains in this observed domain.
@@ -592,7 +842,7 @@ impl DomainObservations {
         &self,
         settings: crate::tensor::ContractSettings<'_>,
     ) -> bool {
-        if self.is_closed_scalar() {
+        if self.is_terminal_polynomial() {
             return true;
         }
         self.candidates.complete
@@ -604,18 +854,86 @@ impl DomainObservations {
     }
 
     pub(crate) fn identity_candidates(&self) -> u8 {
-        if self.is_closed_scalar() {
+        if self.is_terminal_polynomial() {
             0
         } else {
             RegionObservation::identity_heads(&self.candidates.counts)
         }
     }
 
-    pub(crate) fn region(&self, expression: AtomView<'_>) -> Option<&RegionObservation> {
+    /// Estimate local distribution from already observed factor boundaries.
+    /// Reducing an independent family first can avoid carrying a large selected
+    /// sum through its kernels. This estimate affects scheduling, never scope.
+    pub(crate) fn identity_branch_cost(&self, family: u8) -> usize {
+        self.regions
+            .iter()
+            .fold(1usize, |cost, (expression, region)| {
+                if region.identity_candidates() & family != 0
+                    && let AtomView::Add(sum) = expression.as_view()
+                {
+                    cost.saturating_add(sum.get_nargs().saturating_sub(1))
+                } else {
+                    cost
+                }
+            })
+    }
+
+    /// Invalidate only families whose observed bodies or incident representations
+    /// changed. The caller separately checks the arithmetic boundary and callback
+    /// proofs. Opaque index labels do not invalidate a completed candidate walk.
+    pub(crate) fn changed_identity_families(&self, previous: &Self) -> Option<u8> {
+        if !self.identity_inventory_complete
+            || !previous.identity_inventory_complete
+            || self.regions.is_empty()
+            || previous.regions.is_empty()
+        {
+            return None;
+        }
+        let changed = self
+            .regions
+            .iter()
+            .filter(|(body, _)| !previous.regions.contains_key(*body))
+            .chain(
+                previous
+                    .regions
+                    .iter()
+                    .filter(|(body, _)| !self.regions.contains_key(*body)),
+            )
+            .map(|(_, region)| region)
+            .collect::<Vec<_>>();
+        let mut dirty = changed.iter().fold(0, |families, region| {
+            families | region.identity_candidates()
+        });
+        let representations = changed
+            .iter()
+            .flat_map(|region| region.representations.iter().map(|rep| rep.base()))
+            .collect::<HashSet<_>>();
+        // A changed metric/vector path can expose an identity in an otherwise
+        // unchanged body. Representation intersection is conservative: no new
+        // graph is needed merely to decide whether to revisit that family.
+        for region in self.regions.values().chain(previous.regions.values()) {
+            if region
+                .representations
+                .iter()
+                .any(|rep| representations.contains(&rep.base()))
+            {
+                dirty |= region.identity_candidates();
+            }
+        }
+        Some(dirty)
+    }
+
+    pub(crate) fn region(&self, expression: AtomView<'_>) -> Option<Arc<RegionObservation>> {
         self.regions
             .get(expression.get_data())
-            .or_else(|| self.scopes.get(expression.get_data()))
-            .map(AsRef::as_ref)
+            .cloned()
+            .or_else(|| {
+                self.scopes
+                    .read()
+                    .unwrap()
+                    .get(expression.get_data())
+                    .cloned()
+            })
     }
 }
 
@@ -632,23 +950,36 @@ impl SymbolicTensor<PartialStructure> {
         // Admission/checked rewriting proves the same external boundary for
         // every sum branch. If even the branch with most explicit occurrences
         // has only those external ports, none contains a dummy connection.
-        // Repeated spelling across alternatives is not a contraction. Powers
-        // can encode additional copies, so retain their candidate.
-        if !observed.candidates.complete
+        // Compound slot labels are opaque metadata, not hidden incidences;
+        // their conservative candidate flags do not invalidate this proof.
+        // Indexed powers can encode extra copies, while scalar powers cannot.
+        if !observed.candidates.traversal_complete
             || self.proofs.validated.get() != Some(&true)
-            || observed.regions.values().any(|region| region.powered)
+            || observed
+                .regions
+                .values()
+                .any(|region| region.counts[7] > 0 || region.has_indexed_powers())
         {
             return;
         }
-        let external = self
-            .structure
-            .logical_slots()
-            .iter()
-            .filter(|slot| matches!(slot.aind, PartialIndex::Explicit(_)))
-            .count();
-        if observed.max_indices == external {
-            observed.candidates.repeated_indices = false;
+        let slots = self.structure.logical_slots();
+        if observed.max_indices != slots.len()
+            || slots
+                .iter()
+                .any(|slot| !matches!(slot.aind, PartialIndex::Explicit(_)))
+            || observed.reserved_indices.iter().any(|&index| {
+                let mut index = index;
+                while let AbstractIndex::Scoped(scope) = index {
+                    index = scope.index();
+                }
+                matches!(index, AbstractIndex::Open { .. })
+            })
+            || !self.normalization_is_intrinsic()
+        {
+            return;
         }
+        observed.excludes_internal_connections = true;
+        observed.candidates.repeated_indices = false;
     }
 
     pub(crate) fn observe_replacement(&self, previous: &Self) {
@@ -728,6 +1059,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn replacement_reuses_nested_scope_facts_without_losing_occurrences() {
+        crate::test_support::test_initialize();
+        let epsilon = *crate::epsilon::EPSILON_SYMBOL;
+        let x = Atom::var(symbolica::symbol!("nested_observation::x"));
+        let y = Atom::var(symbolica::symbol!("nested_observation::y"));
+        let a = symbolica::symbol!("nested_observation::a");
+        let b = symbolica::symbol!("nested_observation::b");
+        let nested = symbolica::function!(epsilon, &x) + symbolica::function!(epsilon, &y);
+        let source = &nested * &x;
+        let observed = DomainObservations::initial(source.as_view());
+        let changed = symbolica::function!(a, &nested) + symbolica::function!(b, &nested);
+        REUSED_SCOPES.with(|count| count.set(0));
+        OBSERVED_NODES.with(|count| count.set(0));
+        let updated = observed.updated(changed.as_view());
+        let visited = OBSERVED_NODES.with(|count| count.get());
+        assert_eq!(REUSED_SCOPES.with(|count| count.get()), 2);
+        assert!(Arc::ptr_eq(&observed.scopes, &updated.scopes));
+        OBSERVED_NODES.with(|count| count.set(0));
+        let fresh = DomainObservations::initial(changed.as_view());
+        assert!(visited < OBSERVED_NODES.with(|count| count.get()));
+        assert_eq!(updated.regions, fresh.regions);
+        assert_eq!(updated.candidates.counts, fresh.candidates.counts);
+        assert_eq!(updated.candidates.counts[4], 4);
+        assert_eq!(updated.epsilon_degree, 1);
+
+        let surviving = updated.updated(symbolica::function!(b, &nested).as_view());
+        assert_eq!(surviving.candidates.counts[4], 2);
+        assert_ne!(surviving.identity_candidates() & super::super::EPSILON, 0);
+        let removed = surviving.updated(x.as_view());
+        assert_eq!(removed.candidates.counts[4], 0);
+        assert_eq!(removed.identity_candidates(), 0);
+    }
+
+    #[test]
     fn chain_admission_observes_dimensions_variance_and_surviving_regions() {
         crate::test_support::test_initialize();
         let rep = LibraryRep::new_dual("chain_observation::R").unwrap();
@@ -756,6 +1121,155 @@ mod tests {
         let finished = surviving.updated((&metric * Atom::num(2)).as_view());
         assert!(!finished.has_chain_channel(rep));
         assert_eq!(INITIAL_SCANS.with(|count| count.get()), initial);
+    }
+
+    #[test]
+    fn terminal_polynomial_preserves_open_ports_without_fabricating_scalar_closure() {
+        crate::test_support::test_initialize();
+        let expression = spenso::g!(spenso::mink!(4, 98928), spenso::mink!(4, 98929));
+        let tensor = SymbolicTensor::infer(expression).unwrap();
+        let observed = DomainObservations::terminal_polynomial(&tensor.structure, true);
+        assert!(observed.is_terminal_polynomial());
+        assert!(observed.excludes_internal_connections());
+        assert!(!observed.is_closed_scalar());
+        assert!(!observed.can_certify_scalar());
+        assert_eq!(observed.max_indices, 2);
+        assert_eq!(observed.reserved_indices.len(), 2);
+        assert_eq!(observed.representations.len(), 1);
+        assert_eq!(observed.identity_candidates(), 0);
+        assert!(observed.needs_dot_normalization());
+        assert!(observed.excludes_contraction_sources(Default::default()));
+        assert!(!observed.candidates.complete);
+        assert!(!observed.candidates.traversal_complete);
+        assert!(observed.region(tensor.expression.as_view()).is_none());
+
+        let epsilon = symbolica::function!(*crate::epsilon::EPSILON_SYMBOL, Atom::num(1));
+        let changed = observed.updated(epsilon.as_view());
+        assert!(!changed.is_terminal_polynomial());
+        assert!(!changed.excludes_internal_connections());
+        assert_ne!(changed.identity_candidates() & super::super::EPSILON, 0);
+    }
+
+    #[test]
+    fn terminal_product_reuses_spectators_without_inventing_leaf_inventory() {
+        crate::test_support::test_initialize();
+        let ports = [98941, 98942, 98943, 98944].map(|index| spenso::mink!(4, Atom::num(index)));
+        assert_eq!(ports.iter().collect::<HashSet<_>>().len(), 4);
+        let [a, b, c, d] = ports;
+        let polynomial =
+            spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
+        let selected = SymbolicTensor::infer(polynomial).unwrap();
+        let terminal = DomainObservations::terminal_polynomial(&selected.structure, false);
+        let first =
+            SymbolicTensor::infer(crate::color_t!([8, 98945], [3, 98946], [3, 98947])).unwrap();
+        let second =
+            SymbolicTensor::infer(crate::color_t!([8, 98948], [3, 98949], [3, 98950])).unwrap();
+        let spectators = [first, second];
+        let first_region = spectators[0]
+            .reduction_observations()
+            .region(spectators[0].expression.as_view())
+            .unwrap();
+        spectators[1].reduction_observations();
+        let expression =
+            &selected.expression * &spectators[0].expression * &spectators[1].expression;
+        let combined = SymbolicTensor::infer(expression).unwrap();
+        let scans = (
+            INITIAL_SCANS.with(|count| count.get()),
+            REPLACEMENT_SCANS.with(|count| count.get()),
+        );
+        let observed = DomainObservations::compose_terminal_product(
+            combined.expression.as_view(),
+            &combined.structure,
+            selected.expression.as_view(),
+            &terminal,
+            &spectators,
+        )
+        .unwrap();
+        assert_eq!(
+            scans,
+            (
+                INITIAL_SCANS.with(|count| count.get()),
+                REPLACEMENT_SCANS.with(|count| count.get())
+            )
+        );
+        assert_eq!(observed.candidates.counts[18], 2);
+        assert_eq!(observed.identity_candidates(), super::super::COLOR);
+        assert!(observed.excludes_internal_connections());
+        assert!(Arc::ptr_eq(
+            &first_region,
+            &observed.region(spectators[0].expression.as_view()).unwrap()
+        ));
+        assert!(
+            observed
+                .region(selected.expression.as_view())
+                .unwrap()
+                .leaves()
+                .is_none()
+        );
+        assert!(
+            observed
+                .region(spectators[0].expression.as_view())
+                .unwrap()
+                .leaves()
+                .is_some()
+        );
+
+        let survivor = &selected.expression * &spectators[1].expression;
+        let updated = observed.updated(survivor.as_view());
+        assert_eq!(updated.candidates.counts[18], 1);
+        assert_eq!(updated.identity_candidates(), super::super::COLOR);
+        assert_eq!(
+            updated.changed_identity_families(&observed),
+            Some(super::super::COLOR)
+        );
+        assert!(!updated.excludes_internal_connections());
+        assert_eq!(
+            scans,
+            (
+                INITIAL_SCANS.with(|count| count.get()),
+                REPLACEMENT_SCANS.with(|count| count.get())
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_product_does_not_hide_new_connections_or_normalized_factors() {
+        crate::test_support::test_initialize();
+        let ports = [98951, 98952, 98953, 98954].map(|index| spenso::mink!(4, Atom::num(index)));
+        assert_eq!(ports.iter().collect::<HashSet<_>>().len(), 4);
+        let [a, b, c, d] = ports;
+        let polynomial =
+            spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
+        let selected = SymbolicTensor::infer(polynomial).unwrap();
+        let terminal = DomainObservations::terminal_polynomial(&selected.structure, false);
+        let vector = SymbolicTensor::infer(spenso::p!(&a)).unwrap();
+        let combined = SymbolicTensor::infer(&selected.expression * &vector.expression).unwrap();
+        let observed = DomainObservations::compose_terminal_product(
+            combined.expression.as_view(),
+            &combined.structure,
+            selected.expression.as_view(),
+            &terminal,
+            std::slice::from_ref(&vector),
+        )
+        .unwrap();
+        assert!(!observed.excludes_internal_connections());
+        assert!(observed.candidates.repeated_indices);
+        assert!(
+            observed
+                .region(selected.expression.as_view())
+                .unwrap()
+                .contraction_sources(Default::default())
+        );
+        assert!(
+            DomainObservations::compose_terminal_product(
+                selected.expression.pow(2).as_view(),
+                &selected.structure,
+                selected.expression.as_view(),
+                &terminal,
+                &[],
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -792,6 +1306,134 @@ mod tests {
         assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
         assert!(observed.certify_scalar_region(tensor.as_view()).is_none());
         assert!(observed.certify_scalar_region(x.as_view()).is_none());
+    }
+
+    #[test]
+    fn scalar_identity_powers_do_not_hide_compact_tensor_interfaces() {
+        let reps = crate::test_support::test_initialize();
+        let casimir = crate::color::CS.cas(Atom::num(2), reps.coad_da.to_symbolic([]));
+        let x = Atom::var(symbolica::symbol!("scalar_power_observation::x"));
+        for expression in [casimir.pow(2), (&x + &casimir).pow(3)] {
+            let tensor = SymbolicTensor::infer(expression.clone()).unwrap();
+            let observed = tensor.reduction_observations();
+            assert!(
+                !observed
+                    .region(expression.as_view())
+                    .unwrap()
+                    .has_indexed_powers()
+            );
+            assert!(observed.excludes_internal_connections());
+            assert_ne!(observed.identity_candidates() & super::super::COLOR, 0);
+            assert!(!observed.can_certify_scalar());
+        }
+
+        let compact = reps.mink_d.to_symbolic([]);
+        let tensor = spenso::tensor_symbol!("scalar_power_observation::T");
+        let vector = spenso::p!(&compact);
+        // Inspect the written form before intake lowers unresolved powers.
+        for expression in [symbolica::function!(tensor, &compact).pow(2), vector.pow(2)] {
+            let observed = DomainObservations::initial(expression.as_view());
+            assert!(
+                observed
+                    .region(expression.as_view())
+                    .unwrap()
+                    .has_indexed_powers()
+            );
+            assert!(!observed.can_certify_scalar());
+        }
+        let dot = spenso::g!(spenso::p!(&compact), spenso::q!(&compact)).pow(2);
+        let observed = DomainObservations::initial(dot.as_view());
+        assert!(!observed.region(dot.as_view()).unwrap().has_indexed_powers());
+        assert!(observed.can_certify_scalar());
+    }
+
+    #[test]
+    fn external_incidence_proof_accepts_compound_labels_and_scalar_powers() {
+        let reps = crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("external_incidence::hedge");
+        let [a, b, c, d] = std::array::from_fn(|axis| {
+            reps.mink_d
+                .to_symbolic([symbolica::function!(label, 91, axis)])
+        });
+        let x = Atom::var(symbolica::symbol!("external_incidence::x"));
+        let scalar = (&x + Atom::one()).pow(3);
+        let polynomial =
+            spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
+        let tensor = SymbolicTensor::infer(&scalar * &polynomial).unwrap();
+        let observed = tensor.reduction_observations();
+        assert!(!observed.candidates.complete);
+        assert!(observed.excludes_internal_connections());
+        assert!(!observed.is_terminal_polynomial());
+        assert!(!observed.candidates.repeated_indices);
+        assert_eq!(observed.max_indices, 4);
+        super::super::super::collection::SHALLOW_BUILDS.with(|count| count.set(0));
+        let contracted = tensor.contract(Default::default()).unwrap();
+        assert_eq!(contracted.expression, tensor.expression);
+        assert_eq!(contracted.structure, tensor.structure);
+        super::super::super::collection::SHALLOW_BUILDS.with(|count| assert_eq!(count.get(), 0));
+
+        let changed = tensor
+            .with_identity_result((&x + Atom::num(2)).pow(4) * polynomial, None)
+            .unwrap();
+        assert!(
+            changed
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
+
+        // This proof excludes connections, not gamma identities.
+        let left = reps.bis4.to_symbolic([Atom::num(98931)]);
+        let right = reps.bis4.to_symbolic([Atom::num(98932)]);
+        let gamma = SymbolicTensor::infer(crate::gamma!(&left, &right, &a)).unwrap();
+        let observed = gamma.reduction_observations();
+        assert!(observed.excludes_internal_connections());
+        assert_ne!(observed.identity_candidates() & super::super::GAMMA, 0);
+    }
+
+    #[test]
+    fn external_incidence_proof_requires_admission_and_no_hidden_connections() {
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, 98933);
+        let b = spenso::mink!(4, 98934);
+        let c = spenso::mink!(4, 98935);
+        let tensor = SymbolicTensor::infer(spenso::g!(&b, &c)).unwrap();
+        let unchecked = SymbolicTensor::from_normalized_parts(
+            tensor.expression.clone(),
+            tensor.structure.clone(),
+        );
+        assert!(
+            !unchecked
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
+
+        let internal = SymbolicTensor::infer(
+            spenso::g!(&b, &c) + spenso::p!(&a) * spenso::q!(&a) * spenso::g!(&b, &c),
+        )
+        .unwrap();
+        assert!(
+            !internal
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
+        assert!(
+            internal
+                .reduction_observations()
+                .candidates
+                .repeated_indices
+        );
+        let indexed_power = SymbolicTensor::infer(spenso::p!(&a).pow(2)).unwrap();
+        assert!(
+            !indexed_power
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
+        let unresolved = SymbolicTensor::infer(spenso::p!(spenso::mink!(4))).unwrap();
+        assert!(
+            !unresolved
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
     }
 
     #[test]

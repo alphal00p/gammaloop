@@ -54,7 +54,7 @@ impl SymbolicTensor<PartialStructure> {
             crate::reference_cases::timing::Phase::ColorKernel,
         );
         let simplifier = ColorAlgebraSimplifier { settings };
-        self.collect_with_map(None, atom_contains_color_node, |selected, complete| {
+        self.collect_with_map(None, atom_contains_color_node, |selected, complete, _| {
             settled.run(selected, complete, |selected| {
                 let expression = simplifier.step(selected.expression.as_view(), complete);
                 let mut network = expression

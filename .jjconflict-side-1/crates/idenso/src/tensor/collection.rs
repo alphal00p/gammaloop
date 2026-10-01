@@ -121,11 +121,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             value,
             AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
         ) {
-            if let Some(region) = self.observations.region(value) {
-                return region
-                    .leaves
-                    .iter()
-                    .any(|leaf| (self.select)(leaf.as_view()));
+            if let Some(region) = self.observations.region(value)
+                && let Some(leaves) = region.leaves()
+            {
+                return leaves.iter().any(|leaf| (self.select)(leaf.as_view()));
             }
             // Arbitrary user selection and newly exposed replacement regions
             // have no reusable family observation. Inspect only this leaf.
@@ -629,7 +628,7 @@ impl SymbolicTensor<PartialStructure> {
                 Ok(())
             }),
             |value| filter.matches(value),
-            |value, _| Ok(value),
+            |value, _, _| Ok(value),
         )?;
         Ok(proof)
     }
@@ -665,7 +664,7 @@ impl SymbolicTensor<PartialStructure> {
                 Ok(())
             }),
             |value| filter.matches(value),
-            |value, _| Ok(value),
+            |value, _, _| Ok(value),
         )?;
         rows.ok_or_else(|| {
             TensorInferenceError::invalid("selected coefficient collection did not complete")
@@ -675,17 +674,18 @@ impl SymbolicTensor<PartialStructure> {
     /// Collect selected tensors with factored coefficients.
     /// Unselected scalar and tensor subtrees remain factored.
     pub fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
-        self.collect_with_map(None, |value| filter.matches(value), |value, _| Ok(value))
+        self.collect_with_map(None, |value| filter.matches(value), |value, _, _| Ok(value))
     }
 
     /// Visit selected monomials through the graph's established factor order.
-    /// The final callback argument is true only when every selected factor has
-    /// entered this frontier. Refused and capped frontiers remain exact.
+    /// The boolean is true only when every selected factor has entered this
+    /// frontier. A kernel may consume incident coefficient ports; the combined
+    /// logical boundary remains invariant. Refused and capped frontiers remain exact.
     pub(crate) fn collect_with_map(
         &self,
         mut coefficients: Option<&mut CoefficientVisitor<'_>>,
         mut select: impl FnMut(AtomView<'_>) -> bool,
-        mut step: impl FnMut(Self, bool) -> Result<Self>,
+        mut step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
     ) -> Result<Self> {
         self.ensure_validated()?;
         let mut input = CollectionInput::new(self, &mut select);
@@ -721,10 +721,14 @@ impl SymbolicTensor<PartialStructure> {
         let expose = nodes.iter().filter(|node| owned[node]).count() > 1;
         for node in nodes {
             if !owned[&node] {
-                let spectator = Self::from_normalized_parts(
+                let spectator = Self::collection_product(&[Self::from_normalized_parts(
                     input.emit(&network, &tree, node)?,
                     interfaces[&node].clone(),
-                );
+                )])?;
+                // These unchanged graph leaves retain their admitted boundary.
+                // Use the same publication path as selected factors to decode
+                // graph-local AUTO ports before reusing their regional facts.
+                spectator.observe_replacement(self);
                 if spectator.is_scalar()
                     && let Some(facts) = input
                         .observations
@@ -803,6 +807,14 @@ impl SymbolicTensor<PartialStructure> {
                     let mut coefficient_factors = vec![coefficient.clone()];
                     for &(position, power) in powers {
                         let (value, owned) = &values[tape.leaves()[position]];
+                        if power == 1 {
+                            if *owned {
+                                selected_factors.push(value.clone());
+                            } else {
+                                coefficient_factors.push(value.clone());
+                            }
+                            continue;
+                        }
                         let interface = if power % 2 == 0 {
                             PartialStructure::from_logical_slots([])
                         } else {
@@ -826,17 +838,44 @@ impl SymbolicTensor<PartialStructure> {
                     }
                     let monomial = Self::collection_product(&selected_factors)?;
                     monomial.observe_replacement(self);
+                    let mut coefficient = Self::collection_product(&coefficient_factors)?;
+                    let original_coefficient = coefficient.clone();
                     let mapped = if frontier == super::simplification::ReductionStatus::Capped {
                         // Finish retaining the already distributed row frontier,
                         // but do not invoke another kernel after its budget ended.
                         monomial.clone()
                     } else {
-                        step(monomial.clone(), level + 1 == factors.len())?
+                        step(
+                            monomial.clone(),
+                            level + 1 == factors.len(),
+                            &mut coefficient,
+                        )?
                     };
                     frontier = frontier.max(mapped.proofs.frontier);
                     // Internal domain owners publish certified typed results. Only
                     // unchecked callbacks need to have their payload observed again.
-                    if mapped.structure != monomial.structure {
+                    let expected = if coefficient.structure == original_coefficient.structure {
+                        monomial.structure.clone()
+                    } else {
+                        // A kernel may consume incident coefficient ports while
+                        // reducing its selected word. Their combined boundary is
+                        // the invariant, including logical port order.
+                        let before = InterfaceInference::merge_explicit_interface_sequence(&[
+                            monomial.structure.clone(),
+                            original_coefficient.structure,
+                        ])?;
+                        let after = InterfaceInference::merge_explicit_interface_sequence(&[
+                            mapped.structure.clone(),
+                            coefficient.structure.clone(),
+                        ])?;
+                        if after != before {
+                            return Err(TensorInferenceError::invalid(
+                                "selected domain changes its combined coefficient interface",
+                            ));
+                        }
+                        mapped.structure.clone()
+                    };
+                    if mapped.structure != expected {
                         return Err(TensorInferenceError::invalid(
                             "selected domain changes its established logical interface",
                         ));
@@ -848,8 +887,11 @@ impl SymbolicTensor<PartialStructure> {
                     } else {
                         monomial.with_rewritten_expression(mapped.expression)?
                     };
-                    let coefficient = Self::collection_product(&coefficient_factors)?;
-                    let facts = Self::collection_observations(std::slice::from_ref(&coefficient));
+                    let facts = Self::collection_observations(
+                        std::slice::from_ref(&coefficient),
+                        &coefficient.structure,
+                        true,
+                    );
                     let coefficient = coefficient.with_identity_result(
                         Atom::num(number.clone()) * &coefficient.expression,
                         facts,
@@ -880,7 +922,7 @@ impl SymbolicTensor<PartialStructure> {
                     }
                     let body = first.with_identity_result(
                         Atom::add_many(coefficients.iter().map(|value| &value.expression)),
-                        Self::collection_observations(&coefficients),
+                        Self::collection_observations(&coefficients, &first.structure, true),
                     )?;
                     Ok((selected, body))
                 })
@@ -901,8 +943,13 @@ impl SymbolicTensor<PartialStructure> {
             .into_iter()
             .map(|(selected, coefficient)| Self::collection_product(&[selected, coefficient]))
             .collect::<Result<Vec<_>>>()?;
-        let mut facts = Self::collection_observations(&terms);
-        let mut output = vec![Atom::add_many(terms.iter().map(|value| &value.expression))];
+        let selected_interface = terms.first().map(|term| &term.structure);
+        let mut facts = selected_interface
+            .and_then(|interface| Self::collection_observations(&terms, interface, true));
+        let selected_expression = Atom::add_many(terms.iter().map(|value| &value.expression));
+        let selected_facts = facts.clone();
+        let complete = remaining.is_empty();
+        let mut output = vec![selected_expression.clone()];
         if !remaining.is_empty() {
             facts = None;
         }
@@ -935,39 +982,75 @@ impl SymbolicTensor<PartialStructure> {
             )])?;
             output.push(body.expression);
         }
-        facts =
-            facts
-                .zip(Self::collection_observations(&spectators))
-                .map(|(selected, spectators)| {
-                    DomainObservations::closed_scalar(
-                        selected.needs_dot_normalization() || spectators.needs_dot_normalization(),
-                    )
-                });
-        output.extend(spectators.into_iter().map(|value| value.expression));
+        facts = facts.and_then(|selected| {
+            let mut needs_dots = selected.needs_dot_normalization();
+            let mut ports = selected_interface?.logical_slots().len();
+            for spectator in &spectators {
+                let observed = spectator.reduction_observations();
+                if !(observed.is_terminal_polynomial()
+                    || (spectator.is_scalar() && observed.can_certify_scalar()))
+                {
+                    return None;
+                }
+                ports += spectator.structure.logical_slots().len();
+                needs_dots |= observed.needs_dot_normalization();
+            }
+            // A product can connect ports that were external in its factors.
+            // Retain terminal facts only when the established boundary proves
+            // that no such new connection was formed.
+            (ports == self.structure.logical_slots().len())
+                .then(|| DomainObservations::terminal_polynomial(&self.structure, needs_dots))
+        });
+        output.extend(spectators.iter().map(|value| value.expression.clone()));
         let expression = Atom::mul_many(output);
+        if facts.is_none()
+            && complete
+            && let Some(selected_facts) = selected_facts
+        {
+            facts = DomainObservations::compose_terminal_product(
+                expression.as_view(),
+                &self.structure,
+                selected_expression.as_view(),
+                &selected_facts,
+                &spectators,
+            );
+        }
         let mut root = self.with_identity_result(expression, facts)?;
         root.proofs.frontier = frontier;
         Ok(root)
     }
 
-    // Addition and multiplication of certified scalar syntax cannot create an
-    // identity head or an index connection.
-    fn collection_observations(values: &[Self]) -> Option<DomainObservations> {
+    // Sums preserve a common terminal boundary; products preserve terminal facts
+    // only when their established interface excludes new inter-factor connections.
+    fn collection_observations(
+        values: &[Self],
+        interface: &PartialStructure,
+        additive: bool,
+    ) -> Option<DomainObservations> {
         let mut needs_dots = false;
+        let mut ports = 0;
         for value in values {
-            if !value.is_scalar() {
+            if additive && value.structure != *interface {
                 return None;
             }
             let observed = value.reduction_observations();
-            if !observed.can_certify_scalar() {
+            if !(observed.is_terminal_polynomial()
+                || (value.is_scalar() && observed.can_certify_scalar()))
+            {
                 return None;
             }
+            ports += value.structure.logical_slots().len();
             needs_dots |= observed.needs_dot_normalization();
         }
-        Some(DomainObservations::closed_scalar(needs_dots))
+        if !additive && ports != interface.logical_slots().len() {
+            return None;
+        }
+        Some(DomainObservations::terminal_polynomial(
+            interface, needs_dots,
+        ))
     }
 
-    fn collection_product(values: &[Self]) -> Result<Self> {
+    pub(crate) fn collection_product(values: &[Self]) -> Result<Self> {
         let interface = InterfaceInference::merge_explicit_interface_sequence(
             &values
                 .iter()
@@ -995,9 +1078,22 @@ impl SymbolicTensor<PartialStructure> {
             Self::validate_atom(&expression)?;
         }
         let value = Self::from_validated_parts(expression, interface);
-        if intrinsic {
+        if value.expression.is_zero() {
+            // A vanished selected word can leave ports joined to its coefficient.
+            // Those nominal connections determine the typed zero's boundary, but
+            // there is no surviving syntax to contract or inspect for identities.
             let _ = value.proofs.intrinsic.set(true);
-            if let Some(observed) = Self::collection_observations(values) {
+            let _ =
+                value
+                    .proofs
+                    .observations
+                    .set(Arc::new(DomainObservations::terminal_polynomial(
+                        &value.structure,
+                        false,
+                    )));
+        } else if intrinsic {
+            let _ = value.proofs.intrinsic.set(true);
+            if let Some(observed) = Self::collection_observations(values, &value.structure, false) {
                 let _ = value.proofs.observations.set(Arc::new(observed));
             }
         }
@@ -1018,10 +1114,137 @@ mod tests {
     fn contract_selected(
         value: SymbolicTensor<PartialStructure>,
         _complete: bool,
+        _coefficient: &mut SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>> {
         let mut contracted = value.contract_parts(Default::default())?;
         contracted.root.proofs.frontier = contracted.status;
         Ok(contracted.root)
+    }
+
+    #[test]
+    fn vanished_selected_word_retains_terminal_facts_after_coefficient_connections() {
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, 98972);
+        let b = spenso::mink!(4, 98973);
+        let selected = SymbolicTensor::infer(spenso::p!(&a) * spenso::q!(&b)).unwrap();
+        let zero = SymbolicTensor::from_validated_parts(Atom::Zero, selected.structure);
+        let coefficient = SymbolicTensor::infer(spenso::p!(&a)).unwrap();
+        let result = SymbolicTensor::collection_product(&[zero, coefficient]).unwrap();
+        let survivor = SymbolicTensor::infer(spenso::q!(&b)).unwrap();
+        let survivor_facts = DomainObservations::terminal_polynomial(&survivor.structure, false);
+        let _ = survivor.proofs.observations.set(Arc::new(survivor_facts));
+
+        assert!(result.expression.is_zero());
+        assert_eq!(
+            result.structure.logical_slots(),
+            survivor.structure.logical_slots()
+        );
+        assert!(result.reduction_observations().is_terminal_polynomial());
+        assert!(
+            result
+                .reduction_observations()
+                .excludes_internal_connections()
+        );
+        assert!(
+            SymbolicTensor::collection_observations(
+                &[result, survivor.clone()],
+                &survivor.structure,
+                true,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn terminal_selected_polynomial_keeps_open_colour_spectator_connection_proof() {
+        crate::test_support::test_initialize();
+        let ports = [98974, 98975, 98976, 98977].map(|index| spenso::mink!(4, Atom::num(index)));
+        assert_eq!(
+            ports.iter().collect::<std::collections::HashSet<_>>().len(),
+            4
+        );
+        let [a, b, c, d] = ports;
+        let head = spenso::tensor_symbol!("terminal_collection_selected");
+        let selected = tensor(head, &[a.clone(), b.clone(), c.clone(), d.clone()]);
+        let spectator = crate::color_t!([8, 98978], [3, 98979], [3, 98980]);
+        let source = SymbolicTensor::infer(selected * &spectator).unwrap();
+        let polynomial =
+            spenso::g!(&a, &b) * spenso::g!(&c, &d) + spenso::g!(&a, &c) * spenso::g!(&b, &d);
+        let result = source
+            .collect_with_map(
+                None,
+                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
+                |selected, _, _| {
+                    let facts = DomainObservations::terminal_polynomial(&selected.structure, false);
+                    selected.with_identity_result(polynomial.clone(), Some(facts))
+                },
+            )
+            .unwrap();
+        assert_eq!(result.expression, polynomial * spectator);
+        assert_eq!(
+            result.structure.logical_slots(),
+            source.structure.logical_slots()
+        );
+        let observed = result.reduction_observations();
+        assert_eq!(observed.candidates.counts[18], 1);
+        assert!(observed.excludes_internal_connections());
+        assert!(!observed.is_terminal_polynomial());
+        let planning_costs = || {
+            use super::super::simplification::observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+            (
+                INITIAL_SCANS.with(|count| count.get()),
+                REPLACEMENT_SCANS.with(|count| count.get()),
+                SHALLOW_BUILDS.with(|count| count.get()),
+                SELECTED_OPENS.with(|count| count.get()),
+            )
+        };
+        let before = planning_costs();
+        let contracted = result.contract_parts(Default::default()).unwrap();
+        assert_eq!(
+            contracted.status,
+            super::super::simplification::ReductionStatus::Complete
+        );
+        assert_eq!(contracted.root.expression, result.expression);
+        assert_eq!(planning_costs(), before);
+    }
+
+    #[test]
+    fn selected_kernel_can_consume_incident_coefficient_ports() {
+        crate::test_support::test_initialize();
+        let mu = spenso::mink!(4, 98971);
+        let compact = spenso::mink!(4);
+        let head = spenso::tensor_symbol!("coefficient_connection_t");
+        let t = tensor(head, std::slice::from_ref(&mu));
+        let spectator =
+            symbolica::parse_lit!((coefficient_connection_x + coefficient_connection_y) ^ 12);
+        let source =
+            SymbolicTensor::infer(&spectator * (spenso::p!(&mu) * &t + spenso::q!(&mu) * &t))
+                .unwrap();
+        let result = source
+            .collect_with_map(
+                None,
+                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
+                |selected, complete, coefficient| {
+                    if !complete {
+                        return Ok(selected);
+                    }
+                    let joined =
+                        SymbolicTensor::collection_product(&[selected, coefficient.clone()])?;
+                    let result = joined.contract(Default::default())?;
+                    *coefficient = SymbolicTensor::from_validated_parts(
+                        Atom::one(),
+                        PartialStructure::from_logical_slots([]),
+                    );
+                    Ok(result)
+                },
+            )
+            .unwrap();
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(
+            result.expression,
+            spectator
+                * (tensor(head, &[spenso::p!(&compact)]) + tensor(head, &[spenso::q!(&compact)]))
+        );
     }
 
     #[test]
@@ -1070,7 +1293,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == selected),
-                |value, _complete| {
+                |value, _complete, _| {
                     assert!(!matches!(value.expression.as_atom_view(), AtomView::Add(_)));
                     seen.push(value.expression.clone());
                     Ok(value)
@@ -1099,7 +1322,7 @@ mod tests {
                 .collect_with_map(
                     None,
                     |_| true,
-                    |value, _complete| {
+                    |value, _complete, _| {
                         Ok(SymbolicTensor::from_normalized_parts(
                             Atom::one(),
                             value.structure,
@@ -1177,7 +1400,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |_| true,
-                |value, _complete| {
+                |value, _complete, _| {
                     steps += 1;
                     Ok(value)
                 },
@@ -1202,7 +1425,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |value| matches!(value, AtomView::Fun(f) if f.get_symbol() == head),
-                |value, complete| {
+                |value, complete, _| {
                     seen.push((value.expression.clone(), complete));
                     Ok(value)
                 },
@@ -1295,7 +1518,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |value| matches!(value, AtomView::Fun(fun) if fun.get_symbol() == hook),
-                |value, _complete| {
+                |value, _complete, _| {
                     seen.push(value.expression.clone());
                     if value.expression == selected {
                         value.with_checked_expression(Atom::num(2))
@@ -1329,7 +1552,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
-                |value, _complete| {
+                |value, _complete, _| {
                     if value.expression == selected {
                         selected_calls += 1;
                         value.with_checked_expression(target.clone())
@@ -1489,7 +1712,7 @@ mod tests {
                     Ok(())
                 }),
                 |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
-                |value, _| Ok(value),
+                |value, _, _| Ok(value),
             )
             .unwrap();
         assert!(observed);
@@ -1560,7 +1783,7 @@ mod tests {
             .collect_with_map(
                 None,
                 |_| true,
-                |selected, _complete| {
+                |selected, _complete, _| {
                     calls += 1;
                     assert_eq!(
                         selected.structure.logical_slots(),
@@ -1639,7 +1862,7 @@ mod tests {
         let root = source.collect_with_map(
             Some(&mut |_, _| { complete_rows = true; Ok(()) }),
             |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
-            |mut selected, _| {
+            |mut selected, _, _| {
                 calls += 1;
                 selected.proofs.frontier = super::super::simplification::ReductionStatus::Capped;
                 Ok(selected)

@@ -1,6 +1,6 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use spenso::{
     chain, g,
@@ -9,9 +9,9 @@ use spenso::{
     shadowing::{self, IntoAtom, TensorCollectFilter},
     structure::{
         abstract_index::AbstractIndex,
-        partial::PartialStructure,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
+        slot::{DummyAind, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
     },
     trace,
 };
@@ -466,10 +466,37 @@ impl SymbolicTensor<PartialStructure> {
         );
         self.ensure_validated()?;
         let representation = Bispinor {}.into();
+        let mut paired_metrics = HashMap::new();
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
-        let mut simplify = |selected: Self, complete: bool| {
+        let mut simplify = |selected: Self, complete: bool, coefficient: &mut Self| {
+            // Clifford reduction already requires the complete selected word.
+            // Its explicit spinor ports retain matrix order until then; joining
+            // and contracting each growing prefix only repeats structural work.
+            // Callback-sensitive inputs keep their established contextual schedule.
+            if !complete && selected.normalization_is_intrinsic() {
+                return Ok(selected);
+            }
             settled.run(selected, complete, |selected| {
+                // Mass terms carry spinor identities, which chain collection
+                // deliberately leaves as metrics. Consume those connections
+                // once so the complete word can close before Clifford reduction.
+                let selected = if complete
+                    && selected.normalization_is_intrinsic()
+                    && selected.reduction_observations().candidates.symbols[17]
+                {
+                    selected
+                        .contract_parts(crate::tensor::ContractSettings {
+                            representations: Some(&[representation]),
+                            rank_one: false,
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?
+                        .root
+                } else {
+                    selected
+                };
                 let mut scalar_callback = false;
                 let mut component_callback = false;
                 selected.expression.visitor(&mut |node| {
@@ -538,6 +565,17 @@ impl SymbolicTensor<PartialStructure> {
                         settings: &settings,
                         output,
                     };
+                    if settings.evaluate_traces
+                        && selected.normalization_is_intrinsic()
+                        && let Some(rewritten) = simplifier.evaluate_bound_terminal_trace(
+                            &selected,
+                            expression.as_view(),
+                            coefficient,
+                            &mut paired_metrics,
+                        )?
+                    {
+                        return Ok(rewritten);
+                    }
                     let terminal = settings
                         .evaluate_traces
                         .then(|| {
@@ -579,7 +617,14 @@ impl SymbolicTensor<PartialStructure> {
         if standalone_trace
             && TensorCollectFilter::Reps([representation]).matches(self.expression.as_view())
         {
-            simplify(self.clone(), true)
+            simplify(
+                self.clone(),
+                true,
+                &mut Self::from_validated_parts(
+                    Atom::one(),
+                    PartialStructure::from_logical_slots([]),
+                ),
+            )
         } else {
             self.collect_with_map(
                 None,
@@ -800,31 +845,12 @@ impl<'settings> DiracSimplifier<'settings> {
         })
     }
 
-    /// Evaluate standalone traces after reducing summed indices within the
-    /// word. The surviving explicit indices occur once per monomial and compact
-    /// arguments produce scalar dots, so no outer tensor contraction remains.
-    /// A scalar-product context additionally requires callback-free words
-    /// with exact leaf metadata. Free slots occur once per term; wildcard
-    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
-    /// introduce further tensor cleanup.
-    pub(crate) fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
-        self,
-        expr: AtomView<'_>,
-    ) -> Option<(Atom, Option<DomainObservations>)> {
-        let TerminalTrace {
-            representation: rep,
-            indices,
-            axial,
-            repeated,
-            four_dimensional,
-        } = self.parse_terminal_trace::<SCALAR_CONTEXT>(expr)?;
-        let output = self.output;
-        // The recurrence removes every summed explicit pair before emitting
-        // pairings. With no free slots, ordinary pairings contain only compact
-        // metrics and scalar arithmetic. Certify this from the parsed word;
-        // generated polynomial trees need no new candidate traversal.
-        let closed_scalar = !axial
-            && indices.iter().filter(|&&index| is_minkowski_slot(index)).count() == 2 * repeated
+    fn terminal_trace_observations(
+        rep: AtomView<'_>,
+        indices: &[AtomView<'_>],
+        axial: bool,
+    ) -> Option<DomainObservations> {
+        let terminal_polynomial = !axial
             && matches!(rep, AtomView::Fun(spin) if spin.iter().all(Self::exact_scalar_leaf))
             && indices.iter().all(|&index| {
                 // Wildcards keep written diagonal metrics inert during
@@ -856,11 +882,360 @@ impl<'settings> DiracSimplifier<'settings> {
                                 .is_some_and(|rep| Self::exact_scalar_leaf(rep.dimension())))
                 }
             });
-        let observations = closed_scalar.then(|| {
-            DomainObservations::closed_scalar(
-                indices.iter().any(|&index| !is_minkowski_slot(index)),
+        terminal_polynomial
+            .then(|| {
+                let mut slots = SlotMatcher::default();
+                let external = indices
+                    .iter()
+                    .filter(|&&index| {
+                        is_minkowski_slot(index)
+                            && indices.iter().filter(|&&other| other == index).count() == 1
+                    })
+                    .map(|&index| {
+                        slots
+                            .parse::<LibraryRep, AbstractIndex>(index)
+                            .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind)))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .ok()?;
+                Some(DomainObservations::terminal_polynomial(
+                    &PartialStructure::from_logical_slots(external),
+                    indices.iter().any(|&index| !is_minkowski_slot(index)),
+                ))
+            })
+            .flatten()
+    }
+
+    /// Bind tensor coefficients only when a pairing actually needs their ports.
+    /// The trace recurrence still owns all Dirac identities; every metric/vector
+    /// substitution uses the same structural contraction as the public API.
+    fn evaluate_bound_terminal_trace(
+        self,
+        selected: &SymbolicTensor<PartialStructure>,
+        expression: AtomView<'_>,
+        coefficient: &mut SymbolicTensor<PartialStructure>,
+        paired: &mut HashMap<Atom, SymbolicTensor<PartialStructure>>,
+    ) -> Result<Option<SymbolicTensor<PartialStructure>>, TensorInferenceError> {
+        use crate::tensor::{ContractSettings, ReductionStatus, inference::InterfaceInference};
+        use linnet::tree::child_vec::ChildVecStore;
+        use spenso::{
+            network::graph::{NetworkLeaf, NetworkNode, NetworkOp},
+            structure::TensorStructure,
+        };
+
+        if coefficient.is_scalar() || !coefficient.normalization_is_intrinsic() {
+            return Ok(None);
+        }
+        let trace = match expression {
+            AtomView::Fun(_) => expression,
+            AtomView::Mul(_) => {
+                let Some(trace) = Self::scalar_trace_factor(expression, T.trace.get_id()) else {
+                    return Ok(None);
+                };
+                trace
+            }
+            _ => return Ok(None),
+        };
+        let Some(word) = self.parse_terminal_trace::<true>(trace) else {
+            return Ok(None);
+        };
+        if word.axial
+            || word.indices.len() % 2 == 1
+            || Self::terminal_trace_observations(word.representation, &word.indices, false)
+                .is_none()
+        {
+            return Ok(None);
+        }
+        let mut slots = SlotMatcher::default();
+        let explicit = word
+            .indices
+            .iter()
+            .filter_map(|&index| {
+                if !is_minkowski_slot(index)
+                    || word.indices.iter().filter(|&&other| other == index).count() != 1
+                {
+                    return None;
+                }
+                let port = slots.parse::<LibraryRep, AbstractIndex>(index).ok()?;
+                let mut label = port.aind;
+                while let AbstractIndex::Scoped(scope) = label {
+                    label = scope.index();
+                }
+                (!matches!(label, AbstractIndex::Open { .. })).then_some((index, port))
+            })
+            .collect::<Vec<_>>();
+        if explicit.is_empty() {
+            return Ok(None);
+        }
+
+        // The coefficient's depth-one graph supplies every factor boundary.
+        // Its scalar spectators are never opened or distributed.
+        let network = coefficient.shallow_graph()?;
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let nodes = if matches!(
+            network.graph.graph[root],
+            NetworkNode::Op(NetworkOp::Product)
+        ) {
+            tree.iter_children(root, &network.graph.graph)
+                .collect::<Vec<_>>()
+        } else {
+            vec![root]
+        };
+        let coefficient_ports = coefficient.structure.logical_slots();
+        let mut factors = Vec::with_capacity(nodes.len());
+        let mut bindings = Vec::new();
+        for node in nodes {
+            let (body, interface) = match &network.graph.graph[node] {
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                    let tensor = &network.store.tensors[*index];
+                    let external = tensor.structure.external_structure();
+                    let order = network
+                        .graph
+                        .logical_port_order(node)
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                    (
+                        &tensor.expression,
+                        PartialStructure::from_logical_slots(order.into_iter().map(|position| {
+                            let port = external[position];
+                            port.rep().slot(PartialIndex::Explicit(port.aind()))
+                        })),
+                    )
+                }
+                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                    use spenso::network::store::TensorScalarStore;
+                    (
+                        network.store.get_scalar_ref(*index),
+                        PartialStructure::from_logical_slots([]),
+                    )
+                }
+                // A coefficient which is itself a sum retains its complete
+                // admitted interface as one factor instead of exposing branches.
+                _ if node == root => (&coefficient.expression, coefficient.structure.clone()),
+                _ => return Ok(None),
+            };
+            let ports = interface.logical_slots();
+            if let [port] = ports.as_slice()
+                && coefficient_ports.contains(port)
+                && let PartialIndex::Explicit(index) = port.aind
+                && let Some(&(argument, _)) = explicit
+                    .iter()
+                    .find(|(_, target)| target.aind == index && target.rep().matches(&port.rep()))
+            {
+                bindings.push((argument, factors.len(), *port));
+            }
+            factors.push(SymbolicTensor::from_validated_parts(
+                body.clone(),
+                interface,
+            ));
+        }
+        if bindings.is_empty()
+            || bindings
+                .iter()
+                .enumerate()
+                .any(|(position, (argument, _, _))| {
+                    bindings[..position]
+                        .iter()
+                        .any(|(other, _, _)| other == argument)
+                })
+        {
+            return Ok(None);
+        }
+
+        // A bound vector's index names its occurrence, not its Dirac argument.
+        // Compare vector bodies at one fresh external port so repeated routed
+        // momenta can use the recurrence's slash-square and p/q/p identities.
+        // The shared interface rewriter retains metadata and internal scopes.
+        let common_index = SymbolicTensor::reserved_dummies([selected, coefficient]).fresh_index();
+        let mut arguments = Vec::with_capacity(word.indices.len());
+        for &argument in &word.indices {
+            let key = if let Some(&(_, position, port)) = bindings
+                .iter()
+                .find(|(original, _, _)| *original == argument)
+            {
+                crate::tensor::composition::rewrite_interface_ports(
+                    &factors[position],
+                    &HashMap::from([(
+                        0,
+                        port.rep().slot::<AbstractIndex, _>(common_index).to_atom(),
+                    )]),
+                    None,
+                )
+                .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+            } else {
+                argument.to_owned()
+            };
+            arguments.push(key);
+        }
+        let argument_views = arguments.iter().map(Atom::as_view).collect::<Vec<_>>();
+        let bound_arguments = bindings
+            .iter()
+            .map(|&(original, position, _)| {
+                let index = word
+                    .indices
+                    .iter()
+                    .position(|&index| index == original)
+                    .unwrap();
+                (argument_views[index], original, position)
+            })
+            .collect::<Vec<_>>();
+
+        let trace_unit = trace!(word.representation; std::iter::empty::<Atom>());
+        let Some(trace_unit) = Self::simplify_trace_terminal(trace_unit.as_view()) else {
+            return Ok(None);
+        };
+        let mut terminal_pairs = true;
+        let mut failure = None;
+        let result = trace_kernel::evaluate_generic_with_metrics(
+            &argument_views,
+            trace_unit.as_view(),
+            true,
+            self.output,
+            |left, right| {
+                let mut bound = Vec::new();
+                let mut original = [left, right];
+                for (side, argument) in [left, right].into_iter().enumerate() {
+                    if let Some(&(_, target, position)) = bound_arguments
+                        .iter()
+                        .find(|(key, _, position)| *key == argument && !bound.contains(position))
+                    {
+                        original[side] = target;
+                        bound.push(position);
+                    } else if bound_arguments.iter().any(|(key, _, _)| *key == argument) {
+                        // A diagonal vector value needs two original copies.
+                        // Refuse if the recurrence ever requests an absent one.
+                        return None;
+                    }
+                }
+                let metric = g!(original[0], original[1]);
+                if bound.is_empty() {
+                    return Some(metric);
+                }
+                let body = Atom::mul_many(
+                    std::iter::once(&metric)
+                        .chain(bound.iter().map(|&position| &factors[position].expression)),
+                );
+                if let Some(result) = paired.get(&body) {
+                    terminal_pairs &= result
+                        .reduction_observations()
+                        .excludes_internal_connections()
+                        && result.reduction_observations().identity_candidates() == 0;
+                    return Some(result.expression.clone());
+                }
+                let contract = (|| {
+                    // The metric is genuinely new syntax. Its small interface
+                    // combines with already established coefficient boundaries.
+                    let metric_interface =
+                        InterfaceInference::replacement_interface(metric.as_view())?;
+                    let mut interfaces = vec![metric_interface];
+                    interfaces.extend(
+                        bound
+                            .iter()
+                            .map(|&position| factors[position].structure.clone()),
+                    );
+                    let interface =
+                        InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
+                    let input = SymbolicTensor::from_validated_parts(body.clone(), interface);
+                    input.contract_parts(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                })();
+                let result = match contract {
+                    Ok(result) if result.status == ReductionStatus::Complete => result.root,
+                    Ok(_) => return None,
+                    Err(error) => {
+                        failure = Some(error);
+                        return None;
+                    }
+                };
+                terminal_pairs &= result
+                    .reduction_observations()
+                    .excludes_internal_connections()
+                    && result.reduction_observations().identity_candidates() == 0;
+                let expression = result.expression.clone();
+                paired.insert(body, result);
+                Some(expression)
+            },
+        );
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        let Some(result) = result else {
+            return Ok(None);
+        };
+        let consumed = bindings
+            .iter()
+            .map(|(_, _, port)| *port)
+            .collect::<Vec<_>>();
+        let interface = PartialStructure::from_logical_slots(
+            selected
+                .structure
+                .logical_slots()
+                .into_iter()
+                .filter(|port| !consumed.contains(port)),
+        );
+        let expression = if let AtomView::Mul(product) = expression {
+            Atom::mul_many(
+                product
+                    .iter()
+                    .filter(|&factor| factor != trace)
+                    .chain(std::iter::once(result.as_view())),
             )
-        });
+        } else {
+            result
+        };
+        let rewritten = SymbolicTensor::from_validated_parts(expression, interface);
+        let _ = rewritten.proofs.intrinsic.set(true);
+        if terminal_pairs {
+            let _ = rewritten.proofs.observations.set(std::sync::Arc::new(
+                DomainObservations::terminal_polynomial(&rewritten.structure, true),
+            ));
+        }
+        let remaining =
+            Atom::mul_many(factors.iter().enumerate().filter_map(|(position, factor)| {
+                (!bindings
+                    .iter()
+                    .any(|(_, consumed, _)| *consumed == position))
+                .then_some(&factor.expression)
+            }));
+        let remaining_interface = PartialStructure::from_logical_slots(
+            coefficient_ports
+                .into_iter()
+                .filter(|port| !consumed.contains(port)),
+        );
+        let remaining = SymbolicTensor::from_validated_parts(remaining, remaining_interface);
+        let _ = remaining.proofs.intrinsic.set(true);
+        remaining.observe_replacement(coefficient);
+        *coefficient = remaining;
+        Ok(Some(rewritten))
+    }
+
+    /// Evaluate standalone traces after reducing summed indices within the
+    /// word. The surviving explicit indices occur once per monomial and compact
+    /// arguments produce scalar dots, so no outer tensor contraction remains.
+    /// A scalar-product context additionally requires callback-free words
+    /// with exact leaf metadata. Free slots occur once per term; wildcard
+    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
+    /// introduce further tensor cleanup.
+    pub(crate) fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
+        self,
+        expr: AtomView<'_>,
+    ) -> Option<(Atom, Option<DomainObservations>)> {
+        let TerminalTrace {
+            representation: rep,
+            indices,
+            axial,
+            repeated,
+            four_dimensional,
+        } = self.parse_terminal_trace::<SCALAR_CONTEXT>(expr)?;
+        let output = self.output;
+        // The recurrence removes every summed explicit pair before emitting
+        // pairings. Each remaining explicit slot occurs once in every term;
+        // compact arguments introduce only scalar products. Certify this from the parsed word;
+        // generated polynomial trees need no new candidate traversal.
+        let observations = Self::terminal_trace_observations(rep, &indices, axial);
         if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
             return Some((Atom::Zero, observations));
         }
