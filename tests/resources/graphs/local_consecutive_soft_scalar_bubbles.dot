@@ -1,0 +1,27 @@
+digraph local_consecutive_soft_scalar_bubbles {
+  // Two vertex-disjoint 1PI soft components occur consecutively on one
+  // connected carrier line. Their compatible union is a two-component
+  // spinney, while neither component contains the other.
+  num = "-1𝑖/2"
+  node [num = "1"]
+  edge [particle = scalar_1]
+
+  ext [style = invis]
+
+  ext -> left_in:0 [id = 5]
+  right_out:1 -> ext [id = 6]
+
+  left_in -> left_out [
+    id = 0
+    num = "Q(0,spenso::cind(1))^2+Q(0,spenso::cind(2))^2+Q(0,spenso::cind(3))^2"
+  ]
+  left_in -> left_out [id = 1]
+
+  left_out -> right_in [id = 2]
+
+  right_in -> right_out [
+    id = 3
+    num = "Q(3,spenso::cind(1))^2+Q(3,spenso::cind(2))^2+Q(3,spenso::cind(3))^2"
+  ]
+  right_in -> right_out [id = 4]
+}

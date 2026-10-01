@@ -1,0 +1,13 @@
+digraph nested_positive_degree_hu {
+  edge [particle=scalar_1 num=1]
+  node [num=1]
+  ext [style=invis]
+
+  ext -> v1:0 [id=0]
+  v4:1 -> ext [id=1]
+  v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2"]
+  v2 -> v3 [id=3 particle=scalar_2 lmb_id=0 num="Q(3,spenso::cind(0))"]
+  v2 -> v3 [id=4 particle=scalar_2]
+  v3 -> v4 [id=5]
+  v1 -> v4 [id=6]
+}

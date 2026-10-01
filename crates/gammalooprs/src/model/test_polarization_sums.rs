@@ -12,7 +12,7 @@ use spenso::{
     },
     structure::{
         Canonicalized, TensorDataLayout,
-        representation::{Euclidean, LibraryRep, Minkowski, RepName},
+        representation::{LibraryRep, Minkowski, RepName},
     },
     tensors::{
         data::{DataTensor, DenseTensor, SparseOrDense, StorageTensor},
@@ -197,28 +197,13 @@ fn vector_sum_test_library(
             Complex::new_re(momentum.spatial.pz),
         ],
     );
-    // `GS.emr_vec(eid, mu)` is the spatial part of the momentum embedded as a Lorentz vector with
-    // vanishing time component. The axial-gauge reference vector uses this indexed form directly.
+    // `GS.emr_vec(eid, mink(4))` is the spatial part of the momentum embedded as a Lorentz
+    // vector with vanishing time component. The axial-gauge reference vector and denominator use
+    // this same Minkowski representation; its self-contraction is therefore `-|q⃗|²`.
     insert_explicit_complex_tensor(
         &mut lib,
         ExplicitKey::from_iter(
             [Minkowski {}.new_rep(4)],
-            GS.emr_vec,
-            Some(vec![Atom::num(eid.0)]),
-        ),
-        vec![
-            Complex::new_re(F(0.0)),
-            Complex::new_re(momentum.spatial.px),
-            Complex::new_re(momentum.spatial.py),
-            Complex::new_re(momentum.spatial.pz),
-        ],
-    );
-    // The massless axial denominator uses `dot(euc, q3, q3)`. Register the same spatial data as an
-    // Euclidean vector so the dot-product evaluates to +|q3|^2 without introducing a dummy index.
-    insert_explicit_complex_tensor(
-        &mut lib,
-        ExplicitKey::from_iter(
-            [Euclidean {}.new_rep(4)],
             GS.emr_vec,
             Some(vec![Atom::num(eid.0)]),
         ),

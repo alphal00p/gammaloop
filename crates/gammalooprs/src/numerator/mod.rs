@@ -71,6 +71,13 @@ use symbolica::prelude::*;
 pub mod symbolica_ext;
 
 #[cfg(test)]
+pub(crate) mod exact_soft_jet;
+#[cfg(test)]
+pub(crate) mod pole_certificate;
+#[cfg(test)]
+pub(crate) mod soft_energy_certificate;
+
+#[cfg(test)]
 mod spensotests;
 
 pub mod aind;

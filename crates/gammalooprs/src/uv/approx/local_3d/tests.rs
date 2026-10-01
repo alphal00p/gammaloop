@@ -1541,7 +1541,7 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
             &graph.loop_momentum_basis,
             ApproximationType::MUV,
             0,
-        )
+        )?
         .expect("the complete bubble has a compatible loop basis"),
         topo_order: 0,
     };

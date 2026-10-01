@@ -1,0 +1,11 @@
+digraph local_ir_gluon_self_energy {
+  // Close the two external gluon slots; the massless-quark loop itself is
+  // color closed by the Feynman rules.
+  projector = "1/8*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
+  ext [style=invis]
+
+  ext -> v1:0 [id=0 particle=g]
+  v2:1 -> ext [id=1 particle=g]
+  v1:2 -> v2:3 [id=2 particle=d lmb_id=0]
+  v2:4 -> v1:5 [id=3 particle=d]
+}

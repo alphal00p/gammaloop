@@ -133,6 +133,9 @@ impl<'a> Localizer<'a> {
     ) -> Result<Vec<OrientationID>> {
         let production = self.orientation.exact_orientations()?;
         let contracted_edges = graph.paired_edges(contract_subgraph);
+        // Contracted edges are undirected in the reduced CFF, so applying
+        // the original full-graph pattern again is not equivalent to admitting
+        // the reduced maps compatible with selected full orientations.
         // A UV source's contracted-edge orientations resolve its internal
         // energy residues; they are not outer production-map directions.
         let mut explicit_reduced_orientation = reduced.data.orientation.clone();

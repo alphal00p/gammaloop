@@ -1,5 +1,7 @@
 use std::hash::{Hash, Hasher};
 
+use color_eyre::Result;
+use eyre::WrapErr;
 use gammaloop_tracing_filter::LogMessage;
 use linnet::half_edge::{
     HedgeGraph,
@@ -18,6 +20,8 @@ pub struct Spinney {
     components: Vec<SuBitGraph>,
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
+    /// Disconnected unions use `MUV` as a neutral tag; their component factors
+    /// carry the renormalization schemes that determine the approximation.
     pub renormalization_scheme: ApproximationType,
     max_comp_loop_count: usize,
 }
@@ -54,7 +58,7 @@ impl Spinney {
         subgraph: InternalSubGraph,
         g: &G,
         lmb: &LoopMomentumBasis,
-    ) -> Option<Self> {
+    ) -> Result<Option<Self>> {
         let dod = g.compute_dod(&subgraph);
         Self::with_scheme(subgraph, g, lmb, ApproximationType::MUV, dod)
     }
@@ -65,20 +69,29 @@ impl Spinney {
         lmb: &LoopMomentumBasis,
         renormalization_scheme: ApproximationType,
         dod: i32,
-    ) -> Option<Self> {
+    ) -> Result<Option<Self>> {
         let components = g.as_ref().connected_components(&subgraph);
         let max_comp_loop_count = components
             .iter()
             .map(|component| g.as_ref().cyclotomatic_number(component))
             .max()
             .unwrap_or(0);
+
+        // Divergence is a property of each connected factor of a spinney.
+        // A disconnected union may have a negative aggregate DOD even though
+        // every factor was selected as divergent and must still be retained.
+        if dod < 0 && components.len() <= 1 {
+            return Ok(None);
+        }
+
         let lmb = g
             .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
-            .ok()?;
-
-        if dod < 0 {
-            return None;
-        }
+            .wrap_err_with(|| {
+                format!(
+                    "failed to select a compatible loop-momentum route for spinney {} (scheme {renormalization_scheme}, DOD {dod})",
+                    subgraph.string_label()
+                )
+            })?;
 
         debug!(
             dod = %dod,
@@ -89,14 +102,14 @@ impl Spinney {
             renormalization_scheme
         );
 
-        Some(Self {
+        Ok(Some(Self {
             components,
             dod,
             lmb,
             subgraph,
             renormalization_scheme,
             max_comp_loop_count,
-        })
+        }))
     }
 
     pub fn filter(&self) -> &SuBitGraph {
