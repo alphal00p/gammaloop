@@ -1537,14 +1537,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for SparseTensor<Atom, S> {
         fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, EvaluationError> {
-        let atomviews: Vec<AtomView> = self.iter_flat().map(|(_, a)| a.as_view()).collect();
-        let eval = AtomView::to_eval_tree_multiple(&atomviews, fn_map, params)?;
-
-        Ok(EvalTreeTensor {
-            eval,
-            indexmap: None,
-            structure: self.structure.clone(),
-        })
+        EvalTreeTensor::from_sparse(self, fn_map, params)
     }
 
     fn evaluator(

@@ -5,28 +5,29 @@ edition = "2024"
 description = "Tensor identities for symbolica"
 
 [dependencies]
-bincode = { workspace = true }
-bincode-trait-derive = { workspace = true }
+ahash = { workspace = true }
+bincode = { workspace = true, optional = true }
+bincode-trait-derive = { workspace = true, optional = true }
 eyre = { workspace = true }
 itertools = { workspace = true }
-linnet = { workspace = true, default-features = false, features = ["serde"] }
-spenso = { workspace = true, default-features = false, features = ["symbolica"] }
+linnet = { workspace = true, default-features = false, features = ["nodestore-vec", "serde"] }
+spenso = { workspace = true, default-features = false, features = ["shadowing"] }
 spenso-macros = { workspace = true, default-features = false }
 symbolica = { workspace = true }
 symbolica-utils = { workspace = true, default-features = false }
 
 nu-ansi-term = { workspace = true }
-pyo3 = { workspace = true, optional = true }
-pyo3-stub-gen = { workspace = true, optional = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
+base64 = "0.22.1"
 blake3 = "1.8.3"
 delegate = "0.13.5"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 gungraun = "0.18.1"
-insta = { workspace = true }
+insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
 
 [[bench]]
 name = "schoonschip_modes"
@@ -48,10 +49,28 @@ harness = false
 name = "vertex_algebra_once"
 harness = false
 
+[[example]]
+name = "metric_contraction_benchmark"
+required-features = ["reference-cases"]
+
+[[example]]
+name = "contraction_phase_benchmark"
+required-features = ["reference-cases"]
+
 [features]
 default = ["native"]
-native = ["spenso/native"]
+bincode = ["dep:bincode", "dep:bincode-trait-derive"]
+native = [
+  "linnet/native",
+  "spenso/native",
+  "symbolica/integer-gmp",
+  "symbolica/float-mpfr",
+  "symbolica-utils/native",
+]
 reference-cases = []
-python = ["dep:pyo3", "symbolica/python_export"]
-python-stubs = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]
-wasm = ["spenso/wasm"]
+wasm = [
+  "linnet/wasm",
+  "spenso/wasm",
+  "symbolica/wasm",
+  "symbolica-utils/wasm",
+]
