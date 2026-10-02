@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
 use linnest::{
     TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Dash, Details, EdgeDrawing, NodeDrawing, Pattern, Scene, Stroke},
+    svg::{Config, Dash, Details, EdgeDrawing, NodeDrawing, Pattern, Scene, Stroke},
 };
 use linnet::half_edge::{
     EdgeAccessors,
@@ -558,7 +558,8 @@ impl SceneOptions {
         model: &Model,
         incoming: &[ParticleId],
         outgoing: &[ParticleId],
-    ) -> Scene {
+        config: &Config,
+    ) -> Result<Scene, String> {
         let node = TypstNodeSpec {
             name: Some("process".into()),
             index: Some(0),
@@ -566,7 +567,7 @@ impl SceneOptions {
             pos: None,
             statements: BTreeMap::from([
                 ("pos".into(), "0,0".into()),
-                ("pos-mode".into(), "pin".into()),
+                ("pin".into(), "x:0,y:0".into()),
             ]),
         };
         let mut scene = Scene {
@@ -580,7 +581,9 @@ impl SceneOptions {
                 edges: vec![],
             },
             nodes: vec![NodeDrawing {
-                radius: 1.0,
+                // Preserve the original 3 × 1.5em blob at 10pt in the native
+                // renderer's 13.5pt drawing units.
+                radius: 10.0 / 3.0,
                 label: None,
                 rectangular: false,
                 fill: "url(#linnest-process-hatch)".into(),
@@ -593,7 +596,7 @@ impl SceneOptions {
                 details: [("title", "Process")].into_iter().collect(),
             }],
             edges: vec![],
-            preamble: format!("#set text(size: 9pt, fill: rgb({INK:?}))"),
+            preamble: format!("#set text(size: 10pt, fill: rgb({INK:?}))"),
             title: None,
             pages: vec![],
             layout: self.layout.clone(),
@@ -627,8 +630,6 @@ impl SceneOptions {
                 } else {
                     (Some(end), None)
                 };
-                let x = if is_incoming { -6.0 } else { 6.0 };
-                let y = ((particles.len() as f64 - 1.0) / 2.0 - rank as f64) * 4.0;
                 scene.graph.edges.push(TypstEdgeSpec {
                     name: None,
                     source,
@@ -638,15 +639,7 @@ impl SceneOptions {
                     flow: None,
                     id: Some(index),
                     pos: None,
-                    statements: [
-                        ("pos", format!("{x},{y}")),
-                        ("pos-mode", "pin".into()),
-                        ("pos-z", "0".into()),
-                        ("pos-z-mode", "pin".into()),
-                    ]
-                    .into_iter()
-                    .map(|(k, v)| (k.into(), v))
-                    .collect(),
+                    statements: BTreeMap::new(),
                 });
                 let mut drawing = self.particle_drawing(particle, model, orientation);
                 if self.show_particle {
@@ -669,6 +662,37 @@ impl SceneOptions {
                 scene.edges.push(drawing);
             }
         }
-        scene
+        config.apply(&mut scene)?;
+        // A process has a finite interaction region, not a point vertex. Place
+        // straight legs around its final styled radius, leaving visible line
+        // outside even when the caller enlarges the blob. Mixed states occupy
+        // opposite semicircles in input order; one-sided states use the full ring.
+        let reach = scene.nodes[0].radius.max(1.0) * 1.65;
+        let mixed = !incoming.is_empty() && !outgoing.is_empty();
+        for (index, edge) in scene.graph.edges.iter_mut().enumerate() {
+            let is_incoming = index < incoming.len();
+            let (rank, count) = if is_incoming {
+                (index, incoming.len())
+            } else {
+                (index - incoming.len(), outgoing.len())
+            };
+            let angle = if mixed {
+                std::f64::consts::PI * (rank + 1) as f64 / (count + 1) as f64
+            } else {
+                std::f64::consts::TAU * rank as f64 / count as f64
+            };
+            let x = reach * angle.sin() * if is_incoming { -1.0 } else { 1.0 };
+            let y = reach * angle.cos();
+            edge.statements = [
+                ("pos", format!("{x},{y}")),
+                ("pin", format!("x:{x},y:{y}")),
+                ("pos-z", "0".into()),
+                ("pos-z-mode", "pin".into()),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k.into(), v))
+            .collect();
+        }
+        Ok(scene)
     }
 }

@@ -200,7 +200,6 @@ pub(crate) fn collection_html(
     Ok(html)
 }
 
-/// The shared physics renderer's sources, at the project paths importers use.
 /// Draw each process channel as a native star graph with a hatched interaction blob.
 pub(crate) fn process_svg(
     py: Python<'_>,
@@ -213,9 +212,8 @@ pub(crate) fn process_svg(
     let options = scene_options(&config, false)?;
     let mut figures = Vec::new();
     for state in outgoing {
-        let mut scene = options.process_scene(model, incoming, state);
-        config
-            .apply(&mut scene)
+        let scene = options
+            .process_scene(model, incoming, state, &config)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
         figures.push(render_scene(&scene)?);
     }
