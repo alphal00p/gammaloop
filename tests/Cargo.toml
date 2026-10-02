@@ -27,7 +27,7 @@ ndarray = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
 serde_json = { workspace = true }
 parking_lot = { version = "0.12", default-features = false }
-spenso = { workspace = true, features = ["native", "symbolica"] }
+spenso = { workspace = true, features = ["native", "shadowing"] }
 tabled = { workspace = true, features = ["ansi"] }
 three-dimensional-reps = { workspace = true, features = ["eval", "generation-audit"] }
 toml = { workspace = true }

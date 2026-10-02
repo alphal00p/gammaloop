@@ -300,11 +300,39 @@
   let label = _display-node(labels.at(position))
   if cycle == 0 { label } else { math.attach(label, b: $ #cycle $) }
 }
-#let _slot-index(slot, ctx) = {
+#let _index-key(node) = {
+  if _is-variable(node) { return ("var", _name(node)) }
+  if _is-function(node) { return ("fun", _name(node), node.arguments.map(_index-key)) }
+  let natural = _natural-index(node)
+  if natural != none { natural } else { node.at("text", default: "?") }
+}
+#let _slot-index(slot, ctx, settings) = {
   let index = _natural-index(slot.index)
   if index != none {
     let display = _palette-index(slot.palette, index)
     if display != none { return display }
+  }
+  // Aliases affect only the visible slot. The complete tensor call keeps its
+  // original Atom annotation, including its named graph-index identities.
+  if _is-function(slot.index) or _is-variable(slot.index) {
+    // `none` distinguishes symbolic indices from zero-argument index calls.
+    let arguments = if _is-variable(slot.index) { none } else {
+      slot.index.arguments.map(_index-key)
+    }
+    if arguments == none or none not in arguments {
+      for alias in settings.at("index-aliases", default: ()) {
+        if (
+          alias.at(0) == slot.identity
+            and alias.at(1) == _name(slot.index)
+            and alias.at(2) == arguments
+        ) {
+          let label = alias.at(3)
+          if type(label) == content { return label }
+          let display = _palette-index(slot.palette, label)
+          if display != none { return display }
+        }
+      }
+    }
   }
   // Exact document heads are resolved by the common renderer before its
   // payload-head fallback, so they beat spenso.math-display overlays.
@@ -465,7 +493,7 @@
     let slot = _slot(argument, ctx)
     if slot != none {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
       continue
@@ -516,7 +544,7 @@
   let visual-arguments = ctx.arguments.map(argument => {
     let slot = _slot(argument, ctx)
     if slot != none {
-      return _qualified-index(slot, _slot-index(slot, ctx), ctx, settings)
+      return _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings)
     }
     let compact = _compact-vector(argument, ctx, settings)
     if compact != none {
@@ -601,7 +629,7 @@
     prefix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -614,7 +642,7 @@
     suffix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -735,16 +763,54 @@
     (ctx.default)()
   }
   let defaults = core.notation(
-    heads: _default-heads,
-    calls: (
+    heads: _merge(_merge(_default-heads, (
+      "spenso::Nc": ctx => _color-label("Nc", settings),
+    )), settings.print-heads),
+    calls: _merge(callback-calls, (
+      "spenso::bracket": ctx => {
+        if ctx.arguments.len() == 0 { return (ctx.default)() }
+        let body = ctx.arguments.map(argument => {
+          let visual = _visual(ctx, argument)
+          if _kind(argument) == "sum" { _parentheses(visual) } else { visual }
+        }).join(h(settings.factor-gap))
+        if ctx.power-base { _parentheses(body) } else { body }
+      },
+      "spenso::cas": ctx => _color-invariant(ctx, settings, "cas"),
+      "spenso::idx": ctx => _color-invariant(ctx, settings, "idx"),
+      "spenso::gram": ctx => _color-invariant(ctx, settings, "gram"),
       "spenso::gamma": ctx => _render-gamma(ctx, settings),
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
       "spenso::trace": ctx => _render-trace(ctx, settings),
     ),
     tags: (
-      tensor: tensor,
-      "spenso::tensor": tensor,
+      "spenso::index": ctx => {
+        let settings = _portable-settings(ctx, settings)
+        let registered = settings.index-labels.at(ctx.symbol.at("name", default: "?"), default: none)
+        if ctx.kind != "function" or registered == none {
+          (ctx.default)()
+        } else {
+          let label = registered.label
+          let arguments = ctx.visual-arguments
+          // The first endpoint slot is implicit; higher-spin slots and dummy
+          // identifiers remain visible, matching the native index printer.
+          if (
+            label in ("s", "t") and ctx.arguments.len() == 2
+              and _kind(ctx.arguments.at(1)) == "number"
+              and ctx.arguments.at(1).at("source", default: none) == "1"
+          ) {
+            arguments = arguments.slice(0, 1)
+          }
+          // Use a math symbol, not italic text: text boxes scale incorrectly
+          // when this label is itself nested inside a tensor's script.
+          let head = registered.visual
+          // Math's smallest script style stops shrinking at deeper levels.
+          // Keep the numeric identifier subordinate even inside a fraction.
+          math.attach(head, b: text(size: 0.75em, arguments.join([.])))
+        }
+      },
+      tensor: printed-call,
+      "spenso::tensor": printed-call,
     ),
     fallback-head: _payload-head,
   )

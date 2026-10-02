@@ -495,10 +495,13 @@ let settings = MatchSettings {
 };
 ```
 
-Implement FORM-like simplifiers as ordered passes, not as one unordered
-`replace_multiple` table. Put cheap terminal rules first, then structural
-normalization, then broader recursive searches. If a pass can expose another
-rule in the same family, run to a fixed point with an equality guard.
+Keep family kernels as ordered local rule applications. The public
+`simplify_algebra(AlgebraSettings)` and `contract(ContractSettings)` use one
+capability-driven domain planner and one structural contractor. Candidate heads
+and shallow graph boundaries determine eligible work; dependencies and estimated
+term growth determine scheduling. Actual changes update regional observations
+and pending work. Do not prescribe a fixed sequence of whole-expression family
+passes or use whole-alias-table equality to detect progress.
 
 Keep semantic boundaries clear:
 
@@ -516,8 +519,11 @@ Keep semantic boundaries clear:
 - Unit tests for narrow rule families should live next to the implementation.
   Larger FORM/FeynCalc/reference cases should stay in the broader test modules.
 
-The goal is source-backed named rule families plus a small ordered pass driver.
-Avoid a universal rewrite engine unless the algebraic strategy itself is shared.
+Public family simplification wrappers are replaced by `simplify_algebra` with
+explicit family settings. Notation conversions remain separate: `to_dots`
+normalizes surviving compact scalar products without contracting repeated
+indices; `undo_dots`, `undo_chain`, and `undo_trace` unfold the notation present.
+Construction, conjugation, indexing, and canonicalization remain orthogonal.
 
 == Factorization during index canonicalization
 

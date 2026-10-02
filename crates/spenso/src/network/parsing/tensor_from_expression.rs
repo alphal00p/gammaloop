@@ -3,14 +3,14 @@ use std::{
     ops::AddAssign,
 };
 
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::{Atom, AtomOrView, AtomView};
 
 use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
 use crate::{
     algebra::ScalarMul,
     network::{
-        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, Network, Ref, Sequential,
-        SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
+        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost,
+        Network, Ref, Sequential, TensorNetworkError,
         library::{FunctionLibrary, Library, LibraryTensor},
         store::NetworkStore,
     },
@@ -32,8 +32,10 @@ use crate::{
 /// inference decides the exposed slots, then this trait decides how the target
 /// tensor type represents the original expression. Symbolic tensors can keep
 /// the expression directly, while concretized tensor types may parse and
-/// execute an expanded sub-network here.
-pub trait TensorFromExpression<S, Sc, K, FK, Aind, Lib, FunLib>: Sized
+/// execute an expanded sub-network here with the MinIntermediateCost policy.
+/// The returned layout describes the realized tensor: eager contraction can
+/// remove internal ports from the originally inferred interface.
+pub trait TensorFromExpression<'src, S, Sc, K, FK, Aind, Lib, FunLib>: Sized
 where
     S: TensorStructure,
     Self: HasStructure,
@@ -42,12 +44,23 @@ where
 {
     #[allow(clippy::result_large_err)]
     fn tensor_from_expression(
-        expression: AtomView<'_>,
+        expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, FK>>
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display;
+
+    /// Realize an ordinary tensor leaf after the library has declined it.
+    /// Unlike an opaque composite, this leaf must not recursively parse itself.
+    #[allow(clippy::result_large_err)]
+    fn tensor_from_leaf(
+        expression: AtomOrView<'src>,
+        structure: Canonicalized<S>,
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
     where
         K: Display,
         FK: Display;

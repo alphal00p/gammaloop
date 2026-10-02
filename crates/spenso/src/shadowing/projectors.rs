@@ -6,7 +6,7 @@ use symbolica::{
 };
 
 use super::{
-    IntoAtom, TensorCollectExt,
+    IntoAtom,
     trace::{chain_like_with_factors, trace, trace_factor_views},
 };
 
@@ -88,6 +88,36 @@ where
         .finish()
 }
 
+/// Normalized permutations of an ordered group of matrix factors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FactorProjector {
+    Symmetric,
+    Antisymmetric,
+    Cyclic,
+}
+
+impl FactorProjector {
+    /// Registered inert head, sharing normalization with symbolic rewrite rules.
+    pub fn symbol(self) -> Symbol {
+        match self {
+            Self::Symmetric => *SYM,
+            Self::Antisymmetric => *ANTISYM,
+            Self::Cyclic => *CYCLIC,
+        }
+    }
+
+    /// Build the compact projector without expanding its permutations.
+    pub fn apply<F: IntoAtom>(self, factors: impl IntoIterator<Item = F>) -> Atom {
+        projector(self.symbol(), factors)
+    }
+
+    /// Exact coefficients and factor orders for explicit component evaluation.
+    /// Returns None if the normalization denominator exceeds the supported size.
+    pub fn permutations(self, count: usize) -> Option<Vec<(Atom, Vec<usize>)>> {
+        projector_expansion_terms(&(0..count).collect::<Vec<_>>(), self.symbol())
+    }
+}
+
 pub trait ProjectorExpander {
     fn expand_projectors(&self) -> Atom;
 }
@@ -107,13 +137,11 @@ impl ProjectorExpander for AtomView<'_> {
 fn expand_projectors_impl(expression: AtomView) -> Atom {
     let mut current = expression.to_owned();
     loop {
-        let next = current
-            .replace_map(|arg, _context, out| {
-                if let Some(expanded) = expand_chain_like_projector(arg) {
-                    **out = expanded;
-                }
-            })
-            .collect_tensors();
+        let next = current.replace_map(|arg, _context, out| {
+            if let Some(expanded) = expand_chain_like_projector(arg) {
+                **out = expanded;
+            }
+        });
 
         if next == current {
             return next;
@@ -217,10 +245,10 @@ fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
     Some((f.get_symbol(), f.iter().map(|arg| arg.to_owned()).collect()))
 }
 
-fn projector_expansion_terms(
-    factors: &[Atom],
+fn projector_expansion_terms<T: Clone>(
+    factors: &[T],
     projector_symbol: Symbol,
-) -> Option<Vec<(Atom, Vec<Atom>)>> {
+) -> Option<Vec<(Atom, Vec<T>)>> {
     if projector_symbol == *CYCLIC {
         return cyclic_projector_terms(factors);
     }
@@ -240,7 +268,7 @@ fn projector_expansion_terms(
     Some(terms)
 }
 
-fn cyclic_projector_terms(factors: &[Atom]) -> Option<Vec<(Atom, Vec<Atom>)>> {
+fn cyclic_projector_terms<T: Clone>(factors: &[T]) -> Option<Vec<(Atom, Vec<T>)>> {
     if factors.is_empty() {
         return Some(vec![(Atom::num(1), Vec::new())]);
     }
@@ -262,14 +290,14 @@ fn cyclic_projector_terms(factors: &[Atom]) -> Option<Vec<(Atom, Vec<Atom>)>> {
     )
 }
 
-fn collect_projector_terms(
-    factors: &[Atom],
+fn collect_projector_terms<T: Clone>(
+    factors: &[T],
     antisymmetric: bool,
     position: usize,
     sign: i64,
     permutation: &mut [usize],
     denominator: &Atom,
-    terms: &mut Vec<(Atom, Vec<Atom>)>,
+    terms: &mut Vec<(Atom, Vec<T>)>,
 ) {
     if position == permutation.len() {
         let coefficient = if antisymmetric {

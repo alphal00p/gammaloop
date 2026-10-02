@@ -75,8 +75,16 @@ impl PartialStructureExt for PartialStructure {
     }
 
     fn logical_slots(&self) -> Vec<PartialSlot> {
-        let canonical = self.canonical().external_structure();
-        self.layout().canonical_to_logical(&canonical)
+        self.layout()
+            .canonical_to_logical(&self.canonical().structure)
+    }
+
+    fn slots(&self) -> Result<Vec<Slot<LibraryRep, AbstractIndex>>, StructureError> {
+        self.canonical().slots()
+    }
+
+    fn representations(&self) -> Result<Vec<Representation<LibraryRep>>, StructureError> {
+        self.canonical().representations()
     }
 
     fn canonicalize_open_ports(&self) -> Self {
@@ -125,6 +133,32 @@ impl PartialStructureExt for PartialStructure {
     }
 }
 
+impl OrderedStructure<LibraryRep, PartialIndex<AbstractIndex>> {
+    /// Return every external slot in canonical order, or fail at the first unresolved axis.
+    pub fn slots(&self) -> Result<Vec<Slot<LibraryRep, AbstractIndex>>, StructureError> {
+        self.external_structure()
+            .into_iter()
+            .enumerate()
+            .map(|(axis, slot)| match slot.aind {
+                PartialIndex::Explicit(index) => Ok(slot.rep().slot(index)),
+                PartialIndex::Open(_) => Err(StructureError::ExpectedExplicitSlot { axis }),
+            })
+            .collect()
+    }
+
+    /// Return every unresolved representation in canonical order, or fail at the first indexed axis.
+    pub fn representations(&self) -> Result<Vec<Representation<LibraryRep>>, StructureError> {
+        self.external_structure()
+            .into_iter()
+            .enumerate()
+            .map(|(axis, slot)| match slot.aind {
+                PartialIndex::Open(_) => Ok(slot.rep()),
+                PartialIndex::Explicit(_) => Err(StructureError::ExpectedRepresentation { axis }),
+            })
+            .collect()
+    }
+}
+
 impl PartialIndex<AbstractIndex> {
     pub fn explicit(index: AbstractIndex) -> Self {
         Self::Explicit(index)
@@ -142,12 +176,84 @@ mod tests {
     use crate::structure::representation::{ExtendibleReps, RepName};
 
     #[test]
+    fn homogeneous_accessors_use_canonical_order() {
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let slots = [
+            mink.slot(AbstractIndex::Normal(9)),
+            euc.slot(AbstractIndex::Normal(2)),
+        ];
+        let explicit = PartialStructure::from_logical_slots(
+            slots
+                .iter()
+                .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
+        );
+        assert_eq!(explicit.slots().unwrap(), [slots[1], slots[0]]);
+        assert!(matches!(
+            explicit.representations(),
+            Err(StructureError::ExpectedRepresentation { axis: 0 })
+        ));
+        let open = PartialStructure::from_logical_slots([
+            mink.slot(PartialIndex::open(9)),
+            euc.slot(PartialIndex::open(2)),
+        ]);
+        assert_eq!(open.representations().unwrap(), [euc, mink]);
+        assert!(matches!(
+            open.slots(),
+            Err(StructureError::ExpectedExplicitSlot { axis: 0 })
+        ));
+    }
+
+    #[test]
+    fn homogeneous_accessors_reject_mixed_axes_without_losing_information() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let structure = PartialStructure::from_logical_slots([
+            rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(7))),
+            rep.slot(PartialIndex::open(8)),
+        ]);
+        let before = structure.clone();
+        assert!(matches!(
+            structure.slots(),
+            Err(StructureError::ExpectedExplicitSlot { axis: 1 })
+        ));
+        assert!(matches!(
+            structure.representations(),
+            Err(StructureError::ExpectedRepresentation { axis: 0 })
+        ));
+        assert_eq!(structure, before);
+        let reversed =
+            PartialStructure::from_logical_slots(structure.logical_slots().into_iter().rev());
+        assert!(matches!(
+            reversed.slots(),
+            Err(StructureError::ExpectedExplicitSlot { axis: 1 })
+        ));
+        assert!(matches!(
+            reversed.representations(),
+            Err(StructureError::ExpectedRepresentation { axis: 0 })
+        ));
+    }
+
+    #[test]
+    fn scalar_structure_supports_both_homogeneous_accessors() {
+        let scalar = PartialStructure::from_logical_slots([]);
+        assert!(!scalar.has_unresolved_ports());
+        assert!(scalar.logical_slots().is_empty());
+        assert!(scalar.slots().unwrap().is_empty());
+        assert!(scalar.representations().unwrap().is_empty());
+    }
+
+    #[test]
     fn canonicalizes_open_ids_in_logical_order() {
         let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let structure = PartialStructure::from_logical_slots([
             rep.slot(PartialIndex::Open(OpenPortId(9))),
             rep.slot(PartialIndex::Open(OpenPortId(2))),
         ]);
+        assert!(structure.has_unresolved_ports());
+        let materialized = PartialStructure::from_logical_slots([rep.slot(
+            PartialIndex::Explicit(AbstractIndex::Open { owner: 9, axis: 0 }),
+        )]);
+        assert!(!materialized.has_unresolved_ports());
 
         assert_eq!(
             structure
@@ -161,12 +267,14 @@ mod tests {
 
     #[test]
     fn logical_slots_reverse_both_sorting_permutations() {
-        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let small_euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let logical = vec![
             mink.slot(PartialIndex::open(0)),
             euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(8))),
             euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(3))),
+            small_euc.slot(PartialIndex::open(1)),
         ];
         let structure = PartialStructure::from_logical_slots(logical.clone());
 

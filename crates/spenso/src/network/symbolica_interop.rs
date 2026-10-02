@@ -4,8 +4,12 @@ use std::{borrow::Cow, fmt::Display, sync::Arc};
 use std::path::Path;
 
 use ahash::{AHashMap, AHashSet, HashMap};
-#[cfg(feature = "native-code-generation")]
 use eyre::eyre;
+use linnet::{
+    half_edge::{NodeIndex, tree::SimpleTraversalTree},
+    tree::child_vec::ChildVecStore,
+};
+use symbolica::atom::FunctionBuilder;
 #[cfg(feature = "native-code-generation")]
 use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
@@ -66,10 +70,10 @@ use crate::{
 };
 use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
-#[cfg(feature = "native-code-generation")]
 use super::TensorNetworkError;
 use super::{
     ExecutionResult, Network,
+    graph::{NetworkGraph, NetworkNode, NetworkOp},
     store::{NetworkStore, TensorScalarStore, TensorScalarStoreMapping},
 };
 

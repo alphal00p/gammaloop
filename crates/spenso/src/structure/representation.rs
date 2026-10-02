@@ -529,28 +529,32 @@ impl<T: RepName> Representation<T> {
     /// carry a representation or explicit index do not satisfy the precondition;
     /// applying this method to them would append a second structure argument.
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
-        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
-            match value {
-                AtomView::Fun(fun) => {
-                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-                    for arg in fun.iter() {
-                        rebuilt = rebuilt.add_arg(arg);
-                    }
-                    rebuilt.add_arg(rep).finish()
-                }
-                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
-                _ => value.to_owned(),
-            }
-        }
-
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
-        let rep = self.to_symbolic([]);
         function!(
             SPENSO_TAG.dot,
-            with_rep(a.as_view(), &rep),
-            with_rep(b.as_view(), &rep)
+            self.vector(a.as_view(), []),
+            self.vector(b.as_view(), [])
         )
+    }
+
+    /// Attach this representation, optionally with an index, to a vector name.
+    ///
+    /// For example, `p` becomes `p(mink(D,mu))`, while `Q(1)` becomes
+    /// `Q(1,mink(D,mu))`. An empty index list produces the compact vector used
+    /// by scalar products and Dirac slashes. Non-function expressions are
+    /// retained, matching the scalar-product convention.
+    #[cfg(feature = "shadowing")]
+    pub fn vector(&self, value: AtomView<'_>, indices: impl IntoIterator<Item = Atom>) -> Atom {
+        let rep = self.to_symbolic(indices);
+        match value {
+            AtomView::Fun(fun) => FunctionBuilder::new(fun.get_symbol())
+                .add_args(fun.iter())
+                .add_arg(rep)
+                .finish(),
+            AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+            _ => value.to_owned(),
+        }
     }
 
     pub fn base(self) -> Representation<T::Base> {
@@ -561,14 +565,14 @@ impl<T: RepName> Representation<T> {
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the metric tensor with aind a, and b.
     pub fn g<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
         function!(ETS.metric, self.pattern(a), self.pattern(b))
     }
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the musical isomorphism tensor with aind a, and b.
     pub fn flat<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
@@ -1499,7 +1503,7 @@ impl RepresentationMetadata {
 }
 
 impl LibraryRep {
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_symbol(
         &self,
         name: &str,
@@ -1508,7 +1512,7 @@ impl LibraryRep {
         self.new_symbol_with_index_row(name, index_palette, default_index_row(name))
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn new_symbol_with_index_row(
         &self,
         name: &str,
@@ -1580,11 +1584,13 @@ impl LibraryRep {
             return Ok(existing);
         }
 
-        let print_name = name.to_owned();
         SymbolBuilder::new(namespaced)
             .with_tags(tags)
             .with_user_data(metadata.to_user_data())
-            .with_print_function(move |a, opt, _state| {
+            .with_print_function(move |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return mathml::render(a, opt, state, &|_, _| None);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))
@@ -1650,8 +1656,14 @@ impl LibraryRep {
                         };
                         let palette = RepresentationMetadata::from_symbol(f.get_symbol())
                             .map(|metadata| metadata.index_palette);
-                        if let Some(display) =
-                            palette_index.and_then(|index| palette.as_ref()?.resolve(index))
+                        if let Some(display) = palette_index
+                            .and_then(|index| palette.as_ref()?.resolve(index))
+                            .or_else(|| match ind {
+                                AtomView::Var(variable) => {
+                                    IndexDisplay::from_symbol(variable.get_symbol())
+                                }
+                                _ => None,
+                            })
                         {
                             out.push_str(&display.to_native_string());
                         } else {
@@ -1667,28 +1679,9 @@ impl LibraryRep {
                     return None;
                 }
 
-                let AtomView::Fun(f) = a else {
-                    return None;
-                };
-
-                let mut out = if opt.color_builtin_symbols {
-                    nu_ansi_term::Color::DarkGray.paint(&print_name).to_string()
-                } else {
-                    return None;
-                };
-
-                out.push('(');
-                let mut first = true;
-                for arg in f.iter() {
-                    if !first {
-                        out.push_str(", ");
-                    } else {
-                        first = false;
-                    }
-                    out.push_str(&arg.to_string());
-                }
-                out.push(')');
-                Some(out)
+                // Ordinary expressions use Symbolica's namespace, bracket,
+                // and color handling, including the current nested print state.
+                None
             })
             .build()
             .map_err(|error| RepLibraryError::SymbolRegistration {
@@ -2465,18 +2458,33 @@ impl<'a, T: RepName> TryFrom<AtomView<'a>> for Representation<T> {
     type Error = SlotError;
 
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
+        Self::parse_with(value, |head, wrapper| match wrapper {
+            Some(wrapper) => T::try_from_symbol(head, wrapper),
+            None => T::try_from_symbol_coerced(head),
+        })
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<T: RepName> Representation<T> {
+    /// Read the existing representation-prefix grammar with a caller-owned
+    /// resolver. Dimension validation and acceptance of trailing arguments stay
+    /// identical for direct conversion and operation-scoped cached recognition.
+    pub(crate) fn parse_with(
+        value: AtomView<'_>,
+        mut resolve: impl FnMut(Symbol, Option<Symbol>) -> Result<T, RepresentationError>,
+    ) -> Result<Self, SlotError> {
         let (rep, mut iter) = if let AtomView::Fun(f) = value {
             let name = f.get_symbol();
 
             let innerf = f.iter().next().ok_or(SlotError::Composite)?;
 
             if let AtomView::Fun(innerf) = innerf {
-                let rep =
-                    T::try_from_symbol(innerf.get_symbol(), name).map_err(SlotError::RepError)?;
+                let rep = resolve(innerf.get_symbol(), Some(name)).map_err(SlotError::RepError)?;
 
                 (rep, innerf.iter())
             } else {
-                let rep = T::try_from_symbol_coerced(name).map_err(SlotError::RepError)?;
+                let rep = resolve(name, None).map_err(SlotError::RepError)?;
                 (rep, f.iter())
             }
         } else {
@@ -2821,44 +2829,48 @@ mod shadowing_tests {
     }
 
     #[test]
-    fn mathematical_display_nodes_render_and_round_trip_as_safe_user_data() {
-        let display = IndexDisplay::math(
-            "add",
-            vec![
-                IndexDisplay::math(
-                    "accent",
-                    vec![
-                        IndexDisplay::symbol("p").unwrap(),
-                        IndexDisplay::symbol("⃗").unwrap(),
-                    ],
-                )
-                .unwrap(),
-                IndexDisplay::math(
-                    "frac",
-                    vec![IndexDisplay::symbol("q").unwrap(), IndexDisplay::Number(2)],
-                )
-                .unwrap(),
-                IndexDisplay::text("soft").unwrap(),
-            ],
-        )
-        .unwrap();
+    fn ordinary_representation_calls_reuse_symbolica_namespace_and_color_handling() {
+        use symbolica::{
+            atom::AtomCore,
+            function,
+            printer::{ColorMode, PrintOptions},
+            symbol,
+        };
 
-        assert_eq!(
-            display.to_typst_source(),
-            r#"accent(p,"⃗") + frac(q,2) + upright("soft")"#
+        let dimension = function!(
+            symbol!("representation_print_test::dim"),
+            symbol!("representation_print_test::D")
         );
-        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(
-            "spenso_rep_metadata_tests::MathDisplayRoundTrip",
-        ))
-        .with_user_data(display.symbol_user_data())
-        .build()
-        .unwrap();
-        assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
-    }
+        let representation = LibraryRep::from(Minkowski {}).to_symbolic([dimension.clone()]);
+        let ordinary = function!(symbol!("representation_print_control::mink"), dimension);
+        let outer = symbol!("representation_print_test::P");
+        let actual = function!(outer, representation);
+        let control = function!(outer, ordinary);
+        let canonical = actual.to_canonical_string();
 
-    #[test]
-    fn unknown_math_display_heads_cannot_be_constructed() {
-        assert!(IndexDisplay::math("raw-code", vec![]).is_err());
+        for brackets in [('(', ')'), ('[', ']')] {
+            let options = PrintOptions {
+                function_brackets: brackets,
+                hide_all_namespaces: true,
+                color_mode: ColorMode::Always,
+                ..PrintOptions::new()
+            };
+            let actual_text = actual.printer(options.clone()).to_string();
+            let expected_text = control.printer(options).to_string();
+            assert!(!actual_text.contains("::"));
+            assert!(actual_text.contains("\x1b["));
+            assert_eq!(actual_text, expected_text);
+        }
+        let explicit = actual
+            .printer(PrintOptions {
+                hide_all_namespaces: false,
+                color_mode: ColorMode::Never,
+                ..PrintOptions::new()
+            })
+            .to_string();
+        assert!(explicit.contains("spenso::mink("));
+        assert!(explicit.contains("representation_print_test::D"));
+        assert_eq!(actual.to_canonical_string(), canonical);
     }
 
     #[test]
