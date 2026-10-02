@@ -1780,6 +1780,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "feynkit-kinematics"
+version = "0.1.0"
+dependencies = [
+ "linnet",
+ "numerica",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-model"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "blake3",
+ "linnet",
+ "miniz_oxide 0.8.9",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "thiserror 2.0.18",
+ "vectorize",
+]
+
+[[package]]
+name = "feynkit-ufo"
+version = "0.1.0"
+dependencies = [
+ "feynkit-model",
+ "pyo3",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "figment"
 version = "0.10.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7538,6 +7577,15 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "vectorize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25e3bbfdfdcc4ea60ce183b1b45c936aacd69fe097ebf137984a32faf80e365b"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "vello_common"

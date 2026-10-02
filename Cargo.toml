@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "tests"]
+members = ["crates/alphal00p-docs-builder", "crates/alphal00p-docs-catalogs", "crates/alphal00p-docs-examples", "crates/alphal00p-docs-macros", "crates/alphal00p-docs-python-exporter", "crates/alphal00p-docs-schema", "crates/clinnet", "crates/feynkit-kinematics", "crates/feynkit-model", "crates/feynkit-ufo", "crates/gammaloop-api", "crates/gammaloop-tracing-filter", "crates/gammaloop-tracing-filter-macros", "crates/gammaloop-workspace-hack", "crates/gammalooprs", "crates/idenso", "crates/kurvst", "crates/linnest", "crates/linnet", "crates/linnet-py", "crates/spenso", "crates/spenso-hep-lib", "crates/spenso-macros", "crates/spynso3", "crates/symbolica-notation", "crates/symbolica-utils", "crates/three-dimensional-reps", "crates/vakint", "tests"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -20,6 +20,9 @@ colored = "3.1.1"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
+feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
+feynkit-model = { version = "0.1.0", path = "crates/feynkit-model/" }
+feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
@@ -36,6 +39,7 @@ linnet = { path = "crates/linnet/", default-features = false }
 momtrop = { git = "https://github.com/alphal00p/momtrop", rev = "2c80fae4dfb0f136ee07f750efd225d84feff072", default-features = false }
 ndarray = "0.17.2"
 notify = "8.2.0"
+numerica = { version = "3.0.1", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"
