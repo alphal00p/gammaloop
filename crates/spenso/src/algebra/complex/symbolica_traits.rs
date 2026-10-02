@@ -313,6 +313,12 @@ where
     }
 
     #[inline(always)]
+    fn set_precision(&mut self, precision: u32) {
+        self.re.set_precision(precision);
+        self.im.set_precision(precision);
+    }
+
+    #[inline(always)]
     fn get_epsilon(&self) -> f64 {
         (2.0f64).powi(-(self.get_precision() as i32))
     }

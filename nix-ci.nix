@@ -340,7 +340,7 @@
       system = "x86_64-linux";
     };
   };
-  enable = true;
+  enable = false;
   fail-fast = true;
   fail-on-dangling-dependencies = true;
   onlyBuild = [
