@@ -32,7 +32,7 @@ commands = [
 
     "set process -p cool_qm_eos -i NLO kv integrator.n_start=1000000 integrator.n_increase=100000 integrator.n_max=100000000",
     """integrate --process cool_qm_eos -i NLO
-        --workspace-path ./examples/cli/eos/cool_qm/NLO/integration_workspace
+        --workspace-path ./examples/cli/eos/cool_qm/NLO/integration_workspace_nlo
         --target 0.0,-0.06107718321357327
         --restart
     """,
