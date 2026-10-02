@@ -1,7 +1,7 @@
 """Momentum combinations and Mandelstam conservation in the installed host."""
 
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 P = fk.Kinematics.external_momentum

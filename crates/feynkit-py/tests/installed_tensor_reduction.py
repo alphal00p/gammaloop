@@ -1,15 +1,12 @@
 """Keep four-loop gluon tensor projection factored in an installed host."""
 
-import importlib
-import sys
 from time import perf_counter
 
 from symbolica import E
 from symbolica.community.tensor import TensorExpression
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 diagrams = (
     fk.Model.qcd()
     .process(["g"], ["g"], particle_veto=["u", "c", "s", "t", "b"])

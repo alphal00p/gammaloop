@@ -47,7 +47,7 @@ def _(mo):
     ## Setup
 
     Use a Symbolica host built with the HEP community module. Import the
-    classes used in each notebook directly from `symbolica.community.hep`.
+    classes used in each notebook directly from `symbolica.community.hepkit`.
 
     Built-in constructors need no model files. This example uses a single
     real scalar with a cubic interaction and unit mass and coupling.
@@ -57,7 +57,7 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.feynkit import Model
+    from symbolica.community.hepkit import Model
 
     return (Model,)
 

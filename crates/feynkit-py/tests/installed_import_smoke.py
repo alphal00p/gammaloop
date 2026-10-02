@@ -4,18 +4,15 @@ This is intentionally not a workspace test: `feynkit-py` is an rlib, while the
 external Symbolica community host builds and installs the single native wheel.
 """
 
-import importlib
 import sys
 
 from symbolica import Expression, S
+from symbolica.community import hepkit as feynkit
 from symbolica.community.tensor import TensorName
 
-frontend = sys.argv[1] if len(sys.argv) > 1 else "feynkit"
-feynkit = importlib.import_module(f"symbolica.community.{frontend}")
 
-
-assert feynkit.__name__ == f"symbolica.community.{frontend}"
-assert f"symbolica.community.{frontend}_native" in sys.modules
+assert feynkit.__name__ == "symbolica.community.hepkit"
+assert "symbolica.community.feynkit_native" in sys.modules
 assert "_gammaloop" not in sys.modules
 
 for exported_type in (
@@ -28,7 +25,7 @@ for exported_type in (
     feynkit.JetDefinition,
     feynkit.Helicity,
 ):
-    assert exported_type.__module__ == f"symbolica.community.{frontend}"
+    assert exported_type.__module__ == "symbolica.community.hepkit"
 
 momentum = feynkit.ThreeMomentum(3.0, 4.0, 0.0).on_shell()
 assert momentum.components() == (5.0, 3.0, 4.0, 0.0)

@@ -2,7 +2,7 @@
 
 import numpy as np
 from symbolica import E, S, Symbol
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")

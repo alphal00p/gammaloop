@@ -1,7 +1,7 @@
 """Loop-family completion and exact numerator mappings in the installed host."""
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 
 D, k, q, p, s, m1, m2, d1, d2 = S(
     "family::D", "family::k", "family::q", "family::p", "s", "m1sq", "m2sq", "d1", "d2"

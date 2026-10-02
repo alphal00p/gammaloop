@@ -1,8 +1,6 @@
 """Check interactive native SVG output for diagrams and physics subgraph views."""
 
-import importlib
 import json
-import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
@@ -10,9 +8,8 @@ from pathlib import Path
 import linnet
 from marimo._output.formatting import try_format
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate

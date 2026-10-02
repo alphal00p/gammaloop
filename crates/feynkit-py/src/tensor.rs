@@ -33,7 +33,7 @@ use crate::error;
 /// is proportional to the metric tensor times ``k.k / D``.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
 /// >>> D, mu, nu = S("D", "mu", "nu")
 /// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
@@ -49,7 +49,7 @@ use crate::error;
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "TensorReducer",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -134,7 +134,7 @@ impl PyTensorReducer {
     /// The equivalent explicit selector shows which momentum head is integrated:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -242,7 +242,7 @@ impl PyTensorReducer {
     /// by the dimension:
     ///
     /// >>> from symbolica import S
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
     /// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
     /// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))

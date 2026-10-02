@@ -126,8 +126,8 @@ let
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/uv.lock")
         (workspaceRoot + "/crates/linnet-py/linnet.pyi")
-        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi")
-        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.py")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.py")
         (
           workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
         )

@@ -44,13 +44,13 @@ use symbolica::{
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> electron = hep.ParticleSelector.by_pdg(11)
 /// >>> positron = hep.ParticleSelector.by_name("e+")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParticleSelector",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -441,7 +441,7 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
 /// >>> result = process.generate_diagrams(loops=0)
@@ -449,7 +449,7 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Process",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1248,7 +1248,7 @@ impl PyProcess {
     /// A two-particle tree cut has one loop after the amplitude sides are sewn:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     /// >>> result = process.generate_cross_section(loops=1)
@@ -1483,14 +1483,14 @@ impl PyProcess {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> token = hep.CancellationToken()
 /// >>> token.is_cancelled
 /// False
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "CancellationToken",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     from_py_object
 )]
 #[derive(Clone, Default)]
@@ -1546,7 +1546,7 @@ impl PyCancellationToken {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
 ///
 /// Parameters
@@ -1560,7 +1560,7 @@ impl PyCancellationToken {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "SelfEnergyFilterOptions",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1607,7 +1607,7 @@ impl PySelfEnergyFilterOptions {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
 ///
 /// Parameters
@@ -1621,7 +1621,7 @@ impl PySelfEnergyFilterOptions {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "TadpoleFilterOptions",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1672,7 +1672,7 @@ impl PyTadpoleFilterOptions {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
 ///
 /// Parameters
@@ -1686,7 +1686,7 @@ impl PyTadpoleFilterOptions {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "SnailFilterOptions",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1737,7 +1737,7 @@ impl PySnailFilterOptions {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
 ///
 /// Parameters
@@ -1760,7 +1760,7 @@ impl PySnailFilterOptions {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "NumeratorGrouping",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2072,7 +2072,7 @@ impl GenerationSettings {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> snapshots = []
@@ -2083,7 +2083,7 @@ impl GenerationSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationProgress",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2152,7 +2152,7 @@ impl PyGenerationProgress {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -2163,7 +2163,7 @@ impl PyGenerationProgress {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationReport",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2317,7 +2317,7 @@ impl PyGenerationReport {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -2328,7 +2328,7 @@ impl PyGenerationReport {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GroupMember",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2437,7 +2437,7 @@ impl PyGroupMember {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -2448,7 +2448,7 @@ impl PyGroupMember {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramGroup",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2498,7 +2498,7 @@ impl PyDiagramGroup {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -2508,7 +2508,7 @@ impl PyDiagramGroup {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationResult",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -3087,7 +3087,7 @@ mod tests {
     fn automatic_progress_tracks_marimo_lifecycle() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
@@ -3232,7 +3232,7 @@ for via_model in (True, False):
     fn generation_defaults_leave_numerator_grouping_opt_in() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
@@ -3305,7 +3305,7 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
     fn progress_and_partial_filters_use_the_calling_python_thread() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
@@ -3399,7 +3399,7 @@ for via_model in (True, False):
     fn python_signals_interrupt_both_generation_entry_points() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
@@ -3454,7 +3454,7 @@ assert len(result) == 1
     fn process_metadata_and_selectors_are_typed_and_round_trip() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();

@@ -1,20 +1,17 @@
 """Exercise an installed FeynKit host with a separately built Linnet extension.
 
-Pass the community module name as the first argument (``hep`` for that host).
+The public API is provided by ``symbolica.community.hepkit``.
 """
 
 import gc
-import importlib
-import sys
 import weakref
 from pathlib import Path
 
 import linnet
 from symbolica.community.tensor import TensorExpression
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
     model.process(

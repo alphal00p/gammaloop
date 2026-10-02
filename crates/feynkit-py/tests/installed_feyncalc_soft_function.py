@@ -7,7 +7,7 @@ integrated or dimensionally regulated real-emission phase-space calculation.
 """
 
 from symbolica import E, S, Symbol
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 model = hep.Model.standard_model()

@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match component.as_str() {
         "feynkit-community" => outputs.push(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../feynkit-py/python/symbolica/community/feynkit/__init__.pyi"),
+                .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
         ),
         "linnet-python" => {
             outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet.pyi"))
@@ -114,7 +114,7 @@ fn validate_runtime_stub_surface(
         let module = pyo3::types::PyModule::new(py, module_name)?;
         match module_name {
             #[cfg(feature = "feynkit")]
-            "symbolica.community.feynkit" => feynkit_py::initialize_feynkit(&module)?,
+            "symbolica.community.hepkit" => feynkit_py::initialize_feynkit(&module)?,
             #[cfg(feature = "gammaloop")]
             "gammaloop._gammaloop" => gammaloop_api::python::register_python_api_for_docs(&module)?,
             _ => unreachable!("component has no runtime stub validator"),
@@ -187,7 +187,7 @@ fn validate_vakint_stub_surface(
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.hep.vakint")?;
+        let module = pyo3::types::PyModule::new(py, "symbolica.community.hepkit.vakint")?;
         vakint::symbolica_community_module::VakintWrapper::register_module(&module)?;
         public_module_names(&module)
     })?;
@@ -256,7 +256,7 @@ fn validate_exact_surface(
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     match component {
         #[cfg(feature = "feynkit")]
-        "feynkit-community" => Ok(("symbolica.community.feynkit", feynkit_py::stub_info()?)),
+        "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
         #[cfg(feature = "linnet")]
@@ -264,7 +264,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.tensor", spynso3::stub_info()?)),
         #[cfg(feature = "vakint")]
-        "vakint-community" => Ok(("symbolica.community.hep.vakint", vakint::stub_info()?)),
+        "vakint-community" => Ok(("symbolica.community.hepkit.vakint", vakint::stub_info()?)),
         _ => Err(format!(
             "component {component} is not enabled; select its matching Cargo feature"
         )

@@ -6,7 +6,7 @@
 FeynKit is a standalone particle-physics toolkit for validated models, Feynman diagrams,
 deterministic generation, Cross-Free Family (CFF) expressions, relativistic kinematics, and
 covariant tensor reduction. Rust clients use the focused crates or the `feynkit` facade. Python
-clients use `symbolica.community.feynkit` inside a shared Symbolica kernel.
+clients use `symbolica.community.hepkit` inside a shared Symbolica kernel.
 
 == Choose a task
 

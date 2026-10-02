@@ -21,7 +21,7 @@ Rust crate owns five boundaries:
 - `VakintSettings`, `TensorReductionMethod`, `EvaluationOrder`, and `EvaluationMethod`:
   precision, normalization, dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
-- the optional `symbolica.community.hep.vakint` module: Python classes that own a Rust engine and
+- the optional `symbolica.community.hepkit.vakint` module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
 
 The modules `alphaloop_numerics`, `matad`, `matad_numerics`, `fmft`, and `fmft_numerics` contain
@@ -113,7 +113,7 @@ that library exists. This affects native linking only; it does not select an eva
 
 The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
 wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on `symbolica.community.hep.vakint`. `python_stubgen` adds stub metadata and
+`VakintNumericalResult` on `symbolica.community.hepkit.vakint`. `python_stubgen` adds stub metadata and
 also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
 pipeline. Construction stores the selected tensor-reduction and evaluation settings without

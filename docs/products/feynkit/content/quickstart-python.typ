@@ -10,7 +10,7 @@ steps. Do not assume that an arbitrary published Symbolica wheel already include
 
 // docs-example: syntax
 ```sh
-python -c "import symbolica.community.feynkit as fk; print(fk.__name__)"
+python -c "import symbolica.community.hepkit as fk; print(fk.__name__)"
 ```
 
 With that host installed, run the following from the GammaLoop repository root. It uses the same
@@ -19,7 +19,7 @@ integral-evaluation backend.
 
 // docs-example: compile feynkit-community-quickstart
 ```python
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 model = fk.Model("crates/feynkit-model/tests/fixtures/scalars_2p_3p.json")
 result = model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(loops=0, max_vertices=3)
@@ -56,7 +56,7 @@ Particle masses and physical electric charges are symbolic expressions. The
 particle charge includes its sign and is inferred from photon interaction vertices:
 
 ```python
-from symbolica.community import hep
+from symbolica.community import hepkit as hep
 
 qed_model = hep.Model.qed()
 electron = qed_model.particle("e-")
@@ -101,7 +101,7 @@ are rejected because they do not specify the intended exact charge.
 // docs-example: compile
 ```python
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 
 charm = fk.Model.standard_model().particle("c")
 assert charm.charge == E("2/3")

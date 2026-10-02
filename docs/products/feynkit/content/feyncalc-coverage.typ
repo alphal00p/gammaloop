@@ -380,7 +380,7 @@ graph weight a second time.
 
 ```python
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 
 p1, p2, k1, k2, t, u, c, alpha = S(
     "p1", "p2", "k1", "k2", "t", "u", "cos_theta", "alpha"
@@ -687,7 +687,7 @@ zeros.
 == Generated photon self-energy
 
 `crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py` runs in the
-installed `symbolica.community.hep` host, where FeynKit and OneLOop share the
+installed `symbolica.community.hepkit` host, where FeynKit and OneLOop share the
 Symbolica runtime. It generates the electron loop, promotes Lorentz slots to
 symbolic dimension before the Dirac trace, projects the tensor numerator and
 rewrites scalar products with the diagram's integral family. Existing family
@@ -1146,7 +1146,7 @@ counterterm-diagram or subtraction-forest generation remain separate coverage.
 == Native IBP reduction through RustRed
 
 The Symbolica Community host now registers `rustred-feynkit` alongside FeynKit
-and OneLOop in `symbolica.community.hep`. `hep.IBPFamily(family)` reads the
+and OneLOop in `symbolica.community.hepkit`. `hep.IBPFamily(family)` reads the
 existing `IntegralFamily` boundary: denominator order and signs, masses,
 dimension and external Gram products are retained. The bridge passes native
 Symbolica expressions into RustRed in the same extension and kernel. Family

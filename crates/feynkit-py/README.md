@@ -1,6 +1,6 @@
 # FeynKit Python community module
 
-`feynkit-py` registers `symbolica.community.feynkit` in a combined Symbolica host.
+`feynkit-py` registers `symbolica.community.hepkit` in a combined Symbolica host.
 It shares the host's Symbolica kernel and is not a standalone Python wheel.
 
 The canonical documentation is the [FeynKit manual](../../docs/products/feynkit/main.typ):

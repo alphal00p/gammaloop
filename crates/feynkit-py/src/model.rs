@@ -53,14 +53,14 @@ fn display_value(value: Option<ComplexValue>) -> String {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> electron = model.particle_by_pdg(11)
 /// >>> assert electron.name == "e-"
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Particle",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -254,7 +254,7 @@ impl PyParticle {
     /// Using the setup in the ``Particle`` class example:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
     /// >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
     /// >>> electron = model.particle("e-")
@@ -461,7 +461,7 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> qed_model = hep.Model.qed()
     /// >>> electron = qed_model.particle("e-")
     /// >>> mass, charge = electron.mass, electron.electric_charge
@@ -705,14 +705,14 @@ impl PyParticle {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> nature = hep.ParameterNature.EXTERNAL
 /// >>> external = [p for p in model.parameters if p.nature == nature]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterNature",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     rename_all = "SCREAMING_SNAKE_CASE",
     frozen,
     eq,
@@ -739,14 +739,14 @@ impl From<ParameterNature> for PyParameterNature {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> real_parameters = [p for p in model.parameters
 /// ...                    if p.parameter_type == hep.ParameterType.REAL]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterType",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     rename_all = "SCREAMING_SNAKE_CASE",
     frozen,
     eq,
@@ -776,14 +776,14 @@ impl From<ParameterType> for PyParameterType {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> mass = model.parameter("MM")
 /// >>> assert mass.nature == hep.ParameterNature.EXTERNAL
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Parameter",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -813,7 +813,7 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
     /// >>> reference = model.parameter("ee").symbol
     /// >>> mass = model.parameter("Me").symbol
@@ -1046,7 +1046,7 @@ impl PyParameter {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> coupling = model.couplings[0]
 /// >>> orders = coupling.orders
@@ -1054,7 +1054,7 @@ impl PyParameter {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Coupling",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1084,7 +1084,7 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
     /// >>> reference = model.couplings[0].symbol
     #[getter]
@@ -1226,14 +1226,14 @@ impl PyCoupling {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> vertex = model.vertex_rules[0]
 /// >>> particles = [model.particle(name) for name in vertex.particles]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VertexRule",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1533,7 +1533,7 @@ impl PyVertexRule {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> lorentz = model.lorentz_structures[0]
 /// >>> spins = lorentz.spins
@@ -1541,7 +1541,7 @@ impl PyVertexRule {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LorentzStructure",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1678,14 +1678,14 @@ impl PyLorentzStructure {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> propagator = model.propagators[0]
 /// >>> formula = propagator.numerator / propagator.denominator
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Propagator",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1842,13 +1842,13 @@ impl PyPropagator {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> functions = {function.name: function.arguments for function in model.functions}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelFunction",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1878,7 +1878,7 @@ impl PyModelFunction {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
     /// >>> import json
     /// >>> definition = json.loads(model.to_json())
@@ -2008,13 +2008,13 @@ impl PyModelFunction {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> form_factors = {ff.name: ff.value for ff in model.form_factors}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FormFactor",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2159,7 +2159,7 @@ impl PyFormFactor {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> requests = []
@@ -2176,7 +2176,7 @@ impl PyFormFactor {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelExpression",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2232,7 +2232,7 @@ impl PyModelExpression {
 /// A callback must return every requested internal parameter and coupling.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> requests = []
@@ -2247,7 +2247,7 @@ impl PyModelExpression {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluationRequest",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2369,7 +2369,7 @@ impl PyEvaluationRequest {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
 ///
 /// Parameters
@@ -2381,7 +2381,7 @@ impl PyEvaluationRequest {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluatedValues",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2490,7 +2490,7 @@ impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> card = model.default_parameter_card()
 /// >>> card.set("MM", 0.105658, 0.0)
@@ -2498,7 +2498,7 @@ impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParameterCard",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     from_py_object
 )]
 #[derive(Clone, Default)]
@@ -2702,7 +2702,7 @@ impl PyParameterCard {
 /// or ``Model.from_json``.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.standard_model()
 /// >>> photon = model.particle("a")
 /// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
@@ -2718,7 +2718,7 @@ impl PyParameterCard {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Model",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -3420,7 +3420,7 @@ impl PyModel {
     /// ``lam=1``. See ``EvaluationRequest`` for callback inputs.
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     /// >>> requests = []
@@ -3700,7 +3700,7 @@ mod tests {
     }"#;
 
     fn registered_module<'py>(py: Python<'py>) -> Bound<'py, PyModule> {
-        let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
         crate::initialize_feynkit(&module).unwrap();
         module
     }

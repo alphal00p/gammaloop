@@ -28,7 +28,7 @@ expressions are computed by the same APIs documented in the reference.
   columns: (1fr, 2fr),
   table.header([Component], [Showcase]),
   [`feynkit` facade], [#link("guides/showcases/first-diagram/")[A first diagram]],
-  [`feynkit-py`], [All six notebooks through `symbolica.community.feynkit`],
+  [`feynkit-py`], [All six notebooks through `symbolica.community.hepkit`],
   [`feynkit-model`], [#link("guides/showcases/models-and-diagrams/")[Models and parameter cards]],
   [`feynkit-generator`], [#link("guides/showcases/models-and-diagrams/")[Processes and generation]],
   [`feynkit-graph`], [#link("guides/showcases/models-and-diagrams/")[Serialization and momentum bases]],
@@ -39,7 +39,7 @@ expressions are computed by the same APIs documented in the reference.
 )
 
 The Python notebooks exercise the focused Rust components through
-`symbolica.community.feynkit`. The #link("reference/interfaces/")[interface guide] links the
+`symbolica.community.hepkit`. The #link("reference/interfaces/")[interface guide] links the
 Rust and Python references. For tensor-aware notation and algebraic identities, continue to
 #product-link("spenso", page: "guides/showcase/", label: "the Spenso + Idenso showcase").
 

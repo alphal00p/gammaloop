@@ -9,7 +9,7 @@ import json
 from math import prod
 
 from symbolica import E, Expression, Matrix, Replacement, S, Symbol
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression, TensorName
 
 d, mass_squared, p_squared, eps, coupling = S(

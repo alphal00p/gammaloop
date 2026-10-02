@@ -31,7 +31,7 @@ def _():
 
 @app.cell
 def _():
-    from symbolica.community.feynkit import Symbols
+    from symbolica.community.hepkit import Symbols
 
     return (Symbols,)
 
@@ -66,7 +66,7 @@ def _(Symbols):
     import math
     import time
 
-    from symbolica.community.feynkit import Model, TensorReducer
+    from symbolica.community.hepkit import Model, TensorReducer
     from symbolica import E, S
 
     D = S("D")

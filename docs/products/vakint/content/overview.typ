@@ -27,7 +27,7 @@ a `topo(...)` structure built from propagators.
   #link("guides/evaluation/")[evaluation guide] with the exact
   #link("reference/rust/vakint/struct.EvaluationOrder.html")[`EvaluationOrder`]
   reference.
-- To embed Vakint in Rust or `symbolica.community.hep.vakint`, use the
+- To embed Vakint in Rust or `symbolica.community.hepkit.vakint`, use the
   #link("reference/interfaces/")[interface guide], native Rustdoc, and generated Python
   signatures before
   selecting external tools.

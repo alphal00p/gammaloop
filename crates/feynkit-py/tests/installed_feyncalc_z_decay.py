@@ -6,7 +6,7 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Z-FFbar
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")

@@ -1,17 +1,14 @@
 """Check physics subgraph inheritance, ownership, and explicit excision."""
 
 import gc
-import importlib
 import inspect
-import sys
 from pathlib import Path
 
 import linnet
 from symbolica.community.tensor import TensorExpression
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate

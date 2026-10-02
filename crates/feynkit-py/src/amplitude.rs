@@ -19,7 +19,7 @@ use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -31,7 +31,7 @@ use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "AmplitudeLeg",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -151,7 +151,7 @@ impl PyAmplitudeLeg {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -165,7 +165,7 @@ impl PyAmplitudeLeg {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Amplitude",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -421,7 +421,7 @@ impl PyAmplitude {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -433,7 +433,7 @@ impl PyAmplitude {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "SquaredAmplitude",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
