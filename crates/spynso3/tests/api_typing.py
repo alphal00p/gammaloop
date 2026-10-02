@@ -96,6 +96,16 @@ def check_types(
     tensor[0, 1] = 2.0
     tensor[0] = 1j
     assert_type(expression + scalar, sp.TensorExpression)
+    class Product:
+        def __symbolica_rmul__(self, left: Expression) -> str:
+            return str(left)
+
+    assert_type(scalar * Product(), str)
+    assert_type(expression * Product(), str)
+    assert_type(scalar * expression, sp.TensorExpression)
+    assert_type(expression * scalar, sp.TensorExpression)
+    assert_type(scalar * scalar, Expression)
+    assert_type(scalar.__mul__(expression), sp.TensorExpression)
     assert_type(expression * 2.0, sp.TensorExpression)
     assert_type(expression * 1j, sp.TensorExpression)
     assert_type(expression + tensor, sp.TensorNetwork)
