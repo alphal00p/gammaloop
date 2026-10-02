@@ -1,0 +1,347 @@
+//! The amplitude boundary consumes finalized diagrams, not generator state.
+
+use feynkit_amplitude::{Amplitude, AmplitudeError, AmplitudeOptions};
+use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, Process};
+use feynkit_model::Model;
+use idenso::{
+    CookMode, CookSettings, IndexTooling,
+    tensor::{ContractSettings, SymbolicTensor},
+};
+use spenso::{
+    shadowing::TensorCollectFilter,
+    structure::{abstract_index::AbstractIndex, partial::PartialStructure},
+};
+use std::{collections::BTreeMap, sync::Arc};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    id::ConditionResult,
+    parse,
+};
+
+fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let source = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap()).unwrap();
+    let contracted = source
+        .contract(ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
+    let canonical = contracted
+        .expression()
+        .canonize::<AbstractIndex>(AbstractIndex::from)
+        .unwrap();
+    SymbolicTensor::infer(canonical).unwrap()
+}
+
+fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
+    let model =
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+    let process = Process::new(["e-", "e+"], ["a", "a"]);
+    let options = GenerationOptions::default()
+        .with_loop_count(0, 0)
+        .unwrap()
+        .threads(1)
+        .max_vertices(2)
+        .numerator_grouping(NumeratorGrouping::None)
+        .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()]));
+    let generated = process.generate_diagrams(model, &options).unwrap();
+    assert_eq!(generated.diagrams.len(), 2);
+    generated.diagrams.into_iter().map(Arc::new).collect()
+}
+
+#[test]
+fn generated_amplitude_aligns_ports_and_conjugates_involutively() {
+    let amplitude = Amplitude::from_diagrams(photons()).unwrap();
+    assert_eq!(amplitude.legs().len(), 4);
+    assert_eq!(
+        amplitude
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .len(),
+        4
+    );
+    let adjoint = amplitude.conjugate().unwrap();
+    assert!(adjoint.is_conjugated());
+    assert!(!adjoint.expression().to_plain_string().contains("conj"));
+    let roundtrip = adjoint.conjugate().unwrap();
+    assert_eq!(
+        canonical_tensor(roundtrip.expression())
+            .coefficients_equal(
+                &canonical_tensor(amplitude.expression()),
+                TensorCollectFilter::<0>::Tensors,
+            )
+            .unwrap(),
+        ConditionResult::True,
+        "conjugation must be involutive by exact coefficient proof"
+    );
+}
+
+#[test]
+fn squared_ports_remain_open_until_explicit_state_sums() {
+    let amplitude = Amplitude::from_diagrams(photons()).unwrap();
+    let squared = amplitude.squared().unwrap();
+    assert_eq!(
+        squared
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .len(),
+        8
+    );
+    let fermions = squared
+        .sum_spins(&[0, 1], true, &BTreeMap::new(), &BTreeMap::new())
+        .unwrap();
+    assert_eq!(
+        fermions
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .len(),
+        4
+    );
+    let all = fermions
+        .sum_spins(&[2, 3], false, &BTreeMap::new(), &BTreeMap::new())
+        .unwrap();
+    assert!(
+        all.expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        all.sum_spins(&[0], true, &BTreeMap::new(), &BTreeMap::new()),
+        Err(AmplitudeError::AlreadySummed { .. })
+    ));
+    assert!(squared.spin_summed().is_empty());
+}
+
+#[test]
+fn coherent_square_includes_cross_diagram_interference() {
+    let diagrams = photons();
+    let one = Amplitude::from_diagram(diagrams[0].clone()).unwrap();
+    let doubled = Amplitude::from_diagrams([diagrams[0].clone(), diagrams[0].clone()]).unwrap();
+    let normalize = |a: &Amplitude| {
+        a.squared()
+            .unwrap()
+            .sum_spins(&[0, 1, 2, 3], true, &BTreeMap::new(), &BTreeMap::new())
+            .unwrap()
+            .expression()
+            .clone()
+    };
+    // Two identical diagrams give |2 A|² = 4 |A|², not the diagonal-only 2 |A|².
+    assert_eq!(
+        canonical_tensor(normalize(&doubled))
+            .coefficients_equal(
+                &canonical_tensor(normalize(&one) * Atom::num(4)),
+                TensorCollectFilter::<0>::Tensors,
+            )
+            .unwrap(),
+        ConditionResult::True,
+        "the coherent square must include every interference term"
+    );
+}
+
+#[test]
+fn rejects_mixed_external_states_and_unknown_sum_labels() {
+    assert!(matches!(
+        Amplitude::from_diagrams([]),
+        Err(AmplitudeError::Empty)
+    ));
+    let diagrams = photons();
+    let changed = diagrams[0]
+        .map_data(
+            |_, v| v.clone(),
+            |_, _, e| {
+                let mut e = e.clone();
+                if let Some(leg) = &mut e.external {
+                    leg.index += 10;
+                }
+                e
+            },
+        )
+        .unwrap();
+    assert!(matches!(
+        Amplitude::from_diagrams([diagrams[0].clone(), Arc::new(changed)]),
+        Err(AmplitudeError::DifferentExternals(_))
+    ));
+    let squared = Amplitude::from_diagrams(diagrams)
+        .unwrap()
+        .squared()
+        .unwrap();
+    assert!(matches!(
+        squared.sum_colors(&[99], false),
+        Err(AmplitudeError::UnknownLeg(99))
+    ));
+}
+
+#[test]
+fn scalar_couplings_are_conjugated_without_assuming_they_are_real() {
+    let model = Arc::new(
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+    );
+    let diagram = feynkit_graph::FeynmanDiagram::from_dot(
+        model,
+        r#"digraph {
+        a [num="amplitude_test::z"];
+        ext [style=invis];
+        ext -> a [particle="H"];
+        a -> ext [particle="H"];
+        a -> ext [particle="H"];
+    }"#,
+    )
+    .unwrap();
+    let amplitude = Amplitude::from_diagram(diagram).unwrap();
+    assert_eq!(
+        amplitude.conjugate().unwrap().expression(),
+        parse!("spenso::conj(amplitude_test::z)")
+    );
+    assert_eq!(
+        amplitude.squared().unwrap().expression(),
+        &parse!("amplitude_test::z*spenso::conj(amplitude_test::z)")
+    );
+}
+
+#[test]
+fn colored_fermion_interference_preserves_physical_leg_pairings() {
+    let model =
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+    let mut species = [
+        model.particle_id("b").unwrap(),
+        model.particle_id("b~").unwrap(),
+        model.particle_id("g").unwrap(),
+    ];
+    species.sort();
+    let vertices = model
+        .vertex_rules()
+        .iter()
+        .filter(|rule| {
+            let mut particles = rule.particles.clone();
+            particles.sort();
+            particles == species
+        })
+        .map(|rule| rule.name.clone().into())
+        .collect();
+    let process = Process::new(["b", "b"], ["b", "b"]);
+    let options = GenerationOptions::default()
+        .with_loop_count(0, 0)
+        .unwrap()
+        .threads(1)
+        .max_vertices(2)
+        .with_graph_filter(GenerationFilter::VertexAllow(vertices));
+    let generated = process.generate_diagrams(model, &options).unwrap();
+    assert_eq!(generated.diagrams.len(), 2);
+    let amplitude = Amplitude::from_diagrams(generated.diagrams.into_iter().map(Arc::new)).unwrap();
+    assert!(amplitude.legs().iter().all(|leg| leg.slots.len() == 2));
+    let squared = amplitude.squared().unwrap();
+    assert_eq!(
+        squared
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .len(),
+        16
+    );
+    let colors = squared.sum_colors(&[0, 1, 2, 3], true).unwrap();
+    assert_eq!(
+        colors
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .len(),
+        8
+    );
+    let summed = colors
+        .sum_spins(&[0, 1, 2, 3], true, &BTreeMap::new(), &BTreeMap::new())
+        .unwrap();
+    assert!(
+        summed
+            .expression()
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn loop_square_keeps_independent_integration_momenta() {
+    let model = Arc::new(
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+    );
+    let diagram = feynkit_graph::FeynmanDiagram::from_dot(
+        model,
+        r#"digraph triangle {
+        ext [style=invis];
+        ext -> a [id=0, particle="H"];
+        b -> ext [id=1, particle="H"];
+        c -> ext [id=2, particle="H"];
+        a -> b [id=3, particle="H", lmb_id=0];
+        b -> c [id=4, particle="H"];
+        c -> a [id=5, particle="H"];
+    }"#,
+    )
+    .unwrap();
+    let squared = Amplitude::from_diagram(diagram).unwrap().squared().unwrap();
+    assert!(
+        squared
+            .expression()
+            .contains(parse!("gammalooprs::K(0,spenso::mink(4))"))
+    );
+    assert!(squared.expression().contains(parse!(
+        "gammalooprs::K(feynkit_amplitude::bra(0),spenso::mink(4))"
+    )));
+}
+
+#[test]
+fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
+    let model = Arc::new(
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+    );
+    let process = Process::new(["e-", "e+"], ["a", "a"]);
+    let options = GenerationOptions::default().threads(1).max_vertices(4);
+    let diagrams = process.generate_diagrams(model.clone(), &options).unwrap();
+    assert_eq!(diagrams.diagrams.len(), 2);
+    let amplitude = process
+        .generate_amplitude(model.clone(), &options, AmplitudeOptions::default())
+        .unwrap();
+    assert_eq!(amplitude.diagrams().len(), diagrams.diagrams.len());
+    assert_eq!(
+        amplitude.expression(),
+        Amplitude::from_diagrams(diagrams.diagrams.into_iter().map(Arc::new))
+            .unwrap()
+            .expression()
+    );
+    let forward = process
+        .generate_cross_section(
+            model.clone(),
+            &options.clone().with_loop_count(1, 1).unwrap(),
+        )
+        .unwrap();
+    assert!(!forward.diagrams.is_empty());
+    assert!(
+        forward
+            .diagrams
+            .iter()
+            .all(|diagram| diagram.loop_count() == 1 && !diagram.cuts().is_empty())
+    );
+    assert_eq!(options.loop_count(), 0..=0);
+    let token = feynkit_generator::CancellationToken::new();
+    token.cancel();
+    let cancelled = options.cancellation_token(token);
+    assert!(matches!(
+        process.generate_amplitude(model, &cancelled, AmplitudeOptions::default()),
+        Err(feynkit_generator::GenerationError::IncompleteAmplitude)
+    ));
+}
