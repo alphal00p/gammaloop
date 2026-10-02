@@ -1,0 +1,30 @@
+[package]
+name = "alphal00p-notebook-host"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+name = "core"
+crate-type = ["cdylib"]
+
+[dependencies]
+feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo"] }
+spynso3 = { path = "../../../crates/spynso3", default-features = false }
+symbolica = { version = "=3.0.1", default-features = false, features = ["python_export"] }
+pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
+
+[features]
+default = ["native"]
+native = ["feynkit-py/native", "spynso3/native"]
+wasm = ["feynkit-py/wasm", "spynso3/wasm"]
+
+[patch.crates-io]
+# Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
+
+[profile.dev]
+debug = 0
