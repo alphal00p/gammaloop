@@ -16,7 +16,7 @@ spenso-macros = { workspace = true }
 xpct = "0.5.1"
 
 eyre = { workspace = true }
-pyo3 = { workspace = true, features = ["eyre"] }
+pyo3 = { workspace = true, features = ["eyre", "multiple-pymethods"] }
 
 itertools = "0.14.0"
 serde_json = { workspace = true }
