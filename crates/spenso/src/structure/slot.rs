@@ -532,6 +532,34 @@ impl SlotMatcher {
         Ok(Representation { dim, rep })
     }
 
+    /// Read the space of an explicit slot, an unresolved representation, or a
+    /// supplied compact rank-one tensor. Supplied tensors bind a port rather
+    /// than exposing it; their scalar metadata remains opaque here.
+    /// The dimension is borrowed, preserving arbitrary symbolic expressions.
+    pub fn port_representation<'a>(
+        &mut self,
+        value: AtomView<'a>,
+    ) -> Option<(LibraryRep, AtomView<'a>)> {
+        let representation = if let SlotMatch::Explicit(slot) = self.classify(value) {
+            slot.representation()
+        } else if let Some(representation) = self.compact_representation(value) {
+            representation
+        } else {
+            let AtomView::Fun(vector) = value else {
+                return None;
+            };
+            if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+                return None;
+            }
+            let argument = self.vector_argument(vector)?;
+            self.compact_representation(argument)?
+        };
+        let rep = self
+            .resolve_representation(representation.head(), representation.wrapper())
+            .ok()?;
+        Some((rep, representation.dimension()))
+    }
+
     /// Resolve the representation and duality while retaining arbitrary dimension
     /// and index expressions in the borrowed view.
     pub fn representation(

@@ -1098,8 +1098,8 @@ fn rewrite_ports<'a>(
                         })
                 })
             {
-                // A compact vector belongs in an endpoint matrix's port, not
-                // in the chain's channel declaration. Open just this word.
+                // Apply substitutions through the indexed matrix factors.
+                // Structural contraction can recollect their supplied endpoints.
                 let indices = state.indices.get_or_insert_with(ParseState::default);
                 indices.reserve_indices(value);
                 if let Ok(indexed) = indices.materialize_indexed_chain(fun) {
@@ -1110,7 +1110,7 @@ fn rewrite_ports<'a>(
             }
             let tensor_leaf = is_tensor_leaf_head(fun.get_symbol());
             let mut rewritten = Vec::with_capacity(fun.get_nargs());
-            for arg in fun.iter() {
+            for (position, arg) in fun.iter().enumerate() {
                 let replacement = if direct_structural_port(arg) {
                     if let Some(position) = matching_interface_position(arg, slots, &state.claimed)
                     {
@@ -1132,9 +1132,10 @@ fn rewrite_ports<'a>(
                         // are not part of the surviving public interface.
                         arg.into()
                     }
-                } else if tensor_leaf {
-                    // Scalar metadata belongs to this tensor leaf. Nested
-                    // representations inside it are not public tensor ports.
+                } else if tensor_leaf || (fun.get_symbol() == SPENSO_TAG.chain && position < 2) {
+                    // Tensor metadata and supplied chain endpoints are opaque
+                    // to public port rewriting. Their compact representations
+                    // do not denote surviving external axes.
                     arg.into()
                 } else if is_composite_head(fun.get_symbol(), &SPENSO_TAG)
                     && !arg.is_tensorial(StrictTensorFilter::Tagged)

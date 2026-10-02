@@ -426,19 +426,8 @@
 }
 
 #let _qualified-port(rep, ctx, settings) = {
-  let port = if rep.class == "inline-metric" {
-    sym.square.stroked.small
-  } else if rep.class == "self-dual" {
-    sym.circle.stroked.small
-  } else if rep.class == "dualizable" {
-    if rep.dual {
-      sym.triangle.r.small.stroked
-    } else {
-      sym.triangle.l.small.stroked
-    }
-  } else {
-    rep.class
-  }
+  // The central dot distinguishes a supplied argument from an open AUTO port.
+  let port = $⊙$
   if not settings.with-dim { return port }
   math.attach(
     port,
@@ -530,41 +519,15 @@
   (label: label, representation: rep)
 }
 
-#let _render-tensor(ctx, settings) = {
-  let node = ctx.node
-  for (atom, normal, power) in settings.print-calls {
-    if node.at("atom", default: none) == atom {
-      let visual = if ctx.power-base { power } else { normal }
-      if visual != none { return visual }
-    }
-  }
-  if node.arguments.len() > 0 {
-    let component = node.arguments.last()
-    if _is-function(component) and _name(component) == "spenso::cind" and (
-      component.arguments.all(index => _natural-index(index) != none)
-    ) {
-      let base = _head(ctx, node)
-      let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
-      if labels.len() > 0 {
-        // Component parameters are ordinary function arguments in every layout.
-        base = _tight((base, _parentheses(labels.join($,$))))
-      }
-      if component.arguments.len() == 0 { return base }
-      let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
-      if settings.component-style == "array" {
-        return _tight((base, math.lr($ [#coordinates] $)))
-      }
-      let body = math.attach(base, t: coordinates)
-      return if ctx.power-base { _parentheses(body) } else { body }
-    }
-  }
+// Generic tensors and specialized heads share contraction and endpoint layout.
+#let _render-tensor-arguments(base, arguments, ctx, settings) = {
   let columns = ()
   let ordinary = ()
   let bras = ()
   let kets = ()
-  let markers = _chain-markers(node.arguments)
-  let open-columns = _open-port-columns(node.arguments, ctx, settings)
-  for (position, argument) in node.arguments.enumerate() {
+  let markers = _chain-markers(arguments)
+  let open-columns = _open-port-columns(arguments, ctx, settings)
+  for (position, argument) in arguments.enumerate() {
     if markers != none and position in (markers.input, markers.output) { continue }
     if open-columns.at(position) != none {
       columns.push(open-columns.at(position))
@@ -600,7 +563,6 @@
     }
   }
 
-  let base = _head(ctx, node)
   if ordinary.len() > 0 {
     let separator = if settings.commas { $,$ } else { h(0.15em) }
     base = _tight((base, _parentheses(ordinary.join(separator))))
@@ -614,6 +576,37 @@
     base = math.attach(base, t: math.upright("T"))
   }
   if settings.tensor-layout == "ports" { _ports(base, bras, kets) } else { base }
+}
+
+#let _render-tensor(ctx, settings) = {
+  let node = ctx.node
+  for (atom, normal, power) in settings.print-calls {
+    if node.at("atom", default: none) == atom {
+      let visual = if ctx.power-base { power } else { normal }
+      if visual != none { return visual }
+    }
+  }
+  if node.arguments.len() > 0 {
+    let component = node.arguments.last()
+    if _is-function(component) and _name(component) == "spenso::cind" and (
+      component.arguments.all(index => _natural-index(index) != none)
+    ) {
+      let base = _head(ctx, node)
+      let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
+      if labels.len() > 0 {
+        // Component parameters are ordinary function arguments in every layout.
+        base = _tight((base, _parentheses(labels.join($,$))))
+      }
+      if component.arguments.len() == 0 { return base }
+      let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
+      if settings.component-style == "array" {
+        return _tight((base, math.lr($ [#coordinates] $)))
+      }
+      let body = math.attach(base, t: coordinates)
+      return if ctx.power-base { _parentheses(body) } else { body }
+    }
+  }
+  _render-tensor-arguments(_head(ctx, node), node.arguments, ctx, settings)
 }
 
 // A document tag or class attached to a tensor should see the same visual
@@ -647,35 +640,12 @@
   let first = node.arguments.at(0)
   let second = node.arguments.at(1)
   let lorentz = node.arguments.at(2)
-  let forward = _is-marker(first, "in") and _is-marker(second, "out")
-  let transposed = _is-marker(first, "out") and _is-marker(second, "in")
-
   let compact = _compact-vector(lorentz, ctx, settings)
   let base = if compact != none { _cancel(compact.label) } else { _head(ctx, node) }
   // The compact momentum fills the Lorentz port; only actual spinor ports
   // receive indices or AUTO squares. Chain markers remain implicit.
-  let selected = if compact != none {
-    if forward or transposed { () } else { (first, second) }
-  } else if forward or transposed { (lorentz,) } else { node.arguments }
-  let columns = ()
-  let open-columns = _open-port-columns(selected, ctx, settings)
-  for (position, argument) in selected.enumerate() {
-    if open-columns.at(position) != none {
-      columns.push(open-columns.at(position))
-      continue
-    }
-    let slot = _slot(argument, ctx)
-    if slot == none {
-      columns.push((source: _visual(ctx, argument), row: "bottom"))
-    } else {
-      columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
-        row: slot.row,
-      ))
-    }
-  }
-  let body = _row-attachment(base, columns, settings)
-  if transposed { math.attach(body, t: math.upright("T")) } else { body }
+  let selected = if compact != none { (first, second) } else { node.arguments }
+  _render-tensor-arguments(base, selected, ctx, settings)
 }
 
 #let _same-representation(left, right) = (
@@ -717,6 +687,10 @@
   let slot = _slot(start, ctx)
   if compact != none {
     prefix = compact.label
+    columns.push((
+      source: _qualified-port(compact.representation, ctx, settings),
+      row: compact.representation.row,
+    ))
   } else if open-columns.at(0) != none {
     columns.push(open-columns.at(0))
   } else if slot != none {
@@ -732,6 +706,10 @@
   slot = _slot(end, ctx)
   if compact != none {
     suffix = compact.label
+    columns.push((
+      source: _qualified-port(compact.representation, ctx, settings),
+      row: compact.representation.row,
+    ))
   } else if open-columns.at(1) != none {
     columns.push(open-columns.at(1))
   } else if slot != none {
