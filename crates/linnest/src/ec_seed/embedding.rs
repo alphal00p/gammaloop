@@ -110,10 +110,6 @@ fn intersection(a: &Set, b: &Set) -> Set {
     a.intersection(b).cloned().collect()
 }
 
-pub(crate) fn difference(a: &Set, b: &Set) -> Set {
-    a.difference(b).cloned().collect()
-}
-
 pub(crate) fn as_set(v: &[Id]) -> Set {
     v.iter().cloned().collect()
 }
@@ -249,6 +245,74 @@ impl Graph {
         }
         require(b == n, "Vertex not incident to edge")?;
         Ok(a)
+    }
+
+    /// The edges leaving the connected region `members`, in the cyclic order
+    /// of its embedded boundary, starting with `first`.
+    pub(crate) fn boundary(&self, members: &Set, first: &str) -> Result<Ids> {
+        let internal: BTreeSet<&str> = self
+            .edges
+            .iter()
+            .filter(|(_, p)| members.contains(&p[0]) && members.contains(&p[1]))
+            .map(|(e, _)| e.as_str())
+            .collect();
+        let mut edge = first.to_owned();
+        let p = self.edges.at(&edge)?;
+        let mut point = if members.contains(&p[0]) {
+            p[0].clone()
+        } else {
+            p[1].clone()
+        };
+        let mut visited: HashSet<Dart> = HashSet::new();
+        let mut boundary = Ids::new();
+        while visited.insert((edge.clone(), point.clone())) {
+            let r = self.rotation_at(&point)?;
+            edge = r[(index_of(r, &edge)? + 1) % r.len()].clone();
+            if internal.contains(edge.as_str()) {
+                point = self.other(&edge, &point)?.clone();
+            } else {
+                boundary.push(edge.clone());
+            }
+        }
+        Ok(boundary)
+    }
+
+    /// Contract the embedded region `members` into its vertex `into`, whose
+    /// rotation becomes the region's boundary order.
+    pub(crate) fn contract(&mut self, members: &Set, into: &str) -> Result<()> {
+        let leaving = |p: &Ends| members.contains(&p[0]) != members.contains(&p[1]);
+        let first = self
+            .edges
+            .iter()
+            .find(|(_, p)| leaving(p))
+            .map(|(e, _)| e.clone())
+            .ok_or("Contracted region has no boundary")?;
+        let boundary = self.boundary(members, &first)?;
+        let internal: Ids = self
+            .edges
+            .iter()
+            .filter(|(_, p)| members.contains(&p[0]) && members.contains(&p[1]))
+            .map(|(e, _)| e.clone())
+            .collect();
+        for e in &internal {
+            self.edges.erase(e);
+            self.protected_edges.remove(e);
+        }
+        for e in &boundary {
+            for end in self.edges.at_mut(e)?.iter_mut() {
+                if members.contains(end) {
+                    *end = into.to_owned();
+                }
+            }
+        }
+        for n in members.iter().filter(|n| *n != into) {
+            self.nodes.remove(n);
+            self.rotation.remove(n);
+        }
+        self.rotation.insert(into.to_owned(), boundary);
+        self.wheel_hubs.remove(into);
+        self.hubs.remove(into);
+        Ok(())
     }
 
     fn subgraph(&self, chosen: &Set, keep_nodes: bool) -> Result<Self> {
@@ -1423,6 +1487,18 @@ impl ConstraintTree {
         }
     }
 
+    /// Children in a fixed cyclic orientation, or the only child itself.
+    pub(crate) fn oriented(mut children: Vec<Self>) -> Self {
+        if children.len() == 1 {
+            children.remove(0)
+        } else {
+            Self::Node {
+                kind: ConstraintKind::Oriented,
+                children,
+            }
+        }
+    }
+
     fn leaves(&self) -> Result<Ids> {
         match self {
             Self::Leaf(id) => Ok(vec![id.clone()]),
@@ -1506,6 +1582,8 @@ pub(crate) struct Expansion {
     constraints: OrderedMap<ConstraintTree>,
     pub(crate) members: BTreeMap<Id, Set>,
     pub(crate) leaf_ports: BTreeMap<Id, BTreeMap<Id, Id>>,
+    /// Protected edges joining a constraint node to its parent node.
+    pub(crate) tree_edges: Set,
     reserved: Set,
     counter: usize,
 }
@@ -1518,6 +1596,7 @@ impl Expansion {
             constraints: OrderedMap::default(),
             members: BTreeMap::new(),
             leaf_ports: BTreeMap::new(),
+            tree_edges: Set::new(),
             reserved: g.nodes.iter().chain(g.edges.keys()).cloned().collect(),
             counter: 0,
         };
@@ -1646,7 +1725,8 @@ impl Expansion {
         };
         if let (Some(parent), Some(port)) = (parent, ports.last()) {
             let tree_edge = self.fresh("treeedge");
-            self.edge(tree_edge, parent, port, true);
+            self.edge(tree_edge.clone(), parent, port, true);
+            self.tree_edges.insert(tree_edge);
         }
         for (child, port) in children.iter().zip(&ports) {
             match child {
@@ -1689,12 +1769,6 @@ impl Expansion {
                 .members
                 .get(n)
                 .ok_or_else(|| format!("Unknown expansion owner {n}"))?;
-            let internal: BTreeSet<&str> = embedded
-                .edges
-                .iter()
-                .filter(|(_, p)| ms.contains(&p[0]) && ms.contains(&p[1]))
-                .map(|(e, _)| e.as_str())
-                .collect();
             let incident: Ids = edges
                 .iter()
                 .filter(|(_, p)| p[0] == *n || p[1] == *n)
@@ -1704,24 +1778,7 @@ impl Expansion {
                 out.rotation.insert(n.clone(), Ids::new());
                 continue;
             };
-            let mut edge = first.clone();
-            let p = embedded.edges.at(&edge)?;
-            let mut point = if ms.contains(&p[0]) {
-                p[0].clone()
-            } else {
-                p[1].clone()
-            };
-            let mut visited: HashSet<Dart> = HashSet::new();
-            let mut boundary = Ids::new();
-            while visited.insert((edge.clone(), point.clone())) {
-                let r = embedded.rotation_at(&point)?;
-                edge = r[(index_of(r, &edge)? + 1) % r.len()].clone();
-                if internal.contains(edge.as_str()) {
-                    point = embedded.other(&edge, &point)?.clone();
-                } else {
-                    boundary.push(edge.clone());
-                }
-            }
+            let boundary = embedded.boundary(ms, first)?;
             require(
                 boundary.len() == incident.len() && as_set(&boundary) == as_set(&incident),
                 "Expansion boundary lost incidences",

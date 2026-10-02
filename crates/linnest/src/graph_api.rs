@@ -609,6 +609,7 @@ impl ImpredRun {
 
     /// Seed the graph with its embedding-constrained drawing at the `impred-spacing`
     /// scale, as the Typst layout does, then solve.
+    #[cfg(feature = "svg")]
     pub(crate) fn seeded(graph: TypstGraph, options: &serde_json::Value) -> Result<Self, String> {
         let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
         let request = crate::SeedRequest {
