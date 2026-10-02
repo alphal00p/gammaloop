@@ -7,6 +7,7 @@ name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
+license-files = ["licenses/*"]
 
 [tool.maturin]
 module-name = "symbolica.core"

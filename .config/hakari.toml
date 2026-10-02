@@ -50,6 +50,8 @@ workspace-members = [
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    # Full document rendering must not enable components in the lean compiler.
+    "typst-renderer",
     "symbolica-utils",
     "vakint",
 ]
