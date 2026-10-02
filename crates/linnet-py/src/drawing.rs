@@ -38,6 +38,7 @@ pub(crate) const HEDGE_FIELDS: &[&str] = &[
     "statement",
     "port_label",
     "compass",
+    "route_points",
     "anchor",
     "routing",
     "style",
@@ -74,6 +75,7 @@ impl DrawingKind {
             (Self::Edge, "style") => "edge-style",
             (Self::Edge, "label_style") => "edge-label-style",
             (Self::HalfEdge, "port_label") => "port-label",
+            (Self::HalfEdge, "route_points") => "route-points",
             _ => key,
         }
     }
@@ -190,7 +192,7 @@ macro_rules! drawing_class {
     ) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[pyclass(module = "linnet", unsendable, name = $python)]
         pub struct $rust {
             values: Option<Py<PyDict>>,
             guard: Option<DrawingGuard>,
@@ -382,12 +384,13 @@ drawing_class!(
     PyHalfEdgeDrawing,
     "HalfEdgeDrawing",
     HEDGE_FIELDS,
-    "(*, label=..., statement=..., port_label=..., compass=..., anchor=..., routing=..., style=..., extensions=...)",
+    "(*, label=..., statement=..., port_label=..., compass=..., route_points=..., anchor=..., routing=..., style=..., extensions=...)",
     [
         label, set_label, label, "label", "_OptionalStaticContent";
         statement, set_statement, statement, "statement", "_DrawingString";
         port_label, set_port_label, port_label, "port_label", "_DrawingString";
         compass, set_compass, compass, "compass", "_CompassValue";
+        route_points, set_route_points, route_points, "route_points", "_DrawingPoints";
         get_anchor, set_anchor, anchor, "anchor", "_AnchorValue";
         routing, set_routing, routing, "routing", "_RoutingValue";
         style, set_style, style, "style", "_OptionalStyleLayers";
@@ -420,7 +423,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyHalfEdgeDrawing:
-            def __new__(cls, *, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeDrawing: ...
+            def __new__(cls, *, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., route_points: _DrawingPoints = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeDrawing: ...
     "# }
 }
 

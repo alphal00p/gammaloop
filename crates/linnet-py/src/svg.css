@@ -1,0 +1,158 @@
+svg[data-linnet-interactive] {
+  --linnet-selection: #c18a18;
+  --linnet-panel-bg: #fffdf9;
+  --linnet-panel-ink: #302c35;
+  max-width: 100%;
+  height: auto;
+}
+@media (prefers-color-scheme: dark) {
+  svg[data-linnet-interactive] {
+    --linnet-selection: #ffd166;
+    --linnet-panel-bg: #25212b;
+    --linnet-panel-ink: #f5eff8;
+  }
+}
+svg[data-linnet-interactive][data-theme="dark"] {
+  --linnet-selection: #ffd166;
+  --linnet-panel-bg: #25212b;
+  --linnet-panel-ink: #f5eff8;
+}
+svg[data-linnet-interactive][data-theme="light"] {
+  --linnet-selection: #c18a18;
+  --linnet-panel-bg: #fffdf9;
+  --linnet-panel-ink: #302c35;
+}
+svg[data-linnet-interactive] .linnet-viewport,
+svg[data-linnet-interactive] .linnet-pan-surface {
+  cursor: grab;
+  touch-action: none;
+  overflow: hidden;
+}
+svg[data-linnet-interactive] .linnet-pan-surface {
+  fill: transparent;
+  pointer-events: all;
+}
+svg[data-linnet-interactive] .linnet-viewport.linnet-panning,
+svg[data-linnet-interactive] .linnet-panning [data-linnet-kind] {
+  cursor: grabbing;
+}
+svg[data-linnet-interactive] .linnet-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  color: var(--linnet-panel-ink);
+  font: 12px/1.4 system-ui, sans-serif;
+}
+svg[data-linnet-interactive] .linnet-toolbar output {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+}
+svg[data-linnet-interactive] .linnet-navigation-hint {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
+}
+svg[data-linnet-interactive] [data-linnet-kind] {
+  cursor: pointer;
+  outline: none;
+}
+svg[data-linnet-interactive] [data-linnet-kind] rect {
+  pointer-events: all;
+  fill: transparent;
+}
+svg[data-linnet-interactive] [data-linnet-kind="node"][data-linnet-active] rect,
+svg[data-linnet-interactive] [data-linnet-kind="node"]:focus-visible rect {
+  fill: var(--linnet-selection);
+  fill-opacity: .15;
+}
+svg[data-linnet-interactive] [data-linnet-kind="node"][aria-pressed="true"] rect {
+  fill: var(--linnet-selection);
+  fill-opacity: .3;
+}
+svg[data-linnet-interactive] [data-linnet-kind="node"] rect { rx: 50%; }
+svg[data-linnet-interactive] .linnet-edge-highlight {
+  fill: var(--linnet-selection);
+  opacity: .2;
+  pointer-events: none;
+}
+svg[data-linnet-interactive] .linnet-edge-highlight[data-selected] { opacity: .3; }
+svg[data-linnet-interactive] .linnet-inspector {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--linnet-selection) 65%, transparent);
+  border-radius: 8px;
+  background: var(--linnet-panel-bg);
+  color: var(--linnet-panel-ink);
+  font: 12px/1.4 system-ui, sans-serif;
+  box-shadow: 0 2px 8px #00000014;
+  overflow: visible;
+}
+svg[data-linnet-interactive] .linnet-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+svg[data-linnet-interactive] .linnet-inspector-header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+svg[data-linnet-interactive] .linnet-inspector-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+svg[data-linnet-interactive] .linnet-inspector-details > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+svg[data-linnet-interactive] .linnet-inspector button {
+  border: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+svg[data-linnet-interactive] .linnet-inspector-properties {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 10px 0 0;
+}
+svg[data-linnet-interactive] .linnet-inspector-properties dt {
+  /* WebKit misplaces opacity layers inside SVG foreignObject. Use text color
+     for muted labels so they stay in the same painting context as the values. */
+  color: color-mix(in srgb, var(--linnet-panel-ink) 70%, var(--linnet-panel-bg));
+}
+svg[data-linnet-interactive] .linnet-inspector-properties dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+svg[data-linnet-interactive] .linnet-inspector-construction {
+  margin-top: 7px;
+}
+svg[data-linnet-interactive] .linnet-inspector-construction > span {
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 70%, var(--linnet-panel-bg));
+}
+svg[data-linnet-interactive] .linnet-inspector code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-top: 3px;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--linnet-panel-ink) 6%, transparent);
+  font-size: 11px;
+}
+svg[data-linnet-interactive] .linnet-inspector-shortcuts {
+  margin-top: 6px;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
+}
