@@ -3238,13 +3238,13 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
-        Emit the exact Typst source used by ``render`` without compiling it.
+        Export a self-contained Typst document embedding the rendered SVG.
 
         Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
-        as ``render``. The shared Linnest/Kurvst and physics assets must be available
-        beneath the Typst project root when compiling this source separately.
+        as ``render``. Labels are already typeset; compiling the exported source
+        needs no Linnest, Kurvst, MiTeX, or model assets.
 
         Examples
         --------
@@ -3255,7 +3255,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig or None, optional
+        config : dict or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -3264,33 +3264,30 @@ class FeynmanDiagram:
         highlight : Subgraph or linnet.Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an interactive, transparent SVG using the shared physics renderer.
 
-        Amplitudes are laid out and drawn natively, with Typst typesetting only
-        their labels. Templates, selectors, graph styles, drawing options,
-        titles and cross sections compile the complete Typst renderer instead.
-        ``LayoutOptions(impred_labels=True)`` refines the layout around the drawn
-        labels.
+        All graph geometry is drawn in Rust; the embedded Typst compiler typesets
+        labels and titles. ``layouts={"impred_labels": True}`` refines the layout
+        around the drawn labels. No Python renderer or Typst graph package is needed.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
         >>> svg = diagram.render(momenta=True, config={
-        ...     "layouts": {"external_label_length_scale": 0.7},
+        ...     "layouts": {"impred_steps": 100},
         ...     "template_options": {"show-particle": False},
         ... })
         >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig or None, optional
-            Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
-            use ``template_options`` with the same names as ``just draw --input``:
-            ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
-            ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+        config : dict or None, optional
+            Native ``layouts``, ``drawing`` and ``style`` dictionaries. Boolean physics
+            controls in ``template_options`` include ``show-particle``, ``show-momentum``,
+            ``show-edge-index``, ``show-node-index``, ``debug``, and ``momentum-arrows``.
             Cross sections open their initial-state connections by default; set
             ``split-initial-state`` to ``False`` to draw the sewn graph.
         momenta : bool, optional
@@ -3303,7 +3300,7 @@ class FeynmanDiagram:
             Highlight a region while preserving the full diagram as muted context.
             A Subgraph highlights its own region by default.
         """
-    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an HTML figure with the same options and hover information as ``render``.
 
@@ -3316,7 +3313,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig or None, optional
+        config : dict or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -7059,7 +7056,7 @@ class Parameter:
     def symbol(self) -> Expression:
         r"""
         Return the symbolic reference used by this model's expressions.
-        TeX and Typst output use the parameter's ``texname``. Plain output keeps
+        TeX and Typst output use ``texname`` and ``typstname``, respectively. Plain output keeps
         its symbolic name; no defining expression or numerical value is substituted.
 
         Examples
@@ -7069,6 +7066,17 @@ class Parameter:
         >>> reference = model.parameter("ee").symbol
         >>> mass = model.parameter("Me").symbol
         >>> assert "m_e" in (mass**2).to_latex()
+        """
+    @property
+    def typstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.standard_model().parameter("aS").typstname
+        'alpha_s'
         """
     @property
     def name(self) -> builtins.str:
@@ -7085,7 +7093,7 @@ class Parameter:
     def texname(self) -> typing.Optional[builtins.str]:
         r"""
         The model's LaTeX display label, or None when no label was supplied.
-        MiTeX renders this label in Typst and notebook math output.
+        Native Typst output uses ``typstname`` independently.
 
         >>> hep.Model.standard_model().parameter("ee").texname
         'e'
@@ -7396,6 +7404,28 @@ class Particle:
     >>> electron = model.particle_by_pdg(11)
     >>> assert electron.name == "e-"
     """
+    @property
+    def typstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.qcd().particle("g").typstname
+        'g'
+        """
+    @property
+    def antitypstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label of the antiparticle, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.qcd().particle("u").antitypstname
+        'overline(u)'
+        """
     @property
     def name(self) -> builtins.str:
         r"""

@@ -868,7 +868,8 @@
     "texname": "\\text{aEWM1}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [132.507, 0.0]
+    "value": [132.507, 0.0],
+    "typstname": "\"aEWM1\""
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -877,7 +878,8 @@
     "texname": "G_f",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.16639e-05, 0.0]
+    "value": [1.16639e-05, 0.0],
+    "typstname": "G_f"
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -886,7 +888,8 @@
     "texname": "\\alpha _s",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.118, 0.0]
+    "value": [0.118, 0.0],
+    "typstname": "alpha_s"
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -895,7 +898,8 @@
     "texname": "\\text{lamWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"lamWS\""
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -904,7 +908,8 @@
     "texname": "\\text{AWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"AWS\""
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -913,7 +918,8 @@
     "texname": "\\text{rhoWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"rhoWS\""
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -922,7 +928,8 @@
     "texname": "\\text{etaWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"etaWS\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -931,7 +938,8 @@
     "texname": "\\text{ymc}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"ymc\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -940,7 +948,8 @@
     "texname": "\\text{ymb}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [4.7, 0.0]
+    "value": [4.7, 0.0],
+    "typstname": "\"ymb\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -949,7 +958,8 @@
     "texname": "\\text{ymt}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [173.0, 0.0]
+    "value": [173.0, 0.0],
+    "typstname": "\"ymt\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -958,7 +968,8 @@
     "texname": "\\text{yme}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"yme\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -967,7 +978,8 @@
     "texname": "\\text{ymm}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"ymm\""
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -976,7 +988,8 @@
     "texname": "\\text{ymtau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.777, 0.0]
+    "value": [1.777, 0.0],
+    "typstname": "\"ymtau\""
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -985,7 +998,8 @@
     "texname": "m_Z",
     "nature": "external",
     "parameter_type": "real",
-    "value": [91.188, 0.0]
+    "value": [91.188, 0.0],
+    "typstname": "m_Z"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -994,7 +1008,8 @@
     "texname": "m_c",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "m_c"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1003,7 +1018,8 @@
     "texname": "m_t",
     "nature": "external",
     "parameter_type": "real",
-    "value": [173.0, 0.0]
+    "value": [173.0, 0.0],
+    "typstname": "m_t"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1012,7 +1028,8 @@
     "texname": "m_b",
     "nature": "external",
     "parameter_type": "real",
-    "value": [4.9, 0.0]
+    "value": [4.9, 0.0],
+    "typstname": "m_b"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1021,7 +1038,8 @@
     "texname": "m_H",
     "nature": "external",
     "parameter_type": "real",
-    "value": [125.0, 0.0]
+    "value": [125.0, 0.0],
+    "typstname": "m_H"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1030,7 +1048,8 @@
     "texname": "m_e",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "m_e"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1039,7 +1058,8 @@
     "texname": "m_{\\mu}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "m_(mu)"
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1048,7 +1068,8 @@
     "texname": "m_{\\tau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.777, 0.0]
+    "value": [1.777, 0.0],
+    "typstname": "m_(tau)"
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1057,7 +1078,8 @@
     "texname": "\\text{WZ}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [2.441404, 0.0]
+    "value": [2.441404, 0.0],
+    "typstname": "\"WZ\""
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1066,7 +1088,8 @@
     "texname": "\\text{WW}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [2.0476, 0.0]
+    "value": [2.0476, 0.0],
+    "typstname": "\"WW\""
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1075,7 +1098,8 @@
     "texname": "\\text{WT}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.4915, 0.0]
+    "value": [1.4915, 0.0],
+    "typstname": "\"WT\""
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1084,7 +1108,8 @@
     "texname": "\\text{WH}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.00638233934, 0.0]
+    "value": [0.00638233934, 0.0],
+    "typstname": "\"WH\""
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1093,7 +1118,8 @@
     "texname": "\\text{WTau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"WTau\""
   }, {
     "expression": null,
     "lhablock": null,
@@ -1102,7 +1128,8 @@
     "texname": "0",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "0"
   }, {
     "expression": null,
     "lhablock": null,
@@ -1111,7 +1138,8 @@
     "texname": "\\text{CKM3x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0]
+    "value": [1.0, 0.0],
+    "typstname": "\"CKM3x3\""
   }, {
     "expression": "-1/2*UFO::{}::lamWS^2+1",
     "lhablock": null,
@@ -1120,7 +1148,8 @@
     "texname": "\\text{CKM1x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0]
+    "value": [1.0, 0.0],
+    "typstname": "\"CKM1x1\""
   }, {
     "expression": "UFO::{}::lamWS",
     "lhablock": null,
@@ -1129,7 +1158,8 @@
     "texname": "\\text{CKM1x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM1x2\""
   }, {
     "expression": "(-1𝑖*UFO::{}::etaWS+UFO::{}::rhoWS)*UFO::{}::AWS*UFO::{}::lamWS^3",
     "lhablock": null,
@@ -1138,7 +1168,8 @@
     "texname": "\\text{CKM1x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM1x3\""
   }, {
     "expression": "-1*UFO::{}::lamWS",
     "lhablock": null,
@@ -1147,7 +1178,8 @@
     "texname": "\\text{CKM2x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM2x1\""
   }, {
     "expression": "-1/2*UFO::{}::lamWS^2+1",
     "lhablock": null,
@@ -1156,7 +1188,8 @@
     "texname": "\\text{CKM2x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0]
+    "value": [1.0, 0.0],
+    "typstname": "\"CKM2x2\""
   }, {
     "expression": "UFO::{}::AWS*UFO::{}::lamWS^2",
     "lhablock": null,
@@ -1165,7 +1198,8 @@
     "texname": "\\text{CKM2x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM2x3\""
   }, {
     "expression": "(-1*UFO::{}::rhoWS+-1𝑖*UFO::{}::etaWS+1)*UFO::{}::AWS*UFO::{}::lamWS^3",
     "lhablock": null,
@@ -1174,7 +1208,8 @@
     "texname": "\\text{CKM3x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM3x1\""
   }, {
     "expression": "-1*UFO::{}::AWS*UFO::{}::lamWS^2",
     "lhablock": null,
@@ -1183,7 +1218,8 @@
     "texname": "\\text{CKM3x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"CKM3x2\""
   }, {
     "expression": "UFO::{}::aEWM1^(-1)",
     "lhablock": null,
@@ -1192,7 +1228,8 @@
     "texname": "\\alpha _{\\text{EW}}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0075467711139788835, 0.0]
+    "value": [0.0075467711139788835, 0.0],
+    "typstname": "alpha_(\"EW\")"
   }, {
     "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)",
     "lhablock": null,
@@ -1201,7 +1238,8 @@
     "texname": "G",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [1.2177157847767195, 0.0]
+    "value": [1.2177157847767195, 0.0],
+    "typstname": "G"
   }, {
     "expression": "(((1/2)^(1/2)*-1*UFO::{}::Gf^(-1)*UFO::{}::MZ^2*UFO::{}::aEW*𝜋+1/4*UFO::{}::MZ^4)^(1/2)+1/2*UFO::{}::MZ^2)^(1/2)",
     "lhablock": null,
@@ -1210,7 +1248,8 @@
     "texname": "m_W",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [80.41900244575616, 0.0]
+    "value": [80.41900244575616, 0.0],
+    "typstname": "m_W"
   }, {
     "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)",
     "lhablock": null,
@@ -1219,7 +1258,8 @@
     "texname": "e",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.3079537672443688, 0.0]
+    "value": [0.3079537672443688, 0.0],
+    "typstname": "e"
   }, {
     "expression": "-1*UFO::{}::MW^2*UFO::{}::MZ^(-2)+1",
     "lhablock": null,
@@ -1228,7 +1268,8 @@
     "texname": "\\text{sw2}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.22224648578577766, 0.0]
+    "value": [0.22224648578577766, 0.0],
+    "typstname": "\"sw2\""
   }, {
     "expression": "(-1*UFO::{}::sw2+1)^(1/2)",
     "lhablock": null,
@@ -1237,7 +1278,8 @@
     "texname": "c_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.8819033474333922, 0.0]
+    "value": [0.8819033474333922, 0.0],
+    "typstname": "c_w"
   }, {
     "expression": "UFO::{}::sw2^(1/2)",
     "lhablock": null,
@@ -1246,7 +1288,8 @@
     "texname": "s_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.4714302554840723, 0.0]
+    "value": [0.4714302554840723, 0.0],
+    "typstname": "s_w"
   }, {
     "expression": "UFO::{}::cw^(-1)*UFO::{}::ee",
     "lhablock": null,
@@ -1255,7 +1298,8 @@
     "texname": "g_1",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.349192196787333, 0.0]
+    "value": [0.349192196787333, 0.0],
+    "typstname": "g_1"
   }, {
     "expression": "UFO::{}::ee*UFO::{}::sw^(-1)",
     "lhablock": null,
@@ -1264,7 +1308,8 @@
     "texname": "g_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.6532329303475798, 0.0]
+    "value": [0.6532329303475798, 0.0],
+    "typstname": "g_w"
   }, {
     "expression": "2*UFO::{}::MW*UFO::{}::ee^(-1)*UFO::{}::sw",
     "lhablock": null,
@@ -1273,7 +1318,8 @@
     "texname": "\\text{vev}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [246.2184581018163, 0.0]
+    "value": [246.2184581018163, 0.0],
+    "typstname": "\"vev\""
   }, {
     "expression": "1/2*UFO::{}::MH^2*UFO::{}::vev^(-2)",
     "lhablock": null,
@@ -1282,7 +1328,8 @@
     "texname": "\\text{lam}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.1288691060169027, 0.0]
+    "value": [0.1288691060169027, 0.0],
+    "typstname": "\"lam\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymb",
     "lhablock": null,
@@ -1291,7 +1338,8 @@
     "texname": "\\text{yb}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.02699555425046549, 0.0]
+    "value": [0.02699555425046549, 0.0],
+    "typstname": "\"yb\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymc",
     "lhablock": null,
@@ -1300,7 +1348,8 @@
     "texname": "\\text{yc}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"yc\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::yme",
     "lhablock": null,
@@ -1309,7 +1358,8 @@
     "texname": "\\text{ye}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"ye\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymm",
     "lhablock": null,
@@ -1318,7 +1368,8 @@
     "texname": "\\text{ym}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"ym\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymt",
     "lhablock": null,
@@ -1327,7 +1378,8 @@
     "texname": "\\text{yt}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.9936661458150063, 0.0]
+    "value": [0.9936661458150063, 0.0],
+    "typstname": "\"yt\""
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymtau",
     "lhablock": null,
@@ -1336,7 +1388,8 @@
     "texname": "\\text{ytau}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.010206617000654717, 0.0]
+    "value": [0.010206617000654717, 0.0],
+    "typstname": "\"ytau\""
   }, {
     "expression": "(UFO::{}::lam*UFO::{}::vev^2)^(1/2)",
     "lhablock": null,
@@ -1345,7 +1398,8 @@
     "texname": "\\mu",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [88.38834764831844, 0.0]
+    "value": [88.38834764831844, 0.0],
+    "typstname": "mu"
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM1x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1354,7 +1408,8 @@
     "texname": "\\text{I1x31}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I1x31\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1363,7 +1418,8 @@
     "texname": "\\text{I1x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I1x32\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1372,7 +1428,8 @@
     "texname": "\\text{I1x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.02699555425046549, 0.0]
+    "value": [0.02699555425046549, 0.0],
+    "typstname": "\"I1x33\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x1)*UFO::{}::yc",
     "lhablock": null,
@@ -1381,7 +1438,8 @@
     "texname": "\\text{I2x12}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I2x12\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x1)*UFO::{}::yt",
     "lhablock": null,
@@ -1390,7 +1448,8 @@
     "texname": "\\text{I2x13}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I2x13\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x2)*UFO::{}::yc",
     "lhablock": null,
@@ -1399,7 +1458,8 @@
     "texname": "\\text{I2x22}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I2x22\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x2)*UFO::{}::yt",
     "lhablock": null,
@@ -1408,7 +1468,8 @@
     "texname": "\\text{I2x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I2x23\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yc",
     "lhablock": null,
@@ -1417,7 +1478,8 @@
     "texname": "\\text{I2x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I2x32\""
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yt",
     "lhablock": null,
@@ -1426,7 +1488,8 @@
     "texname": "\\text{I2x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.9936661458150063, 0.0]
+    "value": [0.9936661458150063, 0.0],
+    "typstname": "\"I2x33\""
   }, {
     "expression": "UFO::{}::CKM2x1*UFO::{}::yc",
     "lhablock": null,
@@ -1435,7 +1498,8 @@
     "texname": "\\text{I3x21}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I3x21\""
   }, {
     "expression": "UFO::{}::CKM2x2*UFO::{}::yc",
     "lhablock": null,
@@ -1444,7 +1508,8 @@
     "texname": "\\text{I3x22}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I3x22\""
   }, {
     "expression": "UFO::{}::CKM2x3*UFO::{}::yc",
     "lhablock": null,
@@ -1453,7 +1518,8 @@
     "texname": "\\text{I3x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I3x23\""
   }, {
     "expression": "UFO::{}::CKM3x1*UFO::{}::yt",
     "lhablock": null,
@@ -1462,7 +1528,8 @@
     "texname": "\\text{I3x31}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I3x31\""
   }, {
     "expression": "UFO::{}::CKM3x2*UFO::{}::yt",
     "lhablock": null,
@@ -1471,7 +1538,8 @@
     "texname": "\\text{I3x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I3x32\""
   }, {
     "expression": "UFO::{}::CKM3x3*UFO::{}::yt",
     "lhablock": null,
@@ -1480,7 +1548,8 @@
     "texname": "\\text{I3x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.9936661458150063, 0.0]
+    "value": [0.9936661458150063, 0.0],
+    "typstname": "\"I3x33\""
   }, {
     "expression": "UFO::{}::CKM1x3*UFO::{}::yb",
     "lhablock": null,
@@ -1489,7 +1558,8 @@
     "texname": "\\text{I4x13}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I4x13\""
   }, {
     "expression": "UFO::{}::CKM2x3*UFO::{}::yb",
     "lhablock": null,
@@ -1498,7 +1568,8 @@
     "texname": "\\text{I4x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.0, 0.0],
+    "typstname": "\"I4x23\""
   }, {
     "expression": "UFO::{}::CKM3x3*UFO::{}::yb",
     "lhablock": null,
@@ -1507,7 +1578,8 @@
     "texname": "\\text{I4x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.02699555425046549, 0.0]
+    "value": [0.02699555425046549, 0.0],
+    "typstname": "\"I4x33\""
   }],
   "particles": [{
     "antiname": "a",
@@ -1522,7 +1594,9 @@
     "spin": 3,
     "texname": "{\\gamma}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "gamma",
+    "antitypstname": "gamma"
   }, {
     "antiname": "Z",
     "antitexname": "{Z}",
@@ -1536,7 +1610,9 @@
     "spin": 3,
     "texname": "{Z}",
     "width": "WZ",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "Z",
+    "antitypstname": "Z"
   }, {
     "antiname": "W-",
     "antitexname": "{W^-}",
@@ -1550,7 +1626,9 @@
     "spin": 3,
     "texname": "{W^+}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "W^(+)",
+    "antitypstname": "W^(-)"
   }, {
     "antiname": "W+",
     "antitexname": "{W^+}",
@@ -1564,7 +1642,9 @@
     "spin": 3,
     "texname": "{W^-}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "W^(-)",
+    "antitypstname": "W^(+)"
   }, {
     "antiname": "g",
     "antitexname": "{g}",
@@ -1578,7 +1658,9 @@
     "spin": 3,
     "texname": "{g}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "g",
+    "antitypstname": "g"
   }, {
     "antiname": "ghA~",
     "antitexname": "\\overline{\\tilde{\\gamma}}",
@@ -1592,7 +1674,9 @@
     "spin": -1,
     "texname": "\\tilde{\\gamma}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "tilde(gamma)",
+    "antitypstname": "overline(tilde(gamma))"
   }, {
     "antiname": "ghA",
     "antitexname": "\\tilde{\\gamma}",
@@ -1606,7 +1690,9 @@
     "spin": -1,
     "texname": "\\overline{\\tilde{\\gamma}}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "overline(tilde(gamma))",
+    "antitypstname": "tilde(gamma)"
   }, {
     "antiname": "ghZ~",
     "antitexname": "\\bar{\\tilde{Z}}",
@@ -1620,7 +1706,9 @@
     "spin": -1,
     "texname": "\\tilde{Z}",
     "width": "WZ",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "tilde(Z)",
+    "antitypstname": "overline(tilde(Z))"
   }, {
     "antiname": "ghZ",
     "antitexname": "\\tilde{Z}",
@@ -1634,7 +1722,9 @@
     "spin": -1,
     "texname": "\\bar{\\tilde{Z}}",
     "width": "WZ",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "overline(tilde(Z))",
+    "antitypstname": "tilde(Z)"
   }, {
     "antiname": "ghWp~",
     "antitexname": "{\\bar{\\tilde{W}}^+}",
@@ -1648,7 +1738,9 @@
     "spin": -1,
     "texname": "{\\tilde{W}^+}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "tilde(W)^(+)",
+    "antitypstname": "overline(tilde(W)^(+))"
   }, {
     "antiname": "ghWp",
     "antitexname": "{\\tilde{W}^+}",
@@ -1662,7 +1754,9 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^+}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "overline(tilde(W)^(+))",
+    "antitypstname": "tilde(W)^(+)"
   }, {
     "antiname": "ghWm~",
     "antitexname": "{\\bar{\\tilde{W}}^-}",
@@ -1676,7 +1770,9 @@
     "spin": -1,
     "texname": "{\\tilde{W}^-}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "tilde(W)^(-)",
+    "antitypstname": "overline(tilde(W)^(-))"
   }, {
     "antiname": "ghWm",
     "antitexname": "{\\tilde{W}^-}",
@@ -1690,7 +1786,9 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^-}",
     "width": "WW",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "overline(tilde(W)^(-))",
+    "antitypstname": "tilde(W)^(-)"
   }, {
     "antiname": "ghG~",
     "antitexname": "{\\bar{\\tilde{g}}}",
@@ -1704,7 +1802,9 @@
     "spin": -1,
     "texname": "{\\tilde{g}}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "tilde(g)",
+    "antitypstname": "overline(tilde(g))"
   }, {
     "antiname": "ghG",
     "antitexname": "{\\tilde{g}}",
@@ -1718,7 +1818,9 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{g}}}",
     "width": "ZERO",
-    "y_charge": "0"
+    "y_charge": "0",
+    "typstname": "overline(tilde(g))",
+    "antitypstname": "tilde(g)"
   }, {
     "antiname": "ve~",
     "antitexname": "{\\overline{\\nu}_e}",
@@ -1733,7 +1835,9 @@
     "texname": "{\\nu_e}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null
+    "y_charge_right": null,
+    "typstname": "nu_e",
+    "antitypstname": "overline(nu_e)"
   }, {
     "antiname": "ve",
     "antitexname": "{\\nu_e}",
@@ -1748,7 +1852,9 @@
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "overline(nu_e)",
+    "antitypstname": "nu_e"
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
@@ -1763,7 +1869,9 @@
     "texname": "{\\nu_\\mu}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null
+    "y_charge_right": null,
+    "typstname": "nu_mu",
+    "antitypstname": "overline(nu_mu)"
   }, {
     "antiname": "vm",
     "antitexname": "{\\nu_\\mu}",
@@ -1778,7 +1886,9 @@
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "overline(nu_mu)",
+    "antitypstname": "nu_mu"
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
@@ -1793,7 +1903,9 @@
     "texname": "{\\nu_\\tau}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null
+    "y_charge_right": null,
+    "typstname": "nu_tau",
+    "antitypstname": "overline(nu_tau)"
   }, {
     "antiname": "vt",
     "antitexname": "{\\nu_\\tau}",
@@ -1808,7 +1920,9 @@
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "overline(nu_tau)",
+    "antitypstname": "nu_tau"
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
@@ -1823,7 +1937,9 @@
     "texname": "{u}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "4/3"
+    "y_charge_right": "4/3",
+    "typstname": "u",
+    "antitypstname": "overline(u)"
   }, {
     "antiname": "u",
     "antitexname": "{u}",
@@ -1838,7 +1954,9 @@
     "texname": "{\\overline{u}}",
     "width": "ZERO",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(u)",
+    "antitypstname": "u"
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
@@ -1853,7 +1971,9 @@
     "texname": "{c}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "4/3"
+    "y_charge_right": "4/3",
+    "typstname": "c",
+    "antitypstname": "overline(c)"
   }, {
     "antiname": "c",
     "antitexname": "{c}",
@@ -1868,7 +1988,9 @@
     "texname": "{\\overline{c}}",
     "width": "ZERO",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(c)",
+    "antitypstname": "c"
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
@@ -1883,7 +2005,9 @@
     "texname": "{t}",
     "width": "WT",
     "y_charge": "1/3",
-    "y_charge_right": "4/3"
+    "y_charge_right": "4/3",
+    "typstname": "t",
+    "antitypstname": "overline(t)"
   }, {
     "antiname": "t",
     "antitexname": "{t}",
@@ -1898,7 +2022,9 @@
     "texname": "{\\overline{t}}",
     "width": "WT",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(t)",
+    "antitypstname": "t"
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
@@ -1913,7 +2039,9 @@
     "texname": "{d}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3"
+    "y_charge_right": "-2/3",
+    "typstname": "d",
+    "antitypstname": "overline(d)"
   }, {
     "antiname": "d",
     "antitexname": "{d}",
@@ -1928,7 +2056,9 @@
     "texname": "{\\overline{d}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(d)",
+    "antitypstname": "d"
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
@@ -1943,7 +2073,9 @@
     "texname": "{s}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3"
+    "y_charge_right": "-2/3",
+    "typstname": "s",
+    "antitypstname": "overline(s)"
   }, {
     "antiname": "s",
     "antitexname": "{s}",
@@ -1958,7 +2090,9 @@
     "texname": "{\\overline{s}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(s)",
+    "antitypstname": "s"
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
@@ -1973,7 +2107,9 @@
     "texname": "{b}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3"
+    "y_charge_right": "-2/3",
+    "typstname": "b",
+    "antitypstname": "overline(b)"
   }, {
     "antiname": "b",
     "antitexname": "{b}",
@@ -1988,7 +2124,9 @@
     "texname": "{\\overline{b}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3"
+    "y_charge_right": "-1/3",
+    "typstname": "overline(b)",
+    "antitypstname": "b"
   }, {
     "antiname": "H",
     "antitexname": "{H}",
@@ -2002,7 +2140,9 @@
     "spin": 1,
     "texname": "{H}",
     "width": "WH",
-    "y_charge": null
+    "y_charge": null,
+    "typstname": "H",
+    "antitypstname": "H"
   }, {
     "antiname": "G0",
     "antitexname": "{G_0}",
@@ -2017,7 +2157,9 @@
     "spin": 1,
     "texname": "{G_0}",
     "width": "WZ",
-    "y_charge": null
+    "y_charge": null,
+    "typstname": "G_0",
+    "antitypstname": "G_0"
   }, {
     "antiname": "G-",
     "antitexname": "{G^-}",
@@ -2032,7 +2174,9 @@
     "spin": 1,
     "texname": "{G^+}",
     "width": "WW",
-    "y_charge": "1"
+    "y_charge": "1",
+    "typstname": "G^(+)",
+    "antitypstname": "G^(-)"
   }, {
     "antiname": "G+",
     "antitexname": "{G^+}",
@@ -2047,7 +2191,9 @@
     "spin": 1,
     "texname": "{G^-}",
     "width": "WW",
-    "y_charge": "-1"
+    "y_charge": "-1",
+    "typstname": "G^(-)",
+    "antitypstname": "G^(+)"
   }, {
     "antiname": "e+",
     "antitexname": "{e^+}",
@@ -2062,7 +2208,9 @@
     "texname": "{e^-}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": "-2"
+    "y_charge_right": "-2",
+    "typstname": "e^(-)",
+    "antitypstname": "e^(+)"
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
@@ -2077,7 +2225,9 @@
     "texname": "{e^+}",
     "width": "ZERO",
     "y_charge": "2",
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "e^(+)",
+    "antitypstname": "e^(-)"
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
@@ -2092,7 +2242,9 @@
     "texname": "{\\mu^-}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": "-2"
+    "y_charge_right": "-2",
+    "typstname": "mu^(-)",
+    "antitypstname": "mu^(+)"
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
@@ -2107,7 +2259,9 @@
     "texname": "{\\mu^+}",
     "width": "ZERO",
     "y_charge": "2",
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "mu^(+)",
+    "antitypstname": "mu^(-)"
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
@@ -2122,7 +2276,9 @@
     "texname": "{\\tau^-}",
     "width": "WTau",
     "y_charge": "-1",
-    "y_charge_right": "-2"
+    "y_charge_right": "-2",
+    "typstname": "tau^(-)",
+    "antitypstname": "tau^(+)"
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
@@ -2137,7 +2293,9 @@
     "texname": "{\\tau^+}",
     "width": "WTau",
     "y_charge": "2",
-    "y_charge_right": "1"
+    "y_charge_right": "1",
+    "typstname": "tau^(+)",
+    "antitypstname": "tau^(-)"
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

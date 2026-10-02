@@ -42,7 +42,21 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
         let code = CString::new(include_str!("installed_offline_rendering.py")).unwrap();
         let locals = PyDict::new(py);
-        py.run(&code, Some(&locals), Some(&locals))
+        py.run(&code, Some(&locals), Some(&locals))?;
+        let network_tests = CString::new(include_str!(
+            "../../spynso3/tests/installed_tensor_network_display.py"
+        )).unwrap();
+        locals.set_item("__name__", "network_display_tests")?;
+        py.run(&network_tests, Some(&locals), Some(&locals))?;
+        py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(NetworkDisplayTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
+        for name in ["network", "diagram"] {
+            let source = locals.get_item(name)?.unwrap().call_method0("to_linnest")?.extract::<String>()?;
+            let files = std::collections::BTreeMap::from([("main.typ".into(), source.into_bytes())]);
+            let pages = typst_renderer::Document::compile_sources(&files, "svg")
+                .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+            assert_eq!(pages.len(), 1);
+        }
+        Ok(())
     })
     .unwrap();
 }

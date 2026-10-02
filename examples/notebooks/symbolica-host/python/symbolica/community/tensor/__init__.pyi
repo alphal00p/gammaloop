@@ -24,7 +24,6 @@ Examples
 
 import builtins
 import decimal
-import linnet
 import numpy
 import numpy.typing
 import symbolica.core
@@ -3028,7 +3027,7 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -3071,7 +3070,7 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -6533,7 +6532,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -6566,7 +6565,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -8902,25 +8901,25 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> source = network.to_dot()
         """
-    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
-        Generate Typst/Linnest source for the network graph.
+        Export a self-contained Typst document embedding the native SVG graph.
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
         -------
         str
-            Typst graph source produced by Linnet.
+            Typst source containing the complete SVG and its typeset labels.
 
         Notes
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -8933,13 +8932,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_linnest()
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
         Render the current network graph to SVG.
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -8951,7 +8950,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -9076,13 +9075,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
         Display the current network graph and execution status.
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -9094,7 +9093,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -9129,7 +9128,7 @@ class TensorNetwork:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -11182,7 +11181,7 @@ def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bo
 
     Notes
     -----
-    Mathematical rendering uses the optional Typst runtime. The returned
+    Mathematical rendering uses the embedded Typst compiler. The returned
     string is not automatically displayed; pass it to the notebook's HTML
     or SVG display facility.
 
@@ -11219,7 +11218,7 @@ def to_svg(expression: Expression, show_dimensions: typing.Optional[builtins.boo
 
     Notes
     -----
-    Mathematical rendering uses the optional Typst runtime. The returned
+    Mathematical rendering uses the embedded Typst compiler. The returned
     string is not automatically displayed; pass it to the notebook's HTML
     or SVG display facility.
 

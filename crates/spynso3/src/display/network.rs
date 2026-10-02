@@ -1,14 +1,19 @@
-//! Network graph rendering through Linnet's shared asset and SVG pipeline.
+//! Direct SVG network drawing; Typst typesets only node and port labels.
 use super::{DisplaySettings, IndexAliases, TensorDisplayMode, format_atom_with_mode};
 use crate::{
     metadata::SpensoRepresentationName,
     network::{SpensoNet, execution::ExecutionStatus},
+};
+use linnest::{
+    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
+    svg::{Config, Dash, Details, EdgeDrawing, NodeDrawing, Scene, Stroke},
 };
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
 };
+use serde_json::Value;
 use spenso::{
     network::{
         graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
@@ -23,6 +28,7 @@ use spenso::{
     },
     tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
 };
+use std::collections::BTreeMap;
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 
 /// Domain details feed Linnet's common hover and click inspector.
@@ -369,34 +375,188 @@ impl SpensoNet {
         Ok(snapshot)
     }
 
-    pub(crate) fn prepare_render<'py>(
+    pub(crate) fn render_graph(
         &self,
-        py: Python<'py>,
-        config: Option<&Bound<'py, PyAny>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let options = PyDict::new(py);
-        options.set_item("network", self.render_snapshot(py)?)?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("template_options", options)?;
-        let mut effective = linnet_py::RenderConfig::new(Some(&kwargs))?;
-        if let Some(config) = config {
-            effective = linnet_py::RenderConfig::from_authored_config(config)?.merged(&effective);
+        py: Python<'_>,
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let json = py.import("json")?;
+        let options = match config {
+            Some(config) => json.call_method1("dumps", (config,))?.extract::<String>()?,
+            None => "{}".into(),
+        };
+        let config =
+            Config::from_json(&options).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        if !config.template_options.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "tensor networks have no physics template options",
+            ));
         }
-        let effective = Bound::new(py, effective)?.into_any();
-        let sources = std::collections::BTreeMap::from([(
-            "main.typ".to_owned(),
-            concat!(
-                "#import \"crates/linnest/typst/src/render/network.typ\": render-network\n",
-                "#render-network(_linnet_config.options.at(\"network\"), config: _linnet_config)\n",
-            )
-            .as_bytes()
-            .to_vec(),
-        )]);
-        Ok(Bound::new(
-            py,
-            linnet_py::PreparedRender::from_source_files(py, sources, Some(&effective))?,
-        )?
-        .into_any())
+        let snapshot: Value = serde_json::from_str(
+            &json
+                .call_method1("dumps", (self.render_snapshot(py)?,))?
+                .extract::<String>()?,
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let runtime = pyo3::exceptions::PyRuntimeError::new_err;
+        let mut scene = Self::network_scene(&snapshot).map_err(runtime)?;
+        config
+            .apply(&mut scene)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        let files = BTreeMap::from([("main.typ".into(), scene.label_document().into_bytes())]);
+        let pages = typst_renderer::Document::compile_sources(&files, "svg")
+            .map_err(runtime)?
+            .into_iter()
+            .map(String::from_utf8)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| runtime(e.to_string()))?;
+        let typeset = scene.typeset(&pages).map_err(runtime)?;
+        let svg = scene.render(&typeset).map_err(runtime)?;
+        Scene::interactive_svg(&svg).map_err(runtime)
+    }
+
+    fn network_scene(snapshot: &Value) -> Result<Scene, String> {
+        let nodes = snapshot["nodes"]
+            .as_array()
+            .ok_or("missing network nodes")?;
+        let edges = snapshot["edges"]
+            .as_array()
+            .ok_or("missing network edges")?;
+        let mut scene = Scene {
+            graph: TypstGraphSpec {
+                name: None,
+                data: None,
+                statements: BTreeMap::new(),
+                default_edge_statements: BTreeMap::new(),
+                default_node_statements: BTreeMap::new(),
+                nodes: vec![],
+                edges: vec![],
+            },
+            nodes: vec![],
+            edges: vec![],
+            preamble: "#set text(size: 9pt, fill: rgb(\"#000000\"))".into(),
+            title: None,
+            pages: vec![],
+            layout: Default::default(),
+            label_feedback: true,
+        };
+        let mut indices = BTreeMap::new();
+        for (index, record) in nodes.iter().enumerate() {
+            let original = record["id"].as_u64().ok_or("invalid network node ID")? as usize;
+            indices.insert(original, index);
+            let page = scene.pages.len();
+            scene.pages.push(match record["label-typst"].as_str() {
+                Some(math) => format!("[$ {math} $]"),
+                None => format!("[#{:?}]", record["value"].as_str().unwrap_or("")),
+            });
+            let mut details: Details = record["inspection"]
+                .as_object()
+                .ok_or("missing node inspection")?
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            details.insert("node", original);
+            if let Some(label) = record["label-typst"].as_str() {
+                details.insert("label-typst", label);
+            }
+            let operator = record["kind"] == "operator";
+            scene.graph.nodes.push(TypstNodeSpec {
+                name: Some(format!("n{original}")),
+                index: Some(index),
+                data: None,
+                pos: None,
+                statements: BTreeMap::new(),
+            });
+            scene.nodes.push(NodeDrawing {
+                radius: if operator { 0.6 } else { 0.35 },
+                label: Some(page),
+                rectangular: !operator,
+                fill: if operator { "#f5f5f5" } else { "#ffffff" }.into(),
+                stroke: Stroke {
+                    paint: if operator { "#666666" } else { "#aeb4bd" }.into(),
+                    width: 0.3,
+                    dash: Dash::Solid,
+                    round_cap: false,
+                },
+                details,
+            });
+        }
+        for (index, record) in edges.iter().enumerate() {
+            let endpoint = |value: &Value| -> Result<Option<TypstEndpointSpec>, String> {
+                if value.is_null() {
+                    return Ok(None);
+                }
+                let node = value[0].as_u64().ok_or("invalid network endpoint")? as usize;
+                Ok(Some(TypstEndpointSpec {
+                    node: *indices.get(&node).ok_or("unknown network node")?,
+                    id: value[1].as_u64().map(|h| h as usize),
+                    statement: None,
+                    data: None,
+                    port_label: None,
+                    compass: None,
+                    in_subgraph: false,
+                    route_points: vec![],
+                }))
+            };
+            let source = endpoint(&record["source"])?;
+            let sink = endpoint(&record["sink"])?;
+            let mut details: Details = record["inspection"]
+                .as_object()
+                .ok_or("missing edge inspection")?
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            details.insert("edge", record["id"].clone());
+            for endpoint in ["source", "sink"] {
+                details.insert(
+                    endpoint,
+                    record[endpoint].get(0).cloned().unwrap_or(Value::Null),
+                );
+            }
+            if let Some(label) = record["label-typst"].as_str() {
+                details.insert("label-typst", label);
+            }
+            details.insert(
+                "source-hedge",
+                record["source"].get(1).cloned().unwrap_or(Value::Null),
+            );
+            details.insert(
+                "sink-hedge",
+                record["sink"].get(1).cloned().unwrap_or(Value::Null),
+            );
+            let tree = record["tree"] == true;
+            let label = record["label-typst"].as_str().map(|math| {
+                let page = scene.pages.len();
+                scene.pages.push(format!("[$ {math} $]"));
+                page
+            });
+            let orientation = record["orientation"].as_str().unwrap_or("default");
+            scene.graph.edges.push(TypstEdgeSpec {
+                name: None,
+                source,
+                sink,
+                data: None,
+                orientation: Some(orientation.into()),
+                flow: None,
+                id: Some(index),
+                pos: None,
+                statements: BTreeMap::new(),
+            });
+            scene.edges.push(EdgeDrawing {
+                stroke: Stroke {
+                    paint: if tree { "#555555" } else { "#7f95b8" }.into(),
+                    width: if tree { 0.65 } else { 1.0 },
+                    dash: Dash::Solid,
+                    round_cap: true,
+                },
+                pattern: None,
+                flow: tree.then_some(orientation != "reversed"),
+                momentum: false,
+                label,
+                details,
+            });
+        }
+        Ok(scene)
     }
 }
 

@@ -1347,7 +1347,8 @@ fn compile_typst(
     if let Some(tree) = tree {
         sources.insert("tree.cbor".to_owned(), tree.to_vec());
     }
-    let pages = linnet_py::PreparedRender::from_sources(sources)?.compile(format)?;
+    let pages = typst_renderer::Document::compile_sources(&sources, format)
+        .map_err(PyRuntimeError::new_err)?;
     let [output] = pages.as_slice() else {
         return Err(PyRuntimeError::new_err(
             "expression display requires exactly one page",
@@ -2536,7 +2537,7 @@ fn to_typst(
 ///
 /// Notes
 /// -----
-/// Mathematical rendering uses the optional Typst runtime. The returned
+/// Mathematical rendering uses the embedded Typst compiler. The returned
 /// string is not automatically displayed; pass it to the notebook's HTML
 /// or SVG display facility.
 ///
@@ -2587,7 +2588,7 @@ fn to_html(
 ///
 /// Notes
 /// -----
-/// Mathematical rendering uses the optional Typst runtime. The returned
+/// Mathematical rendering uses the embedded Typst compiler. The returned
 /// string is not automatically displayed; pass it to the notebook's HTML
 /// or SVG display facility.
 ///

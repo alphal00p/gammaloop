@@ -20,7 +20,10 @@ def parameter_labels(input_model_path):
         with path.open(encoding="utf-8") as source:
             definition = json.load(source)
             return [
-                (parameter["name"], parameter.get("texname"))
+                (
+                    parameter["name"],
+                    (parameter.get("texname"), parameter.get("typstname")),
+                )
                 for parameter in definition["parameters"]
             ]
 
@@ -33,7 +36,13 @@ def parameter_labels(input_model_path):
     finally:
         sys.path[:] = previous_path
     return [
-        (parameter.name, getattr(parameter, "texname", None))
+        (
+            parameter.name,
+            (
+                getattr(parameter, "texname", None),
+                getattr(parameter, "typstname", None),
+            ),
+        )
         for parameter in [
             *model.all_parameters,
             *getattr(model, "all_CTparameters", ()),

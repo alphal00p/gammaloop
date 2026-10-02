@@ -37,6 +37,20 @@ pub struct Document<'a> {
 }
 
 impl<'a> Document<'a> {
+    /// Compile a virtual document without any package store or plugin assets.
+    pub fn compile_sources(
+        files: &BTreeMap<String, Vec<u8>>,
+        format: &str,
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let root = tempfile::tempdir().map_err(|e| e.to_string())?;
+        Document::new(root.path(), root.path(), files).compile(format)
+    }
+
+    /// A self-contained Typst export of an already drawn SVG figure.
+    pub fn svg_source(svg: &str) -> String {
+        format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
+    }
+
     pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
         let fonts = std::env::var_os("TYPST_FONT_PATHS").map(|paths| {
             let mut fonts = FontStore::new();
@@ -183,6 +197,18 @@ impl World for Document<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_svg_export_compiles_without_packages() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="5" fill="#123456"/></svg>"##;
+        let files = BTreeMap::from([("main.typ".into(), Document::svg_source(svg).into_bytes())]);
+        let result = Document::compile_sources(&files, "svg").unwrap();
+        assert!(
+            String::from_utf8(result[0].clone())
+                .unwrap()
+                .contains("<svg")
+        );
+    }
 
     #[test]
     fn renders_svg_and_mathml_without_system_fonts_or_packages() {

@@ -24,7 +24,11 @@ impl Model {
     /// must call this for every parameter first, including forward references.
     /// Repeated declarations update labels; missing/empty labels restore the
     /// ordinary spelling. Existing user-declared symbol printers are preserved.
-    pub fn register_parameter_symbol(name: &str, texname: Option<&str>) -> Result<(), ModelError> {
+    pub fn register_parameter_symbol(
+        name: &str,
+        texname: Option<&str>,
+        typstname: Option<&str>,
+    ) -> Result<(), ModelError> {
         let symbol_name = NamespacedSymbol::parse(&format!("UFO::{name}"));
         let symbol = if let Some(symbol) = Symbol::get_symbol(symbol_name.clone()) {
             // Existing user declarations (including their printers) are immutable.
@@ -56,14 +60,17 @@ impl Model {
                 })?
         };
         let mut labels = LABELS.write().unwrap();
-        if let Some(latex) = texname.filter(|name| !name.trim().is_empty()) {
+        let texname = texname.filter(|name| !name.trim().is_empty());
+        let typstname = typstname.filter(|name| !name.trim().is_empty());
+        if texname.is_some() || typstname.is_some() {
+            let latex = texname.unwrap_or(name);
             labels.insert(
                 symbol,
                 ParameterLabel {
                     latex: latex.to_owned(),
-                    // MiTeX also handles labels with commands and grouped scripts;
-                    // inserting raw LaTeX into Typst math would misrender those.
-                    typst: format!("#{{ import \"@preview/mitex:0.2.6\": mi; mi({latex:?}) }}"),
+                    typst: typstname
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| format!("{name:?}")),
                 },
             );
         } else {

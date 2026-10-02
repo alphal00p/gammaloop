@@ -2,11 +2,10 @@
 
 import json
 import sys
-from pathlib import Path
 import unicodedata
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
-import typst
 from symbolica import E, S
 from symbolica.community.hepkit import Model, UfoLoader
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
@@ -23,9 +22,11 @@ ee, mass, alpha = S("UFO::ee", "UFO::Me", "UFO::aS")
 # bundled model's presentation choices.
 definition = json.loads(Model.standard_model().to_json())
 labels = {"ee": "e", "Me": r"\text{testmass}", "aS": r"\alpha_s"}
+typst_labels = {"ee": "e", "Me": '"testmass"', "aS": "alpha_s"}
 for parameter in definition["parameters"]:
     if parameter["name"] in labels:
         parameter["texname"] = labels[parameter["name"]]
+        parameter["typstname"] = typst_labels[parameter["name"]]
 model = Model.from_json(json.dumps(definition))
 reloaded = Model.from_json(model.to_json())
 assert [p.texname for p in reloaded.parameters] == [p.texname for p in model.parameters]
@@ -33,7 +34,8 @@ assert [p.texname for p in reloaded.parameters] == [p.texname for p in model.par
 expression = TensorExpression(ee**2 * mass + alpha)
 before = expression.to_expression()
 source = expression.to_typst()
-assert "@preview/mitex:0.2.6" in source
+assert "mitex" not in source
+assert "alpha_s" in source
 assert labels["Me"] in expression.to_latex()
 assert "ee" not in expression.to_latex()
 assert expression.to_latex(max_line_length=1).startswith(r"$$\begin{gathered}")
@@ -44,7 +46,7 @@ assert (
 assert "<msub" in expression.to_html()
 assert "testmass" in visible_math(model.parameter("Me")._repr_html_())
 ET.fromstring(expression.to_svg())
-ET.fromstring(typst.compile(f"$ {source} $".encode(), format="svg"))
+assert "testmass" in source
 assert expression.to_expression() == before
 assert "ee" in str(expression)
 
@@ -58,14 +60,16 @@ assert "e" in visible and "μ" in visible and "hedge" not in visible
 custom = json.loads(Model.phi3().to_json())
 for parameter in custom["parameters"]:
     parameter["texname"] = r"\alpha_s"
+    parameter["typstname"] = "alpha_s"
 custom_model = Model.from_json(json.dumps(custom))
 g, m = S("UFO::g", "UFO::mass")
 same_labels = TensorExpression(g + m)
-assert same_labels.to_typst().count("mi(") == 2
+assert same_labels.to_typst().count("alpha_s") == 2
 assert visible_math(same_labels.to_html()).count("α") == 2
 assert same_labels.to_expression() == g + m
 for parameter in custom["parameters"]:
     parameter.pop("texname")
+    parameter.pop("typstname")
 unlabelled = Model.from_json(json.dumps(custom))
 assert all(p.texname is None for p in unlabelled.parameters)
 assert "mitex" not in same_labels.to_typst()
@@ -79,5 +83,5 @@ source_labels = {p.name: p.texname for p in sm.all_parameters}
 for parameter in imported.parameters:
     assert parameter.texname == source_labels[parameter.name]
 print(
-    "Parameter labels: JSON/UFO metadata, MiTeX MathML/SVG/source, tensor indices and exact algebra passed"
+    "Parameter labels: JSON/UFO metadata, native Typst MathML/SVG/source, tensor indices and exact algebra passed"
 )

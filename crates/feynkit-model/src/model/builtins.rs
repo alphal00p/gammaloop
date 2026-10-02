@@ -169,6 +169,15 @@ impl Model {
                     }
                     .to_owned(),
                 ),
+                typstname: Some(
+                    match name {
+                        "ZERO" => "0",
+                        "mass" => "m",
+                        "lam" => "lambda",
+                        _ => name,
+                    }
+                    .to_owned(),
+                ),
                 lhablock: (index != 0).then(|| "SCALAR".to_owned()),
                 lhacode: (index != 0).then(|| vec![index]),
                 nature: if index == 0 {
@@ -201,6 +210,8 @@ impl Model {
                 width: "ZERO".to_owned(),
                 texname: "\\phi".to_owned(),
                 antitexname: "\\phi".to_owned(),
+                typstname: Some("phi".to_owned()),
+                antitypstname: Some("phi".to_owned()),
                 charge: 0.into(),
                 ghost_number: 0,
                 lepton_number: 0,
@@ -251,6 +262,7 @@ impl Model {
         let mut charge = quartic.clone();
         charge.name = "e".to_owned();
         charge.texname = Some("e".to_owned());
+        charge.typstname = Some("e".to_owned());
         charge.lhacode = Some(vec![3]);
         charge.value = Some(ComplexValue::new(1.0, 0.0));
         definition.parameters.push(charge);
@@ -269,6 +281,8 @@ impl Model {
                 charge: sign.into(),
                 texname: format!("\\phi^{{{}}}", if sign > 0 { "+" } else { "-" }),
                 antitexname: format!("\\phi^{{{}}}", if sign > 0 { "-" } else { "+" }),
+                typstname: Some(format!("phi^({})", if sign > 0 { "+" } else { "-" })),
+                antitypstname: Some(format!("phi^({})", if sign > 0 { "-" } else { "+" })),
                 propagator: Some(propagator_name.clone()),
                 ..scalar.clone()
             });
@@ -286,6 +300,8 @@ impl Model {
             mass: "ZERO".to_owned(),
             texname: "\\gamma".to_owned(),
             antitexname: "\\gamma".to_owned(),
+            typstname: Some("gamma".to_owned()),
+            antitypstname: Some("gamma".to_owned()),
             propagator: Some("a_prop".to_owned()),
             ..scalar
         });

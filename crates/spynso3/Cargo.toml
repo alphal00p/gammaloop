@@ -18,10 +18,12 @@ eyre = { workspace = true }
 pyo3 = { workspace = true, features = ["eyre", "multiple-pymethods"] }
 
 itertools = "0.14.0"
+serde_json = { workspace = true }
 roxmltree = "0.21.1"
 ciborium = "0.2"
 linnet = { workspace = true }
-linnet-py = { path = "../linnet-py" }
+linnest = { workspace = true, features = ["svg"] }
+typst-renderer = { path = "../typst-renderer" }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }

@@ -4253,7 +4253,7 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// Mathematical rendering uses the embedded Typst compiler. The returned
     /// string is not automatically displayed; pass it to the notebook's HTML
     /// or SVG display facility.
     ///
@@ -4300,7 +4300,7 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// Mathematical rendering uses the embedded Typst compiler. The returned
     /// string is not automatically displayed; pass it to the notebook's HTML
     /// or SVG display facility.
     ///
