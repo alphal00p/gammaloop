@@ -440,6 +440,7 @@ impl Vakint {
 
         let rendered = Self::render_template(include_str!("../templates/run_fmft.txt"), &vars);
 
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let form_result = self.run_form(
             settings,
             &["fmft.frm".into()],
