@@ -1,0 +1,221 @@
+{
+  "core_sha256": "04d201f5588c7a1e05e58fdee15a745a627d07bc974921883ffd08205a2ab380",
+  "source_sha256": "46dad05830f936671c4905200ee193de72dad488238e4315256440c8c135c4ad",
+  "model_sha256": "74656540805bc0644c02daf4f81df4ea03322ad3699fd063aaf5e175fb72adf4",
+  "generator_card_sha256": "c3558493a0ab0fc987240e3d51245620d908896ce85850b4c0f4be8d4426728f",
+  "records": {
+    "GL000": {
+      "historical_sha256": "8443139cfcd889a867a97d88e89abca4d8befcc9d3fdd4ea980c41a52de1c4e4",
+      "generated_sha256": "46cecea9ebfa86714947614e4a382c3786777d9ed186712d9eb95781c305fca1",
+      "prepared_sha256": "66ee4c77d83ffdd058a8deee6bb0f602d8a9344ca2628a8772438f25cc9879a6",
+      "generated": "GL193.dot",
+      "overall_factor": "4",
+      "old_to_new_edges": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 9,
+        "5": 10,
+        "6": 11,
+        "7": 12,
+        "8": 13,
+        "9": 7,
+        "10": 5,
+        "11": 4,
+        "12": 6,
+        "13": 8
+      },
+      "edge_orientations": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 1,
+        "12": 1,
+        "13": 1
+      },
+      "loop_coordinate_signs": [
+        1,
+        1,
+        1
+      ],
+      "transported_lmb": [
+        9,
+        11,
+        6
+      ],
+      "checked": "Exact labelled directed topology; local numerators byte-identical; historical overall factor transported verbatim; every routing signature verified; native strict importer qualification follows",
+      "old_to_new_vertices": {
+        "4": 0,
+        "5": 1,
+        "6": 2,
+        "7": 3,
+        "0": 4,
+        "1": 5,
+        "2": 6,
+        "3": 7
+      },
+      "qualification": {
+        "receipt_sha256": "7dc111c480bc18a4b137da13e8e84c3c28e65939858475d1d1b8c327c486bfb3",
+        "exit_code": 0,
+        "samples": 20,
+        "unstable_percent": 0.0,
+        "clock_scope": "functional qualification under concurrent build load; not a timing cohort"
+      }
+    },
+    "GL053": {
+      "historical_sha256": "8c4470e635e985af52ab43b80387e5d3265ad4b94da3b021ec43fc765430411e",
+      "generated_sha256": "24cfb354461ad01d29f590db389af9b1ea1cda3fa6d1b8d18228be5cf7ac2a25",
+      "prepared_sha256": "13eacfb7f0543ab72770ba7a95394a39dc31e8e6a876f3c5d9aab8de74cef7a1",
+      "generated": "GL143.dot",
+      "overall_factor": "-8",
+      "old_to_new_edges": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 12,
+        "5": 10,
+        "6": 11,
+        "7": 13,
+        "8": 4,
+        "9": 9,
+        "10": 5,
+        "11": 7,
+        "12": 8,
+        "13": 6
+      },
+      "edge_orientations": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 1,
+        "12": 1,
+        "13": 1
+      },
+      "loop_coordinate_signs": [
+        1,
+        1,
+        1
+      ],
+      "transported_lmb": [
+        10,
+        13,
+        8
+      ],
+      "checked": "Exact labelled directed topology; local numerators byte-identical; historical overall factor transported verbatim; every routing signature verified; native strict importer qualification follows",
+      "old_to_new_vertices": {
+        "4": 2,
+        "5": 0,
+        "6": 3,
+        "7": 1,
+        "0": 4,
+        "1": 6,
+        "2": 5,
+        "3": 7
+      },
+      "qualification": {
+        "receipt_sha256": "b8687071b21b9621b2f29a6ceebcb25c643df119d3ed14ea0b48ffb42671b7f3",
+        "exit_code": 0,
+        "samples": 20,
+        "unstable_percent": 0.0,
+        "clock_scope": "functional qualification under concurrent build load; not a timing cohort"
+      }
+    },
+    "GL148": {
+      "historical_sha256": "3c83849e971fb4d168e1a73c3e5240d0dcb74ee8d465a06d69289a43f519e684",
+      "generated_sha256": "3fd1d184574fc4da1861be0ec98203cc6c84bf391eeffc32dc3b3d43d4071498",
+      "prepared_sha256": "0cdd9a3fe819bff0c78a96f0e0b465c9cf65731cc6804a124dae4731bc49b7e2",
+      "generated": "GL323.dot",
+      "overall_factor": "8",
+      "old_to_new_edges": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 13,
+        "5": 12,
+        "6": 7,
+        "7": 11,
+        "8": 5,
+        "9": 10,
+        "10": 9,
+        "11": 8,
+        "12": 6,
+        "13": 4
+      },
+      "edge_orientations": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 1,
+        "12": 1,
+        "13": 1
+      },
+      "loop_coordinate_signs": [
+        1,
+        1,
+        1
+      ],
+      "transported_lmb": [
+        12,
+        11,
+        5
+      ],
+      "checked": "Exact labelled directed topology; local numerators byte-identical; historical overall factor transported verbatim; every routing signature verified; native strict importer qualification follows",
+      "old_to_new_vertices": {
+        "4": 2,
+        "5": 3,
+        "6": 0,
+        "7": 1,
+        "0": 6,
+        "1": 7,
+        "2": 4,
+        "3": 5
+      },
+      "qualification": {
+        "receipt_sha256": "11dd7ffeeddaf9ee157c70c614a63009c02b068ec1f9639d1944a4389bdad64a",
+        "exit_code": 0,
+        "samples": 20,
+        "unstable_percent": 0.0,
+        "clock_scope": "functional qualification under concurrent build load; not a timing cohort"
+      }
+    }
+  },
+  "generator_cli_sha256": "e4e637334141d8a3b43255db33ab9859d8c2089bbe05fae762075aa1b2274451",
+  "generator_commit": "2543f3059667f3021b85e35c0f94099f1ff32d0f",
+  "generator_common_prerequisite": "Namespace Vakint symbolic imaginary-unit placeholder",
+  "generator_command": "generate amp a a > a a | a t t~ g ghG ghG~ QCD==4 QED==4 [{3}] --numerator-grouping no_grouping --symmetrize-initial-states=true --symmetrize-final-states=true -p aa_aa -i 3L --only-diagrams",
+  "export_command": "save dot OUTPUT --output-full-numerator=true --do-gamma-algebra=false --do-color-algebra=false --include-autogenerated-fields=true",
+  "model_import": "import model sm-default.json",
+  "scope": "Complete native runtime DOT inputs for the historical GL000, GL053, GL148 topologies, generated once before either timing side. Both sides consume these identical frozen bytes.",
+  "prior_failures": [
+    "Historical compact DOT lacks required local numerators",
+    "Canonical Python generation has full rather than restricted Standard Model",
+    "Restricted-model JSON roundtrip changes symbolic print ordering and therefore model fingerprint; complete native runtime DOT avoids that cross-frontend boundary without weakening validation"
+  ]
+}
