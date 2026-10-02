@@ -83,6 +83,34 @@ source revision. HTML uses direct MathML without a Typst compiler. Source-only
 Typst projects remain available, and vector exports use optional Python typst-py
 (distribution `typst`).
 
+=== Notebook expression display
+
+Interactive tensor output uses Symbolica's shared responsive MathML renderer
+and official `MathMLViewer::expression` factory. Symbolica owns arithmetic,
+cursor caching and navigation, with the same eight width-fitting layouts,
+nested omissions, inline expansion, hover previews, inspection, and keyboard
+zoom as `expression.to_expression()`. Spenso supplies only tensor notation
+leaves through its bounded native Rust MathML printer. The viewer retains typed
+metadata, local index aliases and a bounded leaf cache while preserving logical
+index order and the source expression. Paging uses no CBOR render tree, Typst
+compiler or notation worker.
+
+Use `expression.paged()` to request the tensor viewer explicitly. The default
+`page_size=None` allows a complete compact product to fit the initial preview;
+other pages use 25 entries. An explicit `page_size=25` keeps that entry limit.
+`expression.to_expression().mathml_viewer()` opens the same viewer with
+native Symbolica notation. Explicit page sizes range from 1 to 500; rendering
+budgets may shorten a page. `paged()`, `formatted()` and expression `to_html()` reject
+`notation_source` with `ValueError`. Explicit `to_html()` emits complete direct
+MathML without paging or Typst compilation. Custom Typst notation is available
+through `to_typst_project()` and optional vector `to_svg()` export.
+
+Notebook widgets need `anywidget`. This checkout declares `notebook-display`
+(`anywidget>=0.9,<1`), `graph-export` (`playwright>=1.55,<2`) and `typst-export`
+(`typst>=0.15`) extras in GammaLoop and the isolated notebook host. These are not
+a claim about extras in the currently released external Community wheel.
+Headless graph measurement also needs `python -m playwright install chromium`.
+
 === Pyodide builds
 
 The adapter's default `native` feature includes native arithmetic and C++ evaluator
@@ -162,6 +190,109 @@ The generated #link("reference/python/spynso3/Representation/")[`Representation`
 #link("reference/python/spynso3/TensorNetwork/")[`TensorNetwork`] entries are the exact
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
+
+== Notebook displays
+
+Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` draws its
+current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
+The renderer passes native node, edge, and half-edge identities directly to Linnest's
+graph builder; DOT remains a separate export format.
+`render(config=...)` returns a `DiagramView`. Its AnyWidget measures direct
+MathML labels in the actual notebook browser, then Rust's existing
+`Scene::render` draws the graph. Graph settings are typed values with
+discoverable constructors:
+
+```python
+from IPython.display import display
+from symbolica.community.graph import (
+    Color, DrawOptions, LayoutAlgorithm, LayoutSettings, RenderSettings, Stroke,
+)
+
+view = network.render(config=RenderSettings(
+    layouts=LayoutSettings(algorithm=LayoutAlgorithm.Dot),
+    drawing=DrawOptions(edge_stroke=Stroke(paint=Color("#6f4d85"), thickness=1.5)),
+))
+display(view)
+```
+
+After browser measurement completes, retrieve the same view in a later cell:
+
+```python
+snapshot = view.measured()
+svg = snapshot.to_svg()
+html = snapshot.to_html()
+snapshot.save("network.svg")
+```
+
+The immutable `DiagramRender` retains the measured boxes and embedded math font.
+Its SVG contains XHTML `foreignObject` MathML and is intended for browsers.
+Scripts can explicitly use `view.measured(browser="chromium")` with Playwright
+and Chromium, or send the same view's `measurement_request()` to a browser and
+return its receipt to `view.measured(measurements=receipt)`. Strict `measured()`
+raises while labels are pending and never uses estimates or an implicit browser.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+
+`view.outlined()` instead uses optional typst-py to create a vector-label
+snapshot. Use it for PDF, PNG and Typst SVG import, whose consumers otherwise
+omit MathML labels. `network.to_linnest(config=...)` takes this outlined route
+and returns a self-contained Typst document embedding the SVG.
+
+`RenderSettings`, `LayoutSettings`, `Stroke`, `DiagramView` and `DiagramRender` belong to
+`symbolica.community.graph`, backed by the shared Linnet rendering bindings.
+HepKit keeps its physics-specific `DiagramStyle` and uses the same layout,
+stroke, and snapshot types.
+
+`snapshot.to_html()` wraps the graph in a figure labelled `TensorNetwork`.
+`network.to_html(config=..., browser="chromium")` explicitly measures a fresh
+view for script export. Its default `browser=None` does not start a browser,
+and the owner method accepts no measurement receipt; retain `view` for that.
+Its execution summary uses `network.status` to show remaining nodes, operations,
+contractions, and ready operations. “Graph reduced” means no graph work remains;
+library or deferred results can still require materialization. Displaying the network
+does not execute it; render a new view after stepping or executing the network.
+Tensor labels use the registered tensor-name MathML printer and scalar
+arguments. Custom Typst heads apply to outlined exports. Edge slots use the
+same direct MathML index notation as the slot display, with
+alphabet aliases assigned across the entire network. The inspector retains exact indices.
+Hover summaries identify the node or edge kind. Clicking
+shows tensor storage and ports, operator inputs, or contraction indices and metric
+information; keyboard focus and Enter/Space use the same inspector.
+`expression()` retains the semantic source formula, `to_dot()` exports the operation
+graph, and `result_tensor()` shows evaluated component data. Rendering a network does
+not execute it. Tensor expressions use ordinary multiplication when explicit indices
+identify the slots, or when canonical multiplication preserves unresolved factor
+occurrences in positional order. Brackets remain where sorting or combining factors
+would lose that information, as in `p.outer(p)` with unresolved slots. Assigning explicit
+indices removes brackets that are no longer needed. Nested product brackets flatten;
+sums are not distributed and chain/trace scopes remain intact. Repeated indexed products
+therefore become one n-ary network node before execution.
+Settings and filters
+print their full constructor arguments, and libraries and evaluators show concise summaries.
+The policy types expose named constants and integer conversion; they are PyO3 classes, not
+Python `enum.Enum` subclasses with `.name` and `.value` attributes.
+
+The generated stubs distinguish symbolic results from concrete networks and type component
+access as `Expression | float | complex`. For variadic `chain` and `trace`, symbolic-only
+arguments retain `TensorExpression`; a concrete first or second factor selects
+`TensorNetwork`. General mixed argument sequences retain the union return type. This avoids
+unresolved types from overlapping variadic-tuple overloads in current type checkers.
+`TensorExpression` subclasses Symbolica's `Expression` and retains the shared symbolic
+tensor's ordered interface. Ordinary Symbolica inspection, matching, conversion, and
+evaluation methods are inherited. Tensor algebra and checked rewrite overrides return
+`TensorExpression`; other inherited methods retain Symbolica's return types. Tensor-specific methods
+include `dirac_gamma`, which constructs a Dirac tensor, and `__getitem__`, which translates
+between logical flat indices and coordinates.
+
+The installed API regression checks compare every declared class member with the runtime,
+exercise all tour examples, round-trip settings representations, and check real, complex,
+sparse, and compiled evaluator results. The separate static fixture checks inferred return
+types for indexing, arithmetic, composition, simplification, and evaluation.
 
 == Metrics and oriented identities
 
@@ -258,6 +389,38 @@ re-index the tensor. See the
 ])
 
 == Transforming expressions and axes
+
+Use ordinary algebra directly on a `TensorExpression`: `expand`, `expand_num`, `factor`,
+`collect`, `collect_symbol`, `collect_num`, `collect_factors`, `collect_by_coefficient`,
+`collect_horner`, `together`, `cancel`, and `apart` return `TensorExpression` values.
+They preserve logical port order, unresolved port identities, and explicitly assigned
+metadata. A zero result retains its rank and slots. `expand_num()` distributes numerical
+coefficients over sums; it does not request full polynomial expansion. `collect_factors()`
+extracts factors common to terms in sums, including nested sums.
+
+// docs-example: compile
+```python
+from symbolica import Expression, S
+from symbolica.community.tensor import Representation, TensorName
+
+x, y = S("x", "y")
+A = TensorName("algebra::A")(Representation.euc(3))("i")
+expression = 2 * (x + y) * A
+expanded = expression.expand_num()
+factored = expanded.collect_factors()
+assert factored.structure.axes == expression.structure.axes
+assert (factored - expression).expand().to_expression() == 0
+assert isinstance(expression, Expression)
+assert expression.replace(x, y).structure.axes == expression.structure.axes
+assert expression.derivative(x) == 2 * A
+# Coefficient extraction inherits Symbolica's ordinary Expression return type.
+assert type(expanded.coefficient(x)) is Expression
+```
+
+These operations use Symbolica's algebra implementation. Trusted rearrangements reuse
+the established interface; user-supplied collection callbacks require checking the result.
+A callback that removes or changes external ports raises an error. Label unresolved axes
+before a transformation if their occurrence identities cannot be tracked through the result.
 
 `replace(TensorRule(...))` applies checked whole-tensor replacement rules. The same method
 accepts Symbolica's `replace(pattern, rhs, ...)` form, including callbacks and traversal
@@ -547,8 +710,14 @@ default when the signature is absent. Both accept the same keys as indexing;
 ambiguous names and invalid keys still raise errors. In particular, a factory
 signature can be in an otherwise empty library while `len(library)` remains zero.
 
-
-
+Displaying a library in a notebook opens a compact catalogue of mathematical
+signatures. Select a tensor to inspect its components in the usual Memory grid
+or Matrix view. The collapsed Python panel provides executable access and
+expression examples, including full namespaces, scalar arguments and custom
+representations. Its Print tab shows text, Typst and LaTeX output calls.
+`library.to_html()` returns the same standalone HTML; pass `settings` to use
+the existing display options. Large catalogues show a bounded preview while
+`keys()` and `items()` continue to expose every stored entry.
 
 `ExecutionMode.Single` selects the smallest-degree single-rewrite strategy, but execution still
 continues while work remains unless it is bounded; use `n_steps=1` to inspect exactly one step.
@@ -568,18 +737,271 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 
 == Mathematical display
 
-`TensorExpression`, `Tensor`, and `TensorNetwork` provide text and mathematical
-representations. Use `DisplaySettings` to choose an index style or show dimensions.
-`to_html()` renders expressions as MathML. SVG rendering uses the optional Typst
-compiler. Use `to_typst_project()` or `to_svg()` for custom Typst notation.
+Concrete tensors open an interactive component explorer by default in notebooks.
+Choose two displayed axes, fix the other coordinates, and compare slices.
+The visible *Memory grid / Matrix* toggle switches the current display for either
+one slice or all slices. Axis and slice controls start collapsed into a settings
+summary; expand the chevron to edit them. The soft fields share one row when
+space permits and wrap into two columns in narrow notebook outputs.
+Memory-grid shading always reflects component bytes. Selecting a component
+shows its formula through the same tensor printer, including custom names.
+The explorer follows the notebook's light or dark theme and fills its output
+width. Matrix formulas scale to fit their cells; select a cell to inspect the
+formula at full size above the matrix.
+Deeper blue indicates a larger component payload: encoded Symbolica expression
+bytes, or fixed-width numeric storage. Sparse implicit entries share one default;
+they do not each occupy a stored component. Counts exclude allocation overhead
+and shared symbol metadata. Large tensors carry a bounded preview without
+densifying sparse storage; unloaded cells are explicitly marked rather than
+shown as zero. Heaviest-first ordering applies to the included components.
+
+For a static notebook matrix, use
+`tensor.formatted(settings=DisplaySettings(tensor_view="matrix"))`.
+The same setting works with `to_html`. SVG, Typst and LaTeX retain their
+mathematical matrix/slice output. Symbolic tensor expressions retain their
+existing display and index alphabets. The explorer runs inside a self-contained
+sandboxed frame and requires no live Python callbacks or external assets.
+
+`TensorExpression` and `Tensor` expose semantic display methods. A network's
+`expression()` provides the same formula display separately from its graph.
+Symbolic notebook outputs use the shared viewer for interactive presentation.
+Explicit HTML, LaTeX and pretty-text exports retain the complete expression.
+Display preserves factorization and ordered ports without expanding or
+simplifying the calculation.
+
+The notebook frontend can impose its own output limit. Marimo's
+`tool.marimo.runtime.output_max_bytes` setting in `pyproject.toml` controls that
+separate limit; a frontend warning does not mean the tensor renderer omitted
+terms.
+
+`TensorExpression.formatted()` and the free `formatted(expression)` defer each
+backend until the notebook requests it and cache that representation. Their
+settings are captured when creating the display value; custom printers run when
+a backend is first requested. Create a new formatted value to reflect later
+changes to printer rules.
+Supplying `notation_source` raises `ValueError`, as it does for `paged()` and
+expression `to_html()`.
+The explicit `to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, and
+`format_tensor()` methods provide the same complete expression in the requested
+format.
+
+`DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
+commas, symbol scripts, component notation, and index/factor spacing. In the pager,
+`factor_gap` controls spacing inside semantic tensor notation, such as chains and traces;
+Symbolica retains its own spacing between arithmetic factors. Positional calls such as `to_typst(True)`
+and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
+at the same product level into a single fraction, including rational coefficients.
+The default `ports` layout displays vectors inserted into tensors with bras and kets.
+Keep the default settings, or select `DisplaySettings.ports()`, for this notation.
+`DisplaySettings.schoonschip()` selects the alternative compact layout with bold momentum
+labels in the tensor's index positions. Both layouts retain unresolved AUTO ports.
+Schoonschip notation writes a vector in the position of an index contracted with it:
+$T(p, nu) = T_(mu nu) p^mu$. See
+#link("https://www.nikhef.nl/~form/maindir/documentation/tutorial/book.pdf#page=14")[A. Heck,
+_FORM for Pedestrians_, §1.2.2, pp. 9–10]. For the metric this gives
+$g(p, q) = g_(mu nu) p^mu q^nu = p dot q$. The notation showcase renders the indexed
+metric and vectors, the default bra-and-marker display, and the dot product directly
+from Spenso objects. Its foldout shows the generated Typst source and alternative
+layouts with vector arguments or vectors in index positions.
+`to_dots()` converts the compact metric form without evaluating component data.
+Compound graph indices and generated dummy indices use each representation's alphabet by default: Lorentz indices
+render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
+color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeated indices
+share a label throughout an expression, and existing numeric or manually named labels are
+reserved to prevent collisions. Scoped copies keep the same base letters with primes;
+internal dummy identifiers never become alphabet labels.
+
+Color invariants use compact notation by default: $C_F$, $C_A$, $T_R$, and $N_c$.
+Select `DisplaySettings(invariant_style="explicit")` to display the degree and
+representation as $C_2(F)$, $C_2(A)$, and $I_2(F)$. Higher invariants always use
+$C_k(R)$, $I_k(R)$, and $G_k(R,S)$, with $F$ and $A$ denoting the fundamental and
+adjoint representations. These scalar arguments retain parentheses and commas
+independently of the tensor-index layout settings.
+
+`show_dimensions=True` adds representation dimensions and disables compact
+quadratic aliases, for example $C_2(F_3)$ and $C_2(A_8)$. Use it to distinguish
+multiple color spaces. Older scalar constants carry no dimension metadata.
+These settings affect presentation only: exact expressions and representation
+identities are preserved across plain text, LaTeX, Typst source, HTML and SVG.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import DisplaySettings, Representation, TensorExpression
+
+invariant = TensorExpression(Representation.cof(3).casimir())
+explicit = DisplaySettings(invariant_style="explicit")
+source = invariant.to_typst(settings=explicit)  # C_2(F)
+latex = invariant.to_latex(settings=explicit)
+preview = invariant.formatted(settings=explicit)
+```
+
+Graph-derived indices record their origin as an edge, half-edge or vertex identifier
+and a local index label. Choose `DisplaySettings(index_style="graph")` to display this
+origin in abbreviated form, for example
+$mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.
+The local index label is implicit when it equals one; other values remain visible, as in
+$mu_(upright("h4.2"))$ for `hedge(4,2)`.
+Use `index_style="alphabet"` for the compact default or `index_style="raw"` for the original
+symbolic index notation. Changing the display style preserves the underlying expressions, tensor
+interfaces, and exact notebook payloads. In raw mode, endpoint labels retain their existing
+subscript notation, including distinct higher-spin and dummy slots.
+Native encoded indices retain these source labels in all three styles. The
+formatter reads individual index metadata for presentation while keeping the
+encoded identities distinct, including ports carried by a zero tensor.
+After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
+bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
+
+Tensor names accept backend-specific head formatting through `print`:
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import Representation, TensorName
+
+Jbar = TensorName(
+    "Jbar",
+    print={
+        "typst": "overline(J)",
+        "latex": r"\bar{J}",
+        "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+    },
+)(Representation.bis(4))
+```
+
+Plain, LaTeX and Typst mapping values are bounded display text without math delimiters.
+MathML accepts only presentation elements (`mi`, `mn`, `mo`, `mtext`, `mrow`,
+`msub`, `msup`, `msubsup`, `mover`, `munder`, `munderover`, `mfrac`, `msqrt`,
+`mroot`, `mspace`, `menclose`) and validated presentation attributes. Executable
+markup, namespaces, comments, processing instructions, CDATA, unknown entities,
+and unsupported attributes raise `ValueError`. Input is limited to 4096 bytes,
+256 nodes and 16 levels. Spenso reconstructs escaped output from the parsed tree.
+Equal notation may be registered repeatedly; a different mapping for the same
+symbol raises `ValueError`. Registration lives in this process and is not stored
+by `Expression.save` or canonical strings. Spenso adds ordinary
+arguments, abstract indices, and component coordinates, including inside concrete tensor
+matrices. An omitted backend keeps the ordinary name; `plain` can also be supplied.
+The `mathml` value is a fragment without a `<math>` root and supplies the head
+for interactive paging, rich display and complete HTML exports.
+A callable retains Symbolica's `print(expression, mode=..., **options)` signature and
+replaces the complete tensor display. Returning `None` selects standard tensor notation.
+For custom MathML output it must handle `PrintMode.MathML` and return a fragment.
+Typst-only sources apply to Typst projects and vector exports. The callable itself
+is not serialized into portable Atom payloads.
+
+Concrete tensor components default to $A(x,7)^(0,1)$. Choose
+`DisplaySettings(component_style="array")` for $A(x,7)[0,1]$, or
+`component_style="superscript"` for the default. Both styles keep ordinary
+arguments in parentheses and apply to individual components and matrix entries.
+Use `component.formatted(settings=DisplaySettings(component_style="array"))`
+to show array notation in a notebook. The setting changes presentation only;
+component coordinates remain independent of abstract-index styles.
 
 // docs-example: compile
 ```python
 from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
-html = trace.to_html(settings=DisplaySettings.schoonschip())
+source = trace.to_typst(
+    settings=DisplaySettings(show_dimensions=True, parentheses=False)
+)
 ```
+
+// docs-example: compile
+```python
+compact_indices = numerator.formatted(settings=DisplaySettings(index_style="alphabet"))
+graph_indices = numerator.formatted(settings=DisplaySettings(index_style="graph"))
+raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
+```
+
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip,
+call and custom-spacing settings are supported by native MathML paging and
+explicit HTML/SVG rendering. Source-only methods reject unsupported settings
+rather than silently ignoring them.
+
+A supplied rank-one tensor fills an argument position in the ports layout.
+A filled marker distinguishes it from an unresolved axis: inline-metric spaces
+use `■`, self-dual spaces use `●`, and a dualizable space and its dual use
+left- and right-pointing filled triangles. A hollow square `□`
+marks an unresolved axis. The supplied tensors appear as bras or kets according
+to their representation; this notation does not conjugate their components.
+
+A momentum contracted into a gamma matrix displays as a slash, with its two
+remaining bispinor positions. Gamma uses the same endpoint notation as generic
+tensors: a supplied row spinor becomes a bra and occupies a filled position.
+Explicit spinor indices remain visible; unresolved ones use hollow squares.
+The consumed Lorentz position has no placeholder because the slash encodes it.
+`contract()` collects connected matrix factors even after a rank-one tensor
+has filled an endpoint. The supplied endpoint does not add an external axis:
+for example, a spinor times two slashed gamma matrices retains one open spinor
+slot. Collected chains retain matrix order and the same endpoint markers;
+collecting a trace does not evaluate it. Set `collect_chains=False` to retain
+the individual matrix factors.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
+
+mink = Representation.mink(4)
+p = TensorName.vector("p")
+indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
+pslash = indexed.contract()
+pslash.formatted()
+```
+
+HTML emits complete direct MathML. This display needs no Typst compiler:
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import DisplaySettings, TensorExpression
+
+trace = TensorExpression.gamma5(4).trace()
+compact = DisplaySettings.schoonschip()
+html = trace.to_html(settings=compact)
+rich = trace.formatted(settings=compact)
+```
+
+For custom Typst notation,
+`to_typst_project(settings=..., notation_source=...)` returns a `dict[str, bytes]`
+with `main.typ`, `render.typ`, `notation.typ` and `tree.cbor`. It exports the rich
+render tree and bundled sources without invoking a compiler. Bare `to_typst()`
+retains its existing source-only contract.
+
+```python
+project = trace.to_typst_project(settings=compact)
+assert set(project) == {"main.typ", "render.typ", "notation.typ", "tree.cbor"}
+```
+
+Expression `trace.to_svg(settings=compact)` uses optional Python typst-py
+(distribution `typst`, version 0.15 or newer) and reports compilation errors.
+The native extension contains no Rust Typst compiler. Notebook rich display
+retains its LaTeX or text fallback on rendering errors.
+`TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
+rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
+needed instead of tensor-aware notation.
+
+HTML output keeps selectable native MathML and uses STIX Two Math. Include
+`load_math_font()` once in the output document to embed the font for offline use;
+isolated frames need their own copy. Math defaults to
+21 px with padding and horizontal scrolling for long expressions. Set the CSS custom
+property `--spenso-math-font-size` on the notebook or an output container to change
+the base size; nested scripts retain their relative sizing.
+
+Idenso reductions return typed `TensorExpression` values with these display methods.
+Call `to_expression()` explicitly when an ordinary Symbolica expression is needed.
+`to_typst_project()` and expression `to_svg()` accept `notation_source` as a
+trusted, complete replacement for the bundled `notation.typ`; compilation
+executes that source, which must implement the expected notation interface.
+`formatted()`, `paged()` and expression `to_html()` reject it with `ValueError`.
+Direct MathML never parses Typst source; custom HTML printers supply MathML fragments.
+Display notation stays process-local for ordinary Symbolica `Expression.save`
+and state exports. Spenso-aware exports such as `to_typst_project()` explicitly
+include referenced notation in validated `spenso.notation` version-1 attachments,
+alongside representation and display-identity index declarations. Heads and index
+labels use structured display trees; text overrides are bounded, and MathML
+passes the presentation allowlist. Import rejects conflicting local notation
+before importing atoms; identical re-import is safe. Callback implementations
+never travel. Tydenso renders transported Typst overrides as literal display
+text; executable custom source remains an explicit trusted document input.
 
 == Citation tracking
 
@@ -626,3 +1048,66 @@ For exact parameters and defaults, use the
 The implementation starts in
 #source-link("crates/spynso3/src/lib.rs", label: "the Spenso Python adapter").
 ]
+
+== Tensor evaluation and Symbolica API parity
+
+`tensor.evaluator(params, functions=..., jit_compile=True, ...)` uses the same
+argument order, defaults, function definitions and optimisation settings as
+`Expression.evaluator`. It builds one Symbolica evaluator for all components in
+logical order. `evaluate` and `evaluate_complex` accept the same array-like inputs
+as Symbolica and return one `Tensor` per input row, preserving axes, name and
+arguments. Sparse input and permuted axes follow the same component ordering.
+SymJIT compilation occurs on first numerical use; `jit_compile=False` selects
+interpreted evaluation.
+
+The former `constants, funs, params` interface is removed. Substitute fixed values
+before constructing the evaluator, and pass `FunctionDefinition` objects through
+`functions`. `TensorEvaluator.compile` now follows `Evaluator.compile`, including
+its required `number_type`, compiler flags and native/SIMD/CUDA options. The
+compiled object's `evaluate` method uses the selected number type. The old
+compiled `evaluate_complex` method is removed. `scalar_evaluator` exposes the
+underlying Symbolica object for arbitrary-precision evaluation, instruction
+inspection, export and other scalar operations; these return component arrays
+without tensor metadata.
+
+An audit against Symbolica 3.0.1 found matching signatures for the explicitly
+wrapped `TensorExpression` algebra operations: `apart`, `cancel`, `collect`,
+`collect_by_coefficient`, `collect_factors`, `collect_horner`, `collect_num`,
+`collect_symbol`, `derivative`, `expand`, `expand_num`, `factor`, `map`,
+`replace_multiple` and `together`. Their tensor results additionally validate the
+external interface. `TensorExpression.evaluator` is inherited from `Expression`
+and evaluates its symbolic payload; use `to_tensor().evaluator(...)` to evaluate
+materialized components.
+
+The remaining differences are:
+
+- `TensorNetwork.replace` still uses `level_range` and optional booleans, lacks
+  `partial`, `once`, `bottom_up` and `nested`, and rejects replacement callbacks.
+  `TensorExpression.replace` already delegates those controls to Symbolica;
+  making its `rhs` optional is intentional, to accept whole-tensor rules.
+- `TensorNetwork.evaluate` still accepts real constants and a map of Python
+  functions. `Expression.evaluate` accepts real or complex substitutions and an
+  optional decimal precision. The network route has different capabilities and
+  does not yet provide scalar API parity.
+- Tensor indexing, powers and calls carry tensor semantics. Tensor display methods
+  add representation and layout settings; `to_typst` takes `show_dimensions`
+  where the scalar method takes `show_namespaces`. These are intentional
+  specialisations, not interchangeable scalar operations.
+- Inherited scalar inspection and transformation methods can return ordinary
+  `Expression` values. Use the explicitly wrapped algebra methods when the result
+  must retain a checked tensor interface.
+
+The audit also reproduced a shared Symbolica 3.0.1 C++ export failure at kernel
+revision `942bd2c` for a non-real coefficient: compiling `Symbol.I * x` with `number_type="complex"`
+generates `T(T(0e0), T(1e0))`, which is invalid for `std::complex<double>`.
+Both scalar and tensor evaluators fail, with either direct-translation setting.
+The older tensor-only exporter avoided this kernel bug through its own complex
+coefficient printer. Delegating native compilation exposes it; the existing
+complex-coefficient compilation regression remains failing until the shared
+exporter is fixed. Interpreted and SymJIT evaluation, including the current
+notebook, work. This is a backend defect, not an argument-signature mismatch.
+
+`crates/spynso3/tests/installed_evaluator_parity.py` checks the shared signatures
+and compares component results for function definitions, JIT and interpreted
+execution, sparse data, permuted axes and constant scalars. Native real/complex
+compilation is covered by `installed_api_operations.py`.

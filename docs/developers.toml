@@ -1320,7 +1320,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "6756819c6415e0bb0ad576881774d2b403a64c22"
+digest = "8191d6fe1ef31c054fcb0b5b4bf49f595d9bf21c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

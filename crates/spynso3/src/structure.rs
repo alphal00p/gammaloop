@@ -1275,6 +1275,26 @@ impl PyStubType for ConvertibleToInvariantDegree {
 #[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensoRepresentation {
+    fn _repr_html_(&self) -> String {
+        self.to_html()
+    }
+
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.euc(3)
+    /// >>> html = value.to_html()
+    fn to_html(&self) -> String {
+        crate::display::metadata::representation(self.representation)
+    }
+
     /// The registered space identity and duality, without its dimension.
     ///
     /// Returns
@@ -1880,6 +1900,36 @@ impl SpensoSlot {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.slot.hash(&mut hasher);
         hasher.finish()
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None)
+    }
+
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Parameters
+    /// ----------
+    /// settings : DisplaySettings, optional
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.euc(3)("i")
+    /// >>> html = value.to_html()
+    #[pyo3(signature = (*, settings=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        settings: Option<crate::display::DisplaySettings>,
+    ) -> PyResult<String> {
+        crate::display::metadata::slot(py, self.slot, &settings.unwrap_or_default())
     }
 
     /// The abstract label carried by this slot.
