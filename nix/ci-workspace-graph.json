@@ -12,33 +12,128 @@
     ],
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "gammaloop-api",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "vakint"
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo"
+    ],
+    "feynkit-amplitude": [
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "linnet",
+      "spenso",
+      "three-dimensional-reps"
+    ],
+    "feynkit-generator": [
+      "feynkit-amplitude",
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "linnest",
+      "linnet",
+      "spenso",
+      "symbolica-utils"
+    ],
+    "feynkit-kinematics": [
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "linnest",
+      "linnet",
+      "linnet-py",
+      "spenso-macros",
+      "spynso3"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "idenso",
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "idenso",
       "linnet",
       "spenso",
+      "symbolica-utils",
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+      "idenso",
       "linnet",
       "spenso",
+      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -50,6 +145,12 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -68,6 +169,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -86,21 +188,27 @@
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
-      "gammaloop-workspace-hack",
       "idenso",
-      "spenso"
+      "spenso",
+      "spenso-macros"
     ],
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnet",
       "spenso",
-      "spenso-hep-lib"
+      "spenso-hep-lib",
+      "spenso-macros"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-tensor",
+      "spenso",
+      "spenso-macros"
+    ]
   },
   "normal_dependency_features": {
     "alphal00p-docs-builder": {
@@ -117,29 +225,159 @@
     },
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
-      "alphal00p-docs-schema": []
+      "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
+      "gammaloop-api": [
+        "cli"
+      ],
+      "gammalooprs": [],
+      "idenso": [
+        "bincode",
+        "reference-cases"
+      ],
+      "linnet": [
+        "bincode",
+        "drawing",
+        "nodestore-vec",
+        "serde",
+        "symbolica"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": [
+        "native"
+      ],
+      "spenso-macros": [],
+      "vakint": []
     },
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
-      "gammaloop-api": [
-        "python-stubs"
+      "feynkit-py": [
+        "python_stubgen"
       ],
-      "idenso": [
-        "python-stubs"
+      "gammaloop-api": [
+        "python_stubgen"
       ],
       "linnet-py": [
-        "python-stubs"
+        "python_stubgen"
       ],
       "spynso3": [
-        "python-stubs"
+        "python_stubgen"
       ],
       "vakint": [
-        "python-stubs"
+        "python_stubgen",
+        "symbolica_community_module"
       ]
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": []
+    },
+    "feynkit-amplitude": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-cff": {
+      "feynkit-graph": [],
+      "linnet": [
+        "bincode",
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "three-dimensional-reps": []
+    },
+    "feynkit-generator": {
+      "feynkit-amplitude": [],
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [
+        "symbolica"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": []
+    },
+    "feynkit-graph": {
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "symbolica-utils": []
+    },
+    "feynkit-kinematics": {
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-model": {},
+    "feynkit-py": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [
+        "svg"
+      ],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
+      "linnet-py": [],
+      "spenso-macros": [],
+      "spynso3": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
       ],
@@ -155,20 +393,30 @@
       ],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
+      ],
+      "symbolica-utils": [
+        "native"
       ],
       "three-dimensional-reps": [
         "display"
       ]
     },
     "gammaloop-integration-tests": {
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+      "idenso": [],
       "linnet": [],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
+      ],
+      "symbolica-utils": [
+        "native"
       ],
       "three-dimensional-reps": [
         "eval"
@@ -180,17 +428,24 @@
       "gammaloop-workspace-hack": [],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
       ]
     },
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
+        "bincode",
         "native"
       ],
       "linnet": [
@@ -200,7 +455,7 @@
       ],
       "spenso": [
         "native-code-generation",
-        "symbolica"
+        "shadowing"
       ],
       "spenso-hep-lib": [
         "native"
@@ -215,18 +470,21 @@
     },
     "idenso": {
       "linnet": [
+        "nodestore-vec",
         "serde"
       ],
       "spenso": [
-        "symbolica"
+        "shadowing"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
     },
     "kurvst": {},
     "linnest": {
+      "kurvst": [],
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -239,6 +497,7 @@
       "kurvst": [],
       "linnest": [],
       "linnet": [
+        "nodestore-vec",
         "serde"
       ]
     },
@@ -246,31 +505,30 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
+        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
-      "gammaloop-workspace-hack": [],
-      "idenso": [
-        "reference-cases"
-      ],
+      "idenso": [],
       "spenso": [
-        "symbolica"
-      ]
+        "shadowing"
+      ],
+      "spenso-macros": []
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
+      "linnet": [],
       "spenso": [
         "portable-payload",
         "python",
-        "symbolica"
+        "shadowing"
       ],
-      "spenso-hep-lib": []
+      "spenso-hep-lib": [],
+      "spenso-macros": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {
@@ -280,7 +538,11 @@
         "symbolica"
       ]
     },
-    "vakint": {}
+    "vakint": {
+      "feynkit-tensor": [],
+      "spenso": [],
+      "spenso-macros": []
+    }
   },
   "package_dirs": {
     "alphal00p-docs-builder": "crates/alphal00p-docs-builder",
@@ -290,6 +552,16 @@
     "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
     "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
     "clinnet": "crates/clinnet",
+    "feynkit": "crates/feynkit",
+    "feynkit-amplitude": "crates/feynkit-amplitude",
+    "feynkit-cff": "crates/feynkit-cff",
+    "feynkit-generator": "crates/feynkit-generator",
+    "feynkit-graph": "crates/feynkit-graph",
+    "feynkit-kinematics": "crates/feynkit-kinematics",
+    "feynkit-model": "crates/feynkit-model",
+    "feynkit-py": "crates/feynkit-py",
+    "feynkit-tensor": "crates/feynkit-tensor",
+    "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
     "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
@@ -317,6 +589,16 @@
     "alphal00p-docs-python-exporter",
     "alphal00p-docs-schema",
     "clinnet",
+    "feynkit",
+    "feynkit-amplitude",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -347,13 +629,147 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "gammaloop-api",
+      "gammaloop-tracing-filter",
+      "gammaloop-tracing-filter-macros",
+      "gammaloop-workspace-hack",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils",
+      "three-dimensional-reps",
+      "vakint"
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-amplitude": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-generator": [
+      "feynkit-amplitude",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "kurvst",
+      "linnest",
+      "linnet",
+      "linnet-py",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "spynso3",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -368,6 +784,13 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -393,6 +816,13 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -414,6 +844,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -454,7 +885,18 @@
       "linnet",
       "symbolica-utils"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ]
   },
   "resolved_test_dependencies": {
     "alphal00p-docs-builder": [
@@ -468,6 +910,15 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -488,7 +939,119 @@
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-amplitude": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-generator": [
+      "feynkit-amplitude",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "kurvst",
+      "linnest",
+      "linnet",
+      "linnet-py",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "spynso3",
+      "symbolica-utils",
+      "three-dimensional-reps"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -503,6 +1066,13 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -528,6 +1098,13 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -549,6 +1126,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -589,9 +1167,31 @@
       "linnet",
       "symbolica-utils"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ]
   },
   "symbolica_normal_packages": [
+    "alphal00p-docs-examples",
+    "feynkit",
+    "feynkit-amplitude",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -608,6 +1208,16 @@
   ],
   "symbolica_test_packages": [
     "alphal00p-docs-examples",
+    "feynkit",
+    "feynkit-amplitude",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-tensor",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -636,6 +1246,14 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-schema",
+      "feynkit",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-api",
       "gammalooprs",
       "idenso",
@@ -649,29 +1267,110 @@
       "alphal00p-docs-schema"
     ],
     "alphal00p-docs-python-exporter": [
+      "feynkit-py",
       "gammaloop-api",
-      "idenso",
       "linnet-py",
       "spynso3",
       "vakint"
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo"
+    ],
+    "feynkit-amplitude": [
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "feynkit-model",
+      "linnet",
+      "spenso",
+      "three-dimensional-reps"
+    ],
+    "feynkit-generator": [
+      "feynkit-amplitude",
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "linnest",
+      "linnet",
+      "spenso",
+      "symbolica-utils"
+    ],
+    "feynkit-kinematics": [
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-tensor",
+      "feynkit-ufo",
+      "linnest",
+      "linnet",
+      "linnet-py",
+      "spenso-macros",
+      "spynso3"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "idenso",
       "linnet",
       "spenso",
+      "symbolica-utils",
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+      "idenso",
       "linnet",
       "spenso",
+      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -683,6 +1382,12 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-amplitude",
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -701,6 +1406,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -720,21 +1426,27 @@
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
-      "gammaloop-workspace-hack",
       "idenso",
-      "spenso"
+      "spenso",
+      "spenso-macros"
     ],
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnet",
       "spenso",
-      "spenso-hep-lib"
+      "spenso-hep-lib",
+      "spenso-macros"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-tensor",
+      "spenso",
+      "spenso-macros"
+    ]
   },
   "test_dependency_features": {
     "alphal00p-docs-builder": {
@@ -752,21 +1464,31 @@
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
       "alphal00p-docs-schema": [],
+      "feynkit": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
       "gammaloop-api": [
         "cli"
       ],
       "gammalooprs": [],
       "idenso": [
+        "bincode",
         "reference-cases"
       ],
       "linnet": [
         "bincode",
         "drawing",
+        "nodestore-vec",
         "serde",
         "symbolica"
       ],
       "spenso": [
-        "symbolica"
+        "shadowing"
       ],
       "spenso-hep-lib": [
         "native"
@@ -778,25 +1500,126 @@
       "alphal00p-docs-schema": []
     },
     "alphal00p-docs-python-exporter": {
-      "gammaloop-api": [
-        "python-stubs"
+      "feynkit-py": [
+        "python_stubgen"
       ],
-      "idenso": [
-        "python-stubs"
+      "gammaloop-api": [
+        "python_stubgen"
       ],
       "linnet-py": [
-        "python-stubs"
+        "python_stubgen"
       ],
       "spynso3": [
-        "python-stubs"
+        "python_stubgen"
       ],
       "vakint": [
-        "python-stubs"
+        "python_stubgen",
+        "symbolica_community_module"
       ]
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": []
+    },
+    "feynkit-amplitude": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-cff": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "linnet": [
+        "bincode",
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "three-dimensional-reps": []
+    },
+    "feynkit-generator": {
+      "feynkit-amplitude": [],
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [
+        "symbolica"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": []
+    },
+    "feynkit-graph": {
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [
+        "serde"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "symbolica-utils": []
+    },
+    "feynkit-kinematics": {
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-model": {},
+    "feynkit-py": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [
+        "svg"
+      ],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-tensor": [],
+      "feynkit-ufo": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
+      "linnet-py": [],
+      "spenso-macros": [],
+      "spynso3": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [
+        "shadowing"
+      ]
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
       ],
@@ -812,20 +1635,30 @@
       ],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
+      ],
+      "symbolica-utils": [
+        "native"
       ],
       "three-dimensional-reps": [
         "display"
       ]
     },
     "gammaloop-integration-tests": {
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+      "idenso": [],
       "linnet": [],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
+      ],
+      "symbolica-utils": [
+        "native"
       ],
       "three-dimensional-reps": [
         "eval"
@@ -837,17 +1670,24 @@
       "gammaloop-workspace-hack": [],
       "spenso": [
         "native",
-        "symbolica"
+        "shadowing"
       ]
     },
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "feynkit-amplitude": [],
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
+        "bincode",
         "native"
       ],
       "linnet": [
@@ -857,7 +1697,7 @@
       ],
       "spenso": [
         "native-code-generation",
-        "symbolica"
+        "shadowing"
       ],
       "spenso-hep-lib": [
         "native"
@@ -872,18 +1712,21 @@
     },
     "idenso": {
       "linnet": [
+        "nodestore-vec",
         "serde"
       ],
       "spenso": [
-        "symbolica"
+        "shadowing"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
     },
     "kurvst": {},
     "linnest": {
+      "kurvst": [],
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -901,6 +1744,7 @@
       "kurvst": [],
       "linnest": [],
       "linnet": [
+        "nodestore-vec",
         "serde"
       ]
     },
@@ -908,31 +1752,32 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
+        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
-      "gammaloop-workspace-hack": [],
       "idenso": [
         "reference-cases"
       ],
       "spenso": [
-        "symbolica"
-      ]
+        "shadowing"
+      ],
+      "spenso-macros": []
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [
-        "python"
-      ],
+      "idenso": [],
+      "linnet": [],
       "spenso": [
         "portable-payload",
         "python",
-        "symbolica"
+        "shadowing"
       ],
-      "spenso-hep-lib": []
+      "spenso-hep-lib": [],
+      "spenso-macros": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {
@@ -942,7 +1787,11 @@
         "symbolica"
       ]
     },
-    "vakint": {}
+    "vakint": {
+      "feynkit-tensor": [],
+      "spenso": [],
+      "spenso-macros": []
+    }
   },
   "workspace_root": "."
 }

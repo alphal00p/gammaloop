@@ -16,23 +16,19 @@
 
   documentation = import ./documentation.nix {
     inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources nonCargoBuildSources
-      ciArgs ciCargoProfile
-      dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
-      workspacePackageSrcFor workspaceMissingCargoTargetsScript
-      workspaceAnchorCargoTomlFor workspacePrebuildDependencyPackages
-      workspacePrebuildPackage workspacePrebuildPackageDir craneCiFeaturesFor;
-    nativeCargoArtifacts = cranePackageDependencyArtifacts."gammaloop-api";
+      commonArgs dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
+      workspacePackageSrcFor workspaceMissingCargoTargetsScript;
   };
   inherit (documentation) docsTypst docsFontPath documentationDeveloperScopeSources;
 
-  # Host checks use their own system's groups and features, such as UFO wheels.
+  # Host checks use their own system's groups and features.
   ci = import ./ci.nix {
     inherit workspaceGraph system;
     workspacePackages = workspaceMemberPackages;
   };
   nixCiConfiguration = let
     enable = (import (workspaceRoot + "/nix-ci.nix")).enable;
-    # NixCI schedules x86_64-linux jobs; every host generates and checks that file.
+    # NixCI schedules x86_64-linux jobs on every host.
     scheduled = import ./ci.nix {
       inherit workspaceGraph;
       workspacePackages = workspaceMemberPackages;
@@ -47,7 +43,16 @@
   workspacePrebuildPackage = "gammaloop-ci-prebuild";
   workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
-  cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+  # Cargo path patches are dependencies, not workspace members. Preserve their
+  # manifests and implementation in every filtered dependency/build context.
+  localCargoPatchSources = lib.fileset.unions (
+    lib.optional (builtins.pathExists (workspaceRoot + "/vendor/clarabel"))
+    (workspaceRoot + "/vendor/clarabel")
+  );
+  cargoSources = lib.fileset.unions [
+    (craneLib.fileset.commonCargoSources workspaceRoot)
+    localCargoPatchSources
+  ];
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
@@ -69,8 +74,10 @@
       if package.name == "symbolica" && package.version == "3.0.0"
       then
         drv.overrideAttrs (old: {
-          # Symbolica watches .git/HEAD, which its published crate omits. A stable
-          # file prevents Cargo from rebuilding it whenever Nix restores artifacts.
+          # The pinned incremental baseline still uses registry Symbolica 3.0.0,
+          # whose build script watches the omitted .git/HEAD. Keep its artifacts
+          # reusable. Symbolica 3.0.1 watches only existing metadata and
+          # bypasses this version-specific hook.
           postInstall = (old.postInstall or "") + ''
             mkdir -p "$out/.git"
             printf 'ref: refs/heads/nix-vendor\n' > "$out/.git/HEAD"
@@ -87,6 +94,9 @@
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
+    (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
@@ -136,7 +146,7 @@
       (workspaceRoot + "/docs/api/python")
       (workspaceRoot + "/docs/examples.toml")
       (workspaceRoot + "/docs/products")
-      (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+      (workspaceRoot + "/crates/linnet-py/linnet.pyi")
     ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
@@ -154,8 +164,7 @@
   linnestWasmSrc = lib.fileset.toSource {
     root = workspaceRoot;
     fileset = lib.fileset.unions [
-      # Benchmark cards are TOML but do not affect the drawings embedded in the CLI.
-      (lib.fileset.difference cargoSources (lib.fileset.maybeMissing (workspaceRoot + "/benchmarks/performance")))
+      cargoSources
       (workspaceRoot + "/crates/clinnet/templates/figure.typ")
       (workspaceRoot + "/crates/clinnet/templates/grid.typ")
       (workspaceRoot + "/crates/clinnet/templates/layout.typ")
@@ -163,6 +172,9 @@
       (workspaceRoot + "/crates/kurvst/typst/typst.toml")
       (workspaceRoot + "/crates/linnest/typst/src")
       (workspaceRoot + "/crates/linnest/typst/typst.toml")
+      (workspaceRoot + "/crates/linnest/typst/LICENSE")
+      (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
+      (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
     ];
   };
 
@@ -286,7 +298,8 @@
 
   workspaceDependencyBuildScripts =
     lib.filter builtins.pathExists (
-      map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
+      [(workspaceRoot + "/build.rs")]
+      ++ map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
     );
 
   workspacePackageBuildScriptsForSourcePackages = sourcePackages:
@@ -296,7 +309,7 @@
 
   workspaceDependencySrc = lib.fileset.toSource {
     root = workspaceRoot;
-    fileset = lib.fileset.unions workspaceDependencyManifestFiles;
+    fileset = lib.fileset.unions (workspaceDependencyManifestFiles ++ [localCargoPatchSources]);
   };
 
   cargoGraphGenerationSrc = lib.fileset.toSource {
@@ -306,6 +319,8 @@
       ++ workspaceDependencyBuildScripts
       ++ workspaceCargoTargetEntrypoints
       ++ [
+        localCargoPatchSources
+        (workspaceRoot + "/crate-hashes.json")
         (workspaceRoot + "/.config/hakari.toml")
       ]
     );
@@ -323,8 +338,6 @@
     #![allow(dead_code)]
   '';
 
-  # Cargo compares the newest source timestamp and path in this build-script
-  # fingerprint. Keep build.rs uniquely newest so every consumer agrees.
   normalizeWorkspaceHackBuildScriptTimestampScriptFor = prefix: ''
     if [ -e ${prefix}crates/${workspaceHackPackage}/Cargo.toml ]; then
       touch -d @0 ${prefix}crates/${workspaceHackPackage}/Cargo.toml
@@ -386,6 +399,11 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    "feynkit-py" = [
+      "assets/embedded/drawing/templates/layout-core.typ"
+      "assets/embedded/drawing/templates/physics-edge-style.typ"
+      "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+    ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
       "crates/linnet-py/pyproject.toml"
@@ -394,14 +412,17 @@
       "docs/products"
       "pyproject.toml"
     ];
+    "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
     "gammaloop-api" = [
-      "crates/linnest/build_assets.rs"
       "assets/embedded"
       "assets/models"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
@@ -412,12 +433,14 @@
       "tests/resources/fjcore"
     ];
     clinnet = [
-      "crates/linnest/build_assets.rs"
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
@@ -429,6 +452,9 @@
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
       "crates/linnest/typst/LICENSE"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
@@ -442,8 +468,19 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
+    linnest = [
+      "crates/linnest/layout/native/fixtures"
+      "crates/linnest/src/ec_seed/fixtures"
+    ];
+    "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
-    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
+    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet.pyi" "docs/api/python"];
     clinnet = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
@@ -453,19 +490,16 @@
       "tests/resources/graphs/epemttbar.dot"
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
-    "gammaloop-api" = [
-      "tests/resources/graphs"
-      "examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
-    ];
+    "gammaloop-api" = ["tests/resources/graphs"];
     gammalooprs = [
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
-      "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
-      "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
     ];
     "gammaloop-integration-tests" = [
-      "tests/resources/graphs"
+      "crates/feynkit-model/tests/fixtures"
       "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
+      "crates/gammalooprs/tests/fixtures/renormalization"
+      "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
   };
 
@@ -475,6 +509,8 @@
       "assets/gammalooplogo-dark.svg"
       "assets/gammalooplogo-light.svg"
       "crates/clinnet/CHANGELOG.typ"
+      "crates/feynkit-py/examples/ufo_generation.py"
+      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"
@@ -489,6 +525,7 @@
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"
+      "examples/notebooks"
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"
@@ -496,12 +533,8 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
-    clinnet = [
-      "docs/assets/typst/portal-graphs/edge-style.typ"
-      "docs/assets/typst/theme.typ"
-    ];
+    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
     "gammaloop-api" = [
-      "tests/resources/graphs/scalar_box.dot"
       "tests/resources/graphs/scalar_bubble.dot"
     ];
     "gammaloop-tracing-filter" = [
@@ -521,9 +554,7 @@
 
   workspacePackageExtraSourceRoots.ownTest = {
     gammalooprs = [
-      "crates/gammalooprs/src/feyngen/test.rs"
       "crates/gammalooprs/src/graph/parse/tests.rs"
-      "crates/gammalooprs/src/model/test_polarization_sums.rs"
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
@@ -609,6 +640,7 @@
       root = workspaceRoot;
       fileset = lib.fileset.unions (
         workspaceDependencyManifestFiles
+        ++ [localCargoPatchSources]
         ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
         ++ map (package: packageSources.${package}.production) sourcePackages
         ++ lib.concatMap (package: packageSources.${package}.targets) packageSourcePackages
@@ -740,18 +772,23 @@
 
   craneCiExtraFeatureSets = {
     "gammaloop-workspace-hack" = ["symbolica/tracing_max_level_info"];
-    "gammaloop-tracing-filter" = ["clap" "symbolica" "python"];
-    "gammaloop-api" = ["python-stubs"];
-    gammalooprs = ["python-stubs"];
+    "gammaloop-tracing-filter" = ["clap" "symbolica"];
     idenso = ["reference-cases"];
     linnet = ["drawing" "symbolica"];
-    spenso = ["symbolica" "python-stubs"];
+    spenso = ["shadowing"];
   };
+
+  workspaceFeatureUnificationExcludedPackages = [
+    "feynkit-py"
+    "alphal00p-docs-python-exporter"
+    "linnet-py"
+    "spynso3"
+  ];
 
   workspaceIncomingNormalDependencyFeaturesFor = dependency:
     sortedUnique (lib.concatMap (
         package: workspaceGraph.normal_dependency_features.${package}.${dependency} or []
-      ) workspaceMemberPackages);
+      ) (lib.subtractLists workspaceFeatureUnificationExcludedPackages workspaceMemberPackages));
 
   workspaceIncomingTestDependencyFeaturesFor = packages: dependency:
     sortedUnique (lib.concatMap (
@@ -759,34 +796,19 @@
       )
       packages);
 
-  nativePythonDependencyFeatures = {
-    pyo3 = sortedUnique (
-      lib.concatMap (package:
-        (workspaceManifestFor workspaceMemberPackageDirs.${package}).dependencies.pyo3.features or [])
-      workspaceMemberPackages
-      ++ lib.concatMap (package:
-        map (lib.removePrefix "pyo3/") (lib.filter (lib.hasPrefix "pyo3/")
-          ((workspaceManifestFor workspaceMemberPackageDirs.${package}).features.native or [])))
-      workspaceMemberPackages
-    );
-    pyo3-stub-gen = sortedUnique (lib.concatMap (package:
-        (workspaceManifestFor workspaceMemberPackageDirs.${package}).dependencies.pyo3-stub-gen.features or [])
-      workspaceMemberPackages);
-  };
-
   craneCiFeaturesFor = package:
     sortedUnique (
       craneCiCommonFeaturesFor package
       ++ (craneCiExtraFeatureSets.${package} or [])
       ++ (workspaceIncomingNormalDependencyFeaturesFor package)
-      ++ (workspaceIncomingTestDependencyFeaturesFor workspaceMemberPackages package)
+    );
+
+  craneTestContextFeaturesFor = sourcePackages: package:
+    sortedUnique (
+      craneCiCommonFeaturesFor package
+      ++ (craneCiExtraFeatureSets.${package} or [])
       ++ (ci.testFeatures.${package} or [])
-      # Native tests, documentation and Python embedding use one compatible
-      # feature vector. Extension-module, abi3 and WASM remain separate builds.
-      ++ lib.concatMap (dependency:
-        lib.optionals (((workspaceManifestFor workspaceMemberPackageDirs.${package}).dependencies or {}) ? ${dependency})
-          (map (feature: "${dependency}/${feature}") nativePythonDependencyFeatures.${dependency}))
-      (builtins.attrNames nativePythonDependencyFeatures)
+      ++ (workspaceIncomingTestDependencyFeaturesFor sourcePackages package)
     );
 
   workspaceTestContextFor = {
@@ -810,7 +832,7 @@
       ) [workspaceHackPackage];
     featurePackages = sortedUnique (sourcePackages ++ anchorPackages);
     features = lib.genAttrs featurePackages (package:
-      sortedUnique (craneCiFeaturesFor package ++ (extraFeatures.${package} or [])));
+      sortedUnique (craneTestContextFeaturesFor sourcePackages package ++ (extraFeatures.${package} or [])));
     resolvedFeatureVector = map (package: {
         inherit package;
         features = features.${package};
@@ -822,7 +844,10 @@
     compileEnvironment = {
       inherit (ciArgs) NO_SYMBOLICA_OEM_LICENSE;
       inherit (commonArgs) CC CXX RUSTFLAGS;
-      inherit (ciArgs) PYO3_PYTHON CARGO_BUILD_INCREMENTAL;
+      PYO3_PYTHON =
+        if usesPythonModule
+        then "${nextestPython}/bin/python3"
+        else ciArgs.PYO3_PYTHON;
     };
     key = builtins.substring 0 16 (builtins.hashString "sha256" (builtins.toJSON {
       inherit compileEnvironment resolvedFeatureVector;
@@ -924,6 +949,7 @@
     lib.filter (
       package:
         package != workspaceHackPackage
+        && !(builtins.elem package workspaceFeatureUnificationExcludedPackages)
         && workspacePackageHasLibTarget package
     )
     workspaceMemberPackages;
@@ -938,22 +964,14 @@
     install -D -m 0644 ${workspacePrebuildCargoToml} "$out/${workspacePrebuildPackageDir}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "$out/${workspacePrebuildPackageDir}/src/lib.rs"
   '';
-  workspaceAnchorDependencyFeatures = cargoQualifiedFeaturesFor
-    (builtins.attrNames nativePythonDependencyFeatures)
-    (dependency: nativePythonDependencyFeatures.${dependency});
-  workspacePrebuildCargoArgs = let
-    # The generated anchor requests local features and native Python features.
-    featureArgs = cargoQualifiedFeatureArgsFor workspaceMemberPackages
-      (package: lib.subtractLists workspaceAnchorDependencyFeatures
-        (lib.filter (feature: lib.hasInfix "/" feature) (craneCiFeaturesFor package)));
-  in
+  workspacePrebuildCargoArgs =
     lib.concatStringsSep " " (
       [
         "--offline"
         "-p ${lib.escapeShellArg workspacePrebuildPackage}"
         "-p ${lib.escapeShellArg workspaceHackPackage}"
       ]
-      ++ lib.optional (featureArgs != "") featureArgs
+      ++ lib.optional (craneWorkspacePrebuildFeatureArgs != "") craneWorkspacePrebuildFeatureArgs
     );
   workspaceConsumerPackageFor = package: "gammaloop-ci-consumer-${package}";
   workspaceConsumerPackageDirFor = package: "crates/${workspaceConsumerPackageFor package}";
@@ -968,9 +986,6 @@
     path = "src/lib.rs"
 
     [dependencies]
-    ${lib.concatMapStringsSep "\n" (dependency: ''
-      ${dependency} = { workspace = true, features = ${builtins.toJSON nativePythonDependencyFeatures.${dependency}} }
-    '') (builtins.attrNames nativePythonDependencyFeatures)}
     ${lib.concatMapStringsSep "\n" (dependencyPackage: let
       features = lib.filter (feature: !lib.hasInfix "/" feature) (featuresFor dependencyPackage);
       featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
@@ -987,10 +1002,7 @@
     anchorPackages =
       lib.optionals (
         package != workspaceHackPackage
-        # Select the existing owner of its forwarded Symbolica feature, even
-        # when only a transitive dependency brings it into this consumer.
-        && (builtins.elem package workspaceGraph.symbolica_normal_packages
-          || builtins.elem workspaceHackPackage sourcePackages)
+        && builtins.elem package workspaceGraph.symbolica_normal_packages
       ) [workspaceHackPackage];
     crossFeatures =
       sortedUnique (lib.concatMap (
@@ -998,7 +1010,7 @@
             lib.filter (feature: lib.hasInfix "/" feature) (craneCiFeaturesFor featurePackage)
         )
         (sortedUnique (sourcePackages ++ anchorPackages)));
-    featureArgs = cargoFeatureArgs (lib.subtractLists workspaceAnchorDependencyFeatures crossFeatures);
+    featureArgs = cargoFeatureArgs crossFeatures;
   in
     lib.concatStringsSep " " (
       [
@@ -1096,12 +1108,7 @@
       lib.path = "src/lib.rs";
       dependencies = testBinaryFeatureAnchorDependenciesFor context;
     } // lib.optionalAttrs (context.anchorPackages != []) {
-      build-dependencies = testRegexDependencies // {
-        symbolica = {
-          workspace = true;
-          features = ["tracing_max_level_info"];
-        };
-      };
+      build-dependencies = testRegexDependencies;
     });
   testBinaryFeatureAnchorSourceScriptFor = context: prefix: ''
     install -D -m 0644 ${testBinaryFeatureAnchorCargoTomlFor context} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/Cargo.toml"
@@ -1125,10 +1132,7 @@
     touch -d @0 "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
   '';
   cargoTestContextArgsFor = context: packages: let
-    # Keep root features and forwarded features that can activate optional dependencies.
-    featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage:
-      lib.filter (feature: builtins.elem featurePackage context.componentPackages || lib.hasInfix "/" feature)
-        context.features.${featurePackage});
+    featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage: context.features.${featurePackage});
   in
     lib.concatStringsSep " " (
       ["--offline"]
@@ -1148,20 +1152,20 @@
       ++ lib.optional (featureArgs != "") featureArgs
     );
   cranePythonExtraFeatureSets = {
-    "gammaloop-api" = ["abi3" "extension-module"];
+    "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
   };
   cranePythonFeaturesFor = package:
-    sortedUnique (
-      # Stub generation needs the native Python API, not the extension's
-      # minimum stable ABI. Forwarded dependency features activate it too.
-      lib.filter (feature:
-        !builtins.any (part: builtins.elem part ["python-stubs" "pyo3-stub-gen"])
-          (lib.splitString "/" feature))
-      (craneCiFeaturesFor package)
-      ++ (cranePythonExtraFeatureSets.${package} or [])
-    );
+    sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
+  # The Python feature set enables optional workspace dependencies that are
+  # absent from the default resolved closure used by ordinary package builds.
+  cranePythonSourcePackageNames =
+    workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+  cranePythonSrc = workspacePackageSrcForSourcePackages {
+    sourcePackages = cranePythonSourcePackageNames;
+    packageSourcePackages = ["gammaloop-api"];
+  };
   cranePythonCargoArgs = let
-    featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+    featurePackages = cranePythonSourcePackageNames;
     selectedFeaturePackages =
       lib.filter (
         featurePackage:
@@ -1224,36 +1228,6 @@
   nextestPython = pkgs.python313.withPackages (pythonPackages: [
     pythonPackages.numpy
   ]);
-  nextestUfoPython = pkgs.python313.withPackages (pythonPackages: let
-    packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"))).package;
-    symbolica = lib.findFirst (package: package.name == "symbolica") null packages;
-    loader = lib.findFirst (package: package.name == "ufo-model-loader") null packages;
-    wheelTag = ci.ufoWheelTags.${system} or (throw "The locked Symbolica ${symbolica.version} Python package has no wheel for ${system}; UFO import tests require ${builtins.concatStringsSep " or " (builtins.attrNames ci.ufoWheelTags)}.");
-    symbolicaWheel = lib.findFirst (wheel: lib.hasInfix wheelTag wheel.url) null symbolica.wheels;
-    loaderWheel = builtins.head loader.wheels;
-    pythonSymbolica = pythonPackages.buildPythonPackage {
-      pname = symbolica.name;
-      inherit (symbolica) version;
-      format = "wheel";
-      src = pkgs.fetchurl {inherit (symbolicaWheel) url hash;};
-      nativeBuildInputs = lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.autoPatchelfHook;
-      buildInputs = lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.stdenv.cc.cc.lib;
-      # Importing Symbolica starts its licensed runtime. The core UFO test
-      # validates both wheel imports and behavior with the CI runtime license.
-      doCheck = false;
-      dontUsePythonImportsCheck = true;
-      meta.platforms = builtins.attrNames ci.ufoWheelTags;
-    };
-    ufoModelLoader = pythonPackages.buildPythonPackage {
-      pname = loader.name;
-      inherit (loader) version;
-      format = "wheel";
-      src = pkgs.fetchurl {inherit (loaderWheel) url hash;};
-      dependencies = [pythonSymbolica];
-      doCheck = false;
-      dontUsePythonImportsCheck = true;
-    };
-  in [ufoModelLoader]);
 
   # Common arguments can be set here to avoid repeating them later
   commonArgs = {
@@ -1304,14 +1278,6 @@
     // {
       buildType = ciCargoProfile;
       CARGO_PROFILE = ciCargoProfile;
-      CARGO_BUILD_INCREMENTAL = "true";
-      postBuild = ''
-        # Query caches have their own output in stateful test producers. Other
-        # archives share compiled libraries without retaining those large caches.
-        if [ -z "''${incremental:-}" ]; then
-          rm -rf "''${CARGO_TARGET_DIR:-target}/''${CARGO_PROFILE}/incremental"
-        fi
-      '';
       # The workspace sets default-members to gammaloop-api, so CI checks must
       # opt into the full workspace explicitly.
       cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
@@ -1370,7 +1336,7 @@
       cargoArtifacts = cranePythonBuildArtifacts;
       CARGO_BUILD_INCREMENTAL = "true";
       pname = "gammaloop-api-python";
-      src = workspacePackageSrcFor "gammaloop-api";
+      src = cranePythonSrc;
       cargoExtraArgs = cranePythonCargoArgs;
       doCheck = false;
       postPatch = workspaceMissingCargoTargetsScript;
@@ -1408,6 +1374,8 @@
     cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
     cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
     cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+    cp ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm crates/linnest/typst/ec-layout.wasm
+    cp ${linnest-wasm}/templates/crates/linnest/typst/LICENSE* crates/linnest/typst/
     cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
     cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
@@ -1426,6 +1394,7 @@
     });
 
   nextestProfile = "ci_gammaloop";
+  nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
 
   nextestFailureSummary = pkgs.writeShellApplication {
     name = "nextest-failure-summary";
@@ -1624,19 +1593,6 @@
       --no-deps \
       --manifest-path "$manifest_path" \
       > "$tmp/metadata.json"
-
-    # Check the actual normal/build dependency closure, including weak ABI
-    # modifiers. Shared Python CI features must not enter the standalone CLI.
-    for features in cli cli,abi3; do
-      cargo tree --locked --offline -p gammaloop-api \
-        --no-default-features --features "$features" \
-        --target ${nextestTargetTriple} --edges normal,build \
-        --prefix none --format '{p}' > "$tmp/cli-dependencies.txt"
-      if grep -E '^(pyo3([_-][[:alnum:]_-]+)?|numpy) v' "$tmp/cli-dependencies.txt"; then
-        echo "Python dependency in standalone CLI ($features)" >&2
-        exit 1
-      fi
-    done
 
     jq '
       def workspace_deps($path_map; $kinds):
@@ -2176,12 +2132,6 @@
       then workspaceHackBuildArtifacts
       else let
         sourcePackages = lib.filter workspacePackageHasLibTarget context.sourcePackages;
-        nativeDependencyFrontier = lib.filter (package:
-          !builtins.any (other:
-            other != package
-            && builtins.elem package (workspaceNormalSourcePackageNamesFor other))
-          sourcePackages)
-        sourcePackages;
         dependencyContexts = workspaceTestDependencyContextsFor context;
         # Each context already contains its ancestors. Retain independent inputs,
         # including FeynKit's UFO context, instead of restoring the same chain again.
@@ -2276,10 +2226,9 @@
         buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
           // {
             cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-dependencies-${context.key}-inputs" (
-              (if dependencyFrontier == []
-                then [cargoArtifacts workspaceHackBuildArtifacts]
-                else map (dependencyContext: self.${dependencyContext.key}) dependencyFrontier)
-              ++ map (package: cranePackageDependencyArtifacts.${package}) nativeDependencyFrontier
+              if dependencyFrontier == []
+              then [cargoArtifacts workspaceHackBuildArtifacts]
+              else map (dependencyContext: self.${dependencyContext.key}) dependencyFrontier
             );
             pname = "gammaloop-crate-test-dependencies-${context.key}";
             keepIncrementalState = true;
@@ -2311,6 +2260,7 @@
           }
           // lib.optionalAttrs context.usesPythonModule {
             nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+            PYO3_PYTHON = "${nextestPython}/bin/python3";
             PYTHON = "${nextestPython}/bin/python3";
             PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
           }))
@@ -2341,6 +2291,7 @@
       }
       // lib.optionalAttrs context.usesPythonModule {
         nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+        PYO3_PYTHON = "${nextestPython}/bin/python3";
         PYTHON = "${nextestPython}/bin/python3";
         PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
       });
@@ -2368,16 +2319,9 @@
   workspaceChecks = lib.mapAttrs (name: command:
     craneLib.mkCargoDerivation (ciArgs
       // {
-        cargoArtifacts =
-          if name == "doctest"
-          then mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
-            cargoCheckArtifacts
-            cranePackageDependencyArtifacts."gammaloop-api"
-          ]
-          else cargoCheckArtifacts;
+        cargoArtifacts = cargoCheckArtifacts;
         pname = "gammaloop-workspace-${name}";
         src = workspaceTestSrc;
-        postPatch = workspaceMissingCargoTargetsScript;
         doNotLinkInheritedArtifacts = true;
         doInstallCargoArtifacts = false;
         buildPhaseCargoCommand = ''
@@ -2408,7 +2352,7 @@
     // {
       cargoArtifacts = cranePythonDependencyArtifacts;
       pname = "gammaloop-api-python-build";
-      dummySrc = workspacePackageSrcFor "gammaloop-api";
+      dummySrc = cranePythonSrc;
       buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
       keepIncrementalState = true;
       previousArtifacts =
@@ -2462,6 +2406,44 @@
       cargoExtraArgs = "${cargoPackagesArgsFor (lib.subtractLists ["gammaloop-integration-tests"] workspaceMemberPackages) craneCiFeaturesFor} --tests";
     });
 
+  ecLayoutWasm = pkgs.stdenv.mkDerivation {
+    pname = "linnest-ec-layout-wasm";
+    version = "1a40505ac00677a58ab5ce532e1dcc3bd63116e5";
+    src = lib.fileset.toSource {
+      root = workspaceRoot + "/crates/linnest/layout/native";
+      fileset = lib.fileset.fileFilter (file:
+        file.hasExt "cpp" || file.hasExt "hpp"
+        || file.name == "CMakeLists.txt" || file.name == "build.py")
+      (workspaceRoot + "/crates/linnest/layout/native");
+    };
+    ogdfArchive = pkgs.fetchurl {
+      url = "https://codeload.github.com/ogdf/ogdf/tar.gz/1a40505ac00677a58ab5ce532e1dcc3bd63116e5";
+      sha256 = "f777924563d31813103e4b9df55bb081885a8b65b7c6868d13d162f892c72d84";
+    };
+    jsonHeader = pkgs.fetchurl {
+      url = "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp";
+      sha256 = "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63";
+    };
+    nativeBuildInputs = [pkgs.emscripten pkgs.binaryen pkgs.cmake pkgs.python3];
+    strictDeps = true;
+    dontConfigure = true;
+    dontStrip = true;
+    buildPhase = ''
+      runHook preBuild
+      export EM_CACHE="$TMPDIR/emscripten-cache"
+      mkdir -p "$EM_CACHE" layout-build/json-include/nlohmann
+      tar -xzf "$ogdfArchive" -C layout-build
+      cp "$jsonHeader" layout-build/json-include/nlohmann/json.hpp
+      python3 build.py --wasm --output layout-build --jobs "$NIX_BUILD_CORES"
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      install -Dm644 layout-build/ec-layout.wasm "$out/ec-layout.wasm"
+      runHook postInstall
+    '';
+  };
+
   linnestWasmArgs = {
     inherit cargoVendorDir;
     src = linnestWasmSrc;
@@ -2489,27 +2471,23 @@
           "$out/templates/crates/linnest/typst" \
           "$out/templates/crates/kurvst/typst"
         cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+        cp ${ecLayoutWasm}/ec-layout.wasm "$out/ec-layout.wasm"
         cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
         cp crates/clinnet/templates/*.typ "$out/templates/"
         cp -R crates/linnest/typst/src "$out/templates/crates/linnest/typst/"
         cp crates/linnest/typst/typst.toml "$out/templates/crates/linnest/typst/typst.toml"
+        cp crates/linnest/typst/LICENSE* "$out/templates/crates/linnest/typst/"
         cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
         cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
         cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
+        cp "$out/ec-layout.wasm" "$out/templates/crates/linnest/typst/ec-layout.wasm"
         cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
       '';
     });
 
-  nextestPackageGroups = map (target:
-    target
-    // lib.optionalAttrs (target.name == "docs") {
-      runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
-    }
-    // lib.optionalAttrs (target.name == "clinnet") {
-      # The Typst behaviour tests fail rather than skip without Typst 0.15.
-      runtimeTools = [docsTypst];
-    })
-  ci.groups;
+  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
+    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+  }) ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
 
@@ -2525,6 +2503,8 @@
   ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]"; nextestPackageGroups;
 
   nextestTargetTriple = pkgs.stdenv.hostPlatform.rust.rustcTargetSpec or pkgs.stdenv.hostPlatform.config;
+
+  nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
 
   nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
   nextestFilterFor = target:
@@ -2544,7 +2524,6 @@
   # The extension is imported by the Python tests at runtime; compiling their
   # Rust harness needs the interpreter but does not need the extension build.
   nextestUsesPythonModule = target: target.runtimePythonModule or false;
-  nextestUsesUfoSupport = target: target.runtimeUfoLoader or false;
   nextestSourcePackagesFor = target: (nextestContextFor target).sourcePackages;
   nextestSrcFor = target:
     workspacePackageSrcForSourcePackages {
@@ -2632,6 +2611,7 @@
         checkPhaseCargoCommand = "";
         installPhaseCommand = "";
       } // lib.optionalAttrs context.usesPythonModule {
+        PYO3_PYTHON = "${nextestPython}/bin/python3";
         PYTHON = "${nextestPython}/bin/python3";
         PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
       });
@@ -2697,15 +2677,8 @@
     })
     checkedNextestPackageGroups);
 
-  nextestCheckFor = {
-    target,
-    profile ? nextestProfile,
-    partition ? null,
-    name ? "gammaloop-nextest-${target.name}",
-  }: let
-    junitPath = "target/nextest/${profile}/junit.xml";
-  in
-    pkgs.runCommand name {
+  nextestCheckFor = target:
+    pkgs.runCommand "gammaloop-nextest-${target.name}" {
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2713,7 +2686,6 @@
         pkgs.gcc
         nextestFailureSummary
       ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
-      ++ lib.optionals (nextestUsesUfoSupport target) [nextestUfoPython]
       ++ (target.runtimeTools or []);
       CC = nixCc;
       CXX = nixCxx;
@@ -2761,10 +2733,6 @@
       export PYO3_PYTHON=${nextestPython}/bin/python3
       export PYTHON=${nextestPython}/bin/python3
       export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
-    '' + lib.optionalString (nextestUsesUfoSupport target) ''
-      # Embedded Python uses the shared compile interpreter and imports its
-      # UFO dependencies from this separately packaged runtime environment.
-      export PYTHONPATH=${nextestUfoPython}/${pythonSitePackages}''${PYTHONPATH:+:$PYTHONPATH}
     '' + ''
       # Nextest runs with the workspace root as cwd, while some insta
       # snapshots are stored under each crate src. Mirror those snapshot
@@ -2778,53 +2746,32 @@
         done < <(find crates -type d -name snapshots | sort)
       fi
 
-      # Respect the sandbox's CPU budget while retaining the CI profile's
-      # 16-process cap on large hosts. Test-internal worker reservations remain
-      # accounted for by nextest's existing threads-required settings.
-      nextest_threads=$(nproc)
-      if (( NIX_BUILD_CORES > 0 && NIX_BUILD_CORES < nextest_threads )); then
-        nextest_threads=$NIX_BUILD_CORES
-      fi
-      export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
-      echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
-    '' + lib.optionalString (profile == "ci_slow") ''
-      # These archive runners replace the separate soft-CT acceptance jobs.
-      # Preserve their stack allowance and retain failed generated states in
-      # the build tree, while keeping internal Rayon work within this budget.
-      export RUST_MIN_STACK=134217728
-      export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
-      export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
-    '' + ''
-      mkdir -p target/nextest "$out"
+      mkdir -p target/nextest
       set +e
       status=0
       ${lib.concatMapStringsSep "\n" (package: ''
-          rm -f ${lib.escapeShellArg junitPath}
+          rm -f ${lib.escapeShellArg nextestJunitPath}
           cargo nextest run \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
             --extract-to . \
             --extract-overwrite \
             --workspace-remap . \
-            --profile ${lib.escapeShellArg profile} \
             ${lib.optionalString ((target.runFilter or null) != null) "-E ${lib.escapeShellArg target.runFilter}"} \
-            --no-fail-fast --final-status-level fail --no-tests=pass \
-            ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
+            ${nextestBaseExtraArgs}
           package_status=$?
-          nextest-failure-summary ${lib.escapeShellArg junitPath} || true
-          if [ -f ${lib.escapeShellArg junitPath} ]; then
-            cp ${lib.escapeShellArg junitPath} "$out/${package}.xml"
-          fi
+          nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
           if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
             status="$package_status"
           fi
         '')
         target.packages}
+      mkdir -p "$out"
       exit "$status"
     '');
 
   nextestRunChecks = lib.listToAttrs (map (target: {
       name = "gammaloop-nextest-${target.name}";
-      value = nextestCheckFor {inherit target;};
+      value = nextestCheckFor target;
     })
     checkedNextestPackageGroups);
 
@@ -2843,20 +2790,14 @@
   impureCheckRunnerTargets =
     [
       {
-        runnerAttr = "nix-ci-check-alphal00p-docs";
-        checkAttr = "alphal00p-docs";
-        inputs = [documentation.alphal00pDocsCargoArtifacts];
-      }
-      {
         runnerAttr = "nix-ci-check-gammaloop-doctest";
         checkAttr = "gammaloop-doctest";
-        inputs = [cargoCheckArtifacts cranePackageDependencyArtifacts."gammaloop-api"];
+        inputs = [cargoCheckArtifacts];
       }
       {
         runnerAttr = "nix-ci-check-gammaloop-nextest";
         checkAttr = "gammaloop-nextest";
-        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module]
-          ++ lib.optional (builtins.any nextestUsesUfoSupport checkedNextestPackageGroups) nextestUfoPython;
+        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module];
       }
     ]
     ++ map (target: {
@@ -2864,8 +2805,7 @@
       checkAttr = "gammaloop-nextest-${target.name}";
       inputs =
         [(nextestBinarySetForTarget target)]
-        ++ lib.optional (nextestUsesPythonModule target) gammaloop-python-module
-        ++ lib.optional (nextestUsesUfoSupport target) nextestUfoPython;
+        ++ lib.optional (nextestUsesPythonModule target) gammaloop-python-module;
     })
     checkedNextestPackageGroups;
 
@@ -2918,7 +2858,7 @@
 
       gammaloop-doc = workspaceChecks.doc;
       alphal00p-docs = documentation.alphal00pDocsCheck;
-      alphal00p-docs-watch = documentation.watchCheck;
+      alphal00p-docs-persistent-typst = documentation.persistentTypstCheck;
 
       gammaloop-doctest = workspaceChecks.doctest;
 
@@ -2934,12 +2874,16 @@
         nativeBuildInputs = [pkgs.wasm-tools];
       } ''
         test -s ${linnest-wasm}/linnest.wasm
+        test -s ${linnest-wasm}/ec-layout.wasm
         test -s ${linnest-wasm}/kurvst.wasm
         test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+        test -s ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
         test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
         cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+        cmp ${linnest-wasm}/ec-layout.wasm ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
         cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
         wasm-tools validate ${linnest-wasm}/linnest.wasm
+        wasm-tools validate ${linnest-wasm}/ec-layout.wasm
         wasm-tools validate ${linnest-wasm}/kurvst.wasm
         test -s ${linnest-wasm}/templates/layout.typ
         test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
@@ -2963,32 +2907,6 @@
     ]
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
-  # Main includes unmeasured slow tests in every package. Integration's fast
-  # check and four long-test partitions cover the same full selection while
-  # reusing its archives. Keep these results outside NixCI's fast scheduling.
-  mainTestChecks =
-    hestiaChecks
-    // lib.listToAttrs (map (target: {
-      name = "gammaloop-nextest-${target.name}";
-      value = nextestCheckFor {
-        inherit target;
-        profile = "ci_full";
-      };
-    }) (lib.filter (target: target.name != "integration") checkedNextestPackageGroups))
-    // lib.listToAttrs (map (index: let
-      name = "gammaloop-nextest-long-${toString index}";
-    in {
-      inherit name;
-      value = nextestCheckFor {
-        inherit name;
-        target =
-          lib.findFirst (target: target.name == "integration")
-          (throw "main test partitions require the integration group")
-          checkedNextestPackageGroups;
-        profile = "ci_slow";
-        partition = "hash:${toString index}/4";
-      };
-    }) [1 2 3 4]);
 in {
   inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
@@ -2999,11 +2917,9 @@ in {
     cranePythonBuildArtifacts
     allChecks
     hestiaChecks
-    mainTestChecks
     gammaloop-cli
     clinnet-cli
     gammaloop-python-module
-    nextestUfoPython
     nixCiConfiguration
     guppyWorkspaceGraphJson
     linnest-wasm
