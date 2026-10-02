@@ -310,3 +310,182 @@ fn sun_simplify_id75_structure_times_two_generator_open_chain() {
 
     assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"(𝑖/2)*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
 }
+
+#[test]
+fn fundamental_fierz_contracts_open_and_closed_color_lines() {
+    test_initialize();
+    let r = TestReps::new();
+    let index = color_idx!(2, ColorFundamental {}.to_symbolic([Atom::var(s!(Nc))]));
+    let cases = [
+        (
+            sun_tf!(r, i, j, a) * sun_trace!(r, b, a, c),
+            index.clone() * (sun_tf!(r, i, j, c, b) - sdf!(r, i, j) * sun_trace!(r, b, c) / s!(Nc)),
+        ),
+        (
+            sun_tf!(r, i, j, b, a, c) * sun_trace!(r, d, a, e),
+            index.clone()
+                * (sun_tf!(r, i, j, b, e, d, c)
+                    - sun_tf!(r, i, j, b, c) * sun_trace!(r, d, e) / s!(Nc)),
+        ),
+        (
+            sun_trace!(r, b, a, c) * sun_trace!(r, d, a, e),
+            index
+                * (sun_trace!(r, c, b, e, d) - sun_trace!(r, b, c) * sun_trace!(r, d, e) / s!(Nc)),
+        ),
+    ];
+    for (expression, expected) in cases {
+        for settings in [
+            ColorSimplifySettings::default(),
+            ColorSimplifySettings::default().without_trace_evaluation(),
+        ] {
+            let actual =
+                crate::tensor::SymbolicTensor::infer((expression).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
+                        color: Some(settings),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .into_expression();
+            assert_eq!(
+                actual
+                    .expand()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                    .unwrap(),
+                crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
+                        color: Some(settings),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .into_expression()
+                    .expand()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                    .unwrap(),
+                "Fierz identity for {expression} with {settings:?}"
+            );
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((actual).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
+                        color: Some(settings),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .into_expression(),
+                actual
+            );
+        }
+    }
+}
+
+#[test]
+fn fundamental_trace_fierz_respects_settings_and_representations() {
+    test_initialize();
+    let r = TestReps::new();
+    let expression = sun_tf!(r, i, j, a) * sun_trace!(r, b, a, c);
+    let disabled = ColorSimplifySettings::default()
+        .without_trace_evaluation()
+        .without_cross_chain_fierz_expansion();
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((expression).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(disabled),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression(),
+        expression
+    );
+    let unevaluated = ColorSimplifySettings::default().without_trace_evaluation();
+    let expression = parse!(
+        "chain(cof(3,i),dind(cof(3,j)),t(coad(A,a),in,out))*trace(cof(4),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(unevaluated),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression(),
+        expression
+    );
+    // Fundamental generator words cannot inhabit an adjoint trace channel.
+    // Keep the local Fierz non-match oracle without bypassing typed admission.
+    let invalid = parse!(
+        "trace(coad(A),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))*trace(cof(3),cyclic(t(coad(A,a),in,out),t(coad(A,d),in,out),t(coad(A,e),in,out)))",
+        default_namespace = "spenso"
+    );
+    assert!(matches!(
+        crate::tensor::SymbolicTensor::infer(invalid.clone()),
+        Err(
+            crate::tensor::inference::TensorInferenceError::InvalidBuiltinSignature {
+                factory: "t",
+                ..
+            }
+        )
+    ));
+    assert_eq!(
+        crate::color::simplify::ColorAlgebraSimplifier::new(unevaluated, Default::default())
+            .step(invalid.as_view(), true),
+        invalid
+    );
+    // A one-generator fundamental trace vanishes, including when the cut
+    // produces an empty trace whose value is the fundamental dimension.
+    assert!(
+        crate::tensor::SymbolicTensor::infer(
+            (sun_tf!(r, i, j, a) * sun_trace!(r, a))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            color: Some(unevaluated),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression()
+        .is_zero()
+    );
+}
