@@ -82,7 +82,7 @@ use symbolica::{
 };
 
 #[cfg(feature = "native-code-generation")]
-use symbolica::domains::float::{FloatLike, SingleFloat};
+use symbolica::domains::float::SingleFloat;
 
 #[cfg(feature = "symbolica")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
@@ -3197,7 +3197,7 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     where
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = Complex::new_zero();
 
         let mut elements = vec![zero; self.size];
         self.eval.evaluate(params, &mut elements);
