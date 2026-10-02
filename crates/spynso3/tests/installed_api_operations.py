@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from symbolica import E, Expression, Replacement, S, T
+from symbolica import E, Expression, Replacement, S, Symbol, T
 from symbolica.community import tensor as sp
 
 
@@ -24,6 +24,21 @@ class TensorOperationsTests(unittest.TestCase):
             [self.x, E("1"), E("0"), self.x + 1] if symbolic else [1.0, 2.0, 3.0, 4.0]
         )
         return sp.Tensor.dense(self.A(self.rep, self.rep), values)
+
+    def test_gamma_product_prefers_the_unresolved_spinor_partner(self):
+        spinor, vector = sp.Representation.bis(4), sp.Representation.mink(4)
+        Q = sp.TensorName.vector("preferred_ports::Q")(spinor)
+        G = sp.TensorName.vector("preferred_ports::G")(vector)
+        gamma = sp.TensorExpression.dirac_gamma(4)
+        left = Symbol.I * gamma(1, sp.AUTO, 1) * Q(1) * G(1)
+        result = left * gamma(2, sp.AUTO, 2)
+        shared = "preferred_ports::spinor"
+        expected = Symbol.I * gamma(1, shared, 1) * Q(1) * G(1) * gamma(2, shared, 2)
+        self.assertEqual(result.axes, (spinor(2), vector(2)))
+        library = sp.TensorLibrary.hep_lib_atom()
+        library.register(sp.Tensor.dense(Q, [E(str(i)) for i in (1, 2, 3, 4)]))
+        library.register(sp.Tensor.dense(G, [E(str(i)) for i in (5, 6, 7, 8)]))
+        self.assertEqual(result.to_tensor(library)[:], expected.to_tensor(library)[:])
 
     def test_slot_constructor_reuses_supported_index_labels(self):
         source = self.A(self.rep)
