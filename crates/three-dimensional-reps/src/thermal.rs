@@ -1,8 +1,15 @@
+use std::sync::LazyLock;
+
 use bincode::{Decode, Encode};
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use symbolica::{atom::Atom, function};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+    id::Replacement,
+    symbol,
+};
 
 use crate::symbols::S;
 
@@ -138,9 +145,15 @@ pub struct ThermalWeight {
 }
 
 impl ThermalWeight {
+    /// Wrap the completed medium weight after recursion and component products.
+    /// Medium-mode units stay wrapped so vacuum subtraction can cancel them.
     pub fn to_atom(&self) -> Atom {
+        if self.medium_mode == MediumMode::Vacuum {
+            return Atom::one();
+        }
         let finite = self.medium_mode.is_finite_temperature();
-        self.numerators
+        let weight = self
+            .numerators
             .iter()
             .map(|n| n.to_atom(finite))
             .chain(
@@ -148,7 +161,8 @@ impl ThermalWeight {
                     .iter()
                     .map(|factor| factor.to_atom(finite)),
             )
-            .fold(Atom::num(1), |acc, factor| acc * factor)
+            .fold(Atom::num(1), |acc, factor| acc * factor);
+        function!(S.thermal_weight_wrapper, weight)
     }
 
     pub(crate) fn canonicalize(&mut self) {
@@ -191,11 +205,40 @@ impl ThermalWeight {
     }
 }
 
+/// Apply the full vacuum projection to each completed thermal coefficient.
+/// Retain the wrapper through UV subtraction; only evaluator construction unwraps it.
+/// This replacement is used once at the CFF-to-integrand boundary.
+pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    let (weight, edge, derivative, temperature, sign) =
+        symbol!("weight_", "edge_", "derivative_", "temperature_", "sign_");
+    [function!(S.thermal_weight_wrapper, weight)
+        .to_pattern()
+        .replace_with_map(move |matched| {
+            let weight = matched.get(weight).unwrap().to_atom();
+            let vacuum = weight
+                .replace(function!(
+                    S.thermal_distribution,
+                    edge,
+                    0,
+                    temperature,
+                    sign
+                ))
+                .with((Atom::one() + sign) / Atom::num(2))
+                .replace(function!(
+                    S.thermal_distribution,
+                    edge,
+                    derivative,
+                    temperature,
+                    sign
+                ))
+                .with(Atom::Zero);
+            function!(S.thermal_weight_wrapper, weight - vacuum)
+        })]
+});
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
-
-    use symbolica::atom::AtomCore;
 
     use super::*;
     use crate::{Generate3DExpressionOptions, expression::AllOrientations, generate_3d_expression};
@@ -212,21 +255,118 @@ mod tests {
             vec![EdgeIndex(2), EdgeIndex(4)]
         );
         assert_eq!(numerator.negative_energies, vec![EdgeIndex(1)]);
-        for finite in [false, true] {
+        for medium in [
+            MediumMode::ZeroTemperatureEquilibrium,
+            MediumMode::ThermodynamicEquilibrium,
+        ] {
             let factor = |edge, sign| {
                 ThermalDistributionFactor {
                     edge_id: EdgeIndex(edge),
                     sign,
                     derivative_order: 0,
                 }
-                .to_atom(finite)
+                .to_atom(medium.is_finite_temperature())
             };
             assert_eq!(
-                numerator.to_atom(finite),
+                numerator.to_atom(medium.is_finite_temperature()),
                 factor(2, 1) * factor(4, 1) * factor(1, -1)
                     - factor(2, -1) * factor(4, -1) * factor(1, 1)
             );
         }
+    }
+
+    #[test]
+    fn vacuum_subtraction_acts_on_completed_products_and_units() {
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let left = ThermalWeight {
+                medium_mode,
+                numerators: vec![ThermalNumerator {
+                    positive_energies: vec![EdgeIndex(0), EdgeIndex(1)],
+                    negative_energies: vec![],
+                }],
+                distributions: vec![],
+            };
+            let right = ThermalWeight {
+                medium_mode,
+                numerators: vec![],
+                distributions: vec![ThermalDistributionFactor {
+                    edge_id: EdgeIndex(2),
+                    sign: 1,
+                    derivative_order: 0,
+                }],
+            };
+            let product = left.product(&right);
+            let subtracted = product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION);
+            assert_eq!(
+                subtracted.replace_multiple(&*VACUUM_SUBTRACTION),
+                subtracted
+            );
+            assert_eq!(
+                product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                function!(
+                    S.thermal_weight_wrapper,
+                    left.numerators[0].to_atom(medium_mode.is_finite_temperature())
+                        * right.distributions[0].to_atom(medium_mode.is_finite_temperature())
+                        - Atom::one()
+                )
+            );
+            assert_ne!(
+                product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                left.to_atom().replace_multiple(&*VACUUM_SUBTRACTION)
+                    * right.to_atom().replace_multiple(&*VACUUM_SUBTRACTION)
+            );
+            let unit = ThermalWeight {
+                medium_mode,
+                ..Default::default()
+            };
+            assert_eq!(unit.to_atom(), function!(S.thermal_weight_wrapper, 1));
+            assert_eq!(
+                unit.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                Atom::Zero
+            );
+
+            // A derivative or a negative-pole occupation has zero vacuum weight.
+            for (sign, derivative_order) in [(-1, 0), (1, 1), (-1, 2), (1, 3)] {
+                let mut weighted = product.clone();
+                weighted.distributions.push(ThermalDistributionFactor {
+                    edge_id: EdgeIndex(3),
+                    sign,
+                    derivative_order,
+                });
+                assert_eq!(
+                    weighted.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                    weighted.to_atom()
+                );
+            }
+            // The UV replacement on a proper subset commutes with the full projection.
+            let flag = i64::from(medium_mode.is_finite_temperature());
+            let partial = product
+                .to_atom()
+                .replace_multiple(&*VACUUM_SUBTRACTION)
+                .replace(function!(S.thermal_distribution, 2, 0, flag, 1))
+                .with(Atom::one());
+            assert_eq!(
+                partial,
+                left.to_atom().replace_multiple(&*VACUUM_SUBTRACTION)
+            );
+        }
+        assert_eq!(ThermalWeight::default().to_atom(), Atom::one());
+    }
+
+    #[test]
+    fn thermal_weight_normalizes_zero_after_inner_replacements() {
+        let x = symbol!("thermal_zero_test");
+        assert_eq!(function!(S.thermal_weight_wrapper, 0), Atom::Zero);
+        let weight = function!(S.thermal_weight_wrapper, Atom::var(x) - 1);
+        assert_eq!(weight.replace(x).with(1), Atom::Zero);
+        assert!(weight.contains_symbol(S.thermal_weight_wrapper));
+        assert_eq!(
+            function!(S.thermal_weight_wrapper, 1).get_atom_type(),
+            symbolica::atom::AtomType::Fun
+        );
     }
 
     #[test]
@@ -329,11 +469,9 @@ mod tests {
                 unique_numerators.len(),
                 unique_numerators
                     .iter()
-                    .map(|numerator| {
-                        numerator
-                            .to_atom(medium_mode.is_finite_temperature())
-                            .to_canonical_string()
-                    })
+                    .map(|numerator| numerator
+                        .to_atom(medium_mode.is_finite_temperature())
+                        .to_canonical_string())
                     .collect::<BTreeSet<_>>()
                     .len()
             );
@@ -457,6 +595,7 @@ mod tests {
             let vacuum_atom = vacuum
                 .surfaces
                 .substitute_energies(&vacuum.to_atom(AllOrientations), &[]);
+            assert!(!vacuum_atom.contains_symbol(S.thermal_weight_wrapper));
             for medium_mode in [
                 MediumMode::ThermodynamicEquilibrium,
                 MediumMode::ZeroTemperatureEquilibrium,
@@ -489,7 +628,9 @@ mod tests {
                         }
                     }
                 }
-                assert_eq!((atom - &vacuum_atom).expand(), Atom::Zero);
+                // Taking the vacuum limit inside a medium weight retains its wrapper.
+                let expected = function!(S.thermal_weight_wrapper, 1) * &vacuum_atom;
+                assert_eq!((atom - expected).expand(), Atom::Zero);
             }
         }
     }

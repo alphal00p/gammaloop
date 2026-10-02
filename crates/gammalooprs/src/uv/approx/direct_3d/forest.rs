@@ -123,6 +123,7 @@ impl Direct3dCts {
             production,
             localizer.cutset,
             localizer.orientation.orientation_pattern,
+            localizer.orientation.cff_options()?.vacuum_subtraction,
         )?;
         localizer
             .orientation

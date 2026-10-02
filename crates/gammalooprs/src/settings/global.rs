@@ -77,6 +77,12 @@ pub struct GenerationSettings {
 
 impl GenerationSettings {
     pub fn validate_for_process(&self, generation_type: GenerationType) -> EyreResult<()> {
+        if self.medium.mode == MediumMode::Vacuum && self.medium.vacuum_subtraction {
+            return Err(eyre!(
+                "`global.generation.medium.vacuum_subtraction = true` requires a medium mode other than `vacuum`"
+            ));
+        }
+
         if generation_type == GenerationType::CrossSection
             && (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
         {
@@ -120,8 +126,11 @@ mod generation_settings_tests {
             .validate_for_process(GenerationType::CrossSection)
             .unwrap();
 
+        settings
+            .validate_for_process(GenerationType::Amplitude)
+            .unwrap();
+
         for mode in [
-            MediumMode::Vacuum,
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
         ] {
@@ -131,14 +140,23 @@ mod generation_settings_tests {
                 settings
                     .validate_for_process(GenerationType::Amplitude)
                     .unwrap();
-                if mode != MediumMode::Vacuum || vacuum_subtraction {
-                    let error = settings
-                        .validate_for_process(GenerationType::CrossSection)
-                        .unwrap_err();
-                    assert!(error.to_string().contains("`xs`"));
-                    assert!(error.to_string().contains("not supported"));
-                }
+                let error = settings
+                    .validate_for_process(GenerationType::CrossSection)
+                    .unwrap_err();
+                assert!(error.to_string().contains("`xs`"));
+                assert!(error.to_string().contains("not supported"));
             }
+        }
+    }
+
+    #[test]
+    fn vacuum_subtraction_requires_a_medium_mode() {
+        let mut settings = GenerationSettings::default();
+        settings.medium.vacuum_subtraction = true;
+        for generation_type in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let error = settings.validate_for_process(generation_type).unwrap_err();
+            assert!(error.to_string().contains("vacuum_subtraction = true"));
+            assert!(error.to_string().contains("other than `vacuum`"));
         }
     }
 
@@ -147,7 +165,8 @@ mod generation_settings_tests {
         for (mode, vacuum_subtraction) in [
             (MediumMode::ThermodynamicEquilibrium, false),
             (MediumMode::ZeroTemperatureEquilibrium, false),
-            (MediumMode::Vacuum, true),
+            (MediumMode::ThermodynamicEquilibrium, true),
+            (MediumMode::ZeroTemperatureEquilibrium, true),
         ] {
             let mut settings = GenerationSettings::default();
             settings.medium.mode = mode;

@@ -207,9 +207,18 @@ it applies no further medium-dependent normalization.
 
 Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
 vacuum limit while the surrounding observable retains its medium dependence;
-optional vacuum subtraction is a complete-observable 3D operation. Generation
-validation rejects `local_uv_cts_from_expanded_4d_integrands` for either medium
-mode or vacuum subtraction. The diagnostic `3Drep build` command forwards the
+CFF conversion wraps each completed medium coefficient as `thermal_weight(W)`;
+optional vacuum subtraction replaces it with `thermal_weight(W - V(W))` before
+local UV operations. The wrapper survives UV subtraction and final assembly,
+then the evaluator function map resolves it as the identity. Only
+`thermal_weight(0)` normalizes immediately, so vanishing branches are pruned.
+With vacuum subtraction enabled, the full-observable
+spinney is excluded before both 4D and 3D counterterm computation; there are no
+separate vacuum-subtraction forest branches.
+Vacuum mode emits a plain unit without a thermal wrapper. Generation validation
+rejects combining vacuum mode with vacuum subtraction and rejects
+`local_uv_cts_from_expanded_4d_integrands` for either medium mode.
+The diagnostic `3Drep build` command forwards the
 configured medium and records it alongside the serialized expression. Its
 model-free standalone eager evaluator rejects thermal expressions because it
 does not accept distribution inputs; production evaluation remains owned by

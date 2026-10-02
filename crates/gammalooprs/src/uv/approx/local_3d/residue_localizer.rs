@@ -85,6 +85,7 @@ impl<'a> Localizer<'a> {
                 root_expression,
                 self.cutset,
                 orientation_pattern,
+                options.vacuum_subtraction,
             )?
         } else {
             let capacity_started = std::time::Instant::now();
@@ -604,7 +605,12 @@ impl<'a> Localizer<'a> {
             let unfiltered = OrientationPattern::default();
             Some(
                 graph
-                    .cff_from_production_expression(root_expression, self.cutset, &unfiltered)?
+                    .cff_from_production_expression(
+                        root_expression,
+                        self.cutset,
+                        &unfiltered,
+                        self.orientation.cff_options()?.vacuum_subtraction,
+                    )?
                     .terms
                     .into_iter()
                     .map(|(index, term)| {

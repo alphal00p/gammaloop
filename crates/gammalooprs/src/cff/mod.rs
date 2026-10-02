@@ -47,7 +47,7 @@ use crate::{
 use color_eyre::Result;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
-    GeneratedThreeDExpression,
+    GeneratedThreeDExpression, thermal::VACUUM_SUBTRACTION,
 };
 
 pub mod orientations;
@@ -924,7 +924,13 @@ impl Graph {
         production: &GeneratedThreeDExpression<esurface::Esurface, hsurface::Hsurface>,
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
+        vacuum_subtraction: bool,
     ) -> Result<CutCFF> {
+        let thermal_replacements = if vacuum_subtraction {
+            &VACUUM_SUBTRACTION[..]
+        } else {
+            &[]
+        };
         let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(production);
         let mut cff = production.expression.clone();
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
@@ -972,6 +978,7 @@ impl Graph {
                 }
                 let expression = orientation
                     .to_atom_gs()
+                    .replace_multiple(thermal_replacements)
                     .replace_multiple(&replacement_rules)
                     * &cff_energy_factor
                     * &cff_normalization;
@@ -1333,6 +1340,11 @@ impl Graph {
             }
         }
         let residues = select_indexed_cff_residues(cff, cutset)?;
+        let thermal_replacements = if options.vacuum_subtraction {
+            &VACUUM_SUBTRACTION[..]
+        } else {
+            &[]
+        };
         let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let mut terms = BTreeMap::new();
@@ -1359,6 +1371,7 @@ impl Graph {
             for orientation in expr.orientations {
                 let expression = orientation
                     .to_atom_gs()
+                    .replace_multiple(thermal_replacements)
                     .replace_multiple(&replacement_rules)
                     .replace_multiple(exact_source_numerator.mapper.exact_ose_replacements())
                     * &cff_energy_factor
@@ -1462,6 +1475,11 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
+        let thermal_replacements = if options.vacuum_subtraction {
+            &VACUUM_SUBTRACTION[..]
+        } else {
+            &[]
+        };
         let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match energy_factor_ownership {
@@ -1499,7 +1517,9 @@ impl Graph {
             for orientation in expr.orientations.iter().filter(|orientation| {
                 orientation_pattern.filter_orientation(&orientation.data.orientation)
             }) {
-                let eta_expr = orientation.to_atom_gs();
+                let eta_expr = orientation
+                    .to_atom_gs()
+                    .replace_multiple(thermal_replacements);
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
                 ose_expr *= &cff_energy_factor;
                 ose_expr *= cff_normalization.clone();
@@ -2386,6 +2406,7 @@ mod tests {
             &production,
             &cutset,
             &OrientationPattern::default(),
+            false,
         )?;
         let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
         let denominators = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph)
@@ -2573,6 +2594,7 @@ mod tests {
                 &production,
                 &CutSet::empty(graph.n_hedges()),
                 &OrientationPattern::default(),
+                false,
             )?;
             let term = cff
                 .terms
@@ -6812,9 +6834,13 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let pattern = OrientationPattern::default();
         let ordinary =
-            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
-        let generalized =
-            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern, false)?;
+        let generalized = graph.cff_from_production_expression(
+            &generalized_generated,
+            &cutset,
+            &pattern,
+            false,
+        )?;
         let raw_sum = |cff: &CutCFF| {
             cff.terms
                 .values()
@@ -6875,9 +6901,13 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let pattern = OrientationPattern::default();
         let ordinary =
-            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
-        let generalized =
-            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern, false)?;
+        let generalized = graph.cff_from_production_expression(
+            &generalized_generated,
+            &cutset,
+            &pattern,
+            false,
+        )?;
         let raw_sum = |cff: &CutCFF| {
             cff.terms
                 .values()
@@ -7318,6 +7348,7 @@ mod tests {
                     &production,
                     &cutset,
                     &OrientationPattern::default(),
+                    false,
                 )?;
                 let direct = graph.cff(
                     &graph.empty_subgraph::<SuBitGraph>(),
@@ -7436,6 +7467,7 @@ mod tests {
                     &production,
                     &CutSet::empty(graph.n_hedges()),
                     &OrientationPattern::default(),
+                    false,
                 )?;
                 let term_sum = cff
                     .terms

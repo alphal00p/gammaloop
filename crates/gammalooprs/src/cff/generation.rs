@@ -1210,6 +1210,7 @@ impl Graph {
             settings.uniform_numerator_sampling_scale,
         ))?;
         options.medium_mode = settings.medium.mode;
+        options.vacuum_subtraction = settings.medium.vacuum_subtraction;
         Ok(options)
     }
 
@@ -1241,6 +1242,7 @@ impl Graph {
         );
         Ok(Generate3DExpressionOptions {
             medium_mode: Default::default(),
+            vacuum_subtraction: false,
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(energy_degree_bounds),
@@ -1253,6 +1255,7 @@ impl Graph {
     pub(crate) fn denominator_only_cff_3d_expression_options(&self) -> Generate3DExpressionOptions {
         Generate3DExpressionOptions {
             medium_mode: Default::default(),
+            vacuum_subtraction: false,
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(Vec::new()),
@@ -2715,6 +2718,7 @@ mod tests {
             &generated,
             &cutset,
             &OrientationPattern::default(),
+            false,
         )?;
         for (index, term) in &direct.terms {
             let value = |term: &crate::cff::CFFTerm, prefactor| {

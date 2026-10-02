@@ -25,7 +25,6 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    settings::global::GenerationSettings,
     utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
@@ -182,43 +181,14 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .collect()
     }
 
-    fn vacuum_subtraction_spinney<E, V, H>(
-        &self,
-        settings: &GenerationSettings,
-        lmb: &LoopMomentumBasis,
-    ) -> Option<Spinney>
+    fn remove_full_observable_spinney<E, V, H>(&self, spinneys: &mut Vec<Spinney>)
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        settings.medium.vacuum_subtraction.then(|| {
-            let full_observable = InternalSubGraph::cleaned_filter_pessimist(
-                self.as_ref().full_filter(),
-                self.as_ref(),
-            );
-            // This is an observable subtraction, not a UV-divergence classification.
-            Spinney::with_scheme(
-                full_observable,
-                self,
-                lmb,
-                ApproximationType::VacuumLimit,
-                0,
-            )
-            .expect("the full observable must admit a compatible loop-momentum basis")
-        })
-    }
-
-    fn add_vacuum_subtraction_spinney<E, V, H>(
-        &self,
-        spinneys: &mut Vec<Spinney>,
-        settings: &GenerationSettings,
-        lmb: &LoopMomentumBasis,
-    ) where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        if let Some(vacuum_spinney) = self.vacuum_subtraction_spinney(settings, lmb) {
-            spinneys.retain(|spinney| spinney.subgraph != vacuum_spinney.subgraph);
-            spinneys.push(vacuum_spinney);
-        }
+        let full_observable =
+            InternalSubGraph::cleaned_filter_pessimist(self.as_ref().full_filter(), self.as_ref());
+        spinneys
+            .retain(|spinney| spinney.subgraph.is_empty() || spinney.subgraph != full_observable);
     }
 
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(

@@ -37,8 +37,7 @@
         "PolePart",
         "OS",
         "IR",
-        "Unsubtracted",
-        "VacuumLimit"
+        "Unsubtracted"
       ]
     },
     "CTIdentifier": {

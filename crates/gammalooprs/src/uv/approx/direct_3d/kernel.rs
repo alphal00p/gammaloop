@@ -264,6 +264,8 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         });
     // Every local UV kernel starts from the vacuum-explicit reduced graph, including
     // thermal runs; the medium dependence lives in the unreduced observable.
+    // Replacements recurse into thermal_weight(...). Keep surviving N calls in
+    // edge-ID form so the retained wrapper stays independent of the Taylor variable.
     let integrands = integrands.map_expressions(|atom| {
         ctx.graph.make_thermal_distributions_explicit(
             atom,
@@ -307,11 +309,6 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 .zip_add(&-Direct3dApproximation::t(
                     ctx, current, given, &t_tilde, lmb,
                 )?)
-        }
-        ApproximationType::VacuumLimit => {
-            // The exact residue map already splits numerator time components; keep its
-            // energy assignment when taking the full observable's vacuum limit.
-            Ok(integrands)
         }
         ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
         ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),

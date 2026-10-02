@@ -1273,8 +1273,10 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
-            .unwrap();
+        for wrapper in [GS.tree_denom_wrapper, GS.thermal_weight_wrapper] {
+            new.add_function(wrapper, vec![arg], Atom::var(arg))
+                .unwrap();
+        }
 
         let lmb_ose_replacements = graph
             .iter_edge_ids()
@@ -1990,6 +1992,68 @@ mod tests {
                 });
                 assert!((registered - explicit).abs() < 1e-13);
             }
+        }
+    }
+
+    #[test]
+    fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"]; node [num=1];
+            v1 -> v2; v1 -> v2;
+        }, "scalars")
+        .unwrap();
+        let weight = symbolica::function!(
+            GS.thermal_weight_wrapper,
+            GS.thermal_distribution(0, 0, 1, 1) * GS.thermal_distribution(1, 0, 1, 1) - 1
+        );
+        let partial = graph
+            .make_thermal_distributions_explicit(
+                &weight,
+                ThermalDistributionLimit::Vacuum,
+                [EdgeIndex(0)],
+                ThermalDistributionReplacement::All,
+            )
+            .unwrap();
+        assert_eq!(
+            partial,
+            symbolica::function!(
+                GS.thermal_weight_wrapper,
+                GS.thermal_distribution(1, 0, 1, 1) - 1
+            )
+        );
+        assert!(
+            graph
+                .make_thermal_distributions_explicit(
+                    &partial,
+                    ThermalDistributionLimit::Vacuum,
+                    [EdgeIndex(1)],
+                    ThermalDistributionReplacement::All,
+                )
+                .unwrap()
+                .is_zero()
+        );
+
+        let params = [GS.thermal_distribution(1, 0, 1, 1)];
+        let replacements = graph
+            .param_builder
+            .reps
+            .iter()
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        for explicit_replacements in [false, true] {
+            let expression = if explicit_replacements {
+                partial.replace_multiple(&replacements)
+            } else {
+                partial.clone()
+            };
+            let mut evaluator = expression
+                .evaluator(&params)
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .unwrap()
+                .map_coeff(&|coefficient| coefficient.re.to_f64());
+            assert_eq!(evaluator.evaluate_single(&[1.25]), 0.25);
         }
     }
 

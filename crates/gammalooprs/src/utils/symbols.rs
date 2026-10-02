@@ -269,6 +269,7 @@ pub struct GammaloopSymbols {
     pub uv_damp_plus_right: Symbol,
     pub uv_damp_minus_right: Symbol,
     pub thermal_distribution: Symbol,
+    pub thermal_weight_wrapper: Symbol,
     pub inverse_temperature: Symbol,
 }
 
@@ -1091,6 +1092,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
     thermal_distribution: symbol!("N"),
+    thermal_weight_wrapper: *three_dimensional_reps::symbols::THERMAL_WEIGHT_WRAPPER,
     inverse_temperature: symbol!("β"),
 };
 }

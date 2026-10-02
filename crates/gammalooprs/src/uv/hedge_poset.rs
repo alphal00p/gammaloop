@@ -103,11 +103,7 @@ impl TraceUnfold<SuBitGraph> for Wood {
     /// their union must be the target filter, they must be pairwise disjoint, and there must be
     /// one factor per connected component.
     fn join_factors(&self, target: NodeIndex) -> Option<BTreeSet<SuBitGraph>> {
-        // Vacuum subtraction is one full-observable operation; no componentwise
-        // vacuum-subtraction semantics are defined.
-        if self.graph[target].renormalization_scheme == ApproximationType::VacuumLimit
-            || self.graph[target].n_components() < 2
-        {
+        if self.graph[target].n_components() < 2 {
             return None;
         }
 
@@ -186,7 +182,11 @@ impl Wood {
                 &graph.loop_momentum_basis,
             ));
         }
-        graph.add_vacuum_subtraction_spinney(&mut spinneys, settings, &graph.loop_momentum_basis);
+        if settings.medium.vacuum_subtraction {
+            // Completed thermal weights already carry (1 - V). The full-observable
+            // UV operation vanishes, so omit it before either 4D or 3D computation.
+            graph.remove_full_observable_spinney(&mut spinneys);
+        }
 
         Self::from_spinneys(spinneys, graph, cuts, &settings.uv)
     }
@@ -1032,10 +1032,6 @@ impl Forests {
             return Ok((Local4dCts::root(), IntegratedCts::root()));
         }
 
-        if self.source_spinney(node).renormalization_scheme == ApproximationType::VacuumLimit {
-            return Ok((Local4dCts::root(), IntegratedCts::root()));
-        }
-
         if self.graph.is_disjoint_union(node) {
             let components = self.disconnected_component_nodes(node)?;
             let mut full_components = Vec::with_capacity(components.len());
@@ -1601,6 +1597,159 @@ mod tests {
             labels.sort();
             labels
         }
+    }
+
+    #[test]
+    fn vacuum_subtraction_prunes_only_full_observable_spinneys() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"];
+            v1 -> v2; v1 -> v2; v1 -> v2;
+        }, "scalars")?;
+        let full = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph.as_ref());
+        let mut settings = GenerationSettings::default();
+        settings.medium.mode = crate::settings::global::MediumMode::ThermodynamicEquilibrium;
+        for subtract_uv in [false, true] {
+            settings.uv.subtract_uv = subtract_uv;
+            settings.medium.vacuum_subtraction = false;
+            let ordinary = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+            let proper = ordinary
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, spinney)| spinney.subgraph != full)
+                .map(|(_, _, spinney)| spinney.filter().clone())
+                .collect::<BTreeSet<_>>();
+            if subtract_uv {
+                assert!(
+                    ordinary
+                        .graph
+                        .iter_nodes()
+                        .any(|(_, _, spinney)| spinney.subgraph == full)
+                );
+                assert!(proper.len() > 1);
+            }
+            settings.medium.vacuum_subtraction = true;
+            let subtracted = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+            assert_eq!(
+                subtracted
+                    .graph
+                    .iter_nodes()
+                    .map(|(_, _, spinney)| spinney.filter().clone())
+                    .collect::<BTreeSet<_>>(),
+                proper
+            );
+            // The shared filter also supplies the legacy executor.
+            let mut spinneys = graph.classified_spinneys(
+                &graph.full_filter(),
+                &settings.uv,
+                &graph.loop_momentum_basis,
+            );
+            graph.remove_full_observable_spinney(&mut spinneys);
+            assert!(spinneys.iter().all(|spinney| spinney.subgraph != full));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn vacuum_subtraction_commutes_with_local_and_integrated_forests() -> Result<()> {
+        use crate::{
+            integrands::process::param_builder::{
+                ParamBuilderGraph, ThermalDistributionReplacement,
+            },
+            settings::global::MediumMode,
+            utils::symbols::ThermalDistributionLimit,
+        };
+        test_initialise()?;
+        let graphs: Vec<Graph> = dot!(
+            digraph nested {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+                v1 -> v1;
+            }
+            digraph disjoint {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2;
+                v3 -> v4; v3 -> v4;
+                v2 -> v3; v1 -> v4;
+            }, "scalars"
+        )?;
+        for graph in graphs {
+            for medium in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                for generate_integrated in [false, true] {
+                    let mut settings = GenerationSettings::default();
+                    settings.medium.mode = medium;
+                    settings.medium.vacuum_subtraction = true;
+                    settings.uv.softct = false;
+                    settings.uv.generate_integrated = generate_integrated;
+                    let mut graph = graph.clone();
+                    let options = graph.production_cff_3d_expression_options(&settings)?;
+                    assert!(options.vacuum_subtraction);
+                    let contract =
+                        graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+                    let production = graph
+                        .generate_3d_expression_for_integrand(&contract, &None, &options, None)?;
+                    let mut results = Vec::new();
+                    for early_subtraction in [false, true] {
+                        let mut options = options.clone();
+                        options.vacuum_subtraction = early_subtraction;
+                        let projection = OrientationProjection::exact_expression(
+                            &production,
+                            &options,
+                            &settings.orientation_pattern,
+                            true,
+                        );
+                        // Both routes use precisely the same proper forests. Only the
+                        // boundary where the full vacuum projection acts is different.
+                        let mut forests =
+                            Wood::new(CutStructure::empty(&graph), &graph, &settings).unfold();
+                        forests.compute(
+                            &mut graph,
+                            crate::utils::vakint()?,
+                            projection,
+                            &settings.uv,
+                        )?;
+                        results.push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
+                    }
+                    assert_eq!(results[0].len(), results[1].len());
+                    for (late, early) in results[0].iter().zip(&results[1]) {
+                        let late = late.integrands.resolved()?;
+                        let early = early.integrands.resolved()?;
+                        assert_eq!(late.iter().count(), early.iter().count());
+                        for ((late_key, raw), (early_key, actual)) in late.iter().zip(early.iter())
+                        {
+                            assert_eq!(late_key, early_key);
+                            let vacuum = graph.make_thermal_distributions_explicit(
+                                raw,
+                                ThermalDistributionLimit::Vacuum,
+                                graph.iter_edges().map(|(_, edge, _)| edge),
+                                ThermalDistributionReplacement::All,
+                            )?;
+                            assert!(
+                                raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper)
+                            );
+                            assert!(
+                                actual.is_zero()
+                                    || actual.contains_symbol(GS.thermal_weight_wrapper)
+                            );
+                            // The production expression retains each whole coefficient.
+                            // Resolve the identity only for this scalar comparison.
+                            let difference = (actual - (raw - vacuum))
+                                .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                                .with(W_.a_);
+                            assert!(
+                                difference.expand().is_zero(),
+                                "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}: {difference}",
+                                graph.name
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

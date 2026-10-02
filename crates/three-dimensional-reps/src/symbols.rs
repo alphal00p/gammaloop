@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use symbolica::{
-    atom::{Atom, AtomOrView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function, symbol,
 };
 
@@ -26,6 +26,7 @@ pub struct ThreeDimensionalRepSymbols {
     pub coefficient: Symbol,
     pub loop_energy: Symbol,
     pub thermal_distribution: Symbol,
+    pub thermal_weight_wrapper: Symbol,
 }
 
 impl ThreeDimensionalRepSymbols {
@@ -78,6 +79,24 @@ impl ThreeDimensionalRepSymbols {
     }
 }
 
+// Register this independently: GammaLoop must not initialize the model-free
+// symbol table before spenso has installed its concrete-index attributes.
+pub static THERMAL_WEIGHT_WRAPPER: LazyLock<Symbol> = LazyLock::new(|| {
+    symbol!(
+        "gammalooprs::thermal_weight",
+        norm = |view, out| {
+            // Keep nonzero coefficients opaque until evaluator construction.
+            // Zero must remain visible to CFF and UV branch pruning.
+            if let AtomView::Fun(f) = view
+                && f.get_nargs() == 1
+                && f.iter().next().unwrap().is_zero()
+            {
+                **out = Atom::Zero;
+            }
+        }
+    )
+});
+
 pub static S: LazyLock<ThreeDimensionalRepSymbols> = LazyLock::new(|| ThreeDimensionalRepSymbols {
     sign: symbol!("gammalooprs::σ"),
     theta: symbol!("gammalooprs::θ"),
@@ -91,6 +110,7 @@ pub static S: LazyLock<ThreeDimensionalRepSymbols> = LazyLock::new(|| ThreeDimen
     coefficient: symbol!("three_dimensional_reps::c"),
     loop_energy: symbol!("three_dimensional_reps::ell0"),
     thermal_distribution: symbol!("gammalooprs::N"),
+    thermal_weight_wrapper: *THERMAL_WEIGHT_WRAPPER,
 });
 
 pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
@@ -108,6 +128,7 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
         s.coefficient,
         s.loop_energy,
         s.thermal_distribution,
+        s.thermal_weight_wrapper,
     ]
     .into_iter()
     .collect()

@@ -1541,6 +1541,7 @@ mod tests {
                                     source,
                                     &crate::graph::cuts::CutSet::empty(graph.n_hedges()),
                                     &crate::settings::global::OrientationPattern::default(),
+                                    false,
                                 )?
                                 .expression_with_selectors();
                             Ok(expressions

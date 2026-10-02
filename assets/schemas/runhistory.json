@@ -184,8 +184,7 @@
         "PolePart",
         "OS",
         "IR",
-        "Unsubtracted",
-        "VacuumLimit"
+        "Unsubtracted"
       ]
     },
     "Bench": {

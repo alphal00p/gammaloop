@@ -88,6 +88,10 @@ pub struct Generate3DExpressionOptions {
     pub representation: RepresentationMode,
     #[serde(default)]
     pub medium_mode: crate::MediumMode,
+    /// Subtract the vacuum weight inside each wrapper at GammaLoop's CFF-to-integrand
+    /// boundary. Generation and component products retain their raw typed weights.
+    #[serde(default)]
+    pub vacuum_subtraction: bool,
     #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
     /// `None` keeps the legacy numerator class, which is affine in every EMR
@@ -108,6 +112,7 @@ impl Default for Generate3DExpressionOptions {
         Self {
             representation: RepresentationMode::Cff,
             medium_mode: crate::MediumMode::Vacuum,
+            vacuum_subtraction: false,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
@@ -1410,6 +1415,7 @@ fn project_component_options(
     Ok(Generate3DExpressionOptions {
         representation: options.representation,
         medium_mode: options.medium_mode,
+        vacuum_subtraction: options.vacuum_subtraction,
         cff_generation_context: options.cff_generation_context,
         energy_degree_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
@@ -5965,7 +5971,10 @@ mod causal_generation_tests {
                 }
                 .to_atom(medium.is_finite_temperature())
             });
-            let expected = (&weight[0] + &weight[1]) / (Atom::num(2) * &energy);
+            let expected =
+                (symbolica::function!(crate::symbols::S.thermal_weight_wrapper, &weight[0])
+                    + symbolica::function!(crate::symbols::S.thermal_weight_wrapper, &weight[1]))
+                    / (Atom::num(2) * &energy);
             for context in [
                 CffGenerationContext::Standalone,
                 CffGenerationContext::EmbeddedCffFactor,
@@ -5998,7 +6007,7 @@ mod causal_generation_tests {
                     let unit = scalar.build().unwrap();
                     assert_eq!(
                         unit.to_atom(crate::expression::AllOrientations),
-                        Atom::num(-1)
+                        -symbolica::function!(crate::symbols::S.thermal_weight_wrapper, 1)
                     );
                     let variant = &unit.orientations[OrientationID(0)].variants[0];
                     assert_eq!(variant.thermal_weight.medium_mode, medium);
@@ -11012,6 +11021,7 @@ mod cff_tests {
             &parsed,
             &Generate3DExpressionOptions {
                 medium_mode: crate::MediumMode::Vacuum,
+                vacuum_subtraction: false,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),

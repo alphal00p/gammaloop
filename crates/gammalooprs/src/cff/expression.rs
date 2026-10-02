@@ -229,6 +229,75 @@ mod tests {
     };
 
     #[test]
+    fn vacuum_subtraction_reaches_root_and_unit_cographs() -> color_eyre::Result<()> {
+        use crate::{
+            graph::cuts::CutSet,
+            integrands::process::param_builder::{
+                ParamBuilderGraph, ThermalDistributionReplacement,
+            },
+            settings::global::OrientationPattern,
+            utils::symbols::ThermalDistributionLimit,
+        };
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"]; node [num=1];
+            v1 -> v2; v1 -> v2; v1 -> v2;
+        }, "scalars")?;
+        for medium in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = medium;
+            options.vacuum_subtraction = true;
+            let production =
+                graph.generate_3d_expression_for_integrand(&[], &None, &options, None)?;
+            let cutset = CutSet::empty(graph.n_hedges());
+            let pattern = OrientationPattern::default();
+            let raw = graph
+                .cff_from_production_expression(&production, &cutset, &pattern, false)?
+                .expression_with_selectors();
+            let actual = graph
+                .cff_from_production_expression(&production, &cutset, &pattern, true)?
+                .expression_with_selectors();
+            assert_eq!(raw.iter().count(), actual.iter().count());
+            for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
+                assert_eq!(raw_key, actual_key);
+                let vacuum = graph.make_thermal_distributions_explicit(
+                    raw,
+                    ThermalDistributionLimit::Vacuum,
+                    graph.iter_edges().map(|(_, edge, _)| edge),
+                    ThermalDistributionReplacement::All,
+                )?;
+                assert!(raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper));
+                assert!(actual.is_zero() || actual.contains_symbol(GS.thermal_weight_wrapper));
+                // Unwrap only the diagnostic copy when comparing the two algebraic forms.
+                let difference = (actual - (raw - vacuum))
+                    .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                    .with(W_.a_);
+                assert!(difference.expand().is_zero());
+            }
+            let full = graph.full_filter();
+            let unit = graph
+                .cff(&full, &cutset, &pattern, &options, None)?
+                .expression_with_selectors();
+            assert!(
+                unit.iter().all(|(_, atom)| atom.is_zero()),
+                "the fully contracted cograph must subtract its empty weight"
+            );
+            options.vacuum_subtraction = false;
+            assert!(
+                !graph
+                    .cff(&full, &cutset, &pattern, &options, None)?
+                    .expression_with_selectors()
+                    .iter()
+                    .all(|(_, atom)| atom.is_zero())
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn thermal_surface_conversion_preserves_distribution_atoms() -> color_eyre::Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph thermal_triangle {
