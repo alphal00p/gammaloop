@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
 use aind::Aind;
-use idenso::color::ColorSimplifier;
-use idenso::dirac::GammaSimplifier;
-use idenso::representations::Bispinor;
+use idenso::{
+    CookMode, CookSettings, coad, cof, color::ColorSimplifySettings, color_cas, color_idx,
+    dirac::GammaSimplifySettings, tensor::SymbolicTensor,
+};
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use tracing::warn;
@@ -35,12 +36,10 @@ use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
 use crate::{model::Model, utils::serde_utils::IsDefault};
 
 use crate::{GammaLoopContextContainer, disable};
-use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
 // use gxhash::GxBuildHasher;
-use itertools::Itertools;
 
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
@@ -52,7 +51,6 @@ use spenso::network::library::symbolic::{ETS, ExplicitKey};
 
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
-use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
 
 use spenso::{
@@ -218,7 +216,11 @@ impl<S: NumeratorState> Numerator<S> {
             .unwrap();
 
         fn_map
-            .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
+            .add_aliases([
+                (color_idx!(2, cof!(3)), Atom::num(Rational::from((1, 2)))),
+                (color_cas!(2, cof!(3)), Atom::num(Rational::from((4, 3)))),
+                (color_cas!(2, coad!(8)), Atom::num(3)),
+            ])
             .unwrap();
     }
 }
@@ -702,16 +704,29 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     #[instrument(skip(self))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: {
+                let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+                let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?;
+                cooking.uncook(result.expression().as_view())
+            },
             state: Color::Fully,
         };
         // debug!("Color simplified numerator:{}", state.expr);
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -805,96 +820,6 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     }
 }
 
-impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub(crate) fn canonize_lorentz(&self) -> Result<Self, String> {
-        let pats: Vec<LibraryRep> = vec![Minkowski {}.into(), Bispinor {}.into()];
-
-        let mut indices_map = AHashMap::new();
-
-        for p in &pats {
-            for a in self.state.expr.pattern_match(
-                &p.to_symbolic([W_.x_, W_.y_]).to_pattern(),
-                None,
-                None,
-            ) {
-                indices_map.insert(
-                    p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
-                    p.to_symbolic([a[&W_.x_].clone()]),
-                );
-            }
-        }
-
-        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-
-        let expr = self
-            .state
-            .expr
-            .canonize_tensors(sorted)
-            .map_err(|e| e.to_string())?
-            .canonical_form;
-
-        Ok(Self {
-            state: SymbolicExpression {
-                expr,
-                state: T::default(),
-            },
-        })
-    }
-
-    // pub(crate) fn canonize_color(&self) -> Result<Self, String> {
-
-    //     let pats: Vec<_> = vec![ColorAdjoint{}];
-    //     let dualizablepats: Vec<_> = vec![
-    //         ColorFundamental::selfless_symbol(),
-    //         ColorSextet::selfless_symbol(),
-    //     ];
-
-    //     let mut color = self.state.expr.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
-    //                 .with(Atom::var(GS.x__).to_pattern())
-    //     ;
-
-    //     let mut indices_map = AHashMap::new();
-
-    //     color.iter_flat().for_each(|(_, v)| {
-    //         for p in pats.iter().chain(&dualizablepats) {
-    //             for a in
-    //                 v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-    //             {
-    //                 indices_map.insert(
-    //                     function!(*p, a[&GS.x_], a[&GS.y_]),
-    //                     function!(*p, a[&GS.x_]),
-    //                 );
-    //             }
-    //         }
-    //     });
-
-    //     let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-    //     // println!(
-    //     //     "indices sorted [{}]",
-    //     //     sorted
-    //     //         .iter()
-    //     //         .map(|(a, b)| format!(
-    //     //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
-    //     //             a, b
-    //     //         ))
-    //     //         .collect::<Vec<_>>()
-    //     //         .join(", ")
-    //     // );
-
-    //     color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
-
-    //     let colorless = self.state.colorless.clone();
-    //     Ok(Self {
-    //         state: SymbolicExpression {
-    //             colorless,
-    //             color,
-    //             state: T::default(),
-    //         },
-    //     }));
-    //     todo!()
-    // }
-}
-
 impl Numerator<AppliedFeynmanRule> {
     #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_d_dim<'a>(mut self, dim: impl Into<AtomOrView<'a>>) -> Self {
@@ -903,19 +828,32 @@ impl Numerator<AppliedFeynmanRule> {
     }
 
     #[instrument(skip(self), fields(expr=%self.state.expr.to_ordered_simple()))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: {
+                let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+                let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?;
+                cooking.uncook(result.expression().as_view())
+            },
             state: Color::Fully,
         };
         debug!(
             "Color simplified numerator:{}",
             state.expr.to_ordered_simple()
         );
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -926,21 +864,33 @@ impl Numerator<AppliedFeynmanRule> {
 // }
 
 impl Numerator<ColorSimplified> {
-    pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
+    pub(crate) fn gamma_simplify(self) -> Result<Numerator<GammaSimplified>> {
         debug!("Gamma simplifying color symplified numerator");
-        let expr = self.state.expr.simplify_gamma();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let expr = cooking.uncook(result.expression().as_view());
         crate::debug_tags!(#generation, #inspect, #dump;
             stage = "numerator_after_simplify_gamma",
             log.after_gamma = expr,
             "Numerator after gamma simplification"
         );
 
-        Numerator {
+        Ok(Numerator {
             state: GammaSimplified {
                 expr,
                 state: Default::default(),
             },
-        }
+        })
     }
 }
 

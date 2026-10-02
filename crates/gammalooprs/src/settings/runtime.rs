@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
 };
 
+use crate::cff::Esurface;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
@@ -14,7 +15,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
-    cff::esurface::Esurface,
     graph::LoopMomentumBasis,
     integrands::process::evaluators::EvaluatorMethod,
     momentum::{Helicity, RotationMethod, sample::ExternalIndex, signature::SignatureLike},

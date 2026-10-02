@@ -10,7 +10,7 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
 
-use crate::cff::esurface::Esurface;
+use crate::cff::{Esurface, EsurfaceID};
 use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
 
@@ -18,7 +18,7 @@ use crate::numerator::{Evaluators, Numerator};
 use crate::{
     cff::{
         esurface::{
-            compute_esurface_cache, EsurfaceCache, EsurfaceCollection, EsurfaceID,
+            compute_esurface_cache, EnergySurfaceCache, EsurfaceCollection,
             ExistingEsurfaceId, ExistingEsurfaces,
         },
         expression::CFFLimit,
@@ -103,11 +103,11 @@ impl CounterTerm {
             .overlap_groups
             .iter()
             .map(|overlap_group| {
-                let esurface_ids = &overlap_group.existing_esurfaces;
+                let surface_ids = &overlap_group.existing_esurfaces;
                 existing_esurfaces
                     .iter_enumerated()
                     .map(|a| a.0)
-                    .filter(|id| !esurface_ids.contains(id))
+                    .filter(|id| !surface_ids.contains(id))
                     .collect_vec()
             })
             .collect_vec();
@@ -148,7 +148,7 @@ impl CounterTerm {
     // the multichanneling denominator will be evaluated at r*, so we can not use the cache.
     fn evaluate_multichanneling_denominator<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<F<T>>,
+        esurface_cache: &EnergySurfaceCache<F<T>>,
     ) -> F<T> {
         let const_builder = &esurface_cache[EsurfaceID::from(0usize)];
 

@@ -1,6 +1,7 @@
 use core::f64;
 use std::{collections::BTreeMap, path::Path};
 
+use crate::cff::{Esurface, EsurfaceID, OrientationID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
@@ -18,11 +19,7 @@ use crate::{
     GammaLoopContext,
     cff::{
         CutCFFIndex,
-        esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId,
-            esurface_value_is_strictly_inside,
-        },
-        expression::OrientationID,
+        esurface::{EsurfaceCollection, ExistingEsurfaceId, esurface_value_is_strictly_inside},
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::{

@@ -15,7 +15,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     graph::{Graph, GraphGroup, GroupId, edge::EdgeMass},
-    model::{ArcParticle, Model},
+    model::{Model, ParticleId},
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -159,6 +159,7 @@ impl GraphGroupSelectionSpec {
 
     pub fn plan<'a, F>(
         &self,
+        model: &Model,
         graph_group_structure: &TiVec<GroupId, GraphGroup>,
         graph_by_id: F,
     ) -> Result<GraphGroupSelectionPlan>
@@ -166,6 +167,7 @@ impl GraphGroupSelectionSpec {
         F: FnMut(usize) -> Option<&'a Graph>,
     {
         self.plan_with_analysis_contexts(
+            model,
             graph_group_structure,
             graph_by_id,
             |_master_graph_id, master_graph| {
@@ -177,8 +179,12 @@ impl GraphGroupSelectionSpec {
         )
     }
 
+    // Keeping the graph lookup, the two subject builders, and their distinct diagnostics as
+    // separate inputs makes this internal orchestration boundary explicit at each call site.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn plan_with_analysis_contexts<'a, F, S, C>(
         &self,
+        model: &Model,
         graph_group_structure: &TiVec<GroupId, GraphGroup>,
         mut graph_by_id: F,
         mut analysis_subjects_by_master_id: S,
@@ -318,7 +324,7 @@ impl GraphGroupSelectionSpec {
                 .collect::<BTreeSet<_>>()
         };
         for rule in non_authoritative_rules {
-            let rule_groups = rule.resolve(&candidates, &master_name_to_group)?;
+            let rule_groups = rule.resolve(model, &candidates, &master_name_to_group)?;
             retained_group_ids = retained_group_ids
                 .intersection(&rule_groups)
                 .copied()
@@ -583,9 +589,12 @@ pub enum CycleMatcher {
 }
 
 impl CycleMatcher {
-    fn matches(&self, particle: &ArcParticle) -> bool {
+    fn matches(&self, particle: &ParticleId, model: &Model) -> bool {
+        let Ok(particle) = model.particle_by_id(*particle) else {
+            return false;
+        };
         match self {
-            Self::Pdg(pdg) => particle.pdg_code.abs() == *pdg,
+            Self::Pdg(pdg) => isize::try_from(particle.pdg_code.abs()).ok() == Some(*pdg),
             Self::Fermion => particle.is_fermion(),
             Self::Ghost => particle.is_ghost(),
             Self::Goldstone => particle.is_goldstone(),
@@ -710,11 +719,18 @@ impl GraphSelectionSignatureInventory {
         }
     }
 
-    pub fn from_master_graphs<'a>(graphs: impl IntoIterator<Item = &'a Graph>) -> Self {
-        Self::from_analysis_subjects(graphs.into_iter().map(GraphSelectionSubject::whole_graph))
+    pub fn from_master_graphs<'a>(
+        model: &Model,
+        graphs: impl IntoIterator<Item = &'a Graph>,
+    ) -> Self {
+        Self::from_analysis_subjects(
+            model,
+            graphs.into_iter().map(GraphSelectionSubject::whole_graph),
+        )
     }
 
     pub(crate) fn from_analysis_subjects<'a>(
+        model: &Model,
         subjects: impl IntoIterator<Item = GraphSelectionSubject<'a>>,
     ) -> Self {
         let mut raised_all = BTreeSet::from(["[]".to_string(), "[2]".to_string()]);
@@ -741,11 +757,11 @@ impl GraphSelectionSignatureInventory {
             );
             cycles.extend(
                 subject
-                    .cycle_requirements()
+                    .cycle_requirements(model)
                     .into_iter()
                     .map(|requirement| CycleSignature(vec![requirement]).canonical()),
             );
-            if let Some(signature) = subject.vertex_signature() {
+            if let Some(signature) = subject.vertex_signature(model) {
                 vertices.insert(signature.canonical());
             }
         }
@@ -881,6 +897,7 @@ impl GraphGroupSelectionRule {
 
     fn resolve(
         &self,
+        model: &Model,
         candidates: &[GraphGroupSelectionCandidate],
         master_name_to_group: &BTreeMap<String, GroupId>,
     ) -> Result<BTreeSet<GroupId>> {
@@ -936,7 +953,7 @@ impl GraphGroupSelectionRule {
                 let matched = candidate.analysis_subjects.iter().any(|subject| {
                     signatures
                         .iter()
-                        .any(|signature| subject.matches_cycle_signature(signature))
+                        .any(|signature| subject.matches_cycle_signature(signature, model))
                 });
                 polarity.keep_if_match(matched)
             }),
@@ -945,7 +962,7 @@ impl GraphGroupSelectionRule {
                 signatures,
             } => matching_candidates(candidates, |candidate| {
                 let matched = candidate.analysis_subjects.iter().any(|subject| {
-                    let counts = subject.vertex_rule_name_counts();
+                    let counts = subject.vertex_rule_name_counts(model);
                     signatures.iter().any(|signature| {
                         signature.0.iter().all(|(name, required_count)| {
                             counts.get(name).copied().unwrap_or_default() >= *required_count
@@ -959,7 +976,7 @@ impl GraphGroupSelectionRule {
                 signatures,
             } => matching_candidates(candidates, |candidate| {
                 let matched = candidate.analysis_subjects.iter().any(|subject| {
-                    let pdgs = subject.particle_pdgs();
+                    let pdgs = subject.particle_pdgs(model);
                     signatures
                         .iter()
                         .any(|signature| signature.0.iter().all(|pdg| pdgs.contains(pdg)))
@@ -1126,11 +1143,11 @@ trait GraphSelectionAnalysis {
         &self,
         scope: RaisedPropagatorScope,
     ) -> RaisedPropagatorSignature;
-    fn cycle_requirements(&self) -> BTreeSet<CycleRequirement>;
-    fn cycle_particle_sets(&self) -> Vec<Vec<ArcParticle>>;
-    fn matches_cycle_signature(&self, signature: &CycleSignature) -> bool;
-    fn vertex_rule_name_counts(&self) -> BTreeMap<String, usize>;
-    fn particle_pdgs(&self) -> BTreeSet<isize>;
+    fn cycle_requirements(&self, model: &Model) -> BTreeSet<CycleRequirement>;
+    fn cycle_particle_sets(&self) -> Vec<Vec<ParticleId>>;
+    fn matches_cycle_signature(&self, signature: &CycleSignature, model: &Model) -> bool;
+    fn vertex_rule_name_counts(&self, model: &Model) -> BTreeMap<String, usize>;
+    fn particle_pdgs(&self, model: &Model) -> BTreeSet<isize>;
 }
 
 impl GraphSelectionAnalysis for Graph {
@@ -1141,24 +1158,24 @@ impl GraphSelectionAnalysis for Graph {
         GraphSelectionSubject::whole_graph(self).raised_propagator_signature(scope)
     }
 
-    fn cycle_requirements(&self) -> BTreeSet<CycleRequirement> {
-        GraphSelectionSubject::whole_graph(self).cycle_requirements()
+    fn cycle_requirements(&self, model: &Model) -> BTreeSet<CycleRequirement> {
+        GraphSelectionSubject::whole_graph(self).cycle_requirements(model)
     }
 
-    fn cycle_particle_sets(&self) -> Vec<Vec<ArcParticle>> {
+    fn cycle_particle_sets(&self) -> Vec<Vec<ParticleId>> {
         GraphSelectionSubject::whole_graph(self).cycle_particle_sets()
     }
 
-    fn matches_cycle_signature(&self, signature: &CycleSignature) -> bool {
-        GraphSelectionSubject::whole_graph(self).matches_cycle_signature(signature)
+    fn matches_cycle_signature(&self, signature: &CycleSignature, model: &Model) -> bool {
+        GraphSelectionSubject::whole_graph(self).matches_cycle_signature(signature, model)
     }
 
-    fn vertex_rule_name_counts(&self) -> BTreeMap<String, usize> {
-        GraphSelectionSubject::whole_graph(self).vertex_rule_name_counts()
+    fn vertex_rule_name_counts(&self, model: &Model) -> BTreeMap<String, usize> {
+        GraphSelectionSubject::whole_graph(self).vertex_rule_name_counts(model)
     }
 
-    fn particle_pdgs(&self) -> BTreeSet<isize> {
-        GraphSelectionSubject::whole_graph(self).particle_pdgs()
+    fn particle_pdgs(&self, model: &Model) -> BTreeSet<isize> {
+        GraphSelectionSubject::whole_graph(self).particle_pdgs(model)
     }
 }
 
@@ -1178,53 +1195,58 @@ impl GraphSelectionAnalysis for GraphSelectionSubject<'_> {
             .expect("group lengths are always valid raised-propagator multiplicities")
     }
 
-    fn cycle_requirements(&self) -> BTreeSet<CycleRequirement> {
+    fn cycle_requirements(&self, model: &Model) -> BTreeSet<CycleRequirement> {
         self.cycle_particle_sets()
             .into_iter()
-            .filter_map(cycle_requirement)
+            .filter_map(|particles| cycle_requirement(particles, model))
             .collect()
     }
 
-    fn cycle_particle_sets(&self) -> Vec<Vec<ArcParticle>> {
+    fn cycle_particle_sets(&self) -> Vec<Vec<ParticleId>> {
         self.internal_simple_cycles()
             .into_iter()
             .filter_map(|cycle| cycle_particles(self.graph, &cycle))
             .collect()
     }
 
-    fn matches_cycle_signature(&self, signature: &CycleSignature) -> bool {
+    fn matches_cycle_signature(&self, signature: &CycleSignature, model: &Model) -> bool {
         let cycle_particle_sets = self.cycle_particle_sets();
         signature.0.iter().all(|requirement| {
             cycle_particle_sets
                 .iter()
-                .any(|particles| cycle_matches_requirement(particles, requirement))
+                .any(|particles| cycle_matches_requirement(particles, requirement, model))
         })
     }
 
-    fn vertex_rule_name_counts(&self) -> BTreeMap<String, usize> {
+    fn vertex_rule_name_counts(&self, model: &Model) -> BTreeMap<String, usize> {
         let mut counts = BTreeMap::<String, usize>::new();
         if let Some(subgraph) = self.vertex_subgraph() {
             for (_, _, vertex) in self.graph.underlying.iter_nodes_of(&subgraph) {
-                if let Some(vertex_rule) = &vertex.vertex_rule {
-                    *counts.entry(vertex_rule.name.to_string()).or_default() += 1;
+                if let Some(vertex_rule) = &vertex.vertex_rule
+                    && let Ok(vertex_rule) = model.vertex_rule_by_id(*vertex_rule)
+                {
+                    *counts.entry(vertex_rule.name.clone()).or_default() += 1;
                 }
             }
         } else {
             for (_, _, vertex) in self.graph.underlying.iter_nodes() {
-                if let Some(vertex_rule) = &vertex.vertex_rule {
-                    *counts.entry(vertex_rule.name.to_string()).or_default() += 1;
+                if let Some(vertex_rule) = &vertex.vertex_rule
+                    && let Ok(vertex_rule) = model.vertex_rule_by_id(*vertex_rule)
+                {
+                    *counts.entry(vertex_rule.name.clone()).or_default() += 1;
                 }
             }
         }
         counts
     }
 
-    fn particle_pdgs(&self) -> BTreeSet<isize> {
+    fn particle_pdgs(&self, model: &Model) -> BTreeSet<isize> {
         self.graph
             .underlying
             .iter_edges_of(&self.internal_edge_subgraph())
             .filter_map(|(_, edge_id, _)| self.graph[edge_id].particle())
-            .map(|particle| particle.pdg_code.abs())
+            .filter_map(|particle| model.particle_by_id(particle).ok())
+            .filter_map(|particle| isize::try_from(particle.pdg_code.abs()).ok())
             .collect()
     }
 }
@@ -1270,8 +1292,8 @@ impl GraphSelectionSubject<'_> {
         result
     }
 
-    fn vertex_signature(&self) -> Option<VertexSignature> {
-        let counts = self.vertex_rule_name_counts();
+    fn vertex_signature(&self, model: &Model) -> Option<VertexSignature> {
+        let counts = self.vertex_rule_name_counts(model);
         if counts.is_empty() {
             None
         } else {
@@ -1316,8 +1338,8 @@ fn raised_group_matches_scope(
     }
 }
 
-fn cycle_particles(graph: &Graph, cycle: &Cycle) -> Option<Vec<ArcParticle>> {
-    let mut particles = BTreeMap::<EdgeIndex, ArcParticle>::new();
+fn cycle_particles(graph: &Graph, cycle: &Cycle) -> Option<Vec<ParticleId>> {
+    let mut particles = BTreeMap::<EdgeIndex, ParticleId>::new();
     for hedge in cycle.filter.included_iter() {
         let edge_id = graph.underlying[&hedge];
         if graph[edge_id].is_dummy {
@@ -1329,15 +1351,25 @@ fn cycle_particles(graph: &Graph, cycle: &Cycle) -> Option<Vec<ArcParticle>> {
     Some(particles.into_values().collect())
 }
 
-fn cycle_requirement(particles: Vec<ArcParticle>) -> Option<CycleRequirement> {
+fn cycle_requirement(particles: Vec<ParticleId>, model: &Model) -> Option<CycleRequirement> {
     let matchers = particles
         .into_iter()
-        .map(|particle| CycleMatcher::Pdg(particle.pdg_code.abs()))
-        .collect::<Vec<_>>();
+        .map(|particle| {
+            model
+                .particle_by_id(particle)
+                .ok()
+                .and_then(|particle| isize::try_from(particle.pdg_code.abs()).ok())
+                .map(CycleMatcher::Pdg)
+        })
+        .collect::<Option<Vec<_>>>()?;
     CycleRequirement::new(matchers).ok()
 }
 
-fn cycle_matches_requirement(particles: &[ArcParticle], requirement: &CycleRequirement) -> bool {
+fn cycle_matches_requirement(
+    particles: &[ParticleId],
+    requirement: &CycleRequirement,
+    model: &Model,
+) -> bool {
     if particles.is_empty() {
         return false;
     }
@@ -1345,7 +1377,7 @@ fn cycle_matches_requirement(particles: &[ArcParticle], requirement: &CycleRequi
     for particle in particles {
         let mut particle_matched = false;
         for (index, matcher) in requirement.0.iter().enumerate() {
-            if matcher.matches(particle) {
+            if matcher.matches(particle, model) {
                 matched_requirements[index] = true;
                 particle_matched = true;
             }
@@ -1503,19 +1535,19 @@ fn parse_cycle_matcher(token: &str, model: &Model) -> Result<CycleMatcher> {
                 pdg
             ));
         }
-        model.try_get_particle_from_pdg(pdg)?;
+        model.particle_by_pdg(i64::try_from(pdg)?)?;
         return Ok(CycleMatcher::Pdg(pdg));
     }
 
-    let particle = model.try_get_particle(token)?;
+    let particle = model.particle(token)?;
     if particle.pdg_code < 0 || particle.name.as_str() != token {
         return Err(eyre!(
             "Cycle signatures use particles only; specify '{}' instead of anti-particle '{}'.",
-            particle.get_anti_particle(model).name,
+            model.particle_by_id(particle.antiparticle)?.name,
             token
         ));
     }
-    Ok(CycleMatcher::Pdg(particle.pdg_code))
+    Ok(CycleMatcher::Pdg(isize::try_from(particle.pdg_code)?))
 }
 
 fn parse_particle_signature_pdg(token: &str, model: &Model) -> Result<isize> {
@@ -1524,32 +1556,40 @@ fn parse_particle_signature_pdg(token: &str, model: &Model) -> Result<isize> {
             return Err(eyre!("Particle signatures do not accept PDG 0."));
         }
         let abs_pdg = pdg.abs();
+        let abs_pdg_i64 = i64::try_from(abs_pdg)?;
         model
-            .try_get_particle_from_pdg(abs_pdg)
-            .or_else(|_| model.try_get_particle_from_pdg(-abs_pdg))?;
+            .particle_by_pdg(abs_pdg_i64)
+            .or_else(|_| model.particle_by_pdg(-abs_pdg_i64))?;
         return Ok(abs_pdg);
     }
 
-    let particle = model.try_get_particle(token)?;
-    Ok(particle.pdg_code.abs())
+    let particle = model.particle(token)?;
+    Ok(isize::try_from(particle.pdg_code.abs())?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, OnceLock};
+    use std::sync::OnceLock;
 
     use crate::{
-        dot,
+        finalized_runtime_dot,
         graph::{
             Graph, LoopMomentumBasis,
             edge::EdgeMass,
-            parse::{IntoGraph, complete_group_parsing},
+            parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
         },
         initialisation::test_initialise,
-        model::{ArcVertexRule, ColorStructure, ParameterName, Particle, UFOSymbol, VertexRule},
+        model::VertexRuleId,
         momentum::signature::LoopExtSignature,
     };
+
+    const RULE_A: &str = "V_3_SCALAR_000";
+    const RULE_B: &str = "V_3_SCALAR_001";
+    const RULE_C: &str = "V_3_SCALAR_002";
+    const RULE_D: &str = "V_3_SCALAR_011";
+    const RULE_E: &str = "V_3_SCALAR_012";
+    const RULE_F: &str = "V_3_SCALAR_022";
 
     fn scalar_model() -> &'static Model {
         static MODEL: OnceLock<Model> = OnceLock::new();
@@ -1560,68 +1600,24 @@ mod tests {
     }
 
     fn minimal_model() -> Model {
-        let mut model = Model::default();
-        for particle in [
-            test_particle(3, "s", "s~", 2, 3, false, 0),
-            test_particle(-3, "s~", "s", 2, -3, false, 0),
-            test_particle(4, "c", "c~", 2, 3, false, 0),
-            test_particle(11, "e-", "e+", 2, 1, false, 0),
-            test_particle(-11, "e+", "e-", 2, 1, false, 0),
-            test_particle(21, "g", "g", 3, 8, false, 0),
-            test_particle(22, "a", "a", 3, 1, false, 0),
-            test_particle(25, "h", "h", 1, 1, true, 0),
-            test_particle(82, "ghG", "ghG~", 1, 8, false, 1),
-        ] {
-            model
-                .particle_pdg_to_position
-                .insert(particle.pdg_code, model.particles.len());
-            model
-                .particle_name_to_position
-                .insert(particle.name.clone(), model.particles.len());
-            model.particles.push(ArcParticle(Arc::new(particle)));
-        }
-        model
-    }
-
-    fn test_particle(
-        pdg_code: isize,
-        name: &str,
-        antiname: &str,
-        spin: isize,
-        color: isize,
-        goldstone: bool,
-        ghost_number: isize,
-    ) -> Particle {
-        Particle {
-            pdg_code,
-            name: name.into(),
-            antiname: antiname.into(),
-            spin,
-            color,
-            mass: ParameterName(UFOSymbol::zero()),
-            width: ParameterName(UFOSymbol::zero()),
-            texname: name.into(),
-            antitexname: antiname.into(),
-            charge: 0.0,
-            ghost_number,
-            lepton_number: 0,
-            y_charge: 0,
-            goldstone,
-        }
+        test_initialise().expect("test initialization should succeed");
+        crate::utils::load_generic_model("sm")
     }
 
     fn raised_test_graph() -> Result<Graph> {
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph raised {
-                edge [particle=scalar_1]
+                projector=1
+                edge [particle=scalar_1 num=1]
+                node [num=1]
                 ext [style=invis]
-                ext -> A [id=3]
-                B -> ext [id=4]
-                A -> B [id=0]
-                A -> B [id=1]
-                A -> B [id=2]
-                A -> B [id=5]
-                A -> B [id=6]
+                ext -> A [id=3 sink="{ufo_order:0}"]
+                B -> ext [id=4 source="{ufo_order:0}"]
+                A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                A -> B [id=2 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                A -> B [id=5 lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:4}"]
+                A -> B [id=6 source="{ufo_order:5}" sink="{ufo_order:5}"]
             },
             scalar_model()
         )?;
@@ -1656,15 +1652,17 @@ mod tests {
     }
 
     fn tree_raised_test_graph() -> Result<Graph> {
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph tree_raised {
-                edge [particle=scalar_1]
+                projector=1
+                edge [particle=scalar_1 num=1]
+                node [num=1]
                 ext [style=invis]
-                ext -> A [id=3]
-                B -> ext [id=4]
-                A -> B [id=0]
-                A -> B [id=1]
-                A -> B [id=2]
+                ext -> A [id=3 sink="{ufo_order:0}"]
+                B -> ext [id=4 source="{ufo_order:0}"]
+                A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                A -> B [id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
             },
             scalar_model()
         )?;
@@ -1687,41 +1685,37 @@ mod tests {
     }
 
     fn cycle_test_graph() -> Result<Graph> {
-        dot!(
+        finalized_runtime_dot!(
             digraph cycle_test {
+                projector=1
                 node [num="1"]
-                A -> B [particle=scalar_0, id=0]
-                B -> C [particle=scalar_1, id=1]
-                C -> A [particle=scalar_0, id=2]
-                B -> D [particle=scalar_2, id=3]
-                D -> C [particle=scalar_2, id=4]
+                edge [num=1]
+                A -> B [particle=scalar_0, id=0, lmb_id=0, source="{ufo_order:0}", sink="{ufo_order:0}"]
+                B -> C [particle=scalar_1, id=1, source="{ufo_order:1}", sink="{ufo_order:0}"]
+                C -> A [particle=scalar_0, id=2, source="{ufo_order:1}", sink="{ufo_order:1}"]
+                B -> D [particle=scalar_2, id=3, lmb_id=1, source="{ufo_order:2}", sink="{ufo_order:0}"]
+                D -> C [particle=scalar_2, id=4, source="{ufo_order:1}", sink="{ufo_order:2}"]
             },
             scalar_model()
         )
     }
 
-    fn vertex_rule(name: &str) -> ArcVertexRule {
-        ArcVertexRule(Arc::new(VertexRule {
-            name: name.into(),
-            couplings: Vec::new(),
-            lorentz_structures: Vec::new(),
-            particles: Vec::new(),
-            color_structures: ColorStructure {
-                color_structure: Vec::new(),
-            },
-            dod: 0,
-        }))
+    fn vertex_rule(name: &str) -> VertexRuleId {
+        scalar_model()
+            .vertex_rule_id(name)
+            .expect("selection-test vertex rule must exist in the canonical model")
     }
 
     fn graph_with_vertex_rules(name: &str, vertex_names: &[&str]) -> Result<Graph> {
-        let mut graph: Graph = "digraph vertex_test {
-            node [num=\"1\"]
-            edge [particle=scalar_1]
-            A -> B [id=0]
-            B -> C [id=1]
-            C -> A [id=2]
-        }"
-        .into_graph(scalar_model())?;
+        let mut graph: Graph = r#"digraph vertex_test {
+            projector=1
+            node [num="1"]
+            edge [particle=scalar_1 num=1]
+            A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            B -> C [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            C -> A [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        }"#
+        .into_finalized_runtime_graph(scalar_model())?;
         graph.name = name.to_string();
         let vertex_rules = vertex_names
             .iter()
@@ -1738,13 +1732,15 @@ mod tests {
     }
 
     fn particle_test_graph(name: &str) -> Result<Graph> {
-        let mut graph: Graph = "digraph particle_test {
-            node [num=\"1\"]
-            A -> B [particle=scalar_0, id=0]
-            B -> C [particle=scalar_1, id=1]
-            C -> A [particle=scalar_2, id=2]
-        }"
-        .into_graph(scalar_model())?;
+        let mut graph: Graph = r#"digraph particle_test {
+            projector=1
+            node [num="1"]
+            edge [num=1]
+            A -> B [particle=scalar_0, id=0, lmb_id=0, source="{ufo_order:0}", sink="{ufo_order:0}"]
+            B -> C [particle=scalar_1, id=1, source="{ufo_order:1}", sink="{ufo_order:0}"]
+            C -> A [particle=scalar_2, id=2, source="{ufo_order:1}", sink="{ufo_order:1}"]
+        }"#
+        .into_finalized_runtime_graph(scalar_model())?;
         graph.name = name.to_string();
         Ok(graph)
     }
@@ -2039,11 +2035,11 @@ mod tests {
     #[test]
     fn cycle_requirements_include_simple_cycles_beyond_basis() -> Result<()> {
         let graph = cycle_test_graph()?;
-        let scalar_0 = scalar_model().try_get_particle("scalar_0")?.pdg_code.abs();
-        let scalar_1 = scalar_model().try_get_particle("scalar_1")?.pdg_code.abs();
-        let scalar_2 = scalar_model().try_get_particle("scalar_2")?.pdg_code.abs();
+        let scalar_0 = isize::try_from(scalar_model().particle("scalar_0")?.pdg_code.abs())?;
+        let scalar_1 = isize::try_from(scalar_model().particle("scalar_1")?.pdg_code.abs())?;
+        let scalar_2 = isize::try_from(scalar_model().particle("scalar_2")?.pdg_code.abs())?;
         let requirements = graph
-            .cycle_requirements()
+            .cycle_requirements(scalar_model())
             .into_iter()
             .map(|requirement| requirement.to_string())
             .collect::<BTreeSet<_>>();
@@ -2075,8 +2071,12 @@ mod tests {
         let cut_side_subject =
             GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0, 1]));
 
-        assert!(!full_subject.cycle_requirements().is_empty());
-        assert!(cut_side_subject.cycle_requirements().is_empty());
+        assert!(!full_subject.cycle_requirements(scalar_model()).is_empty());
+        assert!(
+            cut_side_subject
+                .cycle_requirements(scalar_model())
+                .is_empty()
+        );
 
         Ok(())
     }
@@ -2091,29 +2091,38 @@ mod tests {
     #[test]
     fn cycle_category_requirement_matches_particles_directly() {
         let model = minimal_model();
-        let gluon = model.try_get_particle_from_pdg(21).unwrap();
-        let strange = model.try_get_particle_from_pdg(3).unwrap();
+        let gluon = model.particle_id_by_pdg(21).unwrap();
+        let strange = model.particle_id_by_pdg(3).unwrap();
         let requirement =
             CycleRequirement::new(vec![CycleMatcher::Pdg(3), CycleMatcher::Pdg(21)]).unwrap();
         assert!(cycle_matches_requirement(
-            &[strange.clone(), gluon.clone()],
-            &requirement
+            &[strange, gluon],
+            &requirement,
+            &model,
         ));
         let fermion_requirement = CycleRequirement::new(vec![CycleMatcher::Fermion]).unwrap();
-        assert!(cycle_matches_requirement(&[strange], &fermion_requirement));
-        assert!(!cycle_matches_requirement(&[gluon], &fermion_requirement));
+        assert!(cycle_matches_requirement(
+            &[strange],
+            &fermion_requirement,
+            &model,
+        ));
+        assert!(!cycle_matches_requirement(
+            &[gluon],
+            &fermion_requirement,
+            &model,
+        ));
     }
 
     #[test]
     fn subgraph_vertex_signature_counts_only_vertices_in_view() -> Result<()> {
-        let graph = graph_with_vertex_rules("g0", &["V_A", "V_B", "V_C"])?;
+        let graph = graph_with_vertex_rules("g0", &[RULE_A, RULE_B, RULE_C])?;
         let subject = GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0]));
-        let counts = subject.vertex_rule_name_counts();
+        let counts = subject.vertex_rule_name_counts(scalar_model());
 
         assert_eq!(counts.values().copied().sum::<usize>(), 2);
         assert_eq!(
             GraphSelectionSubject::whole_graph(&graph)
-                .vertex_rule_name_counts()
+                .vertex_rule_name_counts(scalar_model())
                 .values()
                 .copied()
                 .sum::<usize>(),
@@ -2127,14 +2136,14 @@ mod tests {
     fn subgraph_particle_signature_counts_only_particles_in_view() -> Result<()> {
         let graph = particle_test_graph("g0")?;
         let subject = GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0]));
-        let scalar_0 = scalar_model().try_get_particle("scalar_0")?.pdg_code.abs();
-        let scalar_1 = scalar_model().try_get_particle("scalar_1")?.pdg_code.abs();
+        let scalar_0 = isize::try_from(scalar_model().particle("scalar_0")?.pdg_code.abs())?;
+        let scalar_1 = isize::try_from(scalar_model().particle("scalar_1")?.pdg_code.abs())?;
 
-        assert!(subject.particle_pdgs().contains(&scalar_0));
-        assert!(!subject.particle_pdgs().contains(&scalar_1));
+        assert!(subject.particle_pdgs(scalar_model()).contains(&scalar_0));
+        assert!(!subject.particle_pdgs(scalar_model()).contains(&scalar_1));
         assert!(
             GraphSelectionSubject::whole_graph(&graph)
-                .particle_pdgs()
+                .particle_pdgs(scalar_model())
                 .contains(&scalar_1)
         );
 
@@ -2144,22 +2153,24 @@ mod tests {
     #[test]
     fn selection_spec_combines_rules_with_and_and_respects_vertex_multiplicity() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("g0", &["V_A", "V_A", "V_B"])?,
-            graph_with_vertex_rules("g1", &["V_A", "V_B", "V_C"])?,
-            graph_with_vertex_rules("g2", &["V_A", "V_A", "V_C"])?,
+            graph_with_vertex_rules("g0", &[RULE_A, RULE_A, RULE_B])?,
+            graph_with_vertex_rules("g1", &[RULE_A, RULE_B, RULE_C])?,
+            graph_with_vertex_rules("g2", &[RULE_A, RULE_A, RULE_C])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
 
         let spec = GraphGroupSelectionSpec::new()
             .with_vertex_signatures(
                 SelectionPolarity::With,
-                vec![VertexSignature::parse("[V_A,V_A]")?],
+                vec![VertexSignature::parse(&format!("[{RULE_A},{RULE_A}]"))?],
             )
             .with_vertex_signatures(
                 SelectionPolarity::Without,
-                vec![VertexSignature::parse("[V_C]")?],
+                vec![VertexSignature::parse(&format!("[{RULE_C}]"))?],
             );
-        let plan = spec.plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        let plan = spec.plan(scalar_model(), &graph_group_structure, |graph_id| {
+            graphs.get(graph_id)
+        })?;
 
         assert_eq!(plan.retained_group_ids(), &[GroupId(0)]);
         assert_eq!(plan.report().kept_master_graphs, vec!["g0".to_string()]);
@@ -2174,15 +2185,17 @@ mod tests {
     #[test]
     fn graph_name_selection_supports_without_polarity() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("g0", &["V_A"])?,
-            graph_with_vertex_rules("g1", &["V_B"])?,
-            graph_with_vertex_rules("g2", &["V_C"])?,
+            graph_with_vertex_rules("g0", &[RULE_A])?,
+            graph_with_vertex_rules("g1", &[RULE_B])?,
+            graph_with_vertex_rules("g2", &[RULE_C])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
 
         let spec = GraphGroupSelectionSpec::new()
             .with_master_graph_names_polarity(SelectionPolarity::Without, vec!["g1".to_string()]);
-        let plan = spec.plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        let plan = spec.plan(scalar_model(), &graph_group_structure, |graph_id| {
+            graphs.get(graph_id)
+        })?;
 
         assert_eq!(plan.report().kept_master_graphs, vec!["g0", "g2"]);
         assert_eq!(plan.report().removed_master_graphs, vec!["g1"]);
@@ -2193,9 +2206,9 @@ mod tests {
     #[test]
     fn master_graph_name_selection_rejects_members_and_preserves_group_order() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("master_0", &["V_A"])?,
-            graph_with_vertex_rules("member_0", &["V_A"])?,
-            graph_with_vertex_rules("master_1", &["V_B"])?,
+            graph_with_vertex_rules("master_0", &[RULE_A])?,
+            graph_with_vertex_rules("member_0", &[RULE_A])?,
+            graph_with_vertex_rules("master_1", &[RULE_B])?,
         ];
         graphs[0].group_id = Some(GroupId(0));
         graphs[0].is_group_master = true;
@@ -2207,7 +2220,9 @@ mod tests {
 
         let member_error =
             GraphGroupSelectionSpec::from_master_graph_names(vec!["member_0".to_string()])
-                .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))
+                .plan(scalar_model(), &graph_group_structure, |graph_id| {
+                    graphs.get(graph_id)
+                })
                 .unwrap_err();
         assert!(
             member_error.chain().any(|cause| cause
@@ -2220,7 +2235,9 @@ mod tests {
             "master_1".to_string(),
             "master_0".to_string(),
         ])
-        .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        .plan(scalar_model(), &graph_group_structure, |graph_id| {
+            graphs.get(graph_id)
+        })?;
         assert_eq!(plan.retained_group_ids(), &[GroupId(0), GroupId(1)]);
         assert_eq!(plan.report().kept_master_graphs, ["master_0", "master_1"]);
 
@@ -2230,8 +2247,8 @@ mod tests {
     #[test]
     fn with_graph_names_are_authoritative_over_vetoes() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("g0", &["V_A"])?,
-            graph_with_vertex_rules("g1", &["V_B"])?,
+            graph_with_vertex_rules("g0", &[RULE_A])?,
+            graph_with_vertex_rules("g1", &[RULE_B])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
 
@@ -2239,9 +2256,11 @@ mod tests {
             .with_master_graph_names(vec!["g1".to_string()])
             .with_vertex_signatures(
                 SelectionPolarity::Without,
-                vec![VertexSignature::parse("[V_B]")?],
+                vec![VertexSignature::parse(&format!("[{RULE_B}]"))?],
             );
-        let plan = spec.plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        let plan = spec.plan(scalar_model(), &graph_group_structure, |graph_id| {
+            graphs.get(graph_id)
+        })?;
 
         assert_eq!(plan.report().kept_master_graphs, vec!["g0", "g1"]);
         assert!(plan.report().removed_master_graphs.is_empty());
@@ -2252,8 +2271,8 @@ mod tests {
     #[test]
     fn graph_name_selection_rejects_conflicting_constraints() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("g0", &["V_A"])?,
-            graph_with_vertex_rules("g1", &["V_B"])?,
+            graph_with_vertex_rules("g0", &[RULE_A])?,
+            graph_with_vertex_rules("g1", &[RULE_B])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
 
@@ -2261,7 +2280,9 @@ mod tests {
             .with_master_graph_names(vec!["g1".to_string()])
             .with_master_graph_names_polarity(SelectionPolarity::Without, vec!["g1".to_string()]);
         let err = spec
-            .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))
+            .plan(scalar_model(), &graph_group_structure, |graph_id| {
+                graphs.get(graph_id)
+            })
             .unwrap_err();
         let message = format!("{err}");
 
@@ -2277,21 +2298,12 @@ mod tests {
     fn particle_selection_matches_required_sets() -> Result<()> {
         let mut graphs = vec![
             particle_test_graph("g0")?,
-            graph_with_vertex_rules("g1", &["V_A"])?,
+            graph_with_vertex_rules("g1", &[RULE_A])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
-        let scalar_0 = scalar_model()
-            .try_get_particle("scalar_0")?
-            .name
-            .to_string();
-        let scalar_1 = scalar_model()
-            .try_get_particle("scalar_1")?
-            .name
-            .to_string();
-        let scalar_2 = scalar_model()
-            .try_get_particle("scalar_2")?
-            .name
-            .to_string();
+        let scalar_0 = scalar_model().particle("scalar_0")?.name.to_string();
+        let scalar_1 = scalar_model().particle("scalar_1")?.name.to_string();
+        let scalar_2 = scalar_model().particle("scalar_2")?.name.to_string();
 
         let spec = GraphGroupSelectionSpec::new()
             .with_particle_signatures(
@@ -2310,7 +2322,9 @@ mod tests {
             );
 
         let err = spec
-            .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))
+            .plan(scalar_model(), &graph_group_structure, |graph_id| {
+                graphs.get(graph_id)
+            })
             .unwrap_err();
         assert!(
             err.to_string()
@@ -2325,7 +2339,9 @@ mod tests {
                 scalar_model(),
             )?],
         );
-        let plan = spec.plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        let plan = spec.plan(scalar_model(), &graph_group_structure, |graph_id| {
+            graphs.get(graph_id)
+        })?;
         assert_eq!(plan.report().kept_master_graphs, vec!["g0"]);
 
         Ok(())
@@ -2334,22 +2350,23 @@ mod tests {
     #[test]
     fn structural_selection_matches_any_analysis_subject_and_without_vetoes() -> Result<()> {
         let mut graphs = vec![
-            graph_with_vertex_rules("g0", &["V_A", "V_B", "V_C"])?,
-            graph_with_vertex_rules("g1", &["V_D", "V_E", "V_F"])?,
+            graph_with_vertex_rules("g0", &[RULE_A, RULE_B, RULE_C])?,
+            graph_with_vertex_rules("g1", &[RULE_D, RULE_E, RULE_F])?,
         ];
         let graph_group_structure = complete_group_parsing(&mut graphs)?;
         let with_spec = GraphGroupSelectionSpec::new()
             .with_master_graph_names(vec!["g0".to_string(), "g1".to_string()])
             .with_vertex_signatures(
                 SelectionPolarity::With,
-                vec![VertexSignature::parse("[V_A]")?],
+                vec![VertexSignature::parse(&format!("[{RULE_A}]"))?],
             );
         let without_spec = GraphGroupSelectionSpec::new().with_vertex_signatures(
             SelectionPolarity::Without,
-            vec![VertexSignature::parse("[V_A]")?],
+            vec![VertexSignature::parse(&format!("[{RULE_A}]"))?],
         );
 
         let with_plan = with_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             vertex_test_subjects_by_graph_id,
@@ -2360,6 +2377,7 @@ mod tests {
         assert_eq!(with_plan.report().kept_master_graphs, vec!["g0", "g1"]);
 
         let without_plan = without_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             vertex_test_subjects_by_graph_id,
@@ -2391,6 +2409,7 @@ mod tests {
         );
 
         let with_plan = with_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             raised_any_test_subjects_by_graph_id,
@@ -2401,6 +2420,7 @@ mod tests {
         assert_eq!(with_plan.report().kept_master_graphs, vec!["g0"]);
 
         let without_plan = without_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             raised_any_test_subjects_by_graph_id,
@@ -2431,6 +2451,7 @@ mod tests {
         );
 
         let with_plan = with_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),
@@ -2441,6 +2462,7 @@ mod tests {
         assert_eq!(with_plan.report().kept_master_graphs, vec!["g0"]);
 
         let without_plan = without_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),
@@ -2472,6 +2494,7 @@ mod tests {
         );
 
         let with_plan = with_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),
@@ -2482,6 +2505,7 @@ mod tests {
         assert_eq!(with_plan.report().kept_master_graphs, vec!["g0"]);
 
         let without_plan = without_spec.plan_with_analysis_contexts(
+            scalar_model(),
             &graph_group_structure,
             |graph_id| graphs.get(graph_id),
             |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),

@@ -27,12 +27,12 @@ pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
+use crate::graph::FinalizedCut;
 use crate::integrands::process::GenericEvaluator;
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
-use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
     DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
@@ -872,7 +872,7 @@ impl Esurface {
 
     pub(crate) fn new_from_cut_left<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         initial_state_cut: Option<&OrientedCut>,
     ) -> Self {
         let edges = graph
@@ -915,11 +915,16 @@ impl Esurface {
         }
     }
 
-    pub(crate) fn lmb_atom(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+    pub(crate) fn lmb_atom(
+        &self,
+        graph: &Graph,
+        model: &crate::model::Model,
+        lmb_reps: &[Replacement],
+    ) -> Atom {
         self.energies
             .iter()
             .map(|index| {
-                let mass_symbol = graph.underlying[*index].mass_atom();
+                let mass_symbol = graph.underlying[*index].mass_atom(model);
                 let emr_symbols = (0..3)
                     .map(|i| function!(GS.emr_mom, usize::from(*index), i + 1))
                     .collect_vec();
@@ -942,11 +947,16 @@ impl Esurface {
     }
 
     // more readable version for debugging, because it doesn't write out components
-    pub(crate) fn lmb_atom_simplified(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+    pub(crate) fn lmb_atom_simplified(
+        &self,
+        graph: &Graph,
+        model: &crate::model::Model,
+        lmb_reps: &[Replacement],
+    ) -> Atom {
         self.energies
             .iter()
             .map(|index| {
-                let mass_symbol = graph.underlying[*index].mass_atom();
+                let mass_symbol = graph.underlying[*index].mass_atom(model);
                 let emr_symbol = function!(GS.emr_mom, usize::from(*index));
 
                 (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt()
@@ -1038,7 +1048,7 @@ define_index!(
     pub struct RaisedEsurfaceId;
 );
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Default, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedEsurfaceData {
     pub raised_groups: TiVec<RaisedEsurfaceId, RaisedEsurfaceGroup>,
@@ -1175,9 +1185,9 @@ mod tests {
     use symbolica::parse;
 
     use crate::cff::VertexSet;
+    use crate::graph::FinalizedCut;
     use crate::graph::LoopMomentumBasis;
     use crate::momentum::{FourMomentum, sample::ExternalFourMomenta, signature::LoopExtSignature};
-    use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
         utils::{
@@ -1563,7 +1573,7 @@ mod tests {
 
             let cross_section_cuts = cuts
                 .into_iter()
-                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                .map(|(node_l, cut, node_r)| FinalizedCut {
                     cut,
                     left: node_l,
                     right: node_r,
@@ -1651,7 +1661,7 @@ mod tests {
 
             let cross_section_cuts = cuts
                 .into_iter()
-                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                .map(|(node_l, cut, node_r)| FinalizedCut {
                     cut,
                     left: node_l,
                     right: node_r,

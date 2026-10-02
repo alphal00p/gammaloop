@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::Path};
 
+use crate::cff::{Esurface, EsurfaceID, OrientationID, RaisedEsurfaceData, RaisedEsurfaceId};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
@@ -13,11 +14,9 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
-            GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
+            EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId,
             esurface_value_is_strictly_inside,
         },
-        expression::OrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     integrands::{
@@ -222,10 +221,7 @@ impl AmplitudeCountertermData {
             helper_evaluators: vec![],
             generated_mask: TiVec::new(),
             active_mask: TiVec::new(),
-            raised_data: RaisedEsurfaceData {
-                raised_groups: TiVec::new(),
-                pass_two_evaluator: None,
-            },
+            raised_data: RaisedEsurfaceData::default(),
             esurface_map: TiVec::new(),
             local_esurface_exists: TiVec::new(),
             own_group_position,
@@ -1446,11 +1442,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
-    use crate::{
-        cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
-        graph::GraphGroupPosition,
-        uv::Integrands,
-    };
+    use crate::cff::RaisedEsurfaceId;
+    use crate::{cff::CutCFFIndex, graph::GraphGroupPosition, uv::Integrands};
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
 

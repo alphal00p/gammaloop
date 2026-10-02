@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::cff::expression::OrientationID;
+use crate::cff::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
@@ -284,7 +284,11 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
 }
 
 impl ProcessIntegrand {
-    pub fn clone_with_selected_graph_groups(&self, graph_names: &[String]) -> Result<Self> {
+    pub fn clone_with_selected_graph_groups(
+        &self,
+        model: &Model,
+        graph_names: &[String],
+    ) -> Result<Self> {
         if graph_names.is_empty() {
             return Ok(self.clone());
         }
@@ -309,23 +313,25 @@ impl ProcessIntegrand {
         let selection = GraphGroupSelectionSpec::from_master_graph_names(graph_names.to_vec());
         let mut selected = match self {
             Self::Amplitude(integrand) => {
-                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
-                    integrand
-                        .data
-                        .graph_terms
-                        .get(graph_id)
-                        .map(|term| &term.graph)
-                })?;
+                let plan =
+                    selection.plan(model, &integrand.data.graph_group_structure, |graph_id| {
+                        integrand
+                            .data
+                            .graph_terms
+                            .get(graph_id)
+                            .map(|term| &term.graph)
+                    })?;
                 Self::Amplitude(integrand.clone_with_graph_group_selection(&plan)?)
             }
             Self::CrossSection(integrand) => {
-                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
-                    integrand
-                        .data
-                        .graph_terms
-                        .get(graph_id)
-                        .map(|term| &term.graph)
-                })?;
+                let plan =
+                    selection.plan(model, &integrand.data.graph_group_structure, |graph_id| {
+                        integrand
+                            .data
+                            .graph_terms
+                            .get(graph_id)
+                            .map(|term| &term.graph)
+                    })?;
                 Self::CrossSection(integrand.clone_with_graph_group_selection(&plan)?)
             }
         };
@@ -4240,10 +4246,13 @@ mod tests {
         create_stability_iterator, filtered_orientation_count, resolve_visible_orientation_id,
         validate_orientation_catalog_group, validate_process_runtime_settings,
     };
-    use crate::cff::expression::OrientationID;
+    use crate::cff::OrientationID;
     use crate::{
-        dot,
-        graph::{Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        finalized_runtime_dot,
+        graph::{
+            Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+            parse::from_dot::IntoFinalizedRuntimeGraph,
+        },
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
@@ -4505,13 +4514,14 @@ mod tests {
         static GRAPH: OnceLock<Graph> = OnceLock::new();
         let graph = GRAPH
             .get_or_init(|| {
-                dot!(
+                finalized_runtime_dot!(
                     digraph lmb_basis_selection {
+                        graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0]
-                        A -> B [id=1]
-                        A -> B [id=2]
+                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
                     }
                 )
                 .unwrap()
@@ -4579,15 +4589,16 @@ mod tests {
     #[test]
     fn lmb_channel_prefactors_form_a_partition_of_unity() {
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph lmb_prefactor_partition {
+                graph [projector=1]
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0]
-                A -> B [id=1]
-                A -> B [id=2]
-                B -> ext [id=3]
+                ext -> A [id=0 sink="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                B -> ext [id=3 source="{ufo_order:2}"]
             }
         )
         .unwrap();

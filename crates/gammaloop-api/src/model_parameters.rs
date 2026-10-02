@@ -22,7 +22,8 @@ pub(crate) fn external_model_parameter_type(
     parameter_name: &str,
 ) -> Option<ParameterType> {
     model
-        .get_parameter_opt(parameter_name)
+        .parameter(parameter_name)
+        .ok()
         .filter(|parameter| parameter.nature == ParameterNature::External)
         .map(|parameter| parameter.parameter_type.clone())
 }

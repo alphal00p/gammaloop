@@ -14,7 +14,8 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::dirac::GammaSimplifier;
+use crate::cff::EsurfaceID;
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -40,7 +41,7 @@ use crate::{
         graph_to_group_id_for_group_structure,
         param_builder::FnMapEntry,
     },
-    model::ArcParticle,
+    model::ParticleId,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, GraphGroupSelectionPlan,
@@ -76,10 +77,9 @@ use typed_index_collections::{TiVec, ti_vec};
 use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
-    cff::esurface::EsurfaceID,
     graph::{FeynmanGraph, Graph},
     integrands::process::ProcessIntegrand,
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     settings::global::GenerationSettings,
 };
 
@@ -92,7 +92,7 @@ pub struct Amplitude {
     pub integrand: Option<ProcessIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
-    pub external_particles: Vec<ArcParticle>,
+    pub external_particles: Vec<ParticleId>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
@@ -108,8 +108,9 @@ impl Amplitude {
     pub fn plan_graph_group_selection(
         &self,
         spec: &GraphGroupSelectionSpec,
+        model: &Model,
     ) -> Result<GraphGroupSelectionPlan> {
-        spec.plan(&self.graph_group_structure, |graph_id| {
+        spec.plan(model, &self.graph_group_structure, |graph_id| {
             self.graphs.get(graph_id).map(|graph| &graph.graph)
         })
     }
@@ -440,7 +441,7 @@ impl Amplitude {
         drop(preprocess_span_enter);
         drop(preprocess_span);
 
-        self.generate_grouped_derived_data()?;
+        self.generate_grouped_derived_data(model)?;
 
         Ok(preprocess_reports)
     }
@@ -568,7 +569,13 @@ impl Amplitude {
             let master_external_pdgs = master_graph
                 .get_external_partcles()
                 .into_iter()
-                .map(|particle| particle.pdg_code)
+                .map(|particle| {
+                    particle
+                        .resolve(model)
+                        .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
+                })
                 .collect_vec();
 
             for graph_id in group.into_iter() {
@@ -688,7 +695,7 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn generate_grouped_derived_data(&mut self) -> Result<()> {
+    pub fn generate_grouped_derived_data(&mut self, model: &Model) -> Result<()> {
         // for each group we must collect all inequivalent esurfaces.
 
         let group_derived_data = self
@@ -718,7 +725,8 @@ impl Amplitude {
                         .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
                         let esurface = &esurfaces[raised_group.esurface_ids[0]];
-                        let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
+                        let esurface_atom =
+                            esurface.lmb_atom(&amplitude_graph.graph, model, &lmb_reps);
 
                         group_esurface_structure
                             .entry(esurface_atom)
@@ -772,10 +780,7 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 threshold_counterterms: TiVec::new(),
-                raised_data: RaisedEsurfaceData {
-                    raised_groups: TiVec::new(),
-                    pass_two_evaluator: None,
-                },
+                raised_data: RaisedEsurfaceData::default(),
                 raised_esurface_ids: TiVec::new(),
             },
         }
@@ -785,6 +790,7 @@ impl AmplitudeGraph {
 impl AmplitudeGraph {
     pub fn renormalization_part(
         &mut self,
+        model: &Model,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
@@ -799,6 +805,7 @@ impl AmplitudeGraph {
         }
         settings.orchestrator.renormalization_part(
             &mut self.graph,
+            model,
             // RenormalizationPart forces a 4D forest: it never builds a CFF
             // or attaches 3D numerator factors and needs no stored source.
             OrientationProjection::four_d(&OrientationPattern::default()),
@@ -891,10 +898,10 @@ impl AmplitudeGraph {
             )
         });
 
-        self.build_integrands(settings, vk)?;
+        self.build_integrands(model, settings, vk)?;
 
         if self.graph.is_group_master {
-            self.build_tropical_sampler(settings)?;
+            self.build_tropical_sampler(model, settings)?;
         }
 
         self.build_lmbs();
@@ -903,7 +910,7 @@ impl AmplitudeGraph {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
-        if let Some(mut raised_data) = raised_data {
+        if let Some(raised_data) = raised_data {
             let max_order = raised_data
                 .raised_groups
                 .iter()
@@ -913,7 +920,7 @@ impl AmplitudeGraph {
             if max_order > 1 {
                 self.graph.param_builder.initialize_duals(max_order);
             }
-            raised_data.pass_two_evaluator = Some(
+            self.derived_data.raised_data.pass_two_evaluator = Some(
                 (1..=max_order)
                     .map(|order| {
                         threshold_counterterm_helper(
@@ -1112,7 +1119,19 @@ impl AmplitudeGraph {
 
         let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
         let before_gamma_plain = before_gamma.to_plain_string();
-        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplified = SymbolicTensor::infer(cooking.try_cook(before_gamma.as_view())?)?
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let four_dimensional_numerator = cooking.uncook(simplified.expression().as_view());
         let after_gamma_plain = four_dimensional_numerator.to_plain_string();
         crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
             stage = "amplitude_to_vakint_after_simplify_gamma",
@@ -1129,7 +1148,9 @@ impl AmplitudeGraph {
         let mut four_dimensional_integrand = four_dimensional_numerator
             / self
                 .graph
-                .denominator(component, |e| e.extra_data.vakint_edge_power.unwrap_or(1));
+                .denominator(component, config.model, |e: &crate::graph::Edge| {
+                    e.extra_data.vakint_edge_power.unwrap_or(1)
+                });
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 
@@ -1209,6 +1230,7 @@ impl AmplitudeGraph {
     #[instrument(skip_all, err)]
     pub(crate) fn build_integrands(
         &mut self,
+        model: &Model,
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
@@ -1241,6 +1263,7 @@ impl AmplitudeGraph {
         let orchestration_started = std::time::Instant::now();
         let parametric_exprs = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            model,
             cutstructure,
             vakint,
             OrientationProjection::exact_expression(
@@ -1424,6 +1447,7 @@ impl AmplitudeGraph {
 
         let exprs: Vec<_> = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            model,
             cut_structure,
             vakint,
             OrientationProjection::exact_expression(
@@ -1471,7 +1495,11 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+    fn build_tropical_sampler(
+        &mut self,
+        model: &Model,
+        process_settings: &GenerationSettings,
+    ) -> Result<()> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
         if process_settings
@@ -1502,7 +1530,7 @@ impl AmplitudeGraph {
             .graph
             .iter_loop_edges()
             .map(|(pair, _edge_id, edge)| {
-                let is_massive = edge.data.particle.is_massive();
+                let is_massive = edge.data.particle.is_massive(model);
 
                 let vertices = match pair {
                     HedgePair::Paired { source, sink } => (
@@ -1655,8 +1683,12 @@ impl AmplitudeState for Processed {}
 // impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
-    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
-        let graphs = Graph::from_string(s, model)?;
+    pub fn from_finalized_runtime_dot_string<Str: AsRef<str>>(
+        s: Str,
+        name: String,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = Graph::from_finalized_runtime_string(s, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {
@@ -1665,11 +1697,11 @@ impl Amplitude {
         Ok(amp)
     }
 
-    pub fn from_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub fn from_finalized_runtime_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let graphs = Graph::from_file(p, model)?;
+        let graphs = Graph::from_finalized_runtime_file(p, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {
@@ -1817,36 +1849,40 @@ pub(crate) fn threshold_counterterm_helper(
 #[cfg(test)]
 pub mod test {
 
+    use crate::cff::OrientationID;
     use crate::{
-        cff::expression::OrientationID,
-        dot,
-        graph::{GraphGroupPosition, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{GraphGroupPosition, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         integrands::process::amplitude::AmplitudeGraphTerm,
         processes::AmplitudeGraph,
         settings::{
-            GlobalSettings, RuntimeSettings,
+            GlobalSettings,
             global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
         },
         utils::load_generic_model,
     };
+    use symbolica::atom::Atom;
     use typed_index_collections::TiVec;
 
     #[test]
     fn amplitude_tree() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
-                num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
-                ext    [style=invis]
-                ext -> v1:1 [particle="d" id=1];
-                ext -> v3:2 [particle="d~" id=2];
-                v1:3 -> ext [particle="a" id=3];
-                v2:4 -> ext [particle="a" id=4];
-                v3:0 -> ext [particle="a" id=0];
-                v1 -> v2 [particle="d" id=5];
-                v2 -> v3 [particle="d" id=6];
-    })
-    .unwrap();
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(digraph qqx_aaa_tree_1 {
+                    num=1
+                    projector=1
+                    node [num=1]
+                    edge [num=1]
+                    ext    [style=invis]
+                    ext -> v1:1 [particle="d" id=1 sink="{ufo_order:0}"];
+                    ext -> v3:2 [particle="d~" id=2 sink="{ufo_order:0}"];
+                    v1:3 -> ext [particle="a" id=3 source="{ufo_order:1}"];
+                    v2:4 -> ext [particle="a" id=4 source="{ufo_order:1}"];
+                    v3:0 -> ext [particle="a" id=0 source="{ufo_order:2}"];
+                    v1 -> v2 [particle="d" id=5 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                    v2 -> v3 [particle="d" id=6 source="{ufo_order:2}" sink="{ufo_order:1}"];
+        })
+        .unwrap();
 
         let _model = load_generic_model("sm");
 
@@ -1870,32 +1906,25 @@ pub mod test {
     #[test]
     fn generation_orientation_pattern_filters_evaluator_orientations() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(
             digraph bub {
-                edge [particle=scalar_1]
+                projector=1
+                edge [particle=scalar_1 num=1]
                 node [num=1]
                 e [style=invis]
-                e -> A:0 [id=3]
-                B:1 -> e [id=2]
-                A -> B [id=1]
-                A -> B [id=0]
+                e -> A:0 [id=3 sink="{ufo_order:0}"]
+                B:1 -> e [id=2 source="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
             },
             "scalars"
         )
         .unwrap();
 
         let model = load_generic_model("scalars");
-        let generation_settings = GenerationSettings {
-            threshold_subtraction: ThresholdSubtractionSettings {
-                enable_thresholds: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let runtime_settings = RuntimeSettings::default();
-        graph
-            .preprocess(&model, &generation_settings, &(&runtime_settings).into())
-            .unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
+        graph.derived_data.all_mighty_integrand = Atom::one();
+        graph.build_lmbs();
 
         assert!(
             graph

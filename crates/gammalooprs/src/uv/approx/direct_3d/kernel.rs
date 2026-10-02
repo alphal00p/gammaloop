@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::{CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::HedgePair,
@@ -256,11 +256,18 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .graph
         .numerator(&reduced, given.subgraph())
         .get_single_atom()
-        .expect("graph numerator should be available")
-        .simplify_color_with(ColorSimplifySettings {
-            simplify_non_color: false,
+        .expect("graph numerator should be available");
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        })?;
+    let numerator = cooking.uncook(numerator.expression().as_view());
     let scope = DirectResidueBranches::numerator_scope();
     let numerator_tag = scope.1.clone();
     let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
@@ -329,7 +336,7 @@ fn t_tilde<S: ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             reps.push(GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products));
         }
     }
@@ -362,7 +369,7 @@ fn t_tilde<S: ForestNodeLike>(
                 // set energies from inner_t on-shell
                 atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-                let e_mass = e.data.mass_atom();
+                let e_mass = e.data.mass_atom(ctx.model);
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
                     lmb_id,
@@ -479,7 +486,7 @@ fn start<S: ForestNodeLike>(
             // set energies from inner_t on-shell
             atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
                 lmb_id,
@@ -500,7 +507,7 @@ fn start<S: ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             let rep = GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products);
             debug_tags!(#uv, #local, #momentum, #trace;
                 stage = "local_3d_start_split_mom_pattern",
