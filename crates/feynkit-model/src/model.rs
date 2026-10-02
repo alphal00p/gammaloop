@@ -281,6 +281,32 @@ impl std::fmt::Display for ModelFingerprint {
     }
 }
 
+/// Line drawn for a particle by the shared physics renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineKind {
+    Plain,
+    /// Scalars.
+    Dashed,
+    /// Ghosts.
+    Dotted,
+    /// Neutral colour-singlet vectors.
+    Wave,
+    /// Neutral colour-octet vectors.
+    Coil,
+    /// Other vectors.
+    Zigzag,
+}
+
+/// A particle's drawing conventions: its line, accent paint when charged, a
+/// heavier stroke when massive, and a particle-flow arrow for fermions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineStyle {
+    pub kind: LineKind,
+    pub charged: bool,
+    pub massive: bool,
+    pub fermion_flow: bool,
+}
+
 /// A particle whose links into the model are stable typed identifiers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Particle {
@@ -353,46 +379,60 @@ impl Particle {
                 .is_some_and(|expression| expression.is_zero())
     }
 
+    /// How the shared physics renderer draws this particle's line.
+    pub fn line_style(&self, model: &Model) -> LineStyle {
+        let neutral = self.charge.is_zero();
+        let kind = if self.is_ghost() {
+            LineKind::Dotted
+        } else if self.is_vector() && neutral && self.color == 1 {
+            LineKind::Wave
+        } else if self.is_vector() && neutral && self.color == 8 {
+            LineKind::Coil
+        } else if self.is_vector() {
+            LineKind::Zigzag
+        } else if self.is_scalar() {
+            LineKind::Dashed
+        } else {
+            LineKind::Plain
+        };
+        LineStyle {
+            kind,
+            charged: !neutral,
+            massive: !self.is_massless(model),
+            fermion_flow: self.is_fermion() && !self.is_ghost(),
+        }
+    }
+
     /// Particle styles consumed by the shared Typst physics renderer.
     pub fn generate_edge_typst_dict(&self, model: &Model) -> String {
-        let label = format!("mi(`{}`)", self.texname);
-        let thickness = if self.is_massless(model) {
-            "massless"
-        } else {
-            "massive"
-        };
-        let color = if !self.charge.is_zero() {
+        let style = self.line_style(model);
+        let color = if style.charged {
             "palette.accent"
         } else {
             "palette.ink"
         };
-        let source = format!("source-stroke(c: {color}, thickness: {thickness})");
-        let sink = format!("sink-stroke(c: {color}, thickness: {thickness})");
-        let (source, sink) = if self.is_ghost() {
-            (
-                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
-                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
-            )
-        } else if self.is_vector() && self.charge.is_zero() && self.color == 1 {
-            (format!("{source} + wave"), format!("{sink} + wave"))
-        } else if self.is_vector() && self.charge.is_zero() && self.color == 8 {
-            (format!("{source} + coil"), format!("{sink} + coil"))
-        } else if self.is_vector() {
-            (format!("{source} + zigzag"), format!("{sink} + zigzag"))
-        } else if self.is_scalar() {
-            (
-                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
-                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
-            )
-        } else {
-            (source, sink)
+        let thickness = if style.massive { "massive" } else { "massless" };
+        let (dash, decoration) = match style.kind {
+            LineKind::Plain => ("", ""),
+            LineKind::Dashed => (", dash: dashed", ""),
+            LineKind::Dotted => (", dash: dotted", ""),
+            LineKind::Wave => ("", " + wave"),
+            LineKind::Coil => ("", " + coil"),
+            LineKind::Zigzag => ("", " + zigzag"),
         };
-        let flow_marker = if self.is_fermion() && !self.is_ghost() {
-            " + fermion-flow"
-        } else {
-            ""
-        };
-        format!("(source:{source}, sink:{sink}, label:{label}){flow_marker}")
+        let stroke =
+            |half| format!("{half}-stroke(c: {color}, thickness: {thickness}{dash}){decoration}");
+        format!(
+            "(source:{}, sink:{}, label:mi(`{}`)){}",
+            stroke("source"),
+            stroke("sink"),
+            self.texname,
+            if style.fermion_flow {
+                " + fermion-flow"
+            } else {
+                ""
+            }
+        )
     }
 
     pub fn is_antiparticle(&self) -> bool {

@@ -2635,21 +2635,70 @@ impl PyGraphStyleOptions {
 }
 
 const LAYOUT_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new("impred_spacing", "impred-spacing", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_repulsion", "impred-repulsion", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_attraction", "impred-attraction", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_parallel_balance", "impred-parallel-balance", ValueRule::NonNegativeNumber),
+    FieldSpec::new(
+        "impred_spacing",
+        "impred-spacing",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_repulsion",
+        "impred-repulsion",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_attraction",
+        "impred-attraction",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_parallel_balance",
+        "impred-parallel-balance",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("impred_pull", "impred-pull", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_pull_balance", "impred-pull-balance", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_pull_attachment", "impred-pull-attachment", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_external_max_points", "impred-external-max-points", ValueRule::NonNegativeInt),
-    FieldSpec::new("impred_split_length_ratio", "impred-split-length-ratio", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_contract_chord_ratio", "impred-contract-chord-ratio", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_edge_clearance", "impred-edge-clearance", ValueRule::NonNegativeNumber),
-    FieldSpec::new("impred_node_edge_strength", "impred-node-edge-strength", ValueRule::NonNegativeNumber),
+    FieldSpec::new(
+        "impred_pull_balance",
+        "impred-pull-balance",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_pull_attachment",
+        "impred-pull-attachment",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_external_max_points",
+        "impred-external-max-points",
+        ValueRule::NonNegativeInt,
+    ),
+    FieldSpec::new(
+        "impred_split_length_ratio",
+        "impred-split-length-ratio",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_contract_chord_ratio",
+        "impred-contract-chord-ratio",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_edge_clearance",
+        "impred-edge-clearance",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_node_edge_strength",
+        "impred-node-edge-strength",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("impred_steps", "impred-steps", ValueRule::NonNegativeInt),
-    FieldSpec::new("impred_step_scale", "impred-step-scale", ValueRule::NonNegativeInt),
+    FieldSpec::new(
+        "impred_step_scale",
+        "impred-step-scale",
+        ValueRule::NonNegativeInt,
+    ),
     FieldSpec::new("impred_level", "impred-level", ValueRule::Bool),
+    FieldSpec::new("impred_labels", "impred-labels", ValueRule::Bool),
     FieldSpec::new("subgraph", "subgraph", ValueRule::HedgeSelection).none(),
     FieldSpec::new("viewport_width", "viewport-w", ValueRule::NonNegativeNumber),
     FieldSpec::new(
@@ -2787,6 +2836,8 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 /// progress callbacks count nominal ticks.
 /// `impred_level` (default true) rotates mixed incoming/outgoing drawings to
 /// their external-pull optimum at every refinement checkpoint.
+/// `impred_labels` (default false) opts into label-aware layout: drawn labels
+/// are fed back as tethered boxes into short warm ImPrEd passes.
 ///
 /// `external_pull_attachment` is a finite nonnegative multiplier for extra demand
 /// from distributed owners sharing an external X coordinate (default 1).
@@ -2807,7 +2858,7 @@ impl PyLayoutOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "(*, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2833,7 +2884,7 @@ impl PyLayoutOptions {
 
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "($self, *, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "($self, *, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3245,6 +3296,40 @@ impl PyRenderConfig {
         self.assign("template_options", value)
     }
 
+    /// The options a native renderer can honour without Typst.
+    ///
+    /// Returns ``(template_options, layout)`` with plain template option values
+    /// and the ``impred-*`` options of a single layout pass, keyed by their
+    /// Typst names, or ``None`` when this configuration needs the Typst renderer
+    /// (templates, selectors, graph styles, drawing options or titles).
+    ///
+    /// Examples
+    /// --------
+    /// >>> import linnet as ln
+    /// >>> ln.RenderConfig(template_options={"momentum-arrows": True}).native_drawing_options()
+    /// ({'momentum-arrows': True}, {})
+    /// >>> ln.RenderConfig(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
+    #[gen_stub(override_return_type(
+        type_repr = "tuple[dict[str, typing.Any], dict[str, typing.Any]] | None",
+        imports = ("typing")
+    ))]
+    fn native_drawing_options(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
+        let Some(maps) = self.native_drawing_values() else {
+            return Ok(None);
+        };
+        let dicts = maps
+            .iter()
+            .map(|values| {
+                let dict = PyDict::new(py);
+                for (key, value) in values {
+                    dict.set_item(key, native_to_py(py, value)?)?;
+                }
+                Ok(dict)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(Some(PyTuple::new(py, dicts)?.unbind()))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "RenderConfig(template={:?}, source_root={:?}, fields={})",
@@ -3321,8 +3406,8 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyLayoutOptions:
-            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
     "# }
 }
 
@@ -3512,6 +3597,60 @@ impl PyRenderConfig {
         values.insert("version".to_owned(), NativeValue::Int(1));
         values.insert("elements".to_owned(), elements);
         NativeValue::Dict(values)
+    }
+
+    /// Plain template options and the `impred-*` options of one layout pass;
+    /// `None` when Typst must draw, as templates, selectors, graph styles,
+    /// drawing options and titles require.
+    fn native_drawing_values(&self) -> Option<[BTreeMap<String, NativeValue>; 2]> {
+        if matches!(self.template, PathSetting::Value(_))
+            || !(self.selectors.is_inherit() || self.selectors.is_none())
+        {
+            return None;
+        }
+        let plain = |value: &NativeValue| {
+            matches!(
+                value,
+                NativeValue::None
+                    | NativeValue::Auto
+                    | NativeValue::Bool(_)
+                    | NativeValue::Int(_)
+                    | NativeValue::Float(_)
+                    | NativeValue::String(_)
+            )
+        };
+        // Option groups list every field; unset ones inherit.
+        let set = |values: &BTreeMap<String, NativeValue>| -> BTreeMap<String, NativeValue> {
+            values
+                .iter()
+                .filter(|(_, value)| !matches!(value, NativeValue::Inherit))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect()
+        };
+        let [mut options, mut layout] = [BTreeMap::new(), BTreeMap::new()];
+        for (key, value) in &self.values {
+            match (key.as_str(), value) {
+                ("title", NativeValue::Auto)
+                | ("style" | "draw" | "options", NativeValue::None) => {}
+                ("style" | "draw", NativeValue::Dict(values)) if set(values).is_empty() => {}
+                ("options", NativeValue::Dict(values)) if set(values).values().all(plain) => {
+                    options = set(values);
+                }
+                ("layouts", NativeValue::Array(passes)) => match passes.as_slice() {
+                    [] => {}
+                    [NativeValue::Dict(values)]
+                        if set(values)
+                            .iter()
+                            .all(|(key, value)| key.starts_with("impred-") && plain(value)) =>
+                    {
+                        layout = set(values);
+                    }
+                    _ => return None,
+                },
+                _ => return None,
+            }
+        }
+        Some([options, layout])
     }
 }
 

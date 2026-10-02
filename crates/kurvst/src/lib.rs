@@ -1,6 +1,9 @@
 mod curve_api;
 
 pub use curve_api::{
+    CubicBezierSpec, CurvePathOutput, CurvePoint, FittedCoilInput, HobbySplineSpec,
+    ParallelPathSpec, PathFrame, PathFramesSpec, PathLengthSpec, PathTrimmer, PatternInput,
+    PatternPathOutput, PatternPathSpec, RegionPart, RegionSamplesSpec, TrimPathSpec,
     curve_fitted_coil_points_bytes, curve_hobby_spline_bytes, curve_hobby_through_bytes,
     curve_parallel_path_bytes, curve_path_frames_bytes, curve_path_intersections_bytes,
     curve_path_length_bytes, curve_pattern_cetz_bytes, curve_pattern_path_bytes,

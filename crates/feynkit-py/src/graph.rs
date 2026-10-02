@@ -3623,6 +3623,12 @@ impl PyFeynmanDiagram {
 
     /// Render an interactive, transparent SVG using the shared physics renderer.
     ///
+    /// Amplitudes are laid out and drawn natively, with Typst typesetting only
+    /// their labels. Templates, selectors, graph styles, drawing options,
+    /// titles and cross sections compile the complete Typst renderer instead.
+    /// ``LayoutOptions(impred_labels=True)`` refines the layout around the drawn
+    /// labels.
+    ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
@@ -3663,8 +3669,7 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let prepared = self.prepare_render(py, config, momenta, lmb, highlight)?;
-        render_diagram_svg(py, &prepared)
+        self.render_svg(py, config, momenta, lmb, highlight)
     }
 
     /// Render an HTML figure with the same options and hover information as ``render``.
@@ -4130,6 +4135,48 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 impl PyFeynmanDiagram {
+    /// Draw natively, or compile the shared Typst renderer when the
+    /// configuration needs it (templates, selectors, styles, cross sections).
+    fn render_svg(
+        &self,
+        py: Python<'_>,
+        config: Option<&Bound<'_, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let effective = self.render_config(py, config, momenta, lmb)?;
+        let region = self.render_region(py, highlight)?;
+        let isolated = region
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let selected = region.as_ref().map(|region| &region.hedges);
+        let scene = match crate::display::native_scene_options(&effective)? {
+            Some(options) => self
+                .inner
+                .to_scene(selected, &isolated, lmb.map(|basis| &basis.inner), &options)
+                .map_err(error::diagram)?,
+            None => None,
+        };
+        match scene {
+            Some(scene) => crate::display::render_scene(py, &scene),
+            None => {
+                let source = self
+                    .inner
+                    .to_linnest(
+                        selected,
+                        &isolated,
+                        lmb.map(|basis| &basis.inner),
+                        "_linnet_config",
+                    )
+                    .map_err(error::diagram)?;
+                let prepared =
+                    crate::display::prepare_physics_render(py, &source, Some(&effective))?;
+                render_diagram_svg(py, &prepared)
+            }
+        }
+    }
+
     fn prepare_render<'py>(
         &self,
         py: Python<'py>,
@@ -4138,6 +4185,43 @@ impl PyFeynmanDiagram {
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let effective = self.render_config(py, config, momenta, lmb)?;
+        let region = self.render_region(py, highlight)?;
+        let isolated = region
+            .as_ref()
+            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
+        let source = self
+            .inner
+            .to_linnest(
+                region.as_ref().map(|region| &region.hedges),
+                &isolated,
+                lmb.map(|basis| &basis.inner),
+                "_linnet_config",
+            )
+            .map_err(error::diagram)?;
+        crate::display::prepare_physics_render(py, &source, Some(&effective))
+    }
+
+    /// The highlighted region: the argument, or this subgraph's own region.
+    fn render_region(
+        &self,
+        py: Python<'_>,
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Option<DiagramSelection>> {
+        Ok(highlight
+            .map(|value| self.region_argument(py, value))
+            .transpose()?
+            .or_else(|| self.selected_region.clone()))
+    }
+
+    /// The render configuration: momentum display defaults, then `config`.
+    fn render_config<'py>(
+        &self,
+        py: Python<'py>,
+        config: Option<&Bound<'py, PyAny>>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         if let Some(basis) = lmb
             && !Arc::ptr_eq(&basis.owner, &self.owner)
         {
@@ -4145,23 +4229,6 @@ impl PyFeynmanDiagram {
                 "momentum basis belongs to a different diagram",
             ));
         }
-        let selected = highlight
-            .map(|value| self.region_argument(py, value))
-            .transpose()?
-            .or_else(|| self.selected_region.clone());
-        let isolated = selected
-            .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let selected = selected.as_ref().map(|region| &region.hedges);
-        let source = self
-            .inner
-            .to_linnest(
-                selected,
-                &isolated,
-                lmb.map(|basis| &basis.inner),
-                "_linnet_config",
-            )
-            .map_err(error::diagram)?;
         let linnet = py.import("linnet").map_err(|error| {
             if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
                 pyo3::exceptions::PyImportError::new_err(format!(
@@ -4182,7 +4249,7 @@ impl PyFeynmanDiagram {
         if let Some(config) = config {
             effective = effective.call_method1("overlay", (config,))?;
         }
-        crate::display::prepare_physics_render(py, &source, Some(&effective))
+        Ok(effective)
     }
 }
 

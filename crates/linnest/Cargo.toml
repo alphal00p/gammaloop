@@ -26,9 +26,14 @@ indexmap = { workspace = true, features = ["serde"] }
 rand = "0.8.5"
 thiserror = { workspace = true }
 wasm-minimal-protocol = "0.2.0"
+kurbo = { version = "0.13", optional = true }
+# Native SVG drawing shares Kurvst's curve geometry with the Typst renderer.
+kurvst = { path = "../kurvst", optional = true }
 
 [features]
 projection-service = []
+# Native SVG drawing of prepared graphs; Typst only typesets their labels.
+svg = ["dep:kurbo", "dep:kurvst"]
 custom = []
 typst-plugin = ["custom"]
 

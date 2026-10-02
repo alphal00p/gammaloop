@@ -1,10 +1,16 @@
-use feynkit_graph::FeynmanDiagram;
+use feynkit_graph::{FeynmanDiagram, SceneOptions};
 use feynkit_model::{Model, ParticleId};
+use linnest::svg::Scene;
+use linnet_py::PreparedRender;
 use pyo3::{
     prelude::*,
     types::{PyBytes, PyDict},
 };
-use std::{collections::BTreeSet, fmt::Write};
+use serde_json::Value;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write,
+};
 
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -21,8 +27,8 @@ pub(crate) fn escape_html(value: &str) -> String {
     escaped
 }
 
-/// Compile a diagram's Linnest source with typst-py and return its SVG page.
-pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) -> PyResult<String> {
+/// typst-py is required to compile diagrams and typeset their labels.
+fn require_typst(py: Python<'_>) -> PyResult<()> {
     py.import("typst").map_err(|error| {
         if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
             pyo3::exceptions::PyImportError::new_err(format!(
@@ -32,10 +38,76 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) ->
             error
         }
     })?;
-    let svg: String = prepared.call_method0("to_svg")?.extract()?;
-    // Use the website SVG palette from docs/assets/typst/theme.typ, including
-    // the 45% lightened sink strokes from the shared physics style. Keep SVG
-    // paint attributes as light-mode fallbacks for viewers without CSS support.
+    Ok(())
+}
+
+/// Compile a diagram's Linnest source with typst-py and return its SVG page.
+pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) -> PyResult<String> {
+    require_typst(py)?;
+    Ok(themed_svg(prepared.call_method0("to_svg")?.extract()?))
+}
+
+/// The physics options of a render configuration a native drawing honours,
+/// or `None` when the configuration needs the Typst renderer.
+pub(crate) fn native_scene_options(config: &Bound<'_, PyAny>) -> PyResult<Option<SceneOptions>> {
+    // The config comes from the separate `linnet` extension, so read it through Python.
+    let native = config.call_method0("native_drawing_options")?;
+    if native.is_none() {
+        return Ok(None);
+    }
+    let (options, layout): (Bound<'_, PyDict>, Bound<'_, PyDict>) = native.extract()?;
+    let auto = config.py().import("linnet")?.getattr("AUTO")?;
+    let mut scene = SceneOptions::default();
+    for (key, value) in options.iter() {
+        let flag = value.extract::<bool>().ok();
+        match (key.extract::<String>()?.as_str(), flag) {
+            ("momentum-arrows", Some(flag)) => scene.momentum_arrows = flag,
+            ("show-momentum", Some(flag)) => scene.show_momentum = Some(flag),
+            ("show-momentum", None) if value.is(&auto) => scene.show_momentum = None,
+            ("show-particle", Some(flag)) => scene.show_particle = flag,
+            ("show-particle", None) if value.is(&auto) => scene.show_particle = true,
+            ("show-edge-index", Some(flag)) => scene.show_edge_index = flag,
+            // Amplitudes have no initial states to open.
+            ("split-initial-state", _) => {}
+            _ => return Ok(None),
+        }
+    }
+    for (key, value) in layout.iter() {
+        let value = if let Ok(flag) = value.extract::<bool>() {
+            Value::from(flag)
+        } else if let Ok(integer) = value.extract::<i64>() {
+            Value::from(integer)
+        } else if let Ok(number) = value.extract::<f64>() {
+            Value::from(number)
+        } else {
+            return Ok(None);
+        };
+        match key.extract::<String>()? {
+            key if key == "impred-labels" => scene.label_feedback = value == Value::Bool(true),
+            key => {
+                scene.layout.insert(key, value);
+            }
+        }
+    }
+    Ok(Some(scene))
+}
+
+/// Typeset a scene's labels with typst-py, then lay out and draw it natively.
+pub(crate) fn render_scene(py: Python<'_>, scene: &Scene) -> PyResult<String> {
+    let runtime = |error: String| pyo3::exceptions::PyRuntimeError::new_err(error);
+    require_typst(py)?;
+    let mut sources = physics_sources();
+    sources.insert("main.typ".to_owned(), scene.label_document().into_bytes());
+    let pages = PreparedRender::from_sources(sources)?.svg_pages(py)?;
+    let typeset = scene.typeset(&pages).map_err(runtime)?;
+    let svg = scene.render(&typeset).map_err(runtime)?;
+    Ok(themed_svg(PreparedRender::interactive_svg(&svg)?))
+}
+
+/// Use the website SVG palette from docs/assets/typst/theme.typ, including
+/// the 45% lightened sink strokes from the shared physics style. Keep SVG
+/// paint attributes as light-mode fallbacks for viewers without CSS support.
+fn themed_svg(svg: String) -> String {
     let mut styles = String::from("<style>");
     let mut light = String::new();
     let mut dark = String::new();
@@ -66,9 +138,8 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) ->
 .feynkit-diagram-svg[data-theme="light"],:is(.light,[data-theme="light"],[data-jp-theme-light="true"]) .feynkit-diagram-svg{{{light}}}
 </style>"#
     ));
-    Ok(svg
-        .replacen("<svg ", "<svg class=\"feynkit-diagram-svg\" ", 1)
-        .replacen('>', &format!(">{styles}"), 1))
+    svg.replacen("<svg ", "<svg class=\"feynkit-diagram-svg\" ", 1)
+        .replacen('>', &format!(">{styles}"), 1)
 }
 
 pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String {
@@ -149,28 +220,9 @@ pub(crate) fn collection_html(
     Ok(html)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::escape_html;
-
-    #[test]
-    fn escapes_html_metadata() {
-        assert_eq!(
-            escape_html("<script data-x='a&b'>\"x\"</script>"),
-            "&lt;script data-x=&#39;a&amp;b&#39;&gt;&quot;x&quot;&lt;/script&gt;"
-        );
-    }
-}
-
-/// Package the shared physics renderer once for diagram and process displays.
-pub(crate) fn prepare_physics_render<'py>(
-    py: Python<'py>,
-    source: &str,
-    config: Option<&Bound<'_, PyAny>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let sources = PyDict::new(py);
-    sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
-    for (path, source) in [
+/// The shared physics renderer's sources, at the project paths importers use.
+fn physics_sources() -> BTreeMap<String, Vec<u8>> {
+    [
         (
             "assets/embedded/drawing/templates/layout-core.typ",
             include_bytes!("../../../assets/embedded/drawing/templates/layout-core.typ").as_slice(),
@@ -187,8 +239,22 @@ pub(crate) fn prepare_physics_render<'py>(
             )
             .as_slice(),
         ),
-    ] {
-        sources.set_item(path, PyBytes::new(py, source))?;
+    ]
+    .into_iter()
+    .map(|(path, source)| (path.to_owned(), source.to_vec()))
+    .collect()
+}
+
+/// Package the shared physics renderer once for diagram and process displays.
+pub(crate) fn prepare_physics_render<'py>(
+    py: Python<'py>,
+    source: &str,
+    config: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let sources = PyDict::new(py);
+    sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
+    for (path, source) in physics_sources() {
+        sources.set_item(path, PyBytes::new(py, &source))?;
     }
     let kwargs = PyDict::new(py);
     kwargs.set_item("config", config)?;
@@ -354,4 +420,17 @@ pub(crate) fn model_expression_html(
         .getattr("to_html")?
         .call1((expression,))?
         .extract()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_html;
+
+    #[test]
+    fn escapes_html_metadata() {
+        assert_eq!(
+            escape_html("<script data-x='a&b'>\"x\"</script>"),
+            "&lt;script data-x=&#39;a&amp;b&#39;&gt;&quot;x&quot;&lt;/script&gt;"
+        );
+    }
 }

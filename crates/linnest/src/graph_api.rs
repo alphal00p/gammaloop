@@ -10,7 +10,10 @@ use linnet::{
             ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
             InvolutiveMapping, Orientation,
         },
-        layout::spring::{Constraint, LayoutPointIndex, PointConstraint},
+        layout::{
+            impred::{ImpredConfig, ImpredLayout},
+            spring::{Constraint, LayoutPointIndex, PointConstraint},
+        },
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         swap::Swap,
@@ -589,19 +592,49 @@ pub fn graph_impred_layout_bytes(
 /// warm passes, for example around measured label boxes.
 pub struct ImpredRun {
     pub session: crate::impred_projection::ProjectionSession,
-    pub layout: linnet::half_edge::layout::impred::ImpredLayout,
-    pub config: linnet::half_edge::layout::impred::ImpredConfig,
+    pub layout: ImpredLayout,
+    pub config: ImpredConfig,
 }
 
 impl ImpredRun {
     /// Project the snapshot onto the EC seed and solve with the Typst options.
     pub fn start(snapshot: &[u8], seed: &[u8], options: &[u8]) -> Result<Self, String> {
-        use crate::impred_projection::ProjectionSession;
-        use linnet::half_edge::layout::impred::ImpredConfig;
-
         let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
-        let mut graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+        let graph = TypstGraph::from_layout_snapshot(&snapshot)?;
         let options: serde_json::Value = decode_cbor(options, "ImPrEd layout options")?;
+        let seed = serde_json::from_slice(seed)
+            .map_err(|error| format!("Invalid EC layout seed: {error}"))?;
+        Self::new(graph, seed, &options)
+    }
+
+    /// Seed the graph with its embedding-constrained drawing at the `impred-spacing`
+    /// scale, as the Typst layout does, then solve.
+    pub(crate) fn seeded(graph: TypstGraph, options: &serde_json::Value) -> Result<Self, String> {
+        let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
+        let request = crate::SeedRequest {
+            diagram: serde_json::from_value(diagram).map_err(|error| error.to_string())?,
+            scale: options
+                .get("impred-spacing")
+                .map_or(
+                    Some(ImpredConfig::default().target),
+                    serde_json::Value::as_f64,
+                )
+                .ok_or("ImPrEd spacing must be numeric")?,
+            external_sides: true,
+        };
+        let seed =
+            serde_json::to_value(request.initialize()?).map_err(|error| error.to_string())?;
+        Self::new(graph, seed, options)
+    }
+
+    /// Project the graph onto an EC seed and solve with `impred-*` options.
+    fn new(
+        mut graph: TypstGraph,
+        seed: serde_json::Value,
+        options: &serde_json::Value,
+    ) -> Result<Self, String> {
+        use crate::impred_projection::ProjectionSession;
+
         let mut settings =
             serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
         for (option, field) in [
@@ -637,8 +670,6 @@ impl ImpredRun {
             return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
         }
         graph.layout_config.spring.external_pull_attachment = attachment;
-        let seed = serde_json::from_slice(seed)
-            .map_err(|error| format!("Invalid EC layout seed: {error}"))?;
         let (session, _) =
             ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
         let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
@@ -660,7 +691,12 @@ impl ImpredRun {
             .layout
             .routes
             .iter()
-            .map(|route| route.iter().map(|&point| self.layout.positions[point]).collect())
+            .map(|route| {
+                route
+                    .iter()
+                    .map(|&point| self.layout.positions[point])
+                    .collect()
+            })
             .collect();
         #[derive(Serialize)]
         struct ResultGeometry {
@@ -701,40 +737,64 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let envelope: TypstGraphSpecEnvelope = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    let spec = envelope.into_graph()?;
-    // Builder half-edges follow source/sink input order. Reuse the same ID
-    // completion as DotGraph before attaching geometry to the reordered graph.
-    let endpoints = spec
-        .edges
-        .iter()
-        .flat_map(|edge| edge.source.iter().chain(edge.sink.iter()))
-        .collect::<Vec<_>>();
-    let mut ids: HedgeVec<Option<Hedge>> = endpoints
-        .iter()
-        .map(|endpoint| endpoint.id.map(Hedge))
-        .collect();
-    let used = ids.iter().filter_map(|(_, id)| *id).collect::<HashSet<_>>();
-    ids.fill_in(|id| used.contains(id));
-    let routes = endpoints
-        .iter()
-        .map(|endpoint| {
-            endpoint
-                .route_points
-                .iter()
-                .map(|point| {
-                    if !point.x.is_finite() || !point.y.is_finite() {
-                        return Err("route-points coordinates must be finite".to_string());
-                    }
-                    Ok(Point2::new(point.x, point.y))
-                })
-                .collect::<Result<Vec<_>, String>>()
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut graph = typst_graph_from_dot(graph_from_spec(spec)?);
-    for ((_, id), route) in ids.into_iter().zip(routes) {
-        graph.graph[id.expect("half-edge IDs completed")].route_points = route;
+    encode_typst_graph(&TypstGraph::from_spec(envelope.into_graph()?)?)
+}
+
+impl TypstGraph {
+    /// Build the graph a spec describes, as `graph.build` does in Typst.
+    pub(crate) fn from_spec(spec: TypstGraphSpec) -> Result<Self, String> {
+        // Builder half-edges follow source/sink input order. Reuse the same ID
+        // completion as DotGraph before attaching geometry to the reordered graph.
+        let endpoints = spec
+            .edges
+            .iter()
+            .flat_map(|edge| edge.source.iter().chain(edge.sink.iter()))
+            .collect::<Vec<_>>();
+        let mut ids: HedgeVec<Option<Hedge>> = endpoints
+            .iter()
+            .map(|endpoint| endpoint.id.map(Hedge))
+            .collect();
+        let used = ids.iter().filter_map(|(_, id)| *id).collect::<HashSet<_>>();
+        ids.fill_in(|id| used.contains(id));
+        let routes = endpoints
+            .iter()
+            .map(|endpoint| {
+                endpoint
+                    .route_points
+                    .iter()
+                    .map(|point| {
+                        if !point.x.is_finite() || !point.y.is_finite() {
+                            return Err("route-points coordinates must be finite".to_string());
+                        }
+                        Ok(Point2::new(point.x, point.y))
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut graph = typst_graph_from_dot(graph_from_spec(spec)?);
+        for ((_, id), route) in ids.into_iter().zip(routes) {
+            graph.graph[id.expect("half-edge IDs completed")].route_points = route;
+        }
+        Ok(graph)
     }
-    encode_typst_graph(&graph)
+
+    /// Node records in index order, as `graph.nodes` returns them.
+    pub(crate) fn node_records(&self) -> Result<Vec<TypstDotNode>, String> {
+        with_dot_view(self, |graph| {
+            Ok(graph.vertex_data().map(node_view_to_output).collect())
+        })
+    }
+
+    /// Edge records in index order, as `graph.edges` returns them.
+    pub(crate) fn edge_records(&self) -> Result<Vec<TypstDotEdge>, String> {
+        let edges = with_dot_view(self, |graph| {
+            Ok(graph
+                .edge_data()
+                .map(|edge| edge_view_to_output(graph, edge))
+                .collect::<Vec<_>>())
+        })?;
+        Ok(edges_with_route_points(self, edges))
+    }
 }
 
 pub fn encode_graph_spec_bytes(spec: &TypstGraphSpec) -> Result<Vec<u8>, String> {
@@ -1236,14 +1296,7 @@ pub fn graph_dot_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub fn graph_nodes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let nodes = with_dot_view(&graph, |graph| {
-        Ok(graph
-            .vertex_data()
-            .map(node_view_to_output)
-            .collect::<Vec<_>>())
-    })?;
-    encode_cbor(&nodes)
+    encode_cbor(&decode_typst_graph(arg)?.node_records()?)
 }
 
 pub fn graph_nodes_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -1259,14 +1312,7 @@ pub fn graph_nodes_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> 
 }
 
 pub fn graph_edges_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let edges = with_dot_view(&graph, |graph| {
-        Ok(graph
-            .edge_data()
-            .map(|edge| edge_view_to_output(graph, edge))
-            .collect::<Vec<_>>())
-    })?;
-    encode_cbor(&edges_with_route_points(&graph, edges))
+    encode_cbor(&decode_typst_graph(arg)?.edge_records()?)
 }
 
 pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {

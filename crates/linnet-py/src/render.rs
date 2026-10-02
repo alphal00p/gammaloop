@@ -787,30 +787,39 @@ impl PreparedRender {
 
     /// Compile the prepared project to a single SVG page.
     pub fn svg(&self, py: Python<'_>) -> PyResult<String> {
+        let pages = self.svg_pages(py)?;
+        let [svg] = pages.as_slice() else {
+            return Err(PyRuntimeError::new_err(format!(
+                "Typst SVG render produced {} pages; expected exactly one",
+                pages.len()
+            )));
+        };
+        Self::interactive_svg(svg)
+    }
+
+    /// Compile the prepared project to one SVG document per page.
+    pub fn svg_pages(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         let rendered = compile_typst(py, self, None, "svg")?;
-        let bytes = if let Ok(bytes) = rendered.cast::<PyBytes>() {
-            bytes.as_bytes().to_vec()
+        let pages = if let Ok(bytes) = rendered.cast::<PyBytes>() {
+            vec![bytes.as_bytes().to_vec()]
         } else if let Ok(pages) = rendered.cast::<PyList>() {
-            if pages.len() != 1 {
-                return Err(PyRuntimeError::new_err(format!(
-                    "Typst SVG render produced {} pages; expected exactly one",
-                    pages.len()
-                )));
-            }
             pages
-                .get_item(0)?
-                .cast_into::<PyBytes>()?
-                .as_bytes()
-                .to_vec()
+                .iter()
+                .map(|page| Ok(page.cast_into::<PyBytes>()?.as_bytes().to_vec()))
+                .collect::<PyResult<_>>()?
         } else {
             return Err(PyRuntimeError::new_err(
                 "typst.compile(format='svg') did not return SVG bytes",
             ));
         };
-        let svg = String::from_utf8(bytes).map_err(|error| {
-            PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
-        })?;
-        Self::interactive_svg(&svg)
+        pages
+            .into_iter()
+            .map(|bytes| {
+                String::from_utf8(bytes).map_err(|error| {
+                    PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
+                })
+            })
+            .collect()
     }
 }
 

@@ -5,6 +5,8 @@ pub mod geom;
 mod graph_api;
 pub mod impred_projection;
 mod label_placement;
+#[cfg(feature = "svg")]
+pub mod svg;
 pub use label_placement::{
     attachment_offset_bytes as label_attachment_offset_bytes,
     candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,

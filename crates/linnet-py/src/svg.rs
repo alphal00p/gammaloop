@@ -7,7 +7,7 @@ use crate::PreparedRender;
 
 impl PreparedRender {
     /// Decorate only the identity links emitted by Linnest, leaving its drawing intact.
-    pub(crate) fn interactive_svg(svg: &str) -> PyResult<String> {
+    pub fn interactive_svg(svg: &str) -> PyResult<String> {
         let document = roxmltree::Document::parse(svg)
             .map_err(|error| PyRuntimeError::new_err(format!("invalid Typst SVG: {error}")))?;
         let root = document.root_element();

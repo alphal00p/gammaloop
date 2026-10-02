@@ -14,6 +14,8 @@ mod finalization;
 mod integrals;
 mod power_counting;
 pub mod routing;
+#[cfg(feature = "svg")]
+mod scene;
 mod subgraph;
 pub mod symbols;
 pub mod thresholds;
@@ -23,6 +25,8 @@ pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
 pub use power_counting::DOD;
+#[cfg(feature = "svg")]
+pub use scene::SceneOptions;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
 // has been registered. Claim momentum, index and Lorentz heads during global state

@@ -19,8 +19,8 @@ pub use evaluation::{
     ModelExpression, RecomputeError,
 };
 pub use model::{
-    Coupling, CouplingId, LorentzStructure, LorentzStructureId, Model, ModelFingerprint,
-    ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order, OrderId, Parameter,
-    ParameterId, ParameterNature, ParameterType, Particle, ParticleId, Propagator, PropagatorId,
-    VertexRule, VertexRuleId,
+    Coupling, CouplingId, LineKind, LineStyle, LorentzStructure, LorentzStructureId, Model,
+    ModelFingerprint, ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order,
+    OrderId, Parameter, ParameterId, ParameterNature, ParameterType, Particle, ParticleId,
+    Propagator, PropagatorId, VertexRule, VertexRuleId,
 };

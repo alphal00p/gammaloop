@@ -3268,6 +3268,12 @@ class FeynmanDiagram:
         r"""
         Render an interactive, transparent SVG using the shared physics renderer.
 
+        Amplitudes are laid out and drawn natively, with Typst typesetting only
+        their labels. Templates, selectors, graph styles, drawing options,
+        titles and cross sections compile the complete Typst renderer instead.
+        ``LayoutOptions(impred_labels=True)`` refines the layout around the drawn
+        labels.
+
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:

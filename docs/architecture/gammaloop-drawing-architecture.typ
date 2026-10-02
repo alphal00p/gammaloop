@@ -60,6 +60,13 @@ rendering run has these steps:
 + `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. GammaLoop's selected
    template installs the particle and momentum callbacks from `edge-style.typ`. It draws edges and
    labels first, then nodes last so nodes sit on top of edges.
++ FeynKit's Python diagram displays draw natively. `FeynmanDiagram::to_scene` describes the drawing
+   `to_linnest` asks Typst for: the graph spec with external-leg pins, particle strokes, decorations
+   and flow arrows, label sources, and inspection details. `linnest::svg` lays it out with ImPrEd,
+   paints Kurvst geometry, and places labels with the same annotation search; `typst-py` only
+   typesets the label pages. Configurations that need Typst (templates, selectors, graph styles,
+   drawing options, titles) and cross sections, whose initial states open before layout, still
+   compile this Typst renderer.
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by

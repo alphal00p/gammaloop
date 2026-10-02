@@ -11,7 +11,7 @@ use linnet::half_edge::{
 };
 use symbolica::atom::AtomCore;
 
-fn typst_string(value: &str) -> String {
+pub(crate) fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
     output.push('"');
     for character in value.chars() {
@@ -33,6 +33,33 @@ fn typst_string(value: &str) -> String {
 }
 
 impl FeynmanDiagram {
+    /// The `particle-map` binding of the shared physics styles for this diagram's particles.
+    pub(crate) fn typst_particle_map(&self) -> String {
+        let mut output = String::from("#let particle-map = (\n");
+        let particles = self
+            .edges()
+            .map(|(_, _, edge)| edge.particle)
+            .collect::<BTreeSet<_>>();
+        if particles.is_empty() {
+            output.push(':');
+        }
+        for particle in particles {
+            let particle = self
+                .model()
+                .particle_by_id(particle)
+                .expect("validated particle ID");
+            writeln!(
+                output,
+                "  {}: {},",
+                typst_string(&particle.name),
+                particle.generate_edge_typst_dict(self.model())
+            )
+            .expect("writing to a string cannot fail");
+        }
+        output.push_str(")\n");
+        output
+    }
+
     /// Emit a complete Typst document that renders this diagram with Linnest.
     ///
     /// The document imports the canonical Linnest package tree at
@@ -86,31 +113,10 @@ impl FeynmanDiagram {
 #import graph: build, edge, node, sink, source
 #set text(fill: palette.ink)
 
-#let particle-map = (
 "##,
         );
-
-        let particles = self
-            .edges()
-            .map(|(_, _, edge)| edge.particle)
-            .collect::<BTreeSet<_>>();
-        if particles.is_empty() {
-            output.push(':');
-        }
-        for particle in particles {
-            let particle = self
-                .model()
-                .particle_by_id(particle)
-                .expect("validated particle ID");
-            writeln!(
-                output,
-                "  {}: {},",
-                typst_string(&particle.name),
-                particle.generate_edge_typst_dict(self.model())
-            )
-            .expect("writing to a string cannot fail");
-        }
-        output.push_str(")\n\n#context {\n  let raw = build({\n");
+        output.push_str(&self.typst_particle_map());
+        output.push_str("\n#context {\n  let raw = build({\n");
 
         for (id, vertex) in &internal_vertices {
             let dense_id = internal_ids[id];
@@ -294,7 +300,7 @@ impl FeynmanDiagram {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::{collections::BTreeSet, sync::Arc};
 
     use linnet::half_edge::{
@@ -329,7 +335,7 @@ mod tests {
         ).unwrap())
     }
 
-    fn one_loop() -> FeynmanDiagram {
+    pub(crate) fn one_loop() -> FeynmanDiagram {
         let model = display_model();
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
