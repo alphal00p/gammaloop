@@ -12,7 +12,9 @@ use crate::{
 
 use super::{
     involution::{Hedge, Involution},
-    subgraph::{Cycle, Inclusion, InternalSubGraph, ModifySubSet, SubSetLike, SubSetOps},
+    subgraph::{
+        cycle::SignedCycle, Cycle, Inclusion, InternalSubGraph, ModifySubSet, SubSetLike, SubSetOps,
+    },
     HedgeGraph, HedgeGraphError, NodeIndex, NodeStorageOps,
 };
 
@@ -246,6 +248,44 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
         Some(cycle)
     }
 
+    /// Orient a fundamental cycle along `cut` using only tree parent links.
+    /// The common part of the two paths to the root cancels. Tree edges,
+    /// dangling edges, and edges joining different components have no cycle.
+    pub fn get_signed_cycle<I: AsRef<Involution>>(
+        &self,
+        cut: Hedge,
+        inv: &I,
+    ) -> Option<SignedCycle> {
+        let inv = inv.as_ref();
+        let opposite = inv.inv(cut);
+        if self.tree_subgraph.includes(&cut) || opposite == cut {
+            return None;
+        }
+        let mut filter = SuBitGraph::empty(self.tree_subgraph.size());
+        filter.add(cut);
+        let mut source_root = self.node_id(cut);
+        let mut sink_root = self.node_id(opposite);
+        // Ancestors alternate between departing a child and arriving at its
+        // parent. The source path keeps arrivals; the sink path keeps departures.
+        for hedge in self.ancestor_iter_hedge(cut, inv).skip(2).step_by(2) {
+            source_root = self.node_id(hedge);
+            filter.add(hedge);
+        }
+        for hedge in self.ancestor_iter_hedge(opposite, inv).skip(1).step_by(2) {
+            let reverse = inv.inv(hedge);
+            sink_root = self.node_id(reverse);
+            if filter.includes(&reverse) {
+                filter.sub(reverse);
+            } else {
+                filter.add(hedge);
+            }
+        }
+        (source_root == sink_root).then_some(SignedCycle {
+            filter,
+            loop_count: Some(1),
+        })
+    }
+
     pub fn node_id(&self, hedge: Hedge) -> NodeIndex {
         NodeIndex::from(self.forest.root(hedge.into()))
     }
@@ -399,7 +439,6 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
     ) -> String
     where
         FR: FnMut(&TTRoot) -> String,
-
         P: ForestNodeStoreDown,
     {
         self.forest.debug_draw(format_root, |_| "".into())
@@ -840,6 +879,58 @@ pub mod tests {
     use crate::{dot, half_edge::involution::Orientation, parser::DotGraph};
 
     use super::*;
+
+    #[test]
+    fn signed_parent_paths_match_validated_cycles() {
+        use crate::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes = (0..6).map(|_| builder.add_node(())).collect::<Vec<_>>();
+        for (id, (source, target)) in [
+            (0, 1),
+            (1, 2),
+            (2, 0),
+            (1, 3),
+            (3, 4),
+            (4, 1),
+            (0, 1),
+            (2, 2),
+            (5, 5),
+            (2, 4),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            builder.add_edge(nodes[source], nodes[target], id, Orientation::Undirected);
+        }
+        builder.add_external_edge(nodes[0], 10, Orientation::Undirected, Flow::Source);
+        let graph: HedgeGraph<usize, ()> = builder.into();
+        let mut guide = graph.empty_subgraph::<SuBitGraph>();
+        for (pair, _, edge) in graph.iter_edges() {
+            if [0, 1, 3, 4].contains(edge.data) {
+                guide.add(pair);
+            }
+        }
+        for selected in [graph.full_filter(), guide] {
+            for root in &nodes {
+                let Ok(tree) =
+                    SimpleTraversalTree::depth_first_traverse(&graph, &selected, root, None)
+                else {
+                    continue;
+                };
+                for hedge in (0..graph.n_hedges()).map(Hedge) {
+                    let expected = tree
+                        .get_cycle(hedge, &graph)
+                        .and_then(|cycle| SignedCycle::from_cycle(&cycle, hedge, &graph));
+                    assert_eq!(
+                        tree.get_signed_cycle(hedge, &graph),
+                        expected,
+                        "root {root:?}, half-edge {hedge:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn double_pentagon_tree() {
