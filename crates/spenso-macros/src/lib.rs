@@ -466,3 +466,34 @@ pub fn derive_simple_representation(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+/// Call a lightweight usage recorder on entry to a function or impl method.
+/// Place this before `pymethods`/`pyfunction`. Class attributes run during module
+/// registration, so they deliberately do not count as user operations.
+#[proc_macro_attribute]
+pub fn track_usage(recorder: TokenStream, item: TokenStream) -> TokenStream {
+    let recorder = parse_macro_input!(recorder as syn::Path);
+    let mut item = parse_macro_input!(item as syn::Item);
+    let statement = syn::parse_quote!(#recorder(););
+    match &mut item {
+        syn::Item::Fn(function) => function.block.stmts.insert(0, statement),
+        syn::Item::Impl(implementation) => {
+            for item in &mut implementation.items {
+                if let syn::ImplItem::Fn(method) = item
+                    && !method
+                        .attrs
+                        .iter()
+                        .any(|attribute| attribute.path().is_ident("classattr"))
+                {
+                    method.block.stmts.insert(0, statement.clone());
+                }
+            }
+        }
+        _ => {
+            return syn::Error::new_spanned(item, "expected a function or impl block")
+                .to_compile_error()
+                .into();
+        }
+    }
+    quote!(#item).into()
+}

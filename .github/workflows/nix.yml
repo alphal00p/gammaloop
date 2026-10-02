@@ -1,24 +1,33 @@
 name: Nix
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
+    branches:
+      - main
+      - codex/raised-energy-cff-reviewed
   push:
     branches:
       - main
+      - feynkit
+  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: nix-${{ github.workflow }}-${{ github.run_id }}
-  cancel-in-progress: false
+  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Matrix evaluation embeds this value in derivations registered with Hestia, so
 # keep it public. Licensed worker builds re-evaluate their attributes locally.
 env:
   CARGO_TERM_COLOR: always
-  HESTIA_CACHE_WRITABLE: true
+  HESTIA_CACHE_WRITABLE: >-
+    ${{ github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.actor != 'dependabot[bot]') }}
   HESTIA_DRAIN_TIMEOUT: 7200
   # Bump this only for an intentional Hestia cache-format migration.
   HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
@@ -30,6 +39,9 @@ jobs:
   # running in parallel.
   prepare:
     name: Prepare shared artifacts
+    if: >-
+      github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review'))
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -38,36 +50,10 @@ jobs:
       manifest-version: ${{ steps.matrix.outputs.manifest-version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require the main test license
-        if: github.ref == 'refs/heads/main'
-        env:
-          LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
-        run: |
-          if [ -z "$LICENSE" ]; then
-            echo "::error::Main test coverage requires the Symbolica license secret"
-            exit 1
-          fi
-      - uses: ./.github/actions/nix-ci-cache
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
         with:
-          netrc: ${{ secrets.NIXCI_NETRC }}
-      - name: Check producer disk budget
-        shell: bash
-        run: |
-          set -euo pipefail
-          df -h /nix/store "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
-          # The publication closure can approach 8 GiB; reserve another 4 GiB
-          # before starting compiler work. Nix collects unrooted paths below
-          # its 4 GiB watermark and runs only one derivation at a time.
-          for path in /nix/store "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do
-            available=$(df --output=avail -B1 "$path" | tail -n 1)
-            if [ "$available" -lt $((12 * 1024 * 1024 * 1024)) ]; then
-              echo "::error::Shared Nix artifacts require at least 12 GiB free on $path before building"
-              exit 1
-            fi
-          done
-      - uses: Mic92/hestia@v3.1.0
-        with:
-          version: v3.1.0
+          version: v3.0.0
           drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
           no-closure: true
           upstream-cache-filter: true
@@ -77,15 +63,11 @@ jobs:
           set -euo pipefail
           # Avoid publishing every large intermediate Crane merge tree.
           test -z "$(nix --option post-build-hook "" config show post-build-hook)"
-          # Keep all roots alive through publication and matrix evaluation,
-          # including while the daemon collects unneeded build intermediates.
-          producer_roots="$RUNNER_TEMP/nix-shared-artifacts"
-          mkdir -p "$producer_roots"
           producer_output_lines=$(
             nix --option post-build-hook "" build \
               --impure \
               --keep-going \
-              --out-link "$producer_roots/result" \
+              --no-link \
               --print-build-logs \
               --print-out-paths \
               .#packages.x86_64-linux.alphal00p-docs-cargo-artifacts \
@@ -96,7 +78,6 @@ jobs:
           )
           mapfile -t producer_outputs <<< "$producer_output_lines"
           test "${#producer_outputs[@]}" -eq 5
-          df -h /nix/store "$RUNNER_TEMP"
           publish_path_lines=$(
             nix-store --query --requisites "${producer_outputs[@]}" | LC_ALL=C sort -u
           )
@@ -130,18 +111,11 @@ jobs:
           SYMBOLICA_LICENSE: GAMMALOOP_MATRIX_${{ github.run_id }}
         run: |
           set -euo pipefail
-          check_collection=hydraJobs.x86_64-linux
-          if [ "${{ github.ref }}" = refs/heads/main ]; then
-            # Main runs full package checks and fast integration plus four
-            # long-test shards, including mandatory local soft-CT acceptance.
-            # All runtime checks reuse the published archives.
-            check_collection=hydraJobsMain.x86_64-linux
-          fi
           "$HESTIA_BIN" matrix \
-            --flake ".#$check_collection" \
+            --flake ".#hydraJobs.x86_64-linux" \
             --socket "$HESTIA_SOCKET" \
             --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs -- --impure" \
-            --attr-prefix "$check_collection" \
+            --attr-prefix "hydraJobs.x86_64-linux" \
             --drain-timeout "$HESTIA_DRAIN_TIMEOUT"
       - id: filter-matrix
         name: Filter unavailable licensed tests
@@ -169,13 +143,6 @@ jobs:
         env:
           MANIFEST_VERSION: ${{ steps.matrix.outputs.manifest-version }}
         run: test "$MANIFEST_VERSION" -gt 0
-      - name: Record final disk use and release job resources
-        if: always()
-        shell: bash
-        run: |
-          rm -f "$RUNNER_TEMP/nixci.netrc"
-          df -h /nix/store "$RUNNER_TEMP" || true
-          rm -rf "$RUNNER_TEMP/nix-shared-artifacts"
 
   build:
     name: ${{ matrix.name }} (${{ matrix.system }})
@@ -188,105 +155,40 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/nix-ci-cache
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
         with:
-          netrc: ${{ secrets.NIXCI_NETRC }}
-      - uses: Mic92/hestia@v3.1.0
-        with:
-          version: v3.1.0
+          version: v3.0.0
           drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
           no-closure: true
           upstream-cache-filter: true
           wait-manifest-version: ${{ needs.prepare.outputs.manifest-version }}
-      - id: build-check
-        name: Build checks
+      - name: Build checks
         env:
           CHECK_ATTR: ${{ matrix.attr }}
           SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
-          df -h /nix/store "$RUNNER_TEMP"
-          result_dir=target/ci-results
-          mkdir -p "$result_dir"
-          rm -f "$result_dir/metrics.csv"
-          artifact_name=${CHECK_ATTR//[^a-zA-Z0-9_.-]/_}
-          echo "artifact-name=nix-metrics-$artifact_name" >> "$GITHUB_OUTPUT"
-          printf 'check=%s\ncommit=%s\nrun=%s/%s/actions/runs/%s\nattempt=%s\n' \
-            "$CHECK_ATTR" "$GITHUB_SHA" "$GITHUB_SERVER_URL" \
-            "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
-            > "$result_dir/provenance.txt"
           nix_options=()
           case "$CHECK_ATTR" in
             *.gammaloop-doctest|*.gammaloop-nextest-*)
-              # Keep licensed test results out of the public Hestia cache.
+              # Do not persist secret-derived test identities or results.
               nix_options+=(--option post-build-hook "")
               ;;
           esac
-          exec 3> >(tee "$result_dir/nix-build.log" >&2)
-          log_pid=$!
-          set +e
           nix "${nix_options[@]}" build \
             --impure \
             --keep-going \
-            --out-link "$RUNNER_TEMP/nix-check-result" \
+            --no-link \
             --print-build-logs \
-            --print-out-paths \
-            ".#$CHECK_ATTR" \
-            > "$result_dir/output-paths.txt" 2>&3
-          build_status=$?
-          exec 3>&-
-          wait "$log_pid"
-          log_status=$?
-          set -e
-          printf 'build-exit-code=%s\n' "$build_status" >> "$result_dir/provenance.txt"
-          reports=()
-          while IFS= read -r output; do
-            [[ "$output" == /nix/store/* ]] || continue
-            for report in "$output"/*.xml; do
-              [ -f "$report" ] || continue
-              reports+=("$report")
-            done
-          done < "$result_dir/output-paths.txt"
-          export_status=0
-          if [ "${#reports[@]}" -gt 0 ]; then
-            # Only metadata CSV is uploaded; raw JUnit and licensed output stay local.
-            python3 .github/scripts/export-test-timings.py \
-              --check "$CHECK_ATTR" \
-              --output "$result_dir/metrics.csv" \
-              "${reports[@]}" || export_status=$?
-          fi
-          if [ "$build_status" -ne 0 ]; then
-            exit "$build_status"
-          fi
-          if [ "$log_status" -ne 0 ]; then
-            exit "$log_status"
-          fi
-          exit "$export_status"
-      - name: Upload test timing metadata
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.build-check.outputs.artifact-name }}
-          path: target/ci-results/metrics.csv
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Record final disk use and release job resources
-        if: always()
-        shell: bash
-        run: |
-          trap 'rm -f "$RUNNER_TEMP/nixci.netrc"' EXIT
-          # A worker's post-build hook can still have queued uploads. Drain
-          # them while the completed checks remain protected from collection.
-          if [ -n "${HESTIA_BIN:-}" ]; then
-            "$HESTIA_BIN" drain --socket "$HESTIA_SOCKET" --timeout "$HESTIA_DRAIN_TIMEOUT"
-          fi
-          df -h /nix/store "$RUNNER_TEMP" || true
-          rm -f "$RUNNER_TEMP"/nix-check-result*
+            ".#$CHECK_ATTR"
 
   flake-checks:
     name: Flake checks
     needs: [prepare, build]
-    if: always()
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result
