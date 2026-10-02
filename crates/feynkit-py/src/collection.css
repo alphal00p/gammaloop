@@ -1,0 +1,20 @@
+.feynkit-collection { color:inherit; font:inherit; width:100%; min-width:0; }
+.feynkit-collection * { box-sizing:border-box; }
+.feynkit-collection header { display:flex; align-items:baseline; flex-wrap:wrap; gap:.65rem; padding:.6rem 0; }
+.feynkit-collection small { opacity:.65; font-size:.85em; }
+.feynkit-collection .fk-row { border-top:1px solid color-mix(in srgb,currentColor 15%,transparent); }
+.feynkit-collection summary { display:flex; align-items:center; gap:1rem; padding:.5rem; cursor:pointer; list-style:none; }
+.feynkit-collection summary::after { content:'Inspect ▸'; font-size:.8em; white-space:nowrap; opacity:.7; margin-left:auto; }
+.feynkit-collection details[open] > summary::after { content:'Close ▾'; }
+.feynkit-collection .fk-thumbnail { width:110px; height:72px; object-fit:contain; flex-shrink:0; }
+.feynkit-collection .fk-term { min-width:0; overflow-x:auto; flex:1; --spenso-math-font-size:18px; }
+.feynkit-collection .fk-term [data-spenso-math] { padding:.5rem .3rem; overflow:visible; }
+.feynkit-collection .fk-strip { display:flex; overflow-x:auto; gap:.5rem; padding:.25rem 0 .75rem; }
+.feynkit-collection button { color:inherit; font:inherit; cursor:pointer; background:color-mix(in srgb,currentColor 4%,transparent); border:1px solid color-mix(in srgb,currentColor 15%,transparent); border-radius:8px; padding:.35rem .55rem; }
+.feynkit-collection button[aria-pressed=true] { outline:2px solid #629ad0; outline-offset:-2px; }
+.feynkit-collection button .fk-thumbnail { display:block; }
+.feynkit-collection :is(button,summary):focus-visible { outline:2px solid #629ad0; outline-offset:2px; }
+.feynkit-collection .fk-stage { min-width:0; width:100%; }
+.feynkit-collection .fk-stage:empty { display:none; }
+.feynkit-collection .fk-caption { font-size:.85em; opacity:.7; padding:.4rem 0; }
+@media(max-width:480px) { .feynkit-collection summary { gap:.5rem; flex-wrap:wrap; } .feynkit-collection .fk-thumbnail { width:80px; height:60px; } .feynkit-collection .fk-term { flex-basis:calc(100% - 100px); } }
