@@ -6845,7 +6845,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6874,7 +6877,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6903,7 +6909,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6932,7 +6941,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -8890,13 +8902,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> source = network.to_dot()
         """
-    def to_linnest(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
         r"""
         Generate Typst/Linnest source for the network graph.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict or linnet.RenderConfig, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -8921,13 +8933,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_linnest()
         """
-    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
         r"""
         Render the current network graph to SVG.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict or linnet.RenderConfig, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -9064,13 +9076,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
         r"""
         Display the current network graph and execution status.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict or linnet.RenderConfig, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns

@@ -483,12 +483,8 @@ generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
-try:
-    generation_html = generated._repr_html_()
-except ImportError as error:
-    assert "typst-py" in str(error)
-else:
-    assert "Generation result" in generation_html
+generation_html = generated._repr_html_()
+assert "Generation result" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
 
@@ -506,17 +502,11 @@ assert denominator.rank == 0
 assert "ZERO" not in str(denominator)
 assert denominator != 1
 integrand = loop_diagram.numerator_expression() / denominator
-try:
-    diagram_svg = loop_diagram.render()
-except ImportError as error:
-    # The minimal Rust test environment does not install optional Python
-    # rendering dependencies; the community-venv tests exercise the SVG path.
-    assert "typst-py" in str(error)
-else:
-    assert diagram_svg.startswith("<svg")
-    assert loop_diagram.to_html() == loop_diagram._repr_html_()
-    assert "<svg" in loop_diagram._repr_svg_()
-    assert "Feynman diagram" in loop_diagram._repr_html_()
+diagram_svg = loop_diagram.render()
+assert diagram_svg.startswith("<svg")
+assert loop_diagram.to_html() == loop_diagram._repr_html_()
+assert "<svg" in loop_diagram._repr_svg_()
+assert "Feynman diagram" in loop_diagram._repr_html_()
 
 json_diagram = fk.FeynmanDiagram.from_json(model, loop_diagram.to_json())
 dot_diagram = fk.FeynmanDiagram.from_dot(model, loop_diagram.to_dot())

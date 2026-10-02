@@ -775,7 +775,7 @@ fn dictionary_source(
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet", skip_from_py_object, frozen, name = "Auto")]
 #[derive(Clone, Copy, Debug)]
-struct PyAuto;
+pub struct PyAuto;
 
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("linnet", "AUTO", PyAuto);
@@ -3043,7 +3043,7 @@ impl PyDrawOptions {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 enum PathSetting {
     #[default]
     Inherit,
@@ -3092,7 +3092,7 @@ fn deep_overlay(
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet", skip_from_py_object, name = "RenderConfig")]
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PyRenderConfig {
+pub struct PyRenderConfig {
     template: PathSetting,
     source_root: PathSetting,
     values: BTreeMap<String, NativeValue>,
@@ -3103,13 +3103,34 @@ pub(crate) struct PyRenderConfig {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRenderConfig {
+    /// A value snapshot crosses extension-module boundaries without sharing
+    /// PyO3 type identities. Authored renderers cannot evaluate graph selectors.
+    #[gen_stub(skip)]
+    fn _authored_snapshot(&self) -> PyResult<String> {
+        if [
+            &self.selectors.node,
+            &self.selectors.edge,
+            &self.selectors.source,
+            &self.selectors.sink,
+        ]
+        .into_iter()
+        .any(|setting| matches!(setting, SelectorSetting::Value(_)))
+        {
+            return Err(PyValueError::new_err(
+                "authored rendering does not accept graph selectors",
+            ));
+        }
+        serde_json::to_string(&(&self.template, &self.source_root, &self.values))
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
     #[new]
     #[pyo3(
         signature = (**kwargs),
         text_signature = "(*, template=..., source_root=..., title=..., style=..., layouts=..., drawing=..., selectors=..., template_options=...)"
     )]
     #[gen_stub(skip)]
-    fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut config = Self::default();
         let Some(kwargs) = kwargs else {
             return Ok(config);
@@ -3430,6 +3451,31 @@ pyo3_stub_gen::inventory::submit! {
 }
 
 impl PyRenderConfig {
+    /// Snapshot optional standalone configuration without importing its module.
+    pub fn from_authored_config(config: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(options) = config.cast::<PyDict>() {
+            return Self::new(Some(options));
+        }
+        let snapshot = config
+            .call_method0("_authored_snapshot")?
+            .extract::<String>()?;
+        let (template, source_root, values): (
+            PathSetting,
+            PathSetting,
+            BTreeMap<String, NativeValue>,
+        ) = serde_json::from_str(&snapshot)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        for value in values.values() {
+            value.validate(0)?;
+        }
+        Ok(Self {
+            template,
+            source_root,
+            values,
+            selectors: SelectorSettings::default(),
+        })
+    }
+
     fn assign(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         match key {
             "template" => {
@@ -3474,6 +3520,11 @@ impl PyRenderConfig {
                     self.values.remove("style");
                 } else if value.is_none() {
                     self.values.insert("style".to_owned(), NativeValue::None);
+                } else if let Ok(options) = value.cast::<PyDict>() {
+                    self.values.insert(
+                        "style".to_owned(),
+                        NativeValue::Dict(PyGraphStyleOptions::new(Some(options))?.values),
+                    );
                 } else {
                     let options =
                         value
@@ -3494,6 +3545,11 @@ impl PyRenderConfig {
                     self.values.remove("layouts");
                 } else if value.is_none() {
                     self.values.insert("layouts".to_owned(), NativeValue::None);
+                } else if let Ok(options) = value.cast::<PyDict>() {
+                    self.values.insert(
+                        "layouts".to_owned(),
+                        PyLayoutOptions::new(Some(options))?.native(),
+                    );
                 } else {
                     let options = value.extract::<PyRef<'_, PyLayoutOptions>>().map_err(|_| {
                         PyTypeError::new_err("layouts must be LayoutOptions, None, or INHERIT")
@@ -3506,6 +3562,11 @@ impl PyRenderConfig {
                     self.values.remove("draw");
                 } else if value.is_none() {
                     self.values.insert("draw".to_owned(), NativeValue::None);
+                } else if let Ok(options) = value.cast::<PyDict>() {
+                    self.values.insert(
+                        "draw".to_owned(),
+                        NativeValue::Dict(PyDrawOptions::new(Some(options))?.values),
+                    );
                 } else {
                     let options = value.extract::<PyRef<'_, PyDrawOptions>>().map_err(|_| {
                         PyTypeError::new_err("drawing must be DrawOptions, None, or INHERIT")
@@ -3579,7 +3640,7 @@ impl PyRenderConfig {
             .map_or_else(|| Ok(inherit(py)), |value| native_to_py(py, value))
     }
 
-    fn merged(&self, overlay: &Self) -> Self {
+    pub fn merged(&self, overlay: &Self) -> Self {
         Self {
             template: self.template.overlay(&overlay.template),
             source_root: self.source_root.overlay(&overlay.source_root),

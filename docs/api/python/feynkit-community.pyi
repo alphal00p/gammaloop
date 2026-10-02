@@ -3238,7 +3238,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Emit the exact Typst source used by ``render`` without compiling it.
 
@@ -3255,7 +3255,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or linnet.RenderConfig or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -3264,7 +3264,7 @@ class FeynmanDiagram:
         highlight : Subgraph or linnet.Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an interactive, transparent SVG using the shared physics renderer.
 
@@ -3278,16 +3278,15 @@ class FeynmanDiagram:
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> import linnet as ln
-        >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
-        ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
-        ...     template_options={"show-particle": False},
-        ... ))
+        >>> svg = diagram.render(momenta=True, config={
+        ...     "layouts": {"external_label_length_scale": 0.7},
+        ...     "template_options": {"show-particle": False},
+        ... })
         >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or linnet.RenderConfig or None, optional
             Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
             use ``template_options`` with the same names as ``just draw --input``:
             ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
@@ -3304,7 +3303,7 @@ class FeynmanDiagram:
             Highlight a region while preserving the full diagram as muted context.
             A Subgraph highlights its own region by default.
         """
-    def to_html(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an HTML figure with the same options and hover information as ``render``.
 
@@ -3317,7 +3316,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or linnet.RenderConfig or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -8075,7 +8074,7 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
         r"""
         Render a blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
@@ -8088,7 +8087,7 @@ class Process:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or linnet.RenderConfig or None, optional
             Particle-label, layout and drawing overrides shared with Feynman diagrams.
         """
     def _repr_svg_(self) -> builtins.str:

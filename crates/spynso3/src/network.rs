@@ -1460,7 +1460,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict or linnet.RenderConfig, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1488,7 +1488,7 @@ impl SpensoNet {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         self.prepare_render(py, config)?
@@ -1500,7 +1500,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict or linnet.RenderConfig, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1528,7 +1528,7 @@ impl SpensoNet {
     fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let svg: String = self
@@ -1688,7 +1688,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict or linnet.RenderConfig, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1716,7 +1716,7 @@ impl SpensoNet {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         Ok(display::network::html(

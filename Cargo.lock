@@ -2340,9 +2340,12 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
+ "approx 0.5.1",
  "arrayvec",
  "bincode 2.0.1",
  "bitflags 2.11.1",
+ "bytemuck",
  "chrono",
  "clap",
  "clap_builder",
@@ -2350,18 +2353,24 @@ dependencies = [
  "criterion",
  "crossterm 0.28.1",
  "either",
+ "fastrand",
+ "hashbrown 0.17.1",
  "indenter",
  "indexmap",
  "libc",
  "log",
  "matrixmultiply",
  "memchr",
+ "miniz_oxide 0.8.9",
  "num-bigint",
  "num-complex",
  "num-integer",
  "num-traits",
  "numerica",
+ "phf_shared 0.13.1",
  "rand 0.8.6",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
  "regex",
  "regex-automata",
  "regex-syntax",
@@ -2371,19 +2380,31 @@ dependencies = [
  "serde_core",
  "serde_json",
  "serde_spanned 1.1.1",
+ "simd-adler32",
+ "slab",
+ "slotmap",
  "smallvec",
  "smartstring",
+ "stable_deref_trait",
+ "strum 0.27.2",
  "symbolica",
  "syn 2.0.117",
+ "syn 3.0.4",
  "time",
+ "tinystr",
+ "toml 0.8.23",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "toml_writer",
  "tracing",
  "tracing-subscriber",
+ "unic-langid-impl",
  "winnow 0.7.15",
  "winnow 1.0.2",
+ "yoke",
  "zerocopy",
+ "zerofrom",
+ "zerovec",
 ]
 
 [[package]]
@@ -3772,6 +3793,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "typst-renderer",
  "walkdir",
 ]
 
@@ -6343,6 +6365,7 @@ dependencies = [
  "idenso",
  "itertools 0.14.0",
  "linnet",
+ "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -7697,6 +7720,21 @@ dependencies = [
  "typst-macros",
  "typst-timing",
  "typst-utils",
+]
+
+[[package]]
+name = "typst-renderer"
+version = "0.1.0"
+dependencies = [
+ "comemo",
+ "tempfile",
+ "typst",
+ "typst-html",
+ "typst-kit",
+ "typst-layout",
+ "typst-pdf",
+ "typst-render",
+ "typst-svg",
 ]
 
 [[package]]

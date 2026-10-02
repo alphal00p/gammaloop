@@ -179,7 +179,8 @@
     "linnet-py": [
       "kurvst",
       "linnest",
-      "linnet"
+      "linnet",
+      "typst-renderer"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
@@ -196,6 +197,7 @@
     "spynso3": [
       "idenso",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
@@ -204,6 +206,7 @@
     "three-dimensional-reps": [
       "linnet"
     ],
+    "typst-renderer": [],
     "vakint": [
       "feynkit-tensor",
       "spenso",
@@ -497,7 +500,8 @@
       "linnet": [
         "nodestore-vec",
         "serde"
-      ]
+      ],
+      "typst-renderer": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -520,6 +524,7 @@
     "spynso3": {
       "idenso": [],
       "linnet": [],
+      "linnet-py": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -536,6 +541,7 @@
         "symbolica"
       ]
     },
+    "typst-renderer": {},
     "vakint": {
       "feynkit-tensor": [],
       "spenso": [],
@@ -577,6 +583,7 @@
     "spynso3": "crates/spynso3",
     "symbolica-utils": "crates/symbolica-utils",
     "three-dimensional-reps": "crates/three-dimensional-reps",
+    "typst-renderer": "crates/typst-renderer",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -614,6 +621,7 @@
     "spynso3",
     "symbolica-utils",
     "three-dimensional-reps",
+    "typst-renderer",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -744,7 +752,8 @@
       "spenso-macros",
       "spynso3",
       "symbolica-utils",
-      "three-dimensional-reps"
+      "three-dimensional-reps",
+      "typst-renderer"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -852,7 +861,8 @@
     "linnet-py": [
       "kurvst",
       "linnest",
-      "linnet"
+      "linnet",
+      "typst-renderer"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
@@ -872,17 +882,22 @@
     "spynso3": [
       "gammaloop-workspace-hack",
       "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "typst-renderer"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
     ],
+    "typst-renderer": [],
     "vakint": [
       "feynkit-graph",
       "feynkit-kinematics",
@@ -1026,7 +1041,8 @@
       "spenso-macros",
       "spynso3",
       "symbolica-utils",
-      "three-dimensional-reps"
+      "three-dimensional-reps",
+      "typst-renderer"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -1134,7 +1150,8 @@
     "linnet-py": [
       "kurvst",
       "linnest",
-      "linnet"
+      "linnet",
+      "typst-renderer"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
@@ -1154,17 +1171,22 @@
     "spynso3": [
       "gammaloop-workspace-hack",
       "idenso",
+      "kurvst",
+      "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-utils"
+      "symbolica-utils",
+      "typst-renderer"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
     ],
+    "typst-renderer": [],
     "vakint": [
       "feynkit-graph",
       "feynkit-kinematics",
@@ -1415,7 +1437,8 @@
     "linnet-py": [
       "kurvst",
       "linnest",
-      "linnet"
+      "linnet",
+      "typst-renderer"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
@@ -1432,6 +1455,7 @@
     "spynso3": [
       "idenso",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
@@ -1440,6 +1464,7 @@
     "three-dimensional-reps": [
       "linnet"
     ],
+    "typst-renderer": [],
     "vakint": [
       "feynkit-tensor",
       "spenso",
@@ -1742,7 +1767,8 @@
       "linnet": [
         "nodestore-vec",
         "serde"
-      ]
+      ],
+      "typst-renderer": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -1767,6 +1793,7 @@
     "spynso3": {
       "idenso": [],
       "linnet": [],
+      "linnet-py": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -1783,6 +1810,7 @@
         "symbolica"
       ]
     },
+    "typst-renderer": {},
     "vakint": {
       "feynkit-tensor": [],
       "spenso": [],
