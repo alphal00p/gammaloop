@@ -24,6 +24,9 @@ pub(crate) enum Counter {
     ParseStructureAttempt,
     ParseStructureOk,
     ParseStructureErr,
+    ParseStructureCacheHit,
+    ParseStructureCacheMiss,
+    ParseStructureVisit,
     NetworkNMul,
     NetworkNAdd,
     GraphNMul,
@@ -64,6 +67,9 @@ impl Counter {
             Counter::ParseStructureAttempt => "parse.structure.attempt",
             Counter::ParseStructureOk => "parse.structure.ok",
             Counter::ParseStructureErr => "parse.structure.err",
+            Counter::ParseStructureCacheHit => "parse.structure.cache_hit",
+            Counter::ParseStructureCacheMiss => "parse.structure.cache_miss",
+            Counter::ParseStructureVisit => "parse.structure.visit",
             Counter::NetworkNMul => "network.n_mul",
             Counter::NetworkNAdd => "network.n_add",
             Counter::GraphNMul => "graph.n_mul",
@@ -97,6 +103,7 @@ pub(crate) enum Timer {
     ParsePow,
     ParseFun,
     ParseStructure,
+    ParseStructureUncached,
     ScalarMulAccum,
     ScalarAddAccum,
     NetworkNMul,
@@ -150,6 +157,7 @@ impl Timer {
             Timer::ParsePow => "parse.pow",
             Timer::ParseFun => "parse.fun",
             Timer::ParseStructure => "parse.structure",
+            Timer::ParseStructureUncached => "parse.structure.uncached",
             Timer::ScalarMulAccum => "parse.scalar_mul_accum",
             Timer::ScalarAddAccum => "parse.scalar_add_accum",
             Timer::NetworkNMul => "network.n_mul",
@@ -367,6 +375,9 @@ fn timer_label(idx: usize) -> &'static str {
         idx if idx == Timer::ParsePow as usize => Timer::ParsePow.label(),
         idx if idx == Timer::ParseFun as usize => Timer::ParseFun.label(),
         idx if idx == Timer::ParseStructure as usize => Timer::ParseStructure.label(),
+        idx if idx == Timer::ParseStructureUncached as usize => {
+            Timer::ParseStructureUncached.label()
+        }
         idx if idx == Timer::ScalarMulAccum as usize => Timer::ScalarMulAccum.label(),
         idx if idx == Timer::ScalarAddAccum as usize => Timer::ScalarAddAccum.label(),
         idx if idx == Timer::NetworkNMul as usize => Timer::NetworkNMul.label(),
@@ -430,6 +441,13 @@ fn counter_label(idx: usize) -> &'static str {
         }
         idx if idx == Counter::ParseStructureOk as usize => Counter::ParseStructureOk.label(),
         idx if idx == Counter::ParseStructureErr as usize => Counter::ParseStructureErr.label(),
+        idx if idx == Counter::ParseStructureCacheHit as usize => {
+            Counter::ParseStructureCacheHit.label()
+        }
+        idx if idx == Counter::ParseStructureCacheMiss as usize => {
+            Counter::ParseStructureCacheMiss.label()
+        }
+        idx if idx == Counter::ParseStructureVisit as usize => Counter::ParseStructureVisit.label(),
         idx if idx == Counter::NetworkNMul as usize => Counter::NetworkNMul.label(),
         idx if idx == Counter::NetworkNAdd as usize => Counter::NetworkNAdd.label(),
         idx if idx == Counter::GraphNMul as usize => Counter::GraphNMul.label(),

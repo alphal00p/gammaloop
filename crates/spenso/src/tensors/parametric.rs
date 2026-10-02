@@ -61,8 +61,8 @@ use symbolica_utils::{IntoArgs, IntoSymbol};
 
 #[cfg(feature = "native-code-generation")]
 use symbolica::evaluate::{
-    CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, ExportNumber,
-    ExportSettings, ExportedCode,
+    CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, CompiledRealEvaluator,
+    ExportNumber, ExportSettings, ExportedCode,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
@@ -82,7 +82,7 @@ use symbolica::{
 };
 
 #[cfg(feature = "native-code-generation")]
-use symbolica::domains::float::{FloatLike, SingleFloat};
+use symbolica::domains::float::SingleFloat;
 
 #[cfg(feature = "shadowing")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
@@ -2591,7 +2591,9 @@ impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -2719,7 +2721,9 @@ impl<S: Clone, T> EvalTreeTensor<T, S> {
         T: Real,
         S: TensorStructure,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
         if let Some(ref indexmap) = self.indexmap {
             let mut elements = vec![zero.clone(); indexmap.len()];
             self.eval.evaluate(params, &mut elements);
@@ -2745,6 +2749,26 @@ pub struct EvalTensor<T, S> {
 }
 
 impl<T, S: TensorStructure + Clone> EvalTensor<T, S> {
+    fn evaluate_components<U: Clone>(
+        &mut self,
+        zero: U,
+        evaluate: impl FnOnce(&mut T, &mut [U]),
+    ) -> DataTensor<U, S> {
+        if let Some(indexmap) = &self.indexmap {
+            let mut elements = vec![zero.clone(); indexmap.len()];
+            evaluate(&mut self.eval, &mut elements);
+            DataTensor::Sparse(SparseTensor {
+                zero,
+                elements: indexmap.iter().copied().zip(elements).collect(),
+                structure: self.structure.clone(),
+            })
+        } else {
+            let mut tensor = DenseTensor::repeat(self.structure.clone(), zero);
+            evaluate(&mut self.eval, &mut tensor.data);
+            DataTensor::Dense(tensor)
+        }
+    }
+
     pub fn usize_tensor(&self, shift: usize) -> DataTensor<usize, S> {
         if let Some(ref indexmap) = self.indexmap {
             let mut sparse_tensor = SparseTensor::empty(self.structure.clone(), 0);
@@ -2995,21 +3019,10 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements = vec![zero.clone(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: zero.clone(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), zero.clone());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
+        self.evaluate_components(zero, |eval, out| eval.evaluate(params, out))
     }
 }
 
@@ -3088,7 +3101,9 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -3143,48 +3158,25 @@ impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<CompiledCode<F>, S> {
 pub type CompiledEvalTensor<S> = EvalTensor<CompiledComplexEvaluatorSpenso, S>;
 
 #[cfg(feature = "native-code-generation")]
-impl<S> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
-    pub fn evaluate(&mut self, params: &[Complex<f64>]) -> DataTensor<Complex<f64>, S>
-    where
-        S: TensorStructure + Clone,
-    {
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements: Vec<Complex<f64>> = vec![Complex::default(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: Complex::new_zero(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), Complex::default());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+impl<S: TensorStructure + Clone> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
+    pub fn evaluate(&mut self, params: &[Complex<f64>]) -> DataTensor<Complex<f64>, S> {
+        self.evaluate_components(Complex::default(), |eval, out| eval.evaluate(params, out))
     }
 }
 
 #[cfg(feature = "native-code-generation")]
-impl<S> EvalTensor<CompiledComplexEvaluator, S> {
-    pub fn evaluate(&mut self, params: &[SymComplex<f64>]) -> DataTensor<SymComplex<f64>, S>
-    where
-        S: TensorStructure + Clone,
-    {
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements: Vec<SymComplex<f64>> = vec![SymComplex::default(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: SymComplex::new_zero(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), SymComplex::default());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+impl<S: TensorStructure + Clone> EvalTensor<CompiledComplexEvaluator, S> {
+    pub fn evaluate(&mut self, params: &[SymComplex<f64>]) -> DataTensor<SymComplex<f64>, S> {
+        self.evaluate_components(SymComplex::default(), |eval, out| {
+            eval.evaluate(params, out)
+        })
+    }
+}
+
+#[cfg(feature = "native-code-generation")]
+impl<S: TensorStructure + Clone> EvalTensor<CompiledRealEvaluator, S> {
+    pub fn evaluate(&mut self, params: &[f64]) -> DataTensor<f64, S> {
+        self.evaluate_components(0.0, |eval, out| eval.evaluate(params, out))
     }
 }
 
@@ -3197,7 +3189,7 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     where
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = Complex::new_zero();
 
         let mut elements = vec![zero; self.size];
         self.eval.evaluate(params, &mut elements);

@@ -1,3 +1,6 @@
+mod tape;
+pub use tape::{TermLeaf, TermTape};
+
 use std::collections::BTreeMap;
 
 use crate::{
@@ -7,7 +10,7 @@ use crate::{
         tags::SPENSO_TAG,
     },
     shadowing::static_symbols::W_,
-    structure::representation::LibraryRep,
+    structure::{representation::LibraryRep, slot::SlotMatcher},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
@@ -37,7 +40,8 @@ pub enum TensorCollectFilter<const N: usize> {
 }
 
 pub trait Collectable {
-    fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
+    /// Collect selected leaves while retaining opaque coefficients as alias definitions.
+    fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> AliasedAtom;
     fn expand_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
     fn collect_collects(self) -> Atom;
     fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(self, map: F) -> Atom;
@@ -45,7 +49,7 @@ pub trait Collectable {
     fn unwrap_collect(self) -> Atom;
 }
 impl Collectable for Atom {
-    fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom {
+    fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> AliasedAtom {
         self.as_view().collect_with_map(map)
     }
 
@@ -128,7 +132,7 @@ impl Collectable for AtomView<'_> {
         }
         wrapped.expand_in(*COLLECT)
     }
-    fn collect_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> Atom {
+    fn collect_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> AliasedAtom {
         let mut hit = false;
         let wrapped = self.replace_map(|arg, _context, out| {
             if matches(arg) {
@@ -138,7 +142,7 @@ impl Collectable for AtomView<'_> {
         });
 
         if !hit {
-            return self.to_owned();
+            return self.to_owned().into();
         }
         // Keep complete unselected coefficients opaque. Symbolica's polynomial
         // collector otherwise statistically tests their growing sums for zero,
@@ -171,28 +175,25 @@ impl Collectable for AtomView<'_> {
         for (original, alias) in aliases {
             protected.register_alias(alias, original);
         }
-        // Resolve through the existing alias owner before exposing any tensor
-        // group to map_collects callbacks. Identical coefficients can still
-        // cancel after restoration; opaque polynomial coefficients stay intact.
-        protected
-            .map_root(|root| {
-                let AtomView::Mul(product) = root.as_view() else {
-                    return root.collect_symbol::<i16>(*COLLECT).collect_collects();
-                };
-                // Keep a shared coefficient outside the tensor sum. Collect the
-                // entire remaining product so callbacks still see every factor
-                // of a contraction, including tensors multiplying a sum.
-                let (tensors, coefficients): (Vec<_>, Vec<_>) = product
-                    .iter()
-                    .partition(|factor| factor.contains_symbol(*COLLECT));
-                tensors
-                    .into_iter()
-                    .product::<Atom>()
-                    .collect_symbol::<i16>(*COLLECT)
-                    .collect_collects()
-                    * coefficients.into_iter().product::<Atom>()
-            })
-            .into_inner()
+        // Keep coefficient definitions on the existing alias owner. Callers
+        // resolve explicitly before callbacks that require complete terms.
+        protected.map_root(|root| {
+            let AtomView::Mul(product) = root.as_view() else {
+                return root.collect_symbol::<i16>(*COLLECT).collect_collects();
+            };
+            // Keep a shared coefficient outside the tensor sum. Collect the
+            // entire remaining product so callbacks still see every factor
+            // of a contraction, including tensors multiplying a sum.
+            let (tensors, coefficients): (Vec<_>, Vec<_>) = product
+                .iter()
+                .partition(|factor| factor.contains_symbol(*COLLECT));
+            tensors
+                .into_iter()
+                .product::<Atom>()
+                .collect_symbol::<i16>(*COLLECT)
+                .collect_collects()
+                * coefficients.into_iter().product::<Atom>()
+        })
     }
 
     fn unwrap_collect(self) -> Atom {
@@ -230,6 +231,7 @@ impl<const N: usize> TensorCollectFilter<N> {
     fn collect(self, expression: AtomView<'_>) -> Atom {
         expression
             .collect_with_map(|a| self.matches(a))
+            .into_inner()
             .unwrap_collect()
     }
 
@@ -240,13 +242,8 @@ impl<const N: usize> TensorCollectFilter<N> {
     ) -> Atom {
         expression
             .collect_with_map(|a| self.matches(a))
+            .into_inner()
             .map_collects(map)
-            .unwrap_collect()
-    }
-
-    fn expand(self, expression: AtomView<'_>) -> Atom {
-        expression
-            .expand_with_map(|a| self.matches(a))
             .unwrap_collect()
     }
 
@@ -261,8 +258,37 @@ impl<const N: usize> TensorCollectFilter<N> {
             .unwrap_collect()
     }
 
-    /// Match one complete tensor leaf for composition with custom collectors.
+    /// Match a complete tensor leaf or an opaque scalar power scope.
     pub fn matches(self, arg: AtomView<'_>) -> bool {
+        if let AtomView::Pow(power) = arg {
+            let (base, exponent) = power.get_base_exp();
+            // Positive integer powers belong to the collector's copy frontier.
+            // Other powers can be opaque scalar leaves in a parsed network;
+            // select the whole scope rather than hiding its domain in a weight.
+            if let AtomView::Num(number) = exponent {
+                let coefficient = number.get_coeff_view();
+                if matches!(
+                    coefficient,
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                ) && coefficient.is_integer()
+                    && !coefficient.to_owned().is_negative()
+                {
+                    return false;
+                }
+            }
+            let mut selected = false;
+            base.visitor(&mut |node| {
+                if selected {
+                    return false;
+                }
+                if let AtomView::Fun(_) = node {
+                    selected = self.matches(node);
+                    return false;
+                }
+                matches!(node, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+            });
+            return selected;
+        }
         let AtomView::Fun(fun) = arg else {
             return false;
         };
@@ -272,12 +298,16 @@ impl<const N: usize> TensorCollectFilter<N> {
             Self::ChainsAndTraces => {
                 fun.get_symbol() == SPENSO_TAG.chain || fun.get_symbol() == SPENSO_TAG.trace
             }
-            Self::Tensors => {
-                TensorialSyntax::function_is_tensorial(fun, StrictTensorFilter::ContainsReps)
-            }
-            Self::TaggedTensors => {
-                TensorialSyntax::function_is_tensorial(fun, StrictTensorFilter::Tagged)
-            }
+            Self::Tensors => TensorialSyntax::function_is_tensorial(
+                fun,
+                StrictTensorFilter::ContainsReps,
+                &SlotMatcher::default(),
+            ),
+            Self::TaggedTensors => TensorialSyntax::function_is_tensorial(
+                fun,
+                StrictTensorFilter::Tagged,
+                &SlotMatcher::default(),
+            ),
             Self::Reps(rep) => Self::function_contains_rep(fun, &rep),
         }
     }
@@ -308,6 +338,39 @@ impl<const N: usize> TensorCollectFilter<N> {
             return true;
         }
 
+        // Compact products retain their representation on the two vector
+        // operands, rather than directly on the metric/dot arguments. Keep
+        // this descent restricted to the registered product owners.
+        if symbol == SPENSO_TAG.dot || symbol == ETS.metric {
+            return fun.iter().any(|argument| {
+                matches!(argument, AtomView::Fun(vector)
+                    if Self::function_contains_rep(vector, reps))
+            });
+        }
+
+        // A scalar function owns its interface, but a requested domain can
+        // occur in its metadata. Select the whole function so the local rewrite
+        // and its normalizer keep their original order and checked boundary.
+        if symbol.is_scalar() {
+            return fun.iter().any(|argument| {
+                let mut selected = false;
+                argument.visitor(&mut |node| {
+                    if selected {
+                        return false;
+                    }
+                    let AtomView::Fun(nested) = node else {
+                        return true;
+                    };
+                    selected = Self::function_contains_rep(nested, reps);
+                    !selected
+                        && !nested.get_symbol().is_scalar()
+                        && nested.get_symbol() != SPENSO_TAG.pure_scalar
+                        && nested.get_symbol() != SPENSO_TAG.bracket
+                });
+                selected
+            });
+        }
+
         if symbol == SPENSO_TAG.chain {
             return fun.iter().skip(2).any(
                 |arg| matches!(arg, AtomView::Fun(arg) if Self::function_contains_rep(arg, reps)),
@@ -319,7 +382,16 @@ impl<const N: usize> TensorCollectFilter<N> {
             );
         }
 
-        false
+        // A registered tensor can carry an explicitly scalar metadata field.
+        // Its domain still needs local rewriting after an enclosing chain or
+        // trace disappears. Keep the entire tensor as the checked callback
+        // boundary, and leave unregistered function scopes opaque.
+        symbol.has_tag(&SPENSO_TAG.tensor)
+            && fun.iter().any(|argument| {
+                matches!(argument, AtomView::Fun(metadata)
+                    if metadata.get_symbol().is_scalar()
+                        && Self::function_contains_rep(metadata, reps))
+            })
     }
 }
 
@@ -327,9 +399,6 @@ impl<const N: usize> TensorCollectFilter<N> {
 pub trait TensorCollectExt {
     /// Collect common tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
     fn collect_tensors(&self) -> Atom;
-
-    /// Collect common tagged tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
-    fn collect_tagged_tensors(&self) -> Atom;
 
     /// Collect common tensor leaves that contain `rep` as one of their slot representations.
     fn collect_rep(&self, rep: LibraryRep) -> Atom;
@@ -347,33 +416,12 @@ pub trait TensorCollectExt {
     /// Collect common metric tensors.
     fn collect_metrics(&self) -> Atom;
 
-    /// Collect common chain and trace tensors.
-    fn collect_chains_and_traces(&self) -> Atom;
-
-    /// Expand common tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
-    fn expand_tensors(&self) -> Atom;
-
-    /// Expand common tagged tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
-    fn expand_tagged_tensors(&self) -> Atom;
-
-    /// Expand common tensor leaves that contain `rep` as one of their slot representations.
-    fn expand_rep(&self, rep: LibraryRep) -> Atom;
-
     /// Expand common tensor leaves that contain `rep` as one of their slot representations, using a custom map function.
     fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
         &self,
         rep: LibraryRep,
         map: F,
     ) -> Atom;
-
-    /// Expand common tensor leaves that contain any of the `reps` as one of their slot representations.
-    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom;
-
-    /// Expand common metric tensors.
-    fn expand_metrics(&self) -> Atom;
-
-    /// Expand common chain and trace tensors.
-    fn expand_chains_and_traces(&self) -> Atom;
 }
 
 impl TensorCollectExt for Atom {
@@ -389,10 +437,6 @@ impl TensorCollectExt for Atom {
         self.as_view().collect_rep_with_map(rep, map)
     }
 
-    fn collect_tagged_tensors(&self) -> Atom {
-        self.as_view().collect_tagged_tensors()
-    }
-
     fn collect_rep(&self, rep: LibraryRep) -> Atom {
         self.as_view().collect_rep(rep)
     }
@@ -405,22 +449,6 @@ impl TensorCollectExt for Atom {
         self.as_view().collect_metrics()
     }
 
-    fn collect_chains_and_traces(&self) -> Atom {
-        self.as_view().collect_chains_and_traces()
-    }
-
-    fn expand_tensors(&self) -> Atom {
-        self.as_view().expand_tensors()
-    }
-
-    fn expand_tagged_tensors(&self) -> Atom {
-        self.as_view().expand_tagged_tensors()
-    }
-
-    fn expand_rep(&self, rep: LibraryRep) -> Atom {
-        self.as_view().expand_rep(rep)
-    }
-
     fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
         &self,
         rep: LibraryRep,
@@ -428,30 +456,11 @@ impl TensorCollectExt for Atom {
     ) -> Atom {
         self.as_view().expand_rep_with_map(rep, map)
     }
-
-    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {
-        self.as_view().expand_reps(reps)
-    }
-
-    fn expand_metrics(&self) -> Atom {
-        self.as_view().expand_metrics()
-    }
-
-    fn expand_chains_and_traces(&self) -> Atom {
-        self.as_view().expand_chains_and_traces()
-    }
 }
 
 impl TensorCollectExt for AtomView<'_> {
-    fn collect_chains_and_traces(&self) -> Atom {
-        TensorCollectFilter::<0>::ChainsAndTraces.collect(*self)
-    }
     fn collect_tensors(&self) -> Atom {
         TensorCollectFilter::<0>::Tensors.collect(*self)
-    }
-
-    fn collect_tagged_tensors(&self) -> Atom {
-        TensorCollectFilter::<0>::TaggedTensors.collect(*self)
     }
 
     fn collect_rep(&self, rep: LibraryRep) -> Atom {
@@ -474,21 +483,6 @@ impl TensorCollectExt for AtomView<'_> {
         TensorCollectFilter::<0>::Metrics.collect(*self)
     }
 
-    fn expand_chains_and_traces(&self) -> Atom {
-        TensorCollectFilter::<0>::ChainsAndTraces.expand(*self)
-    }
-    fn expand_tensors(&self) -> Atom {
-        TensorCollectFilter::<0>::Tensors.expand(*self)
-    }
-
-    fn expand_tagged_tensors(&self) -> Atom {
-        TensorCollectFilter::<0>::TaggedTensors.expand(*self)
-    }
-
-    fn expand_rep(&self, rep: LibraryRep) -> Atom {
-        TensorCollectFilter::Reps([rep]).expand(*self)
-    }
-
     fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
         &self,
         rep: LibraryRep,
@@ -496,12 +490,161 @@ impl TensorCollectExt for AtomView<'_> {
     ) -> Atom {
         TensorCollectFilter::Reps([rep]).expand_with_map(*self, map)
     }
+}
 
-    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {
-        TensorCollectFilter::Reps(reps).expand(*self)
+#[cfg(test)]
+mod scalar_domain_tests {
+    use super::*;
+    use crate::structure::representation::{Euclidean, Minkowski};
+
+    #[test]
+    fn representation_filter_selects_scalar_metadata_without_crossing_explicit_boundaries() {
+        crate::structure::representation::initialize();
+        let rep = LibraryRep::from(Minkowski {});
+        let other = LibraryRep::from(Euclidean {});
+        let scalar = symbol!("collect_domain_scalar"; Scalar);
+        let nested = symbol!("collect_domain_nested");
+        let leaf = FunctionBuilder::new(symbol!("collect_domain_leaf"))
+            .add_arg(FunctionBuilder::new(rep.symbol()).add_arg(4).finish())
+            .finish();
+        let scalar_leaf = FunctionBuilder::new(scalar).add_arg(&leaf).finish();
+        let nested_sum = FunctionBuilder::new(scalar)
+            .add_arg(FunctionBuilder::new(nested).add_arg(&leaf).finish() + Atom::one())
+            .finish();
+        for input in [&scalar_leaf, &nested_sum] {
+            assert!(TensorCollectFilter::Reps([rep]).matches(input.as_view()));
+            assert!(!TensorCollectFilter::Reps([other]).matches(input.as_view()));
+        }
+        for boundary in [SPENSO_TAG.pure_scalar, SPENSO_TAG.bracket] {
+            let wrapped = FunctionBuilder::new(boundary).add_arg(&leaf).finish();
+            assert!(!TensorCollectFilter::Reps([rep]).matches(wrapped.as_view()));
+            let input = FunctionBuilder::new(scalar).add_arg(wrapped).finish();
+            assert!(!TensorCollectFilter::Reps([rep]).matches(input.as_view()));
+        }
+        let ordinary = FunctionBuilder::new(nested).add_arg(scalar_leaf).finish();
+        assert!(!TensorCollectFilter::Reps([rep]).matches(ordinary.as_view()));
     }
 
-    fn expand_metrics(&self) -> Atom {
-        TensorCollectFilter::<0>::Metrics.expand(*self)
+    #[test]
+    fn representation_filter_selects_scalar_metadata_on_registered_tensor_leaves() {
+        crate::structure::representation::initialize();
+        let mink = LibraryRep::from(Minkowski {});
+        let euc = LibraryRep::from(Euclidean {});
+        let scalar = symbol!("collect_tensor_metadata_scalar"; Scalar);
+        let inner = FunctionBuilder::new(
+            SPENSO_TAG.rank_one_tensor_symbol("collect_tensor_metadata_inner"),
+        )
+        .add_arg(crate::mink!(4))
+        .finish();
+        let outer = SPENSO_TAG.rank_one_tensor_symbol("collect_tensor_metadata_outer");
+        let representation = FunctionBuilder::new(euc.symbol()).add_arg(4).finish();
+        let make_outer = |metadata: Atom| {
+            FunctionBuilder::new(outer)
+                .add_arg(FunctionBuilder::new(scalar).add_arg(metadata).finish())
+                .add_arg(&representation)
+                .finish()
+        };
+        let tensor = make_outer(inner.clone());
+        let filter = TensorCollectFilter::Reps([mink]);
+        assert!(filter.matches(tensor.as_view()));
+        let compact = FunctionBuilder::new(outer)
+            .add_arg(&representation)
+            .finish();
+        let product = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(&tensor)
+            .add_arg(&compact)
+            .finish();
+        assert!(filter.matches(product.as_view()));
+        assert!(!filter.matches(compact.as_view()));
+        for boundary in [SPENSO_TAG.pure_scalar, SPENSO_TAG.bracket] {
+            let hidden = FunctionBuilder::new(boundary).add_arg(&inner).finish();
+            assert!(!filter.matches(make_outer(hidden).as_view()));
+        }
+    }
+
+    #[test]
+    fn representation_filter_selects_compact_products_without_opening_foreign_functions() {
+        crate::structure::representation::initialize();
+        let mink = LibraryRep::from(Minkowski {});
+        let euclidean = LibraryRep::from(Euclidean {});
+        let p = SPENSO_TAG.rank_one_tensor_symbol("collect_compact_product_p");
+        let q = SPENSO_TAG.rank_one_tensor_symbol("collect_compact_product_q");
+        let opaque = symbol!("collect_compact_product_opaque");
+        for rep in [mink, euclidean] {
+            let representation = FunctionBuilder::new(rep.symbol()).add_arg(4).finish();
+            let p = FunctionBuilder::new(p).add_arg(&representation).finish();
+            let q = FunctionBuilder::new(q).add_arg(&representation).finish();
+            for owner in [SPENSO_TAG.dot, ETS.metric] {
+                let product = FunctionBuilder::new(owner).add_arg(&p).add_arg(&q).finish();
+                assert!(TensorCollectFilter::Reps([rep]).matches(product.as_view()));
+                let other = if rep == mink { euclidean } else { mink };
+                assert!(!TensorCollectFilter::Reps([other]).matches(product.as_view()));
+                for boundary in [opaque, SPENSO_TAG.pure_scalar, SPENSO_TAG.bracket] {
+                    let wrapped = FunctionBuilder::new(boundary).add_arg(&product).finish();
+                    assert!(!TensorCollectFilter::Reps([rep]).matches(wrapped.as_view()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn filtered_collection_retains_aliases_until_explicit_resolution() {
+        crate::structure::representation::initialize();
+        let tensor =
+            FunctionBuilder::new(SPENSO_TAG.rank_one_tensor_symbol("collect_alias_tensor"))
+                .add_arg(crate::mink!(4, 99101))
+                .finish();
+        let coefficient = (Atom::one() + Atom::var(symbol!("collect_alias_x"))).pow(9);
+        let source = &coefficient * &tensor;
+        let collected = source
+            .as_view()
+            .collect_with_map(|part| part == tensor.as_view());
+        assert!(!collected.get_aliases().is_empty());
+        assert_ne!(collected.get_root(), &source);
+        let mut observed = Vec::new();
+        let resolved = collected
+            .into_inner()
+            .map_collects(|wrapped, _, _| {
+                observed.push(
+                    wrapped
+                        .as_fun_view()
+                        .unwrap()
+                        .iter()
+                        .next()
+                        .unwrap()
+                        .to_owned(),
+                );
+            })
+            .unwrap_collect();
+        assert_eq!(observed, vec![tensor]);
+        assert_eq!(resolved, source);
+        let unselected = source.as_view().collect_with_map(|_| false);
+        assert!(unselected.get_aliases().is_empty());
+        assert_eq!(unselected.into_inner(), source);
+    }
+    #[test]
+    fn representation_filter_keeps_nonpositive_and_fractional_power_scopes() {
+        crate::structure::representation::initialize();
+        let rep = LibraryRep::from(Minkowski {});
+        let vector = FunctionBuilder::new(SPENSO_TAG.rank_one_tensor_symbol("collect_power_p"))
+            .add_arg(crate::mink!(4))
+            .finish();
+        let dot = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(&vector)
+            .add_arg(&vector)
+            .finish();
+        let filter = TensorCollectFilter::Reps([rep]);
+        for exponent in [Atom::num(-2), Atom::num((1, 2)), Atom::num((-1, 2))] {
+            assert!(filter.matches((Atom::one() + &dot).pow(&exponent).as_view()));
+            for boundary in [
+                symbol!("collect_power_foreign"),
+                SPENSO_TAG.pure_scalar,
+                SPENSO_TAG.bracket,
+            ] {
+                let hidden = FunctionBuilder::new(boundary).add_arg(&dot).finish();
+                assert!(!filter.matches((Atom::one() + hidden).pow(&exponent).as_view()));
+            }
+        }
+        assert!(!filter.matches((Atom::one() + dot).pow(2).as_view()));
     }
 }

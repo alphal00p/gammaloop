@@ -6,6 +6,10 @@ use std::path::Path;
 use ahash::{AHashMap, AHashSet, HashMap};
 #[cfg(feature = "native-code-generation")]
 use eyre::eyre;
+use linnet::{
+    half_edge::{NodeIndex, tree::SimpleTraversalTree},
+    tree::child_vec::ChildVecStore,
+};
 #[cfg(feature = "native-code-generation")]
 use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
@@ -66,12 +70,66 @@ use crate::{
 };
 use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
-#[cfg(feature = "native-code-generation")]
 use super::TensorNetworkError;
 use super::{
     ExecutionResult, Network,
+    graph::{NetworkGraph, NetworkNode, NetworkOp},
     store::{NetworkStore, TensorScalarStore, TensorScalarStoreMapping},
 };
+
+impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
+    /// Materialize one already parsed subtree without distributing products.
+    ///
+    /// The caller supplies stored leaf values and may retain a completed scoped
+    /// operation as one value. Tensor payloads
+    /// and literal alias definitions remain the store owner's responsibility;
+    /// this method only emits the existing operation graph. It is an explicit
+    /// output boundary, not input preparation for another structural parser.
+    pub fn to_expression_at(
+        &self,
+        tree: &SimpleTraversalTree<ChildVecStore<()>>,
+        node: NodeIndex,
+        value: &mut impl FnMut(
+            NodeIndex,
+            &NetworkNode<K, Symbol, Aind>,
+        ) -> Result<Option<Atom>, TensorNetworkError<K, Symbol>>,
+    ) -> Result<Atom, TensorNetworkError<K, Symbol>> {
+        if let Some(result) = value(node, &self.graph[node])? {
+            return Ok(result);
+        }
+        let operation = match &self.graph[node] {
+            NetworkNode::Leaf(_) => {
+                return Err(TensorNetworkError::Other(eyre::eyre!(
+                    "stored occurrence has no expression"
+                )));
+            }
+            NetworkNode::Op(operation) => operation,
+        };
+        let children = tree
+            .iter_children(node, &self.graph)
+            .map(|child| self.to_expression_at(tree, child, value))
+            .collect::<Result<Vec<_>, _>>()?;
+        match operation {
+            NetworkOp::Sum => Ok(Atom::add_many(children)),
+            NetworkOp::Product => Ok(Atom::mul_many(children)),
+            NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_) => {
+                let [value]: [Atom; 1] = children.try_into().map_err(|_| {
+                    TensorNetworkError::Other(eyre::eyre!(
+                        "unary network operation must have exactly one child"
+                    ))
+                })?;
+                Ok(match operation {
+                    NetworkOp::Neg => -value,
+                    NetworkOp::Power(power) => value.pow(*power),
+                    NetworkOp::Function(symbol) => symbolica::atom::FunctionBuilder::new(*symbol)
+                        .add_arg(value)
+                        .finish(),
+                    _ => unreachable!(),
+                })
+            }
+        }
+    }
+}
 
 impl<'a> From<ExecutionResult<Cow<'a, Atom>>> for Atom {
     fn from(value: ExecutionResult<Cow<'a, Atom>>) -> Self {
