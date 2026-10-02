@@ -1780,6 +1780,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "feynkit"
+version = "0.1.0"
+dependencies = [
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
+]
+
+[[package]]
 name = "feynkit-amplitude"
 version = "0.1.0"
 dependencies = [
@@ -1790,6 +1804,24 @@ dependencies = [
  "spenso",
  "symbolica",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-cff"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "feynkit-graph",
+ "feynkit-model",
+ "linnet",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "symbolica-notation",
+ "thiserror 2.0.18",
+ "three-dimensional-reps",
+ "typed-index-collections",
 ]
 
 [[package]]
@@ -6071,6 +6103,16 @@ dependencies = [
  "tracing-subscriber",
  "wide 1.7.0",
  "xmlparser",
+]
+
+[[package]]
+name = "symbolica-data"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

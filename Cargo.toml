@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/alphal00p-docs-builder", "crates/alphal00p-docs-catalogs", "crates/alphal00p-docs-examples", "crates/alphal00p-docs-macros", "crates/alphal00p-docs-python-exporter", "crates/alphal00p-docs-schema", "crates/clinnet", "crates/feynkit-amplitude", "crates/feynkit-generator", "crates/feynkit-graph", "crates/feynkit-kinematics", "crates/feynkit-model", "crates/feynkit-tensor", "crates/feynkit-ufo", "crates/gammaloop-api", "crates/gammaloop-tracing-filter", "crates/gammaloop-tracing-filter-macros", "crates/gammaloop-workspace-hack", "crates/gammalooprs", "crates/idenso", "crates/kurvst", "crates/linnest", "crates/linnet", "crates/linnet-py", "crates/spenso", "crates/spenso-hep-lib", "crates/spenso-macros", "crates/spynso3", "crates/symbolica-notation", "crates/symbolica-utils", "crates/three-dimensional-reps", "crates/vakint", "tests"]
+members = ["crates/alphal00p-docs-builder", "crates/alphal00p-docs-catalogs", "crates/alphal00p-docs-examples", "crates/alphal00p-docs-macros", "crates/alphal00p-docs-python-exporter", "crates/alphal00p-docs-schema", "crates/clinnet", "crates/feynkit", "crates/feynkit-amplitude", "crates/feynkit-cff", "crates/feynkit-generator", "crates/feynkit-graph", "crates/feynkit-kinematics", "crates/feynkit-model", "crates/feynkit-tensor", "crates/feynkit-ufo", "crates/gammaloop-api", "crates/gammaloop-tracing-filter", "crates/gammaloop-tracing-filter-macros", "crates/gammaloop-workspace-hack", "crates/gammalooprs", "crates/idenso", "crates/kurvst", "crates/linnest", "crates/linnet", "crates/linnet-py", "crates/spenso", "crates/spenso-hep-lib", "crates/spenso-macros", "crates/spynso3", "crates/symbolica-data", "crates/symbolica-notation", "crates/symbolica-utils", "crates/three-dimensional-reps", "crates/vakint", "tests"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -20,7 +20,9 @@ colored = "3.1.1"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
+feynkit = { version = "0.1.0", path = "crates/feynkit/" }
 feynkit-amplitude = { version = "0.1.0", path = "crates/feynkit-amplitude/" }
+feynkit-cff = { version = "0.1.0", path = "crates/feynkit-cff/" }
 feynkit-generator = { version = "0.1.0", path = "crates/feynkit-generator/" }
 feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }
 feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
