@@ -21,7 +21,7 @@ selectors and run the affected cell with its play button.
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "rendering_api",
+    "data-notebook": "rendering_api",
     "aria-label": "Linnet Python rendering notebook",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[
@@ -46,6 +46,31 @@ selectors and run the affected cell with its play button.
   internal edges. The notebook reports the node, edge, and half-edge counts below the drawings.
 - Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
   instances remain attached by identity, including their shared runtime object.
+
+== Default layout and controls
+
+`Graph.render()` and Feynman diagram rendering use the shared
+EC-planarization and ImPrEd pipeline by default. The same implementation runs
+in direct Typst and in CLI drawings. Layout controls remain explicit:
+
+```python
+config = linnet.RenderSettings(
+    layouts=linnet.LayoutSettings(
+        algorithm=linnet.LayoutAlgorithm.Impred,
+        impred_parallel_balance=1.0,
+        impred_pull=0.45,
+        impred_external_max_points=0,
+    )
+)
+view = graph.render(config=config)
+view
+```
+
+The #link("reference/typst/layout/")[layout guide] describes every ImPrEd control.
+Python uses underscores where the Typst names use hyphens.
+Here, `impred_external_max_points=0` disables insertion of intermediate points
+on external routes. Explicit layouts
+such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
 
 == The rendering boundary
 

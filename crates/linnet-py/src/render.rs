@@ -244,6 +244,7 @@ fn topology_endpoint(graph: &PyHedgeGraph, hedge: Hedge) -> TypstEndpointSpec {
         id: Some(hedge.0),
         data: None,
         port_label: None,
+        route_points: Vec::new(),
         compass: None,
         in_subgraph: false,
     }
@@ -322,121 +323,41 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
-fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<PreparedRender> {
-    let build_dir =
-        tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let build_root = canonicalize(build_dir.path(), "render directory")?;
-    write_embedded_assets(&TYPST_PACKAGE_ASSETS, &build_root.join(TYPST_PACKAGES_DIR))?;
-    let package_store = canonicalize(
-        &build_root.join(TYPST_PACKAGES_DIR),
-        "bundled Typst package store",
-    )?;
-    for (variable, description) in [
-        ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
-        ("TYPST_PACKAGE_PATH", "Typst package path"),
-    ] {
-        if let Some(path) = env::var_os(variable) {
-            let path = Path::new(&path);
-            if variable == "TYPST_PACKAGE_CACHE_PATH" && !path.exists() {
-                continue;
-            }
-            let path = canonicalize(path, description)?;
-            copy_directory(&path, &package_store, description)?;
-        }
+pub(crate) fn render_graph(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+    subgraph: Option<&PySubgraph>,
+) -> PyResult<PyDiagramView> {
+    // Validate before callbacks and again after preparation of the graph records.
+    if let Some(subgraph) = subgraph {
+        subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
     }
-
-    let mut files = BTreeMap::new();
-    insert_embedded_assets(
-        &LINNEST_PACKAGE_ASSETS,
-        &mut files,
-        &build_root,
-        LINNEST_PACKAGE_DIR,
-    )?;
-    insert_embedded_assets(
-        &KURVST_PACKAGE_ASSETS,
-        &mut files,
-        &build_root,
-        KURVST_PACKAGE_DIR,
-    )?;
-    write_project_asset(&build_root, TOPOLOGY, &topology)?;
-
-    let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
-    source_paths.extend(transport.imports.iter().filter_map(|import| {
-        if let TypstModuleSource::File(path) = &import.source {
-            Some(path.clone())
-        } else {
-            None
-        }
-    }));
-    let mut staged_sources = collect_user_sources(
-        &mut files,
-        &build_root,
-        &source_paths,
-        transport.source_root.as_deref(),
-    )?
-    .into_iter();
-    let template = if transport.template.is_some() {
-        staged_sources
-            .next()
-            .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst template"))?
+    let (topology, transport) = request(py, graph, config, false)?;
+    let selection = if let Some(subgraph) = subgraph {
+        let owner = graph.borrow(py);
+        let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
+        let state = owner.state.borrow();
+        let state = state.as_ref().expect("checked selection owner");
+        let hedges = (0..selected.size())
+            .map(|index| selected.includes(&Hedge(index)))
+            .collect();
+        let nodes = state
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, mut crown, _)| {
+                (isolated.contains(&node.0) || crown.any(|hedge| selected.includes(&hedge)))
+                    .then_some(node.0)
+            })
+            .collect();
+        Some((hedges, nodes))
     } else {
-        DEFAULT_TEMPLATE.to_owned()
+        None
     };
-    let module_files = transport
-        .imports
-        .iter()
-        .map(|import| match import.source {
-            TypstModuleSource::File(_) => staged_sources
-                .next()
-                .map(Some)
-                .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst module")),
-            TypstModuleSource::Package(_) => Ok(None),
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
-    files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
-    Ok(PreparedRender {
-        _build_dir: build_dir,
-        files,
-        root: build_root,
-        package_store,
-    })
-}
-
-fn insert_embedded_assets(
-    assets: &Dir<'_>,
-    files: &mut BTreeMap<String, Vec<u8>>,
-    build_root: &Path,
-    root: &str,
-) -> PyResult<()> {
-    for file in assets.files() {
-        insert_project_asset(
-            files,
-            build_root,
-            &format!(
-                "{root}/{}",
-                file.path().to_string_lossy().replace('\\', "/")
-            ),
-            file.contents(),
-        )?;
-    }
-    Ok(())
-}
-
-fn insert_project_asset(
-    files: &mut BTreeMap<String, Vec<u8>>,
-    build_root: &Path,
-    path: &str,
-    contents: &[u8],
-) -> PyResult<()> {
-    // typst-py's multi-file input decodes every value as UTF-8. Keep binary
-    // assets in the project filesystem (MEMFS in Pyodide) at the same paths.
-    if std::str::from_utf8(contents).is_ok() {
-        files.insert(path.to_owned(), contents.to_vec());
-        Ok(())
-    } else {
-        write_project_asset(build_root, path, contents)
-    }
+    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
+    PyDiagramView::from_scene(py, scene, None)
 }
 
 fn write_project_asset(build_root: &Path, path: &str, contents: &[u8]) -> PyResult<()> {

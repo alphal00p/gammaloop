@@ -1048,6 +1048,21 @@ class TestHedgeGraphTopology(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different graph revision"):
             ab.union(other.full_subgraph())
 
+    def test_subgraph_equality_preserves_python_fallback(self):
+        graph, _, _, _ = topology_graph()
+        selected = graph.subgraph(edges=["ab"])
+
+        self.assertEqual(selected, graph.subgraph(edges=["ab"]))
+        self.assertNotEqual(selected, graph.subgraph(edges=["bc"]))
+        self.assertIs(selected.__eq__(object()), NotImplemented)
+        self.assertFalse(selected == object())
+
+        class ReflectedEquality:
+            def __eq__(self, other):
+                return other is selected
+
+        self.assertTrue(selected == ReflectedEquality())
+
     def test_construct_and_filter_union_live_views(self):
         graph, _, _, _ = topology_graph()
         at_b = graph.subgraph(nodes=["b"])
@@ -2227,6 +2242,30 @@ class TestDotCodec(unittest.TestCase):
 
 
 class TestTypedTypstSurface(unittest.TestCase):
+    def test_generated_stub_declares_aliases_and_only_exported_classes(self):
+        stub = (
+            Path(__file__).resolve().parents[1]
+            / "python/symbolica/community/graph/__init__.pyi"
+        )
+        declarations = ast.parse(stub.read_text()).body
+        aliases = {
+            node.target.id
+            for node in declarations
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+        }
+        self.assertTrue({"_NativeValue", "_SubgraphSelection"} <= aliases)
+        graph = next(
+            node
+            for node in declarations
+            if isinstance(node, ast.ClassDef) and node.name == "Graph"
+        )
+        self.assertIn("symbolica.community", ast.get_docstring(graph))
+
+        for node in declarations:
+            if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                with self.subTest(name=node.name):
+                    self.assertIsInstance(getattr(lp, node.name), type)
+
     def test_native_values_drawing_and_configuration_smoke(self):
         length = lp.Length.mm(2)
         ratio = lp.Ratio.from_fraction(0.25)
@@ -2284,7 +2323,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertEqual(repr(lp.AUTO), "AUTO")
         self.assertEqual(repr(lp.INHERIT), "INHERIT")
 
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
             label_layout=lp.LabelLayout.Normal,
@@ -2322,29 +2361,20 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_resolve_length=lp.EdgeLengthResolution.Min,
             debug=lp.DebugLevel.Off,
         )
-        base = lp.RenderConfig(
+        base = lp.RenderSettings(
             title=label,
             style=style,
             layouts=layouts,
             drawing=draw,
             selectors=selectors,
-            template_options={
-                "profile": "analysis",
-                "nested": {"base": True},
-                "mark": mark,
-            },
         )
-        overlay = lp.RenderConfig(
+        overlay = lp.RenderSettings(
             title=None,
             selectors=lp.INHERIT,
-            template_options={"nested": {"overlay": True}},
         )
         merged = base.overlay(overlay)
-        self.assertIn("RenderConfig", repr(merged))
-        self.assertEqual(
-            merged.template_options["nested"],
-            {"base": True, "overlay": True},
-        )
+        self.assertIn("RenderSettings", repr(merged))
+        self.assertIsNone(merged.title)
 
         graph, _, _, _ = sample_graph(render_config=base)
         graph.render_config = merged
@@ -2437,42 +2467,6 @@ class TestTypedTypstSurface(unittest.TestCase):
             setattr(config, field, lp.INHERIT)
             self.assertIs(getattr(config, field), lp.INHERIT)
 
-    def test_template_options_overlay_and_module_references_are_typed(self):
-        module = lp.TypstModule.file("template options.typ")
-        base = lp.RenderConfig(
-            template_options={
-                "nested": {"base": 1, "shared": "base"},
-                "accent": module.value("accent"),
-                "decorate": module.function("decorate").bind(prefix="graph"),
-            }
-        )
-        merged = base.overlay(
-            lp.RenderConfig(
-                template_options={
-                    "nested": {"overlay": 2, "shared": "overlay"},
-                    "title": module.content("title"),
-                }
-            )
-        )
-
-        options = merged.template_options
-        self.assertEqual(
-            options["nested"],
-            {"base": 1, "overlay": 2, "shared": "overlay"},
-        )
-        self.assertIn("TypstRef", repr(options["accent"]))
-        self.assertIn("TypstBind", repr(options["decorate"]))
-        self.assertIn("TypstRef", repr(options["title"]))
-        preserved = base.overlay(
-            lp.RenderConfig(template_options={"nested": {"base": lp.INHERIT}})
-        )
-        self.assertEqual(preserved.template_options["nested"]["base"], 1)
-        self.assertIsNone(
-            base.overlay(lp.RenderConfig(template_options=None)).template_options
-        )
-        with self.assertRaises(TypeError):
-            lp.RenderConfig(template_options=["not", "a", "dictionary"])
-
     def test_drawing_fields_validate_their_declared_types(self):
         module = lp.TypstModule.file("drawing-values.typ")
         value = module.value("value")
@@ -2510,6 +2504,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             label=lp.MathSymbol("p", subscript=0),
             statement="cut-0",
             port_label="out",
+            route_points=[(0, 1), [1, 2], {"x": 3, "y": value}, value],
             style={"stroke": stroke},
         )
 
@@ -2718,7 +2713,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             source=lambda _half_edge: lp.HalfEdgeDrawing(style={"stroke": stroke}),
             sink=lambda _half_edge: lp.HalfEdgeDrawing(style={"stroke": stroke}),
         )
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             subgraph=[True, False],
             viewport_width=12,
             viewport_height=8,
@@ -2740,9 +2735,15 @@ class TestTypedTypstSurface(unittest.TestCase):
             crossing_penalty=20,
             dangling_repulsion=2,
             dangling_centroid_repulsion=1.25,
+            external_pull=1.0,
+            external_pull_balance=2.5,
+            spring_length_scale=0.75,
+            initial_repulsion=0.15,
+            repulsion_growth=0.7,
             edge_edge_repulsion=0.2,
             directional_force=4.5,
-            label_length_scale=1.1,
+            internal_label_length_scale=1.1,
+            external_label_length_scale=0.3,
             label_spring=20,
             label_charge=2,
             label_steps=30,
@@ -2773,6 +2774,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             title=lp.TextLabel("all drawing fields"),
             subgraph=[[True, False], [False, True]],
             debug=lp.DebugLevel.EdgePositions,
+            debug_label_collisions=True,
+            label_collision_padding=0.3,
             show_half_edge_ids=True,
             node_radius=[0.2, 0.3],
             node_min_radius=0.1,
@@ -2797,6 +2800,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             sink_style={"stroke": stroke},
             edge_label=lp.MathSymbol("p", subscript=1),
             edge_label_style={"fill": lp.Color("red")},
+            external_label_gap=0.45,
             edge_omega=1,
             edge_trim_accuracy=0.001,
             padding=lp.Insets(x=lp.Length.em(0.4), y=lp.Length.em(0.2)),
@@ -2807,37 +2811,15 @@ class TestTypedTypstSurface(unittest.TestCase):
             subgraph_edge_style={"stroke": stroke},
             subgraph_edge_underlay=True,
         )
-        template_options = {
-            "palette": {"accent": lp.Color("blue")},
-            "orientation": {"split": True},
-            "edge-decoration": {
-                "offset": 0.4,
-                "length": 5,
-                "ratio": 0.5,
-                "stroke": stroke,
-                "mark": lp.Mark.barbed(),
-            },
-            "annotations": {
-                "node-indices": True,
-                "edge-indices": True,
-                "half-edge-indices": True,
-                "prefix": lp.MathSymbol("q"),
-                "separator": lp.TextLabel(", "),
-                "size": lp.Length.pt(7),
-                "fill": lp.Color("red"),
-            },
-        }
-        config = lp.RenderConfig(
-            template=Path("template with spaces.typ"),
+        config = lp.RenderSettings(
             title=lp.AUTO,
             style=style,
             layouts=layouts,
             drawing=drawing,
             selectors=selectors,
-            template_options=template_options,
         )
         self.assertEqual(layouts.pass_count, 1)
-        self.assertIn("RenderConfig", repr(config))
+        self.assertIn("RenderSettings", repr(config))
 
     def test_closed_native_model_rejects_arbitrary_values_and_reserved_extensions(self):
         nested = [lp.Color("red")]
@@ -3008,17 +2990,81 @@ class TestTypedTypstSurface(unittest.TestCase):
             graph.prepare_render().typst_source,
         )
 
-    def test_dangling_centroid_repulsion_is_typed_and_serialized(self):
-        graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(dangling_centroid_repulsion=1.25)
-            )
+    def test_external_pull_balance_is_validated_and_preserved_across_passes(self):
+        layouts = (
+            lp.LayoutSettings(external_pull_balance=0)
+            .then(external_pull_balance=0.25)
+            .then(external_pull_balance=1)
+            .then(external_pull_balance=2)
         )
+        graph = lp.build(
+            lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
+        )
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
+        for value in (-0.1, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings(external_pull_balance=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings().then(external_pull_balance=value)
 
-        self.assertIn(
-            '("gamma-dangling-centroid"): 1.25',
-            graph.prepare_render().typst_source,
+    def test_impred_step_scale_is_typed_and_preserved_across_passes(self):
+        layouts = lp.LayoutSettings(
+            algorithm=lp.LayoutAlgorithm.Impred, impred_steps=1500, impred_step_scale=1
+        ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=2)
+        graph = lp.build(
+            lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
         )
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
+        for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
+            self.assertIn(
+                "impred_step_scale", inspect.signature(constructor).parameters
+            )
+        for value in (-1, 1.5, "2", float("nan"), float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings(impred_step_scale=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings().then(impred_step_scale=value)
+
+    def test_impred_level_is_typed_and_preserved_across_passes(self):
+        layouts = lp.LayoutSettings(
+            algorithm=lp.LayoutAlgorithm.Impred, impred_level=False
+        ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_level=True)
+        graph = lp.build(
+            lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
+        )
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
+        for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
+            self.assertIn("impred_level", inspect.signature(constructor).parameters)
+        for value in (1, 0.0, "true"):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings(impred_level=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings().then(impred_level=value)
+
+    def test_impred_step_scale_zero_is_rejected_before_rendering(self):
+        with self.assertRaisesRegex(ValueError, "impred_step_scale"):
+            lp.LayoutSettings(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=0)
+
+    def test_external_pull_attachment_is_validated_and_preserved_across_passes(self):
+        layouts = (
+            lp.LayoutSettings(external_pull_attachment=0)
+            .then(external_pull_attachment=0.25)
+            .then(external_pull_attachment=1)
+            .then(external_pull_attachment=16)
+        )
+        graph = lp.build(
+            lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
+        )
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
+        for value in (-0.1, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings(external_pull_attachment=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutSettings().then(external_pull_attachment=value)
 
     def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
         constructors = (

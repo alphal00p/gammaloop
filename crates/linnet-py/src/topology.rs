@@ -131,8 +131,8 @@ fn isolated_node_indices(graph: &PyHedgeGraph) -> BTreeSet<usize> {
         .collect()
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySubgraph {
     #[getter]
@@ -330,7 +330,12 @@ impl PySubgraph {
         self.complement(py)
     }
 
-    fn __eq__(&self, py: Python<'_>, other: &Self) -> PyResult<bool> {
+    fn __eq__(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "builtins.object", imports = ("builtins")))]
+        other: &Self,
+    ) -> PyResult<bool> {
         let graph = self.owner(py)?;
         let other_graph = other.owner(py)?;
         Ok(graph.is(other_graph)
@@ -408,8 +413,8 @@ impl PyCycle {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCycle {
     #[getter]
@@ -504,8 +509,8 @@ impl PyCutPartition {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCutPartition {
     #[getter]
@@ -587,8 +592,8 @@ impl PyCutPartition {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyOrientedCut {
     fn side(&self, py: Python<'_>, left: bool) -> PyResult<PySubgraph> {
@@ -732,8 +737,8 @@ impl PyTraversalTree {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTraversalTree {
     #[getter]

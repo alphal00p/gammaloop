@@ -319,30 +319,39 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
-The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
-per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
-suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are
-the only high-level rendering methods; there are no raw command-line inputs or string-expression
-escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
-looking up or launching a Typst executable. Generated inputs and imported modules remain alive
-until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
-CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
-on an installed Typst package cache or a network fetch.
+SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
+Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+Meta-click toggles the element in that displayed selection. Enter and Space perform the same
+actions on a focused element; Escape dismisses the details while retaining the selection.
+The first and last quarters of arc length pick the source and sink half-edges; the middle
+half picks the whole edge. Both end quarters of a dangling edge pick its sole half-edge,
+which selects the same subgraph as the whole edge. Half-edge highlighting covers its half
+of a paired edge, or the entire dangling edge. Copy the panel's construction into
+`graph.subgraph(nodes=[...], edges=[...], half_edges=[...])` to create a Python selection.
+Figure selections are browser state and do not mutate the Python graph.
+Ctrl/Meta-scroll gently zooms the graph around the pointer; drag to pan. With the graph
+focused, `+` and `-` zoom in five-percent steps, arrow keys pan, and `0` fits the complete drawing.
+Details appear beside the graph in wide outputs and below it in narrow outputs. Zooming
+preserves the selection and pinned details, whose text stays at its original size.
+Embedding applications can read the SVG element's `linnetSelection` property or listen for
+`linnet-selection-change`; its event detail contains sorted `nodes`, `edges`, and `half_edges` arrays.
+For custom overlays, `svg.linnetShade({nodes, edges, half_edges})` returns an SVG group
+in the drawing's coordinates. Append it inside `.linnet-viewport` and style its color
+and group opacity. It reuses native half-edge paths, compositing overlapping
+half-edges and vertices once; it does not change the interactive selection.
+The optional second argument controls `width` (edge-band width, default 8),
+`padding` (beyond each node, default 2), and `outline` (boundary thickness,
+default 0), in drawing coordinates. For example,
+`svg.linnetShade({nodes: [0, 1], edges: [2]}, {width: 20, padding: 5, outline: 1.6, fillOpacity: 0.09})`
+draws a filled circling with an opaque boundary around the union. `fillOpacity`
+controls its interior independently of the boundary. Multiple groups can carry
+different colors and padding for nested regions, as in the CFF explorer.
+Native momentum arrows retain their edge inspection identity in
+`[data-linnet-momentum]` groups, so specialized displays can reuse their curves
+and arrowheads without duplicating the renderer.
+Use the Python selection API explicitly when applying graph algorithms to those IDs.
 
-For inspection tools, `prepare_render(config=None)` evaluates selectors once and returns a
-`PreparedRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
-by `to_svg()` or `render(path)` on that preparation. It keeps the ephemeral entrypoint, versioned
-topology-only CBOR graph spec, bundled assets, and snapshots of referenced user template/module
-source trees alive. Editing or deleting the original files after preparation therefore cannot
-change that preparation. The graph spec contains structural names, indices, incidence, flow, and
-orientation, while typed drawing values travel in `config.elements`; it is not a hidden DOT
-serialization and never inspects arbitrary Python `.data`.
-
-The shipped notebook display is generic and model-neutral, including for graphs with dangling
-edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
-An application that needs those concepts selects its own template and passes that template's
-closed native settings through `RenderConfig.template_options`. `INHERIT` leaves the preceding
-configuration layer unchanged, while `None` becomes Typst `none`.
+A `Subgraph` also renders directly as the final expression of a notebook cell:
 
 ```python
 domain_template = RenderConfig(
@@ -418,10 +427,12 @@ belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `li
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
-) parses ordinary DOT with an explicit application codec, then composes particle,
-momentum, edge-index, and node-index layers using the same generic API.
-Run it from a checkout with
-`nix develop -c uvx --from marimo==0.24.0 --with-editable crates/linnet-py marimo edit crates/linnet-py/examples/physics_render_settings.py`.
+) loads a model and parses compact or annotated DOT with `FeynmanDiagram.from_dot(model, dot)`.
+FeynKit renders the parsed diagram with a shared `RenderSettings`, including momentum labels
+from its stored loop momentum basis and interactive SVG hover and selection.
+Run it from a checkout using a Python environment with Marimo, Linnet, and the Symbolica host
+containing `symbolica.community.hepkit`:
+`python -m marimo edit crates/linnet-py/examples/physics_render_settings.py`.
 The #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook")
 previews the force solver as it runs. Its DOT editor and collapsible sliders restart the
 simulation; pause/resume preserves the current state. The viewer creates SVG topology
