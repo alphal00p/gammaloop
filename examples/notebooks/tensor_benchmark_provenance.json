@@ -1,0 +1,20 @@
+{
+  "plan": "docs/architecture/tensor-engine-consolidation-plan.typ",
+  "workspace_parent": "bfb80d8c",
+  "qualified_M0_core_sha256": "cfe4e655591faf6b871e12d32de18ad00e7ae76a27a793c7b66441149e69de8c",
+  "prototype_sources": {
+    "factor_dp.py": "16ea74cb03f0e0131efff10c8503ea4a8eb424d876d85a7193de2d24bc189c0e",
+    "factor_dp_dag.py": "e2cbddfae9c4c54d7afeee16a4ecb4468b86263a78bb72e29f571059739bcc0e",
+    "factor_dp_poly.py": "b4da7f5b15a1d221bf0870824fb70a4b7dc4d140fd219606dbc6f9c5a679653f",
+    "validation_overhead.py": "d4d89fa18208da3289de8f58fd8166fa75f7cfec85f06f8bfb8bf1f6748d069b",
+    "idempotent_cost.py": "920c9ddadd492ebc5447f6a13400ad3b86310f40fdaf9fb55d9b466a07db75a4",
+    "partial_parse_cost.py": "8422b1065bcc8077a0c91e7d317758d51d7fcc389383d6e93f64d2489853507c",
+    "keep_the_rest_probe.py": "3c1fddbc37952fded5ac6167817effb2cd5864b893eb8cf26d000176ce4eccb0",
+    "keep_the_rest_probe2.py": "99817a321cb7f259bf0440f8c42c6da3a78321e6c5412ca00f150f006edc833f",
+    "keep_the_rest_probe3.py": "d422c540b311e8d21fefabcaad562f7bbcb1b7782ab36c3b5a1ac6ffa27c1701",
+    "keep_the_rest_probe4.py": "c5e12e5e55caa47940efe8cdd3af676b0ebf73c52a054049aa4c841f1e0e9b1c"
+  },
+  "port": "Shared fixed fixture and transition builder; no runtime scratchpad dependency; current explicit replacement/contraction API",
+  "M0_record": "examples/notebooks/tensor_benchmark_m0.json",
+  "M0_candidate_core_sha256": "096d809fca743b46bd35b3ae26ffbfda497526086b24fb13673bb95b30f4fbde"
+}
