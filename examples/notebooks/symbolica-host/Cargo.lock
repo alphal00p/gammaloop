@@ -75,6 +75,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "amd"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a679e001575697a3bd195813feb57a4718ecc08dc194944015cbc5f6213c2b96"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -493,7 +502,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "clap_lex",
- "strsim",
+ "strsim 0.11.1",
  "terminal_size",
  "unicase",
  "unicode-width",
@@ -516,6 +525,26 @@ name = "clap_lex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "clarabel"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d950c870fad4feed732bc3f7da489d223ba3911eac0522e6512eed7e659cfafe"
+dependencies = [
+ "amd",
+ "cfg-if",
+ "derive_builder",
+ "enum_dispatch",
+ "itertools 0.11.0",
+ "lazy_static",
+ "num-traits",
+ "serde",
+ "serde-big-array",
+ "serde_json",
+ "thiserror 1.0.69",
+ "web-time",
+]
 
 [[package]]
 name = "colorchoice"
@@ -716,6 +745,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "darling"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "109c1ca6e6b7f82cc233a97004ea8ed7ca123a9af07a8230878fcfda9b158bf0"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim 0.10.0",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -749,7 +813,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -779,6 +843,37 @@ name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
+
+[[package]]
+name = "derive_builder"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d07adf7be193b71cc36b193d0f5fe60b918a3a9db4dad0449f57bcfd519704a3"
+dependencies = [
+ "derive_builder_macro",
+]
+
+[[package]]
+name = "derive_builder_core"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f91d4cfa921f1c05904dc3c57b4a32c38aed3340cce209f3a6fd1478babafc4"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "derive_builder_macro"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f0314b72bed045f3a68671b3c86328386762c93f82d98c65c3cb5e5f573dd68"
+dependencies = [
+ "derive_builder_core",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "derive_more"
@@ -903,6 +998,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "env_filter"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -986,7 +1093,7 @@ dependencies = [
  "linnet",
  "spenso",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -999,7 +1106,7 @@ dependencies = [
  "serde",
  "spenso",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
  "three-dimensional-reps",
  "typed-index-collections",
 ]
@@ -1020,7 +1127,7 @@ dependencies = [
  "spenso",
  "spenso-hep-lib",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1030,6 +1137,7 @@ dependencies = [
  "feynkit-kinematics",
  "feynkit-model",
  "itertools 0.14.0",
+ "linnest",
  "linnet",
  "nu-ansi-term",
  "serde",
@@ -1037,7 +1145,7 @@ dependencies = [
  "spenso",
  "symbolica",
  "symbolica-utils",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1049,7 +1157,7 @@ dependencies = [
  "serde",
  "spenso",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1063,7 +1171,7 @@ dependencies = [
  "serde",
  "serde_json",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
  "vectorize",
 ]
 
@@ -1079,10 +1187,13 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "linnest",
  "linnet",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen-derive",
+ "serde_json",
+ "spenso-macros",
  "spynso3",
  "symbolica",
 ]
@@ -1096,7 +1207,7 @@ dependencies = [
  "linnet",
  "spenso",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1106,7 +1217,7 @@ dependencies = [
  "feynkit-model",
  "pyo3",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -1359,6 +1470,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
+name = "hexf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6618f4550dcd7d9ddb5126ab18d48dfa31aa952159cb832390bda464d3bc827e"
+dependencies = [
+ "hexf-parse",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
 name = "hugepage-rs"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1416,9 +1543,15 @@ dependencies = [
  "spenso-macros",
  "symbolica",
  "symbolica-utils",
- "thiserror",
+ "thiserror 2.0.20",
  "tracing",
 ]
+
+[[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "indenter"
@@ -1574,6 +1707,7 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "kurbo",
+ "libm",
  "serde",
  "wasm-minimal-protocol",
 ]
@@ -1630,12 +1764,16 @@ dependencies = [
  "dot-parser",
  "figment",
  "getrandom 0.2.17",
+ "indexmap",
+ "kurbo",
+ "kurvst",
  "linnet",
  "rand 0.8.8",
  "rkyv",
  "self_cell",
  "serde",
- "thiserror",
+ "serde_json",
+ "thiserror 2.0.20",
  "wasm-minimal-protocol",
 ]
 
@@ -1648,6 +1786,7 @@ dependencies = [
  "bincode-trait-derive",
  "bitvec",
  "cgmath",
+ "clarabel",
  "dot-parser",
  "duplicate 2.0.1",
  "figment",
@@ -1663,7 +1802,8 @@ dependencies = [
  "serde_repr",
  "symbolica",
  "symbolica-utils",
- "thiserror",
+ "thiserror 2.0.20",
+ "twofloat",
 ]
 
 [[package]]
@@ -2478,7 +2618,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.17",
  "libredox",
- "thiserror",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -2812,6 +2952,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-big-array"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3030,7 +3179,7 @@ dependencies = [
  "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
- "thiserror",
+ "thiserror 2.0.20",
  "tracing",
 ]
 
@@ -3060,6 +3209,7 @@ name = "spynso3"
 version = "0.1.2"
 dependencies = [
  "ahash 0.8.12",
+ "ciborium",
  "eyre",
  "idenso",
  "itertools 0.14.0",
@@ -3073,7 +3223,7 @@ dependencies = [
  "symbolica",
  "symbolica-typst-plugin",
  "tabled",
- "thiserror",
+ "thiserror 2.0.20",
  "xpct",
 ]
 
@@ -3085,6 +3235,12 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
@@ -3092,6 +3248,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "symbolica"
 version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#9bccc884b3cf36bfa676c29702cb47ac3d617c74"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -3277,11 +3434,31 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+dependencies = [
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
 version = "2.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 2.0.20",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3314,7 +3491,7 @@ dependencies = [
  "linnet",
  "serde",
  "symbolica",
- "thiserror",
+ "thiserror 2.0.20",
  "typed-index-collections",
 ]
 
@@ -3493,6 +3670,17 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "twofloat"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f25f7bfd28a043cba51ea618ad2d29c5fa991a1237a4c0b592b466fbbb60c5c"
+dependencies = [
+ "hexf",
+ "libm",
+ "num-traits",
 ]
 
 [[package]]
@@ -3775,6 +3963,16 @@ name = "web-sys"
 version = "0.3.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c435338968042f4f59a557f690a253676d47ce13ceb55d70100e7facf6620a30"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
