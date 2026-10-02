@@ -61,6 +61,7 @@ pub(crate) fn refine(module: &mut Module) {
         "index_style" => Some("typing.Literal['alphabet', 'graph', 'raw']"),
         "component_style" => Some("typing.Literal['superscript', 'array']"),
         "invariant_style" => Some("typing.Literal['compact', 'explicit']"),
+        "tensor_view" => Some("typing.Literal['interactive', 'matrix']"),
         _ => None,
     };
     for class in module.class.values_mut() {

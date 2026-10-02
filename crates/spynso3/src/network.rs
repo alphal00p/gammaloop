@@ -1,4 +1,5 @@
 use linnet_render_py::PyErrExt;
+use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use pyo3::exceptions::PyImportError;
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
@@ -1547,6 +1548,80 @@ impl SpensoNet {
         self.network.dot_pretty()
     }
 
+    /// Export a self-contained Typst document embedding the native SVG graph.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst source containing the complete SVG and its typeset labels.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_linnest()
+    #[pyo3(signature = (*, config=None))]
+    fn to_linnest(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
+        Ok(linnet_render_py::typst_export::svg_source(
+            &self.render_graph(py, config)?.outlined(py)?.to_svg()?,
+        ))
+    }
+
+    /// Render a displayable snapshot of the current network graph.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// DiagramRender
+    ///     Interactive graph snapshot with SVG/HTML exports and notebook display.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.render()
+    #[pyo3(signature = (*, config=None))]
+    fn render(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<PyDiagramView> {
+        let drawing = self
+            .render_graph(py, config)?
+            .map_svg(|svg| display::network::svg_theme(&svg))?;
+        let html = display::network::html("<!--linnet-svg-0-->", &self.status());
+        Ok(drawing.with_html(html))
+    }
+
     /// Produce compact plain-text tensor notation.
     ///
     /// Parameters
@@ -1568,7 +1643,7 @@ impl SpensoNet {
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
     /// This formats the symbolic source expression, independent of execution
-    /// progress.
+    /// progress. Use render() or to_html() for the network graph.
     ///
     /// Examples
     /// --------
@@ -1615,7 +1690,7 @@ impl SpensoNet {
     /// format. Use to_html() or to_svg() for other layouts and custom gaps.
     ///
     /// This formats the symbolic source expression, independent of execution
-    /// progress.
+    /// progress. Use render() or to_html() for the network graph.
     ///
     /// Static Typst output remains available independently of the HTML explorer.
     ///
@@ -1704,16 +1779,43 @@ impl SpensoNet {
         ))
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Display the current network graph and execution status.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Interactive HTML graph with its progress summary.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_html()
+    #[pyo3(signature = (*, config=None, browser=None))]
     fn to_html(
         &self,
         py: Python<'_>,
-        show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
-        notation_source: Option<String>,
+        config: Option<&PyRenderSettings>,
+        browser: Option<&str>,
     ) -> PyResult<String> {
-        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::structured_to_html(py, &self.structure, &settings, notation_source.as_deref())
+        self.render(py, config)?.snapshot(py, browser)?.to_html()
     }
 
     /// Render static mathematical tensor notation to SVG.
@@ -1744,7 +1846,7 @@ impl SpensoNet {
     /// if compilation fails.
     ///
     /// This formats the symbolic source expression, independent of execution
-    /// progress.
+    /// progress. Use render() or to_html() for the network graph.
     ///
     /// Examples
     /// --------
@@ -1767,20 +1869,25 @@ impl SpensoNet {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref()).map_err(|cause| {
             if !cause.is_instance_of::<PyImportError>(py) { return cause; }
-            let error = PyImportError::new_err("Tensor notation SVG requires the optional Python package 'typst'; install it with `python -m pip install typst`.");
+            let error = PyImportError::new_err("Tensor notation SVG requires the optional Python package 'typst'; install it with `python -m pip install typst`. For the network diagram SVG, use network.render().to_svg().");
             error.set_cause(py, Some(cause));
             error
         })
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        display::structured_to_html(
-            py,
-            &self.structure,
-            &display::DisplaySettings::default(),
-            None,
-        )
-        .ok()
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?._mime_(py)
+    }
+
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?
+            ._repr_mimebundle_(py, include, exclude)
     }
 
     /// Return the symbolic source computation of this network.

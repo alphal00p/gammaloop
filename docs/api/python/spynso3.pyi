@@ -29,6 +29,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
+from symbolica.community.graph import DiagramView, RenderSettings
 from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
@@ -390,6 +391,8 @@ class DisplaySettings:
     Immutable presentation options for tensor notation and component displays.
 
     Formatting does not change indices, tensor algebra, or component order.
+    The defaults use representation-specific index alphabets and an interactive
+    component explorer. The direct MathML pager supports rich layouts and gaps;
     static Typst/plain source supports ports layout. HTML uses direct MathML;
     customizable Typst projects and SVG exports retain the Typst notation backend.
 
@@ -445,6 +448,22 @@ class DisplaySettings:
         --------
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().component_style
+        """
+    @property
+    def tensor_view(self) -> typing.Literal['interactive', 'matrix']:
+        r"""
+        Concrete-tensor HTML: "interactive" provides a component explorer with
+
+        Returns
+        -------
+        str
+            Concrete-tensor HTML: "interactive" provides a component explorer with
+            a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import DisplaySettings
+        >>> value = DisplaySettings().tensor_view
         """
     @property
     def invariant_style(self) -> typing.Literal['compact', 'explicit']:
@@ -557,7 +576,7 @@ class DisplaySettings:
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().factor_gap
         """
-    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
+    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
         r"""
         Choose tensor notation, index labels, and component presentation.
 
@@ -587,6 +606,9 @@ class DisplaySettings:
         component_style : str, default "superscript"
             Concrete component labels: "superscript" for A(x,7)^{0,1},
             or "array" for A(x,7)[0,1]. Scalar arguments stay in parentheses.
+        tensor_view : str, default "interactive"
+            Concrete-tensor HTML: "interactive" provides a component explorer with
+            a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
 
         invariant_style : {"compact", "explicit"}, default "compact"
             Compact quadratic color notation uses C_F, C_A and T_R. Explicit
@@ -602,11 +624,13 @@ class DisplaySettings:
 
         Notes
         -----
+        The tensor_view option affects concrete tensor HTML, not symbolic
+        TensorExpression algebra or TensorNetwork graph rendering.
 
         Examples
         --------
         >>> from symbolica.community.tensor import DisplaySettings
-        >>> settings = DisplaySettings(component_style="array")
+        >>> settings = DisplaySettings(component_style="array", tensor_view="matrix")
         """
     @staticmethod
     def ports() -> DisplaySettings:
@@ -2279,6 +2303,8 @@ class Tensor:
     components; calling the tensor assigns abstract index labels and returns a
     lazy TensorNetwork. Arithmetic also builds networks, retaining component data.
 
+    The default notebook view is an interactive component explorer with a matrix
+    toggle. ``to_typst()`` provides static mathematical source.
 
     Examples
     --------
@@ -2895,6 +2921,11 @@ class Tensor:
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        The default is a responsive component explorer with a Memory grid /
+        Matrix toggle. Dark mode follows the surrounding page. The color scale
+        measures stored component payload bytes, not total process memory. Use
+        DisplaySettings(tensor_view="matrix") for static mathematical HTML.
 
         # Errors
 
@@ -8699,6 +8730,70 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> source = network.to_dot()
         """
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None) -> builtins.str:
+        r"""
+        Export a self-contained Typst document embedding the native SVG graph.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        str
+            Typst source containing the complete SVG and its typeset labels.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.to_linnest()
+        """
+    def render(self, *, config: typing.Optional[RenderSettings] = None) -> DiagramView:
+        r"""
+        Render a displayable snapshot of the current network graph.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        DiagramRender
+            Interactive graph snapshot with SVG/HTML exports and notebook display.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.render()
+        """
     def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
         Produce compact plain-text tensor notation.
@@ -8722,7 +8817,7 @@ class TensorNetwork:
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Examples
         --------
@@ -8758,7 +8853,7 @@ class TensorNetwork:
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Static Typst output remains available independently of the HTML explorer.
 
@@ -8811,7 +8906,38 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Display the current network graph and execution status.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        str
+            Interactive HTML graph with its progress summary.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.to_html()
+        """
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Render static mathematical tensor notation to SVG.
@@ -8842,7 +8968,7 @@ class TensorNetwork:
         if compilation fails.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Examples
         --------
@@ -8855,7 +8981,8 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_svg()
         """
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _mime_(self) -> typing.Any: ...
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
     def expression(self) -> TensorExpression:
         r"""
         Return the symbolic source computation of this network.

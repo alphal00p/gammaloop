@@ -64,14 +64,18 @@ pub const NOTEBOOK_STYLE: &str = concat!(
     include_str!("../typst/notebook.css")
 );
 
+mod explorer;
 mod labels;
 pub(crate) mod library;
 pub(crate) mod metadata;
+pub(crate) mod network;
 pub(crate) mod paging;
 
 /// Immutable presentation options for tensor notation and component displays.
 ///
 /// Formatting does not change indices, tensor algebra, or component order.
+/// The defaults use representation-specific index alphabets and an interactive
+/// component explorer. The direct MathML pager supports rich layouts and gaps;
 /// static Typst/plain source supports ports layout. HTML uses direct MathML;
 /// customizable Typst projects and SVG exports retain the Typst notation backend.
 ///
@@ -130,6 +134,20 @@ pub struct DisplaySettings {
     /// >>> value = DisplaySettings().component_style
     #[pyo3(get)]
     component_style: String,
+    /// Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import DisplaySettings
+    /// >>> value = DisplaySettings().tensor_view
+    #[pyo3(get)]
+    tensor_view: String,
     /// Choose compact or degree-explicit scalar invariant notation.
     ///
     /// Returns
@@ -235,6 +253,7 @@ impl Default for DisplaySettings {
             tensor_layout: "ports".to_owned(),
             index_style: "alphabet".to_owned(),
             component_style: "superscript".to_owned(),
+            tensor_view: "interactive".to_owned(),
             invariant_style: "compact".to_owned(),
             show_dimensions: false,
             parentheses: true,
@@ -293,6 +312,9 @@ impl DisplaySettings {
     /// component_style : str, default "superscript"
     ///     Concrete component labels: "superscript" for A(x,7)^{0,1},
     ///     or "array" for A(x,7)[0,1]. Scalar arguments stay in parentheses.
+    /// tensor_view : str, default "interactive"
+    ///     Concrete-tensor HTML: "interactive" provides a component explorer with
+    ///     a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
     ///
     /// invariant_style : {"compact", "explicit"}, default "compact"
     ///     Compact quadratic color notation uses C_F, C_A and T_R. Explicit
@@ -308,11 +330,13 @@ impl DisplaySettings {
     ///
     /// Notes
     /// -----
+    /// The tensor_view option affects concrete tensor HTML, not symbolic
+    /// TensorExpression algebra or TensorNetwork graph rendering.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community.tensor import DisplaySettings
-    /// >>> settings = DisplaySettings(component_style="array")
+    /// >>> settings = DisplaySettings(component_style="array", tensor_view="matrix")
     #[new]
     #[pyo3(signature = (
         tensor_layout = "ports",
@@ -324,6 +348,7 @@ impl DisplaySettings {
         factor_gap = "0.12em",
         index_style = "alphabet",
         component_style = "superscript",
+        tensor_view = "interactive",
         invariant_style = "compact",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
@@ -337,6 +362,7 @@ impl DisplaySettings {
         factor_gap: &str,
         index_style: &str,
         component_style: &str,
+        tensor_view: &str,
         invariant_style: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
@@ -355,6 +381,11 @@ impl DisplaySettings {
             ));
         }
         validate_typst_length(index_gap, "index_gap")?;
+        if !matches!(tensor_view, "interactive" | "matrix") {
+            return Err(PyValueError::new_err(
+                "tensor_view must be 'interactive' or 'matrix'",
+            ));
+        }
         if !matches!(invariant_style, "compact" | "explicit") {
             return Err(PyValueError::new_err(
                 "invariant_style must be 'compact' or 'explicit'",
@@ -365,6 +396,7 @@ impl DisplaySettings {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
             component_style: component_style.to_owned(),
+            tensor_view: tensor_view.to_owned(),
             invariant_style: invariant_style.to_owned(),
             show_dimensions,
             parentheses,
@@ -465,6 +497,7 @@ impl DisplaySettings {
                 ("factor_gap", "factor_gap"),
                 ("index_style", "index_style"),
                 ("component_style", "component_style"),
+                ("tensor_view", "tensor_view"),
                 ("invariant_style", "invariant_style"),
             ],
         )
@@ -2750,6 +2783,11 @@ pub(crate) fn concrete_tensor_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     reject_html_notation(notation_source)?;
+    if settings.tensor_view == "interactive"
+        && !tensor.descriptor.structure().logical_slots().is_empty()
+    {
+        return explorer::to_html(py, tensor, settings);
+    }
     concrete_tensor_to_table_html(py, tensor, settings)
 }
 
@@ -3213,6 +3251,7 @@ mod tests {
                 "0.12em",
                 style,
                 "superscript",
+                "interactive",
                 "compact",
             )
             .unwrap();
@@ -3239,6 +3278,7 @@ mod tests {
                 "0.12em",
                 "invalid",
                 "superscript",
+                "interactive",
                 "compact",
             )
             .is_err()
@@ -3259,6 +3299,7 @@ mod tests {
                 "0.12em",
                 "alphabet",
                 style,
+                "interactive",
                 "compact",
             )
             .unwrap();
@@ -3289,6 +3330,7 @@ mod tests {
                 "0.12em",
                 "alphabet",
                 "invalid",
+                "interactive",
                 "compact",
             )
             .is_err()
@@ -4258,6 +4300,7 @@ mod tests {
                 "0.1em",
                 "alphabet",
                 "superscript",
+                "interactive",
                 "compact",
             )
             .unwrap();

@@ -10,7 +10,7 @@ use spenso::structure::representation::{LibraryRep, Representation};
 use spenso::structure::slot::{Slot, SlotMatch, SlotMatcher};
 
 use crate::display;
-use crate::display::{DisplaySettings, IndexAliases};
+use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use crate::metadata::{SpensoRepresentationName, SpensoTensorStructure};
 use idenso::tensor::composition;
 use pyo3::{PyResult, Python};
@@ -114,13 +114,24 @@ impl IndexAliases {
     }
 
     /// Shared with the component explorer's axis labels.
-    #[cfg(test)]
     pub(super) fn port_label(&self, slot: PartialSlot, settings: &DisplaySettings) -> String {
         let (index, display) = self.port_display(slot);
         display
             .map(|label| label.to_native_string())
             .unwrap_or_else(|| {
-                display::format_atom_with_settings(&index, display::TensorDisplayMode::Plain, settings)
+                display::format_atom_with_settings(&index, TensorDisplayMode::Plain, settings)
+            })
+    }
+
+    pub(super) fn port_typst(&self, slot: PartialSlot, settings: &DisplaySettings) -> String {
+        if matches!(slot.aind, PartialIndex::Open(_)) {
+            return "?".into();
+        }
+        let (index, display) = self.port_display(slot);
+        display
+            .map(|display| display.to_typst_source())
+            .unwrap_or_else(|| {
+                display::format_atom_with_settings(&index, TensorDisplayMode::Typst, settings)
             })
     }
 

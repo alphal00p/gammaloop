@@ -559,7 +559,10 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
-    "spynso3" = ["crates/spynso3/tests/browser_math_font.py"];
+    "spynso3" = [
+      "crates/spynso3/tests/browser_math_font.py"
+      "crates/spynso3/tests/browser_tensor_explorer.py"
+    ];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
