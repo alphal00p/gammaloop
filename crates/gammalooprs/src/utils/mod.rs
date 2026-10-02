@@ -9,7 +9,6 @@ use crate::momentum::sample::{
 use crate::momentum::signature::{ExternalSignature, LoopSignature};
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::numerator::aind::Aind;
-use crate::numerator::ufo::UFO;
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::kinematic::Externals;
@@ -18,7 +17,6 @@ use crate::utils::hyperdual_utils::new_constant;
 
 use bincode::{Decode, Encode};
 use colored::Colorize;
-use idenso::representations::initialize;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -29,7 +27,6 @@ use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
-use smallvec::SmallVec;
 use spenso::algebra::algebraic_traits::RefOne;
 use spenso::algebra::algebraic_traits::RefZero;
 use spenso::algebra::complex::Complex;
@@ -630,48 +627,6 @@ mod tests {
     }
 
     #[test]
-    fn normalized_h_functions_integrate_to_one() {
-        use super::{F, h, h_dual, hyperdual_utils::new_constant};
-        use crate::settings::runtime::{HFunction, HFunctionSettings};
-        use symbolica::domains::dual::HyperDual;
-
-        let template = HyperDual::from_values(vec![vec![0], vec![1]], vec![F(1.0), F(0.0)]);
-        // With t = sigma e^u, the trapezoidal rule converges exponentially for
-        // these profiles, which decay doubly exponentially at both ends.
-        let step = 0.01;
-        for function in [
-            HFunction::Exponential,
-            HFunction::PolyExponential,
-            HFunction::PolyLeftRightExponential,
-        ] {
-            // The exponential profile ignores the power.
-            for power in [None, Some(1), Some(4), Some(16)] {
-                let settings = HFunctionSettings {
-                    function: function.clone(),
-                    sigma: 1.5,
-                    power,
-                    ..Default::default()
-                };
-                let integral = (-4000..=4000)
-                    .map(|n| {
-                        let t = F(settings.sigma * (n as f64 * step).exp());
-                        let value = h(&t, None, None, &settings);
-                        let dual = h_dual(&new_constant(&template, &t), None, None, &settings);
-                        // Far tails amplify argument rounding but are negligible.
-                        let scale = value.0.abs().max(1.0);
-                        assert!((dual.values[0].0 - value.0).abs() <= 1e-14 * scale);
-                        value.0 * t.0 * step
-                    })
-                    .sum::<f64>();
-                assert!(
-                    (integral - 1.0).abs() < 1e-12,
-                    "{settings:?} integrates to {integral}"
-                );
-            }
-        }
-    }
-
-    #[test]
     fn debug_tags_macro_supports_tags_and_regular_fields() {
         crate::debug_tags!(#integration, #summary;
             inspect = false,
@@ -1144,6 +1099,10 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    // The type parameter fixes the working precision.
+    #[inline]
+    fn set_precision(&mut self, _precision: u32) {}
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.float.assign(&other.float);
@@ -1367,6 +1326,11 @@ impl RefOne for QuadFloat {
 }
 
 impl SymFloatLike for QuadFloat {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -2266,9 +2230,6 @@ impl<T: FloatLike> ToCoefficient for F<T> {
 
 use symbolica::evaluate::{EvaluationDomain, ExportNumber};
 
-#[cfg(test)]
-mod evaluation_domain_tests;
-
 impl ExportNumber for QuadFloat {
     fn export(&self) -> String {
         self.to_string()
@@ -2308,21 +2269,6 @@ impl<const N: u32> FixedPrecision for VarFloat<N> {
 impl EvaluationDomain for QuadFloat {
     const FIXED_PRECISION: Option<u32> = <DoubleFloat as EvaluationDomain>::FIXED_PRECISION;
 
-    fn resolve_function(
-        tags: &[AtomView],
-        info: &EvaluationInfo,
-    ) -> Option<Box<dyn ExternalFunction<Self>>> {
-        if let Some(f) = info.get_evaluator::<Self>(tags) {
-            return Some(f);
-        }
-
-        let f = DoubleFloat::resolve_function(tags, info)?;
-        Some(Box::new(move |args: &[Self]| {
-            let args: SmallVec<[DoubleFloat; 4]> = args.iter().map(|x| x.0).collect();
-            Self(f(&args))
-        }))
-    }
-
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
     ) -> Result<Self, String> {
@@ -2339,21 +2285,6 @@ impl EvaluationDomain for QuadFloat {
 
 impl<const N: u32> EvaluationDomain for VarFloat<N> {
     const FIXED_PRECISION: Option<u32> = Some(N);
-
-    fn resolve_function(
-        tags: &[AtomView],
-        info: &EvaluationInfo,
-    ) -> Option<Box<dyn ExternalFunction<Self>>> {
-        if let Some(f) = info.get_evaluator::<Self>(tags) {
-            return Some(f);
-        }
-
-        let f = SymbolicaFloat::resolve_function(tags, info)?;
-        Some(Box::new(move |args: &[Self]| {
-            let args: SmallVec<[SymbolicaFloat; 4]> = args.iter().map(Into::into).collect();
-            Self::from(f(&args))
-        }))
-    }
 
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
@@ -2389,21 +2320,6 @@ impl<T: FloatLike + FixedPrecision> FixedPrecision for F<T> {
 
 impl<T: FloatLike + EvaluationDomain> EvaluationDomain for F<T> {
     const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
-
-    fn resolve_function(
-        tags: &[AtomView],
-        info: &EvaluationInfo,
-    ) -> Option<Box<dyn ExternalFunction<Self>>> {
-        if let Some(f) = info.get_evaluator::<Self>(tags) {
-            return Some(f);
-        }
-
-        let f = T::resolve_function(tags, info)?;
-        Some(Box::new(move |args: &[Self]| {
-            let args: SmallVec<[T; 4]> = args.iter().map(|x| x.0.clone()).collect();
-            Self(f(&args))
-        }))
-    }
 
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
@@ -2625,6 +2541,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -3471,28 +3392,6 @@ where
 {
 }
 
-pub(crate) fn parse_python_expression(expression: &str) -> Atom {
-    initialize();
-    let _ = UFO.metric;
-    let processed_string = String::from(expression)
-        .replace("**", "^")
-        .replace("cmath.sqrt", "sqrt")
-        .replace("cmath.pi", "pi")
-        .replace("math.sqrt", "sqrt")
-        .replace("math.pi", "pi");
-
-    parse!(processed_string)
-}
-
-#[test]
-fn python_expression_imaginary_unit_is_numeric() {
-    // The pinned Symbolica parser accepts both UFO export spellings directly.
-    for expression in ["𝑖", "1𝑖", "(𝑖)^5", "1+𝑖-1"] {
-        assert_eq!(parse_python_expression(expression), Atom::i());
-    }
-    assert_eq!(parse_python_expression("-𝑖/3"), -Atom::i() / 3);
-}
-
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
 pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
@@ -3737,35 +3636,86 @@ pub(crate) fn h_dual<T: FloatLike>(
     sigma: Option<F<T>>,
     h_function_settings: &crate::settings::runtime::HFunctionSettings,
 ) -> HyperDual<F<T>> {
-    let sigma = sigma.unwrap_or_else(|| F::<T>::from_f64(h_function_settings.sigma));
-    let sig = new_constant(t, &sigma);
-    let two = new_constant(t, &sigma.from_usize(2));
-    let power = h_function_settings.power;
-    let prefactor = || {
-        let normalisation = new_constant(t, &h_function_settings.normalization(&sigma));
-        match power {
-            None | Some(0) => normalisation.inv(),
-            Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
-        }
+    let sqrt_pi = new_constant(t, &t.values[0].PI().sqrt());
+    let sig = if let Some(s) = sigma {
+        new_constant(t, &s)
+    } else {
+        new_constant(t, &F::<T>::from_f64(h_function_settings.sigma))
     };
+    let power = h_function_settings.power;
     match h_function_settings.function {
         crate::settings::runtime::HFunction::Exponential => {
-            // This profile has no power.
-            (-(t.clone() * t) / (sig.clone() * &sig)).exp()
-                / new_constant(t, &h_function_settings.normalization(&sigma))
+            (-(t.clone() * t) / (sig.clone() * sig.clone())).exp()
+                * new_constant(t, &F::<T>::from_f64(2_f64))
+                / (sqrt_pi * sig)
         }
         crate::settings::runtime::HFunction::PolyExponential => {
-            // Normalized by the integral of (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2).
-            prefactor()
-                * (two
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
+            let normalisation = match power {
+                None | Some(0) => {
+                    sqrt_pi.clone() * &sig / new_constant(t, &F::<T>::from_f64(2_f64))
+                }
+                Some(1) => new_constant(t, &F::<T>::from_f64(0.841_568_215_070_771_4)) * &sig,
+                Some(3) => new_constant(t, &F::<T>::from_f64(1.033_476_847_068_688_6)) * &sig,
+                Some(4) => new_constant(t, &F::<T>::from_f64(1.329_340_388_179_137)) * &sig,
+                Some(6) => new_constant(t, &F::<T>::from_f64(2.880_237_507_721_463_7)) * &sig,
+                Some(7) => new_constant(t, &F::<T>::from_f64(4.783_566_971_347_609)) * &sig,
+                Some(9) => new_constant(t, &F::<T>::from_f64(16.225_745_976_182_285)) * &sig,
+                Some(10) => new_constant(t, &F::<T>::from_f64(32.735_007_058_911_25)) * &sig,
+                Some(12) => new_constant(t, &F::<T>::from_f64(155.837_465_922_583_42)) * &sig,
+                Some(13) => new_constant(t, &F::<T>::from_f64(364.658_500_356_566_04)) * &sig,
+                Some(15) => new_constant(t, &F::<T>::from_f64(2_257.637_553_015_473)) * &sig,
+                Some(16) => new_constant(t, &F::<T>::from_f64(5_939.804_418_537_864)) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
+            };
+            prefactor
+                * (new_constant(t, &F::<T>::from_f64(2_f64))
                     - (t.clone() * t) / (sig.clone() * &sig)
-                    - (sig.clone() * &sig) / (t.clone() * t))
+                    - (sig.clone() * sig) / (t.clone() * t))
                     .exp()
         }
         crate::settings::runtime::HFunction::PolyLeftRightExponential => {
-            // Normalized by the integral of (t/sigma)^{-p} exp(-((t^2/sigma^2+1)/(t/sigma)-2)).
-            prefactor()
-                * (two - ((t.clone() * t) / (sig.clone() * &sig) + t.one()) / (t.clone() / &sig))
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
+            let normalisation = match power {
+                None | Some(0) => new_constant(t, &F::<T>::from_f64(2.066_953_694_137_377)) * &sig,
+                Some(1) => new_constant(t, &F::<T>::from_f64(1.683_136_430_141_542_8)) * &sig,
+                Some(3) => new_constant(t, &F::<T>::from_f64(3.750_090_124_278_92)) * &sig,
+                Some(4) => new_constant(t, &F::<T>::from_f64(9.567_133_942_695_218)) * &sig,
+                Some(6) => new_constant(t, &F::<T>::from_f64(139.373_101_752_153_5)) * &sig,
+                Some(7) => new_constant(t, &F::<T>::from_f64(729.317_000_713_132_1)) * &sig,
+                Some(9) => new_constant(t, &F::<T>::from_f64(32_336.242_742_929_753)) * &sig,
+                Some(10) => new_constant(t, &F::<T>::from_f64(263_205.217_049_469)) * &sig,
+                Some(12) => new_constant(t, &F::<T>::from_f64(2.427_503_717_893_097_5e7)) * &sig,
+                Some(13) => new_constant(t, &F::<T>::from_f64(2.694_265_921_644_289e8)) * &sig,
+                Some(15) => new_constant(t, &F::<T>::from_f64(4.261_555_045_314_143e10)) * &sig,
+                Some(16) => new_constant(t, &F::<T>::from_f64(5.998_751_004_871_322e11)) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+
+            // println!("normalisation: {}", normalisation);
+            // println!("t: {}", t);
+            // println!("sig: {}", sig);
+            // println!("power: {:?}", power);
+
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
+            };
+
+            // println!("prefactor: {}", prefactor);
+            prefactor
+                * (new_constant(t, &F::<T>::from_f64(2_f64))
+                    - ((t.clone() * t) / (sig.clone() * &sig) + t.one()) / (t.clone() / &sig))
                     .exp()
         }
         crate::settings::runtime::HFunction::ExponentialCT => {
@@ -3801,29 +3751,82 @@ pub(crate) fn h<T: FloatLike>(
     sigma: Option<F<T>>,
     h_function_settings: &crate::settings::runtime::HFunctionSettings,
 ) -> F<T> {
-    let sig = sigma.unwrap_or_else(|| F::<T>::from_f64(h_function_settings.sigma));
-    let two = sig.from_usize(2);
-    let power = h_function_settings.power;
-    let prefactor = || {
-        let normalisation = h_function_settings.normalization(&sig);
-        match power {
-            None | Some(0) => normalisation.inv(),
-            Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
-        }
+    let sqrt_pi = t.PI().sqrt();
+    let sig = if let Some(s) = sigma {
+        s
+    } else {
+        F::<T>::from_f64(h_function_settings.sigma)
     };
+    let power = h_function_settings.power;
     match h_function_settings.function {
         crate::settings::runtime::HFunction::Exponential => {
-            // This profile has no power.
-            (-(t.square()) / (sig.square())).exp() / h_function_settings.normalization(&sig)
+            (-(t.square()) / (sig.square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
         }
         crate::settings::runtime::HFunction::PolyExponential => {
-            // Normalized by the integral of (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2).
-            prefactor()
-                * (two - (t.square()) / (sig.square()) - (sig.square()) / (t.square())).exp()
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
+            let normalisation = match power {
+                None | Some(0) => sqrt_pi * &sig / F::<T>::from_f64(2_f64),
+                Some(1) => F::<T>::from_f64(0.841_568_215_070_771_4) * &sig,
+                Some(3) => F::<T>::from_f64(1.033_476_847_068_688_6) * &sig,
+                Some(4) => F::<T>::from_f64(1.329_340_388_179_137) * &sig,
+                Some(6) => F::<T>::from_f64(2.880_237_507_721_463_7) * &sig,
+                Some(7) => F::<T>::from_f64(4.783_566_971_347_609) * &sig,
+                Some(9) => F::<T>::from_f64(16.225_745_976_182_285) * &sig,
+                Some(10) => F::<T>::from_f64(32.735_007_058_911_25) * &sig,
+                Some(12) => F::<T>::from_f64(155.837_465_922_583_42) * &sig,
+                Some(13) => F::<T>::from_f64(364.658_500_356_566_04) * &sig,
+                Some(15) => F::<T>::from_f64(2_257.637_553_015_473) * &sig,
+                Some(16) => F::<T>::from_f64(5_939.804_418_537_864) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
+            };
+            prefactor
+                * (F::<T>::from_f64(2_f64)
+                    - (t.square()) / (sig.square())
+                    - (sig.square()) / (t.square()))
+                .exp()
         }
         crate::settings::runtime::HFunction::PolyLeftRightExponential => {
-            // Normalized by the integral of (t/sigma)^{-p} exp(-((t^2/sigma^2+1)/(t/sigma)-2)).
-            prefactor() * (two - ((t.square()) / (sig.square()) + t.one()) / (t / &sig)).exp()
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
+            let normalisation = match power {
+                None | Some(0) => F::<T>::from_f64(2.066_953_694_137_377) * &sig,
+                Some(1) => F::<T>::from_f64(1.683_136_430_141_542_8) * &sig,
+                Some(3) => F::<T>::from_f64(3.750_090_124_278_92) * &sig,
+                Some(4) => F::<T>::from_f64(9.567_133_942_695_218) * &sig,
+                Some(6) => F::<T>::from_f64(139.373_101_752_153_5) * &sig,
+                Some(7) => F::<T>::from_f64(729.317_000_713_132_1) * &sig,
+                Some(9) => F::<T>::from_f64(32_336.242_742_929_753) * &sig,
+                Some(10) => F::<T>::from_f64(263_205.217_049_469) * &sig,
+                Some(12) => F::<T>::from_f64(2.427_503_717_893_097_5e7) * &sig,
+                Some(13) => F::<T>::from_f64(2.694_265_921_644_289e8) * &sig,
+                Some(15) => F::<T>::from_f64(4.261_555_045_314_143e10) * &sig,
+                Some(16) => F::<T>::from_f64(5.998_751_004_871_322e11) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+
+            // println!("normalisation: {}", normalisation);
+            // println!("t: {}", t);
+            // println!("sig: {}", sig);
+            // println!("power: {:?}", power);
+
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
+            };
+
+            // println!("prefactor: {}", prefactor);
+            prefactor
+                * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig))
+                    .exp()
         }
         crate::settings::runtime::HFunction::ExponentialCT => {
             let delta_t_sq = (tstar.clone().unwrap() - t).square();
@@ -5114,10 +5117,6 @@ pub(crate) fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
-pub(crate) fn format_wdhms_from_duration(duration: Duration) -> String {
-    format_wdhms(duration.as_secs() as usize)
-}
-
 #[allow(unused)]
 pub(crate) fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
     let denom = -mat[0][2] * mat[1][1] * mat[2][0]
@@ -5737,7 +5736,7 @@ impl<T> Length for Vec<T> {
     }
 }
 
-pub(crate) fn ose_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
         GS.ose,
         usize::from(index) as i64 // Atom::from(FlatIndex::from(0))
@@ -5748,7 +5747,7 @@ pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
     function!(GS.energy, usize::from(index) as i64)
 }
 
-pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }
 
@@ -5758,7 +5757,7 @@ static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/mode
 
 pub fn load_generic_model(name: &str) -> Model {
     if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
-        Model::from_str(file.contents_utf8().unwrap().into(), "json").unwrap()
+        Model::from_json(file.contents_utf8().unwrap()).unwrap()
     } else {
         panic!("Model {} not found in built-in models.", name);
     }

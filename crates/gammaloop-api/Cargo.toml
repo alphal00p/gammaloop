@@ -25,19 +25,23 @@ ahash = { workspace = true, features = ["serde"] }
 bincode = { workspace = true, features = ["serde"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["unstable-ext"] }
-clap_complete = { version = "4.5.57", optional = true }
-clap_complete_nushell = { version = "4.5.10", optional = true }
+clap_complete = "4.5.57"
+clap_complete_nushell = "4.5.10"
 # clap-repl = "0.3.2"
 color-eyre = { workspace = true }
 colored = { workspace = true }
 console = "0.16.3"
-crossterm = "0.29"
+crossterm = "0.28.1"
 dirs = { workspace = true }
 eyre = { workspace = true }
-figment = { version = "0.10.19", features = ["json"] }
+feynkit-cff = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
+figment = { version = "0.10.19", features = ["json", "toml"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
 three-dimensional-reps = { workspace = true, features = ["display"] }
+feynkit-ufo = { workspace = true, optional = true }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true }
@@ -47,19 +51,23 @@ json5 = { workspace = true }
 ndarray = { workspace = true }
 nu-ansi-term = { workspace = true }
 numpy = { workspace = true, optional = true }
-ratatui = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+ratatui = { workspace = true, features = ["crossterm_0_28"] }
 rayon = { workspace = true }
-reedline = { version = "0.44", optional = true }
+reedline = "0.42.0"
 regex = { workspace = true }
+rust-embed = { version = "8.11.0", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 shlex = "1.3.0"
 smartstring = { workspace = true, features = ["serde"] }
-spenso = { workspace = true, features = ["native", "symbolica"] }
+spenso = { workspace = true, features = ["native", "shadowing"] }
 # symbolica = { version = "0.18.0", default-features = false }
-tabled = { workspace = true, features = ["ansi", "derive"] }
+symbolica-utils = { workspace = true, features = ["native"] }
+sysinfo = { workspace = true }
+tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
@@ -79,7 +87,7 @@ features = [
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
 workspace = true
-# The abi3 feature changes compatibility without activating Python support.
+# Stable ABI features are now feature-gated via python_abi feature
 features = ["auto-initialize", "eyre"]
 optional = true
 
@@ -90,7 +98,6 @@ features = ["numpy"]
 
 [dependencies.pyo3-stub-gen-derive]
 workspace = true
-optional = true
 
 [dependencies.symbolica]
 workspace = true
@@ -116,9 +123,6 @@ features = [
   "serde",
   "serde-alloc",
 ]
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-sysinfo = { workspace = true }
-
 [dev-dependencies]
 tempfile = "3.8"
 
@@ -129,23 +133,24 @@ walkdir = { workspace = true }
 [features]
 # Keep Python optional unless explicitly enabled.
 default = ["cli"]
-cli = ["dep:clap_complete", "dep:clap_complete_nushell", "dep:reedline"]
-extension-module = [
-  "python",
+cli = []
+no_pyo3 = []
+pyo3-extension-module = [
+  "dep:pyo3",
+  "gammalooprs/pyo3-extension-module",
   "pyo3/extension-module"
 ]
-abi3 = ["pyo3?/abi3-py37"]
-python = [
-  "dep:pyo3-stub-gen-derive",
+python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
+python_api = [
   "dep:numpy",
   "dep:pyo3-build-config",
-  "gammaloop-tracing-filter/python",
-  "gammalooprs/python",
-  "ufo-import",
+  "gammaloop-tracing-filter/python_api",
+  "gammalooprs/python_api",
+  "ufo_support",
 ]
-python-stubs = [
+python_stubgen = [
   "dep:pyo3-stub-gen",
-  "gammalooprs/python-stubs",
-  "python",
+  "gammalooprs/python_stubgen",
+  "python_api",
 ]
-ufo-import = ["dep:pyo3"]
+ufo_support = ["dep:feynkit-ufo", "dep:pyo3", "pyo3/auto-initialize"]

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::cff::expression::OrientationID;
+use crate::cff::OrientationID;
 
 use crate::graph::cuts::CutSet;
 use crate::graph::edge::ParseEdge;
@@ -13,7 +13,6 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
-use crate::integrands::process::OrientationProfileMode;
 use crate::model::Model;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
@@ -24,12 +23,12 @@ use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
 use crate::uv::{
-    ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings, Spinney,
-    UVOrchestrator, UVgenerationSettings, UltravioletGraph,
+    ApproximationType, RenormalizationPrescriptionSettings, Spinney, UVOrchestrator,
+    UVgenerationSettings, UltravioletGraph,
     marker::{UvMarker, UvOperation},
 };
 
-use linnet::half_edge::involution::{EdgeIndex, Hedge};
+use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -38,8 +37,8 @@ use symbolica::atom::Symbol;
 use symbolica::symbol;
 
 use crate::{
-    dot,
-    graph::{Graph, parse::IntoGraph},
+    finalized_runtime_dot,
+    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
     momentum::signature::LoopExtSignature,
     processes::{CrossSection, CutId},
     settings::RuntimeSettings,
@@ -50,65 +49,6 @@ use symbolica::{
     atom::{Atom, AtomCore},
     function, parse,
 };
-
-#[test]
-fn analytical_uv_limits_match_compact_and_explicit_energies() -> Result<(), eyre::Report> {
-    test_initialise()?;
-    let graph: Graph = dot!(
-        digraph analytical_energy_limit {
-            edge [particle="H" num=1];
-            node [num=1];
-            ext [style=invis];
-            ext -> A:0 [id=0];
-            B:1 -> ext [id=1];
-            A -> B [id=2];
-            A -> B [id=3];
-        }
-    )?;
-    let lmb = &graph.loop_momentum_basis;
-    assert_eq!(lmb.loop_edges.len(), 1);
-    let edge = lmb.loop_edges[LoopIndex(0)];
-    let invariant = (1..=3).fold(Atom::num(9), |sum, index| {
-        sum + GS.emr_mom(edge, GS.cind(index)).pow(2)
-    });
-    let compact = function!(GS.on_shell_energy, usize::from(edge), &invariant);
-    let numerator = parse!(
-        "(analytical_energy_limit::a+analytical_energy_limit::b)^8*(analytical_energy_limit::c+analytical_energy_limit::d)^3"
-    );
-    let source = &numerator * &compact;
-    let lambda = symbol!("analytical_energy_limit::lambda");
-    let compact_limits = graph.all_limits(&graph.full_filter(), &source, lambda, lmb);
-    for energy in [
-        invariant.sqrt(),
-        function!(GS.broadcasting_sqrt, &invariant),
-    ] {
-        let explicit_limits =
-            graph.all_limits(&graph.full_filter(), &(&numerator * energy), lambda, lmb);
-        assert_eq!(compact_limits, explicit_limits);
-    }
-    let [(_, series)] = compact_limits.as_slice() else {
-        panic!("a one-loop graph must have one nonempty UV limit");
-    };
-    let actual = series
-        .to_atom()
-        .replace(GS.emr_mom(edge, GS.cind(1)))
-        .with(3)
-        .replace(GS.emr_mom(edge, GS.cind(2)))
-        .with(4)
-        .replace(GS.emr_mom(edge, GS.cind(3)))
-        .with(0);
-    // E=sqrt(25/lambda^2+9) with the three-dimensional measure lambda^-3.
-    // Exact structural equality also checks that the independent numerator's
-    // powers remain factorized in every coefficient.
-    let parameter = Atom::var(lambda);
-    let expected = &numerator * 5 / parameter.pow(4)
-        + &numerator * Atom::num((9, 10)) / parameter.pow(2)
-        - &numerator * Atom::num((81, 1000));
-    assert_eq!(actual, expected);
-    assert_eq!(source, numerator * compact);
-    assert!(source.contains_symbol(GS.on_shell_energy));
-    Ok(())
-}
 
 #[test]
 fn integrands_bulk_add_preserves_factorized_coefficients_and_cut_orders() -> Result<(), eyre::Report>
@@ -199,8 +139,6 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
         rhs: body.clone(),
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let call = function!(family, &scope, 2);
@@ -255,7 +193,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let mut state = Vec::new();
     State::export(&mut state)?;
     let state_map = State::import(&mut Cursor::new(state), None)?;
-    let model = Model::default();
+    let model = Model::empty("test");
     let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
         &encoded,
         bincode::config::standard(),
@@ -286,8 +224,6 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
         rhs: Atom::num(2),
         args: Vec::new(),
         tags: vec![scope],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots = Integrands::from_iter([(cut, call.clone())]);
@@ -350,8 +286,6 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
                 .map(|p| Indeterminate::try_from(p).unwrap())
                 .collect(),
             tags: vec![tag],
-            inlining: symbolica::evaluate::InliningPolicy::Always,
-            is_alias: false,
         });
         assert!(Integrands::from_iter([]).with_numerators([entry]).is_err());
     }
@@ -363,8 +297,6 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
         rhs: parameter.clone(),
         args: vec![Indeterminate::try_from(parameter).unwrap()],
         tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots =
@@ -373,305 +305,6 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
         roots.resolved()?,
         Integrands::from_iter([(cut, Atom::num(2))])
     );
-    Ok(())
-}
-
-#[test]
-fn integrands_retain_parametric_scalar_definitions_through_arithmetic_and_persistence()
--> Result<(), eyre::Report> {
-    use std::{io::Cursor, sync::Arc};
-    use symbolica::state::State;
-
-    use crate::{
-        GammaLoopContextContainer, cff::CutCFFIndex,
-        integrands::process::param_builder::FnMapEntry, uv::Integrands,
-    };
-
-    test_initialise()?;
-    let head = Integrands::scalar_symbol();
-    let parameter = symbol!("uv_scalar_test::parameter");
-    let p = Atom::var(parameter);
-    let scope = Atom::var(symbol!("uv_scalar_test::scope"));
-    let body = p.pow(-1) + (&p + Atom::one()).pow(-2);
-    let entry = Arc::new(FnMapEntry {
-        lhs: function!(head, &scope, &p),
-        rhs: body.clone(),
-        args: vec![parameter.into()],
-        tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
-    });
-    let cut = CutCFFIndex::new_all_none();
-    let q = function!(GS.emr_mom, 7, GS.cind(1));
-    let mass = Atom::var(symbol!("uv_scalar_test::mass"));
-    let energy = function!(GS.on_shell_energy, 7, q.pow(2) + mass.pow(2));
-    let call = function!(head, &scope, &energy);
-    let explicit = body.replace(p.to_pattern()).with(energy.to_pattern());
-    let roots = Integrands::from_iter([(cut, call)]).with_scalar_definitions([
-        Arc::clone(&entry),
-        Arc::clone(&entry),
-        Arc::new(entry.as_ref().clone()),
-    ])?;
-    assert_eq!(roots.scalar_definitions().len(), 1);
-    let multiplier = (&q + Atom::one()).pow(5);
-    for (actual, expected) in [
-        (
-            roots.map(|atom| atom * &multiplier),
-            &explicit * &multiplier,
-        ),
-        (
-            roots.fallible_map(|atom| Ok(atom * &multiplier))?,
-            &explicit * &multiplier,
-        ),
-        (-roots.clone(), -&explicit),
-        (roots.zero_like(), Atom::Zero),
-        (roots.zip_mul(&roots)?, explicit.pow(2)),
-        (
-            roots.clone().zip_add([roots.clone()])?,
-            Atom::num(2) * &explicit,
-        ),
-    ] {
-        assert_eq!(actual.scalar_definitions().len(), 1);
-        assert!(Arc::ptr_eq(&actual.scalar_definitions()[0], &entry));
-        assert_eq!(actual.resolved()?, Integrands::from_iter([(cut, expected)]));
-    }
-    let deformed = roots.map(|atom| {
-        atom.replace(q.to_pattern())
-            .with((&q + &mass).to_pattern())
-            .replace(mass.to_pattern())
-            .with(Atom::num(3))
-    });
-    let expected = explicit
-        .replace(q.to_pattern())
-        .with((&q + &mass).to_pattern())
-        .replace(mass.to_pattern())
-        .with(Atom::num(3));
-    assert_eq!(
-        deformed.resolved()?,
-        Integrands::from_iter([(cut, expected)])
-    );
-    assert!(
-        roots
-            .clone()
-            .with_scalar_definitions([])?
-            .resolved()
-            .is_err()
-    );
-
-    let encoded = bincode::encode_to_vec(&roots, bincode::config::standard())?;
-    let mut state = Vec::new();
-    State::export(&mut state)?;
-    let state_map = State::import(&mut Cursor::new(state), None)?;
-    let model = Model::default();
-    let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
-        &encoded,
-        bincode::config::standard(),
-        GammaLoopContextContainer {
-            state_map: &state_map,
-            model: &model,
-        },
-    )?;
-    assert_eq!(consumed, encoded.len());
-    assert_eq!(decoded, roots);
-    assert_eq!(decoded.resolved()?, roots.resolved()?);
-    Ok(())
-}
-
-#[test]
-fn integrands_resolve_nested_scalar_arguments_and_scalar_numerator_coefficients()
--> Result<(), eyre::Report> {
-    use crate::{cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry, uv::Integrands};
-    use std::sync::Arc;
-
-    test_initialise()?;
-    let head = Integrands::scalar_symbol();
-    let parameter = symbol!("uv_scalar_test::nested_parameter");
-    let p = Atom::var(parameter);
-    let scope = Atom::var(symbol!("uv_scalar_test::nested_scope"));
-    let body = (&p + Atom::one()).pow(-2);
-    let scalar = Arc::new(FnMapEntry {
-        lhs: function!(head, &scope, &p),
-        rhs: body.clone(),
-        args: vec![parameter.into()],
-        tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
-    });
-    let value = Atom::var(symbol!("uv_scalar_test::value"));
-    let inner = function!(head, &scope, &value);
-    let nested = function!(head, &scope, &inner);
-    let expected_inner = body.replace(p.to_pattern()).with(value.to_pattern());
-    let expected = body
-        .replace(p.to_pattern())
-        .with(expected_inner.to_pattern());
-    let cut = CutCFFIndex::new_all_none();
-    let roots = Integrands::from_iter([(cut, nested.clone())])
-        .with_scalar_definitions([Arc::clone(&scalar)])?;
-    assert_eq!(
-        roots.resolved()?,
-        Integrands::from_iter([(cut, expected.clone())])
-    );
-    assert_eq!(roots.resolve_scalar(&inner)?, expected_inner);
-
-    // One resolver can serve different roots without reusing a value for a
-    // different physical argument, including an actual argument named like a formal.
-    let mut resolve =
-        Integrands::scalar_resolver([Arc::clone(&scalar), Arc::new(scalar.as_ref().clone())])?;
-    for actual in [
-        value.clone(),
-        &value + Atom::one(),
-        p.clone(),
-        value.clone(),
-    ] {
-        let input = nested.replace(value.to_pattern()).with(actual.to_pattern());
-        let reference = expected
-            .replace(value.to_pattern())
-            .with(actual.to_pattern());
-        assert_eq!(resolve(&input)?, reference);
-    }
-    assert_eq!(resolve(&inner)?, expected_inner);
-
-    let family = symbol!("gammalooprs::uv::numerator_family");
-    let numerator = Arc::new(FnMapEntry {
-        lhs: function!(family, &scope, &p),
-        rhs: function!(head, &scope, &p) * (&p + Atom::num(2)).pow(5),
-        args: vec![parameter.into()],
-        tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
-    });
-    let call = function!(family, &scope, &value);
-    let roots = Integrands::from_iter([(cut, call.clone())])
-        .with_numerators([numerator])?
-        .with_scalar_definitions([scalar])?;
-    let scalar_resolved = roots.resolved_scalars()?;
-    assert_eq!(scalar_resolved.iter().next().unwrap().1, &call);
-    assert_eq!(scalar_resolved.numerators().len(), 1);
-    assert!(scalar_resolved.scalar_definitions().is_empty());
-    let expected = expected_inner * (&value + Atom::num(2)).pow(5);
-    assert_eq!(roots.resolved()?, Integrands::from_iter([(cut, expected)]));
-    Ok(())
-}
-
-#[test]
-fn integrands_reject_conflicting_hidden_and_invalid_scalar_definitions() -> Result<(), eyre::Report>
-{
-    use crate::{cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry, uv::Integrands};
-    use std::sync::Arc;
-
-    test_initialise()?;
-    let head = Integrands::scalar_symbol();
-    let parameter = symbol!("uv_scalar_test::validation_parameter");
-    let p = Atom::var(parameter);
-    let scope = Atom::var(symbol!("uv_scalar_test::validation_scope"));
-    let entry = Arc::new(FnMapEntry {
-        lhs: function!(head, &scope, &p),
-        rhs: &p + Atom::one(),
-        args: vec![parameter.into()],
-        tags: vec![scope.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
-    });
-    let cut = CutCFFIndex::new_all_none();
-    let roots = Integrands::from_iter([(cut, function!(head, &scope, 2))]);
-    let first = roots
-        .clone()
-        .with_scalar_definitions([Arc::clone(&entry)])?;
-    let conflict = Arc::new(FnMapEntry {
-        rhs: &p + Atom::num(2),
-        ..entry.as_ref().clone()
-    });
-    let second = roots
-        .clone()
-        .with_scalar_definitions([Arc::clone(&conflict)])?;
-    assert!(
-        roots
-            .clone()
-            .with_scalar_definitions([Arc::clone(&entry), conflict])
-            .is_err()
-    );
-    assert!(first.zip_mul(&second).is_err());
-    assert!(first.clone().zip_add([second.clone()]).is_err());
-    assert!(
-        Integrands::scalar_resolver(
-            first
-                .scalar_definitions()
-                .iter()
-                .chain(second.scalar_definitions())
-                .cloned()
-        )
-        .is_err()
-    );
-    for rhs in [
-        Atom::var(symbol!("uv_scalar_test::hidden_mass")),
-        function!(GS.on_shell_energy, 7, &p),
-        function!(head, &scope, &p),
-    ] {
-        let invalid = Arc::new(FnMapEntry {
-            rhs,
-            ..entry.as_ref().clone()
-        });
-        assert!(
-            roots
-                .clone()
-                .with_scalar_definitions([Arc::clone(&invalid), Arc::clone(&invalid)])
-                .is_err()
-        );
-        assert!(Integrands::scalar_resolver([invalid]).is_err());
-    }
-    for entry in [
-        FnMapEntry {
-            lhs: function!(head, &scope, &p, &p),
-            args: vec![parameter.into(), parameter.into()],
-            ..entry.as_ref().clone()
-        },
-        FnMapEntry {
-            lhs: function!(head, &p, &p),
-            tags: vec![p.clone()],
-            ..entry.as_ref().clone()
-        },
-        FnMapEntry {
-            lhs: function!(head, &scope),
-            ..entry.as_ref().clone()
-        },
-    ] {
-        assert!(
-            roots
-                .clone()
-                .with_scalar_definitions([Arc::new(entry)])
-                .is_err()
-        );
-    }
-    assert!(roots.resolved_scalars().is_err());
-    assert!(
-        first
-            .resolve_scalar(&function!(head, &scope, 2, 3))
-            .is_err()
-    );
-    assert!(
-        first
-            .resolve_scalar(&function!(
-                head,
-                symbol!("uv_scalar_test::unknown_scope"),
-                2
-            ))
-            .is_err()
-    );
-
-    // Different tag-prefix lengths can select the same concrete call. Merging
-    // row stores must preserve the ambiguity error even after warming the cache.
-    let fixed = Arc::new(FnMapEntry {
-        lhs: function!(head, &scope, 1),
-        rhs: Atom::num(5),
-        args: vec![],
-        tags: vec![scope.clone(), Atom::one()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
-        is_alias: false,
-    });
-    let mut resolve = Integrands::scalar_resolver([entry, fixed])?;
-    assert_eq!(resolve(&function!(head, &scope, 2))?, Atom::num(3));
-    assert!(resolve(&function!(head, &scope, 1)).is_err());
-    assert_eq!(resolve(&function!(head, &scope, 2))?, Atom::num(3));
     Ok(())
 }
 
@@ -692,12 +325,18 @@ fn scalar_bubble_root_integrand_reference(
     amplitude_graph: &mut AmplitudeGraph,
     generation_settings: &GenerationSettings,
 ) -> Atom {
+    let model = load_generic_model("scalars");
     let mut reference_settings = generation_settings.clone();
     reference_settings.uv.subtract_uv = true;
     let cutstructure = CutStructure {
         cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
     };
-    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings).unwrap();
+    let woods = CutWoods::new(
+        cutstructure,
+        &amplitude_graph.graph,
+        &model,
+        &reference_settings.uv,
+    );
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
     let production = amplitude_graph
@@ -712,6 +351,7 @@ fn scalar_bubble_root_integrand_reference(
     forests
         .compute(
             &mut amplitude_graph.graph,
+            &model,
             vakint,
             OrientationProjection::exact_expression(
                 production,
@@ -747,41 +387,44 @@ fn scalar_bubble_root_integrand_reference(
 fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
     test_initialise().unwrap();
 
-    let g: Vec<Graph> = dot!(
+    let g: Vec<Graph> = finalized_runtime_dot!(
 
         digraph banana{
-            edge [particle=scalar_1]
+            graph [projector=1]
+            edge [particle=scalar_1 num=1]
             node [num=1]
             e        [style=invis]
             // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
-            e -> A:0   [ id=5]
-            B:1 -> e   [ id=4]
-            A -> B    [ id=1]
-            A -> B    [ id=2]
-            A -> B    [ id=3]
-            A -> B    [ id=0]
+            e -> A:0   [id=5 sink="{ufo_order:0}"]
+            B:1 -> e   [id=4 source="{ufo_order:0}"]
+            A -> B     [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B     [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            A -> B     [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            A -> B     [id=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
         }
 
         digraph sunrise{
-            edge [particle=scalar_1]
+            graph [projector=1]
+            edge [particle=scalar_1 num=1]
             node [num=1]
             e        [style=invis]
             // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
-            e -> A:0   [ id=3]
-            B:1 -> e   [ id=4]
-            A -> B    [ id=1]
-            A -> B    [ id=2]
-            A -> B    [ id=0]
+            e -> A:0   [id=3 sink="{ufo_order:0}"]
+            B:1 -> e   [id=4 source="{ufo_order:0}"]
+            A -> B     [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B     [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            A -> B     [id=0 source="{ufo_order:3}" sink="{ufo_order:3}"]
         }
         digraph bub{
-            edge [particle=scalar_1]
+            graph [projector=1]
+            edge [particle=scalar_1 num=1]
             node [num=1]
             e        [style=invis]
             // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
-            e -> A:0   [ id=3]
-            B:1 -> e   [ id=2]
-            A -> B    [ id=1]
-            A -> B    [ id=0]
+            e -> A:0   [id=3 sink="{ufo_order:0}"]
+            B:1 -> e   [id=2 source="{ufo_order:0}"]
+            A -> B     [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B     [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
         },"scalars"
     )
     .unwrap();
@@ -791,6 +434,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
 
     let theadpool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
+        .stack_size(32 * 1024 * 1024)
         .build()
         .unwrap();
 
@@ -836,27 +480,20 @@ fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
 }
 
 fn build_tta_uv_graph() -> Graph {
-    let model = load_generic_model("sm");
-    let mut graph = Graph::from_dot(
-        linnet::dot!(
-            digraph G {
-                e [style=invis];
-                e -> A:0 [id=0 particle="t"];
-                B:1 -> e [id=1 particle="t"];
-                e -> C:2 [id=2 particle="a"];
-                A -> B [particle="g" lmb_id=0];
-                C -> B [particle="t"];
-                A -> C [particle="t"];
-            }
-        )
-        .unwrap(),
-        &model,
+    finalized_runtime_dot!(
+        digraph G {
+            graph [projector=1]
+            node [num=1]
+            e [style=invis];
+            e -> A:0 [id=0 particle="t" num=1 sink="{ufo_order:0}"];
+            B:1 -> e [id=1 particle="t" num=1 source="{ufo_order:0}"];
+            e -> C:2 [id=2 particle="a" num=1 sink="{ufo_order:0}"];
+            A -> B [id=3 particle="g" num=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            C -> B [id=4 particle="t" num="Q(4,spenso::cind(1))" source="{ufo_order:1}" sink="{ufo_order:2}"];
+            A -> C [id=5 particle="t" num="Q(5,spenso::cind(1))" source="{ufo_order:2}" sink="{ufo_order:2}"];
+        }
     )
-    .unwrap();
-    graph.global_prefactor.num *=
-        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]);
-    graph.validate_full_numerator_tensor_network().unwrap();
-    graph
+    .unwrap()
 }
 
 fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_dod: f64) -> String {
@@ -900,118 +537,6 @@ fn scalars_profile() {
 }
 
 #[test]
-fn unsubtracted_scalars() {
-    test_initialise().unwrap();
-    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
-        generate_integrated: false,
-        softct: false,
-        add_marker: true,
-        keep_marker: false,
-        subtract_uv: false,
-        ..Default::default()
-    });
-
-    let profile_settings = scalar_uv_profile_settings();
-    let res = amp.profile(&model, &profile_settings).unwrap();
-
-    let analysis = res.analyse();
-    assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
-    for graph in &analysis.graphs {
-        for lmb in &graph.lmbs {
-            for subset in &lmb.subsets {
-                assert!(
-                    subset.bare_dod_matches_estimate(),
-                    "bare DOD mismatch for fixed {:?}, free {:?}",
-                    subset.fixed,
-                    subset.free
-                );
-            }
-        }
-    }
-    for t in analysis.tables_per_graph(-0.9) {
-        println!("{}", t);
-    }
-
-    for t in analysis.analytic_tables_per_graph() {
-        let Some(t) = t else {
-            continue;
-        };
-        println!("{}", t);
-    }
-}
-
-#[test]
-fn scalars_profile_respects_graph_lmb_and_subset_filters() {
-    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
-        generate_integrated: false,
-        softct: false,
-        add_marker: true,
-        keep_marker: false,
-        subtract_uv: true,
-        orchestrator: UVOrchestrator::LegacyDagForest,
-        ..Default::default()
-    });
-
-    let profile_settings = ProfileSettings {
-        n_points: 5,
-        // The one-loop bubble needs only one representative divergent LMB.
-        graph_id: Some(2),
-        orientation_mode: OrientationProfileMode::PerOrientation,
-        ..scalar_uv_profile_settings()
-    };
-    let analysis = amp.profile(&model, &profile_settings).unwrap().analyse();
-
-    assert_eq!(analysis.graphs.len(), 1);
-    assert_eq!(analysis.graphs[0].graph_index, 2);
-    assert_eq!(analysis.graphs[0].lmbs.len(), 1);
-    assert_eq!(analysis.graphs[0].lmbs[0].lmb_index, 0);
-    assert!(!analysis.graphs[0].lmbs[0].subsets.is_empty());
-    let subset_analysis = &analysis.graphs[0].lmbs[0].subsets[0];
-    assert!(!subset_analysis.free.is_empty());
-    assert!(!analysis.allow_vanishing_missing_fits);
-    let serialized = serde_json::to_value(&analysis).unwrap();
-    assert!(serialized.get("allow_vanishing_missing_fits").is_none());
-    assert!(serialized["graphs"][0]["lmbs"][0]["subsets"][0]["analysis"].is_object());
-    let orientation_entries =
-        serialized["graphs"][0]["lmbs"][0]["subsets"][0]["per_orientation_inspect_entries"]
-            .as_array()
-            .unwrap();
-    assert!(!orientation_entries.is_empty());
-    assert!(
-        orientation_entries
-            .iter()
-            .all(|entry| entry["analysis"].is_object())
-    );
-}
-
-#[test]
-fn invalid_uv_graph_filter_preserves_the_integrand() {
-    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
-        generate_integrated: false,
-        softct: false,
-        add_marker: true,
-        keep_marker: false,
-        subtract_uv: true,
-        orchestrator: UVOrchestrator::LegacyDagForest,
-        ..Default::default()
-    });
-    let invalid = ProfileSettings {
-        n_points: 5,
-        graph_id: Some(usize::MAX),
-        ..scalar_uv_profile_settings()
-    };
-
-    let error = amp.profile(&model, &invalid).err().unwrap().to_string();
-    assert!(error.contains("graph_id") || error.contains("graph"));
-
-    let valid = ProfileSettings {
-        graph_id: None,
-        ..invalid
-    };
-    assert!(amp.profile(&model, &valid).is_ok());
-}
-
-#[test]
 fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
     let (amp, _model) = build_uv_scalars_amplitude(UVgenerationSettings {
         generate_integrated: false,
@@ -1031,12 +556,8 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
         .into_iter()
         .next()
         .expect("expected at least one UV spinney");
-    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis)
-        .unwrap()
-        .unwrap();
-    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis)
-        .unwrap()
-        .unwrap();
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis).unwrap();
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis).unwrap();
 
     assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
 }
@@ -1084,15 +605,17 @@ fn scalars_profile_new() {
 #[test]
 fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
     test_initialise().unwrap();
-    let mut amp: AmplitudeGraph = dot!(
+    let model = load_generic_model("sm");
+    let mut amp: AmplitudeGraph = finalized_runtime_dot!(
         digraph bub {
-            edge [particle=H]
+            graph [projector=1]
+            edge [particle=H num=1]
             node [num=1]
             e        [style=invis]
-            e -> A:0   [ id=3]
-            B:1 -> e   [ id=2]
-            A -> B    [ id=1]
-            A -> B    [ id=0]
+            e -> A:0 [id=3 sink="{ufo_order:0}"]
+            B:1 -> e [id=2 source="{ufo_order:0}"]
+            A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
         }
     )
     .unwrap();
@@ -1120,7 +643,7 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
         ..Default::default()
     };
 
-    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
+    amp.build_integrands(&model, &settings, crate::utils::vakint().unwrap())
         .unwrap();
 }
 
@@ -1128,17 +651,19 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
 #[ignore = "expensive nested integrated banana Vakint regression"]
 fn scalars_integrated_banana_hedge_poset() {
     test_initialise().unwrap();
-    let mut amp: AmplitudeGraph = dot!(
+    let model = load_generic_model("scalars");
+    let mut amp: AmplitudeGraph = finalized_runtime_dot!(
         digraph banana {
-            edge [particle=scalar_1]
+            graph [projector=1]
+            edge [particle=scalar_1 num=1]
             node [num=1]
             e        [style=invis]
-            e -> A:0   [ id=5]
-            B:1 -> e   [ id=4]
-            A -> B    [ id=1]
-            A -> B    [ id=2]
-            A -> B    [ id=3]
-            A -> B    [ id=0]
+            e -> A:0 [id=5 sink="{ufo_order:0}"]
+            B:1 -> e [id=4 source="{ufo_order:0}"]
+            A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            A -> B [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            A -> B [id=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
         },
         "scalars"
     )
@@ -1167,7 +692,7 @@ fn scalars_integrated_banana_hedge_poset() {
         ..Default::default()
     };
 
-    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
+    amp.build_integrands(&model, &settings, crate::utils::vakint().unwrap())
         .unwrap();
 }
 
@@ -1236,7 +761,7 @@ fn nested_bubble_soft_ct() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1438,7 +963,7 @@ fn nested_bubble_scalar_quad() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
@@ -1621,7 +1146,7 @@ fn nested_bubble_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1781,7 +1306,7 @@ fn disconnect_forest_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
@@ -1922,6 +1447,318 @@ fn disconnect_forest_scalar() {
 
     */
 
+// #[test]
+// #[allow(unused)]
+// fn easy() {
+//     let model = load_generic_model("sm");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
+//         name: "external".into(),
+//         couplings: vec![],
+//         lorentz_structures: vec![],
+//         particles: vec![],
+//         color_structures: ColorStructure::new(vec![]),
+//     }));
+
+//     let incoming = symbolica_graph.add_node(NodeColorWithVertexRule {
+//         external_tag: 1,
+//         vertex_rule: dummy_external_vertex_rule.clone(),
+//     });
+
+//     let outgoing = symbolica_graph.add_node(NodeColorWithVertexRule {
+//         external_tag: 2,
+//         vertex_rule: dummy_external_vertex_rule.clone(),
+//     });
+
+//     let tth = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_141"),
+//     };
+
+//     let t = EdgeColor::from_particle(model.get_particle("t"));
+//     let h = EdgeColor::from_particle(model.get_particle("H"));
+
+//     let l1 = symbolica_graph.add_node(tth.clone());
+//     let l2 = symbolica_graph.add_node(tth.clone());
+
+//     let e1 = symbolica_graph.add_edge(incoming, l1, false, h).unwrap();
+//     let e2 = symbolica_graph.add_edge(l2, outgoing, false, h).unwrap();
+//     symbolica_graph.add_edge(l1, l2, true, t);
+//     symbolica_graph.add_edge(l2, l1, true, t);
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "1l_prop".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![((Some(1), Some(2)))],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     println!("{}", wood.dot(&uv_graph));
+//     println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // assert_eq!(152, ufold.n_terms());
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn tbt() {
+//     let (model, amplitude, _) =
+//         load_amplitude_output("TEST_AMPLITUDE_triangle_box_triangle_phys/GL_OUTPUT", true);
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+//     // graph.generate_uv();
+
+//     graph.generate_loop_momentum_bases();
+
+//     let uv_graph = UVGraph::from_graph(&graph.bare_graph);
+
+//     println!("tbt_dot{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     println!("{}", wood.dot(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn bugblatter_forest() {
+//     // println!("{}", env!("CARGO_CRATE_NAME"));
+//     let model = load_generic_model("sm");
+//     println!("{}", model.vertex_rules[0].0.name);
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let ttg = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_137"),
+//     };
+
+//     let t = EdgeColor::from_particle(model.get_particle("t"));
+//     let g = EdgeColor::from_particle(model.get_particle("g"));
+
+//     let l1 = symbolica_graph.add_node(ttg.clone());
+//     let l2 = symbolica_graph.add_node(ttg.clone());
+//     let l3 = symbolica_graph.add_node(ttg.clone());
+//     let l4 = symbolica_graph.add_node(ttg.clone());
+//     let l5 = symbolica_graph.add_node(ttg.clone());
+//     let l6 = symbolica_graph.add_node(ttg.clone());
+
+//     symbolica_graph.add_edge(l1, l2, true, t);
+//     symbolica_graph.add_edge(l2, l3, true, t);
+//     symbolica_graph.add_edge(l3, l1, true, t);
+
+//     symbolica_graph.add_edge(l4, l5, true, t);
+//     symbolica_graph.add_edge(l5, l6, true, t);
+//     symbolica_graph.add_edge(l6, l4, true, t);
+
+//     symbolica_graph.add_edge(l1, l4, true, g);
+//     symbolica_graph.add_edge(l2, l5, true, g);
+//     symbolica_graph.add_edge(l3, l6, true, g);
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "bugblatter".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     assert_eq!(20, wood.n_spinneys());
+//     println!("{}", wood.dot(&uv_graph));
+//     println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     assert_eq!(152, ufold.n_terms());
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn kaapo_triplering() {
+//     let model = load_generic_model("scalars");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let four_scalar = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+//     };
+
+//     let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+//     let l1 = symbolica_graph.add_node(four_scalar.clone());
+//     let l2 = symbolica_graph.add_node(four_scalar.clone());
+//     let l3 = symbolica_graph.add_node(four_scalar.clone());
+
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "threeringscalar".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     // println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     assert_eq!(26, wood.n_spinneys());
+
+//     // println!("{}", wood.dot(&uv_graph));
+//     // println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     assert_eq!(242, ufold.n_terms());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn kaapo_quintic_scalar() {
+//     let model = load_generic_model("scalars");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let three = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_3_SCALAR_000"),
+//     };
+//     let four = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+//     };
+//     let five = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_5_SCALAR_00000"),
+//     };
+
+//     let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+//     let l1 = symbolica_graph.add_node(three);
+//     let l2 = symbolica_graph.add_node(four);
+//     let l3 = symbolica_graph.add_node(five);
+
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "threeringscalar".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     assert_eq!(25, wood.n_spinneys());
+
+//     // println!("{}", wood.dot(&uv_graph));
+//     // println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     assert_eq!(248, ufold.n_terms());
+// }
+
 use super::*;
 
 use std::cmp::Ordering;
@@ -2049,7 +1886,7 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let cycle = graph
         .spinneys(&graph.no_dummy())
         .into_iter()
@@ -2069,7 +1906,9 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
         "Q(2,spenso::cind(0))*Q(2,spenso::mink(4,edge(2,1)))",
         1,
     );
-    let marginal: Graph = marginal_source.into_graph(&model).unwrap();
+    let marginal: Graph = marginal_source
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
     let marginal_cycle = marginal
         .spinneys(&marginal.no_dummy())
         .into_iter()
@@ -2100,7 +1939,7 @@ fn production_energy_gate_includes_factorized_global_numerator() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
     let convergent = graph.with_global_numerator_only(
@@ -2156,7 +1995,7 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let convergent = graph.with_global_numerator_only("four_d_unit_bubble".into(), Atom::one());
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
@@ -2180,13 +2019,13 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         };
         let mut bare = AmplitudeGraph::new(convergent.clone());
         assert!(bare.derived_data.cff_expression.is_none());
-        let part = bare.renormalization_part(&settings).unwrap();
+        let part = bare.renormalization_part(&model, &settings).unwrap();
         assert!(!part.expression.is_zero());
         assert!(bare.derived_data.cff_expression.is_none());
         let mut stored = AmplitudeGraph::new(convergent.clone());
         stored.generate_cff(&GenerationSettings::default()).unwrap();
         assert!(stored.derived_data.cff_expression.is_some());
-        let with_cff = stored.renormalization_part(&settings).unwrap();
+        let with_cff = stored.renormalization_part(&model, &settings).unwrap();
         assert_eq!(
             part.expression.collect_factors(),
             with_cff.expression.collect_factors()
@@ -2200,7 +2039,7 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         let mut unsupported = AmplitudeGraph::new(divergent.clone());
         assert!(unsupported.derived_data.cff_expression.is_none());
         let error = unsupported
-            .renormalization_part(&settings)
+            .renormalization_part(&model, &settings)
             .unwrap_err()
             .to_string();
         assert!(error.contains("DOD_4D=3"), "{error}");
@@ -2217,7 +2056,7 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     // one r denominator and three q denominators carry the factor q0^2-r0^2.
     // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
     // has DOD_E=1. It is not a valid finite-pole oracle.
-    let graph: Graph = dot!(
+    let graph: Graph = finalized_runtime_dot!(
         digraph energy_divergent_r_contact {
             edge [particle=scalar_1]
             node [num=1]
@@ -2255,7 +2094,7 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
 
 #[test]
 fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
-    use crate::utils::symbolica_ext::DOD;
+    use feynkit_graph::DOD;
 
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
@@ -2274,7 +2113,7 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
         B -> C [id=2]
         C -> A [id=3]
     }"#;
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let r_squared = function!(GS.emr_mom, 0, GS.cind(0)).pow(2);
     assert_eq!(
         graph.production_numerator_atom_for_full_3d_expression(),
@@ -2286,7 +2125,7 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     // outside a cycle and depending only on its own momentum is soft there.
     let owner_local: Graph = source
         .replace("Q(0,spenso::cind(0))", "Q(1,spenso::cind(0))")
-        .into_graph(&model)
+        .into_finalized_runtime_graph(&model)
         .unwrap();
     owner_local
         .ensure_energy_convergent_cycles(&owner_local.no_dummy())
@@ -2323,9 +2162,10 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
             &lmb,
             &lmb,
             &(graph.production_numerator_atom_for_full_3d_expression()
-                / graph.denominator(&r_cycle.filter, |_| 1)),
+                / graph.denominator(&r_cycle.filter, &model, |_| 1)),
         )
-        .trailing_exponent()
+        .trailing_exponent(GS.rescale)
+        .unwrap()
         - 3;
     assert_eq!(
         local_degree, -1,
@@ -2353,47 +2193,32 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     );
 }
 
-#[test]
-fn disconnected_spinney_classification_is_factorwise() {
-    failing::disconnected_spinney_classification_is_factorwise();
-}
-
-#[test]
-fn ct_identifier_flips_outgoing_boundary_pdgs() {
-    test_initialise().unwrap();
-
-    let graph = build_tta_uv_graph();
-    let expected_internal_pdg_set = pdg_set([6, 21]);
-    let identifiers = graph
-        .spinneys(&graph.full_filter())
-        .into_iter()
-        .map(|spinney| graph.ct_identifier(&spinney.filter))
-        .collect::<Vec<_>>();
-    let identifier = identifiers
-        .iter()
-        .find(|identifier| identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set))
-        .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
-
-    assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
-    assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
-}
 mod failing {
     use super::*;
+
+    fn explicit_ufo_order(order: u8) -> ParseHedgeData {
+        ParseHedgeData {
+            ufo_order: Some(order),
+        }
+    }
 
     #[test]
     fn soft_ct_test() {
         test_initialise().unwrap();
-        let mut amp: AmplitudeGraph = dot!(
+        let model = load_generic_model("sm");
+        let mut amp: AmplitudeGraph = finalized_runtime_dot!(
             digraph physical_1L_4photons_0 {
-            ext    [style=invis]
-            ext -> v1 [particle=a];
-            ext -> v2 [particle=a];
-            v3 -> ext [particle=a];
-            v4 -> ext [particle=a];
-            v1 -> v2 [particle=t];
-            v2 -> v3 [particle=t];
-            v3 -> v4 [particle=t];
-            v4 -> v1 [particle=t];
+            graph [projector=1]
+            node [num=1]
+            ext [style=invis]
+            ext -> v1 [id=0 particle=a num=1 sink="{ufo_order:0}"];
+            ext -> v2 [id=1 particle=a num=1 sink="{ufo_order:0}"];
+            v3 -> ext [id=2 particle=a num=1 source="{ufo_order:0}"];
+            v4 -> ext [id=3 particle=a num=1 source="{ufo_order:0}"];
+            v1 -> v2 [id=4 particle=t num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            v2 -> v3 [id=5 particle=t num="Q(5,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            v3 -> v4 [id=6 particle=t num="Q(6,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            v4 -> v1 [id=7 particle=t num="Q(7,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"];
             }
         )
         .unwrap();
@@ -2417,7 +2242,7 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(&model, &set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -2425,17 +2250,20 @@ mod failing {
     #[test]
     fn four_photon_one_loop_amp() {
         test_initialise().unwrap();
-        let mut amp: AmplitudeGraph = dot!(
+        let model = load_generic_model("sm");
+        let mut amp: AmplitudeGraph = finalized_runtime_dot!(
             digraph physical_1L_4photons_0 {
-            ext    [style=invis]
-            ext -> v1 [particle=a];
-            ext -> v2 [particle=a];
-            v3 -> ext [particle=a];
-            v4 -> ext [particle=a];
-            v1 -> v2 [particle=t];
-            v2 -> v3 [particle=t];
-            v3 -> v4 [particle=t];
-            v4 -> v1 [particle=t];
+            graph [projector=1]
+            node [num=1]
+            ext [style=invis]
+            ext -> v1 [id=0 particle=a num=1 sink="{ufo_order:0}"];
+            ext -> v2 [id=1 particle=a num=1 sink="{ufo_order:0}"];
+            v3 -> ext [id=2 particle=a num=1 source="{ufo_order:0}"];
+            v4 -> ext [id=3 particle=a num=1 source="{ufo_order:0}"];
+            v1 -> v2 [id=4 particle=t num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            v2 -> v3 [id=5 particle=t num="Q(5,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            v3 -> v4 [id=6 particle=t num="Q(6,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            v4 -> v1 [id=7 particle=t num="Q(7,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"];
             }
         )
         .unwrap();
@@ -2459,9 +2287,32 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(&model, &set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
+    }
+
+    #[test]
+    fn ct_identifier_flips_outgoing_boundary_pdgs() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let graph = build_tta_uv_graph();
+        let expected_internal_pdg_set = pdg_set([6, 21]);
+        let identifiers = graph
+            .spinneys(&graph.full_filter())
+            .into_iter()
+            .map(|spinney| graph.ct_identifier(&spinney.filter, &model))
+            .collect::<Vec<_>>();
+        let identifier = identifiers
+            .iter()
+            .find(|identifier| {
+                identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set)
+            })
+            .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
+
+        assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
+        assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
     }
 
     #[test]
@@ -2469,10 +2320,19 @@ mod failing {
         test_initialise().unwrap();
 
         let model = load_generic_model("scalars");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = finalized_runtime_dot!(
+            digraph GL0 {
+                graph [projector=1]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [particle=scalar_1 num="1𝑖" sink="{ufo_order:0}"]
+                B -> ext [particle=scalar_1 num="1𝑖" source="{ufo_order:0}"]
+                A -> B [particle=scalar_2 num="1𝑖 * Q(2,spenso::mink(4,edge(2,1))) * Q(0,spenso::mink(4,edge(2,1)))" lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [particle=scalar_2 num="-1𝑖 * (Q(3,spenso::mink(4,edge(3,1))) + Q(0,spenso::mink(4,edge(3,1)))) * Q(0,spenso::mink(4,edge(3,1)))" source="{ufo_order:2}" sink="{ufo_order:2}"]
+            },
+            &model
+        )
+        .unwrap();
         let settings = UVgenerationSettings {
             renormalization_prescription: RenormalizationPrescriptionSettings {
                 log_divergent: ApproximationType::MUV,
@@ -2483,112 +2343,89 @@ mod failing {
             ..Default::default()
         };
 
-        let spinneys = graph
-            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
-            .unwrap();
+        let spinneys = graph.classified_spinneys(
+            &graph.full_filter(),
+            &model,
+            &settings,
+            &graph.loop_momentum_basis,
+        );
         let spinney = spinneys
             .iter()
             .find(|spinney| {
-                spinney.dod > 0 && graph.has_massive_boundary_external(spinney.filter())
+                spinney.dod > 0 && graph.has_massive_boundary_external(spinney.filter(), &model)
             })
             .unwrap_or_else(|| panic!("dod2 bubble should have a massive power-divergent spinney"));
 
         assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
     }
 
-    pub(super) fn disconnected_spinney_classification_is_factorwise() {
+    #[test]
+    fn unsubtracted_scalars() {
         test_initialise().unwrap();
-
-        let model = load_generic_model("scalars");
-        let graph: Graph = include_str!(
-            "../../../../tests/resources/graphs/uv_tests/scalar_spectacles_self_energy.dot"
-        )
-        .into_graph(&model)
-        .unwrap();
-        let union = graph
-            .spinneys(&graph.full_filter())
-            .into_iter()
-            .find(|spinney| graph.underlying.connected_components(spinney).len() > 1)
-            .expect("spectacles should contain a disconnected spinney");
-        let components = graph.underlying.connected_components(&union);
-        let union_identifier = graph.ct_identifier(&union);
-        let component_identifiers = components
-            .iter()
-            .map(|component| graph.ct_identifier(component))
-            .collect::<Vec<_>>();
-        assert!(
-            component_identifiers
-                .iter()
-                .all(|identifier| identifier != &union_identifier),
-            "the aggregate override must not also match a component"
-        );
-
-        let prescription = |overrides| RenormalizationPrescriptionSettings {
-            log_divergent: ApproximationType::OS,
-            massive_power_divergent: ApproximationType::OS,
-            massless_power_divergent: ApproximationType::OS,
-            overrides,
-        };
-        let aggregate_override = UVgenerationSettings {
-            renormalization_prescription: prescription(vec![CTRenormalizationRule::new(
-                union_identifier,
-                ApproximationType::Unsubtracted,
-            )]),
+        let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+            generate_integrated: false,
+            softct: false,
+            add_marker: true,
+            keep_marker: false,
+            subtract_uv: true,
             ..Default::default()
-        };
-        let classified = graph
-            .classified_spinneys(
-                &graph.full_filter(),
-                &aggregate_override,
-                &graph.loop_momentum_basis,
-            )
-            .unwrap();
-        let classified_union = classified
-            .iter()
-            .find(|spinney| spinney.subgraph == union)
-            .expect("retained components should retain their disconnected union");
-        assert_eq!(
-            classified_union.renormalization_scheme,
-            ApproximationType::MUV
-        );
-        for component in &components {
-            let factor = classified
-                .iter()
-                .find(|spinney| spinney.filter() == component)
-                .expect("each component factor should be retained");
-            assert_eq!(factor.renormalization_scheme, ApproximationType::OS);
+        });
+
+        let profile_settings = scalar_uv_profile_settings();
+        let res = amp.profile(&model, &profile_settings).unwrap();
+
+        let analysis = res.analyse();
+        assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
+        for graph in &analysis.graphs {
+            for lmb in &graph.lmbs {
+                for subset in &lmb.subsets {
+                    assert!(
+                        subset.bare_dod_matches_estimate(),
+                        "bare DOD mismatch for fixed {:?}, free {:?}",
+                        subset.fixed,
+                        subset.free
+                    );
+                }
+            }
+        }
+        for t in analysis.tables_per_graph(-0.9) {
+            println!("{}", t);
         }
 
-        let component_override = UVgenerationSettings {
-            renormalization_prescription: prescription(vec![CTRenormalizationRule::new(
-                component_identifiers[0].clone(),
-                ApproximationType::Unsubtracted,
-            )]),
-            ..Default::default()
-        };
-        let classified = graph
-            .classified_spinneys(
-                &graph.full_filter(),
-                &component_override,
-                &graph.loop_momentum_basis,
-            )
-            .unwrap();
-        assert!(
-            classified.iter().all(|spinney| spinney.subgraph != union),
-            "suppressing a component must also suppress its disconnected union"
-        );
+        for t in analysis.analytic_tables_per_graph() {
+            let Some(t) = t else {
+                continue;
+            };
+            println!("{}", t);
+        }
     }
 
     #[test]
     fn tta_uv() {
         test_initialise().unwrap();
 
-        let mut amp = Amplitude::from_graph_list("tta", vec![build_tta_uv_graph()]).unwrap();
+        let g: Vec<Graph> = finalized_runtime_dot!(
+            digraph G{
+                graph [projector=1]
+                node [num=1]
+                e        [style=invis]
+                e -> A:0 [id=0 particle=t num=1 sink="{ufo_order:0}"]
+                B:1 -> e [id=1 particle=t num=1 source="{ufo_order:0}"]
+                e -> C:2 [id=2 particle=a num=1 sink="{ufo_order:0}"]
+                A -> B [id=3 lmb_id=0 particle=g num=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                C -> B [id=4 particle=t num="Q(4,spenso::cind(1))" source="{ufo_order:1}" sink="{ufo_order:2}"]
+                A -> C [id=5 particle=t num="Q(5,spenso::cind(1))" source="{ufo_order:2}" sink="{ufo_order:2}"]
+            }
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("tta", g).unwrap();
 
         let model = load_generic_model("sm");
 
         let theadpool = rayon::ThreadPoolBuilder::new()
             .num_threads(1)
+            .stack_size(32 * 1024 * 1024)
             .build()
             .unwrap();
 
@@ -2623,6 +2460,7 @@ mod failing {
             // let all = g.graph.all_cycle_unions(&g.graph.full_filter());
 
             g.graph.all_limits(
+                &model,
                 &g.graph.full_filter(),
                 &g.derived_data.resolved_integrand().unwrap(),
                 symbol!("lambd"),
@@ -2648,42 +2486,38 @@ mod failing {
 
         let mut underlying = HedgeGraphBuilder::new();
 
-        let hhh = model.get_vertex_rule("V_9");
-        let htt = model.get_vertex_rule("V_141");
+        let hhh = model.vertex_rule_id("V_9").unwrap();
+        let htt = model.vertex_rule_id("V_141").unwrap();
+        let hp = model.particle_id("H").unwrap();
+        let tp = model.particle_id("t").unwrap();
 
-        let hprop = model.get_propagator("H_propFeynman");
-        let hp = model.get_particle("H");
-
-        let tprop = model.get_propagator("t_propFeynman");
-        let tp = model.get_particle("t");
-
-        let n1 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-        let n2 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-        let n3 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-        let n4 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
-        let n5 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
-        let n6 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+        let n1 = underlying.add_node(ParseVertex::from(hhh).with_num(Atom::num(1)));
+        let n2 = underlying.add_node(ParseVertex::from(hhh).with_num(Atom::num(1)));
+        let n3 = underlying.add_node(ParseVertex::from(hhh).with_num(Atom::num(1)));
+        let n4 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::num(1)));
+        let n5 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::num(1)));
+        let n6 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::num(1)));
 
         underlying.add_edge(
-            n1.add_data(ParseHedgeData::default()),
-            n2.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone())
+            n1.add_data(explicit_ufo_order(0)),
+            n2.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp)
                 .with_num(Atom::one())
                 .with_lmb_id(LoopIndex(0)),
             false,
         );
 
         underlying.add_edge(
-            n1.add_data(ParseHedgeData::default()),
-            n3.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(Atom::one()),
+            n1.add_data(explicit_ufo_order(1)),
+            n3.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp).with_num(Atom::one()),
             false,
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedgeData::default()),
-            n3.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 1 {
+            n2.add_data(explicit_ufo_order(1)),
+            n3.add_data(explicit_ufo_order(1)),
+            ParseEdge::new(hp).with_num(if box_uv_dod >= 1 {
                 spenso_lor_atom(2, 30, GS.dim)
             } else {
                 Atom::one()
@@ -2705,9 +2539,9 @@ mod failing {
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedgeData::default()),
-            n4.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
+            n2.add_data(explicit_ufo_order(2)),
+            n4.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
@@ -2716,9 +2550,9 @@ mod failing {
         );
 
         underlying.add_edge(
-            n3.add_data(ParseHedgeData::default()),
-            n5.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone())
+            n3.add_data(explicit_ufo_order(2)),
+            n5.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp)
                 .with_num(if box_uv_dod == 2 {
                     spenso_lor_atom(4, 30, GS.dim)
                 } else {
@@ -2729,9 +2563,9 @@ mod failing {
         );
 
         underlying.add_edge(
-            n4.add_data(ParseHedgeData::default()),
-            n5.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+            n4.add_data(explicit_ufo_order(1)),
+            n5.add_data(explicit_ufo_order(1)),
+            ParseEdge::new(tp).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(5, 10, GS.dim)
             } else {
                 Atom::one()
@@ -2740,9 +2574,9 @@ mod failing {
         );
 
         underlying.add_edge(
-            n6.add_data(ParseHedgeData::default()),
-            n4.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
+            n6.add_data(explicit_ufo_order(0)),
+            n4.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(tp).with_num(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {
                 Atom::one()
@@ -2751,9 +2585,9 @@ mod failing {
         );
 
         underlying.add_edge(
-            n5.add_data(ParseHedgeData::default()),
-            n6.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone())
+            n5.add_data(explicit_ufo_order(2)),
+            n6.add_data(explicit_ufo_order(1)),
+            ParseEdge::new(tp)
                 .with_num(if uv_dod >= 0 {
                     spenso_lor_atom(7, 10, GS.dim)
                 } else {
@@ -2764,8 +2598,8 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n1.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(if box_uv_dod == 1 {
+            n1.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(hp).with_num(if box_uv_dod == 1 {
                 spenso_lor_atom(8, 30, GS.dim)
             } else {
                 Atom::one()
@@ -2775,8 +2609,8 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n6.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
+            n6.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(hp).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
                 spenso_lor_atom(9, 20, GS.dim)
             } else {
                 Atom::one()
@@ -2787,7 +2621,7 @@ mod failing {
 
         let underlying = ParseGraph {
             graph: underlying.build(),
-            global_data: ParseData::default(),
+            global_data: ParseData::default().with_projectors(Atom::one()),
         };
 
         println!("{}", underlying.dot(&underlying.full_filter()));
@@ -2801,8 +2635,8 @@ mod failing {
                 .dot_lmb_of(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
         );
 
-        let hpdg = hp.pdg_code as i64;
-        let tpdg = tp.pdg_code as i64;
+        let hpdg = model.particle_by_id(hp).unwrap().pdg_code;
+        let tpdg = model.particle_by_id(tp).unwrap().pdg_code;
         let cs: CrossSection = CrossSection::new("".into());
         //    cs.preprocess(
         //        &model,
@@ -2836,38 +2670,36 @@ mod failing {
 
         let mut underlying = HedgeGraphBuilder::new();
 
-        let hhh = model.get_vertex_rule("V_9");
-        let htt = model.get_vertex_rule("V_141");
+        let hhh = model.vertex_rule_id("V_9").unwrap();
+        let htt = model.vertex_rule_id("V_141").unwrap();
+        let hp = model.particle_id("H").unwrap();
+        let tp = model.particle_id("t").unwrap();
 
-        let hprop = model.get_propagator("H_propFeynman");
-        let hp = model.get_particle("H");
-
-        let tprop = model.get_propagator("t_propFeynman");
-        let tp = model.get_particle("t");
-
-        let n1 = underlying.add_node(hhh.clone().into());
-        let n2 = underlying.add_node(htt.clone().into());
-        let n3 = underlying.add_node(htt.clone().into());
-        let n4 = underlying.add_node(htt.clone().into());
+        let n1 = underlying.add_node(ParseVertex::from(hhh).with_num(Atom::one()));
+        let n2 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::one()));
+        let n3 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::one()));
+        let n4 = underlying.add_node(ParseVertex::from(htt).with_num(Atom::one()));
 
         underlying.add_edge(
-            n1.add_data(ParseHedgeData::default()),
-            n2.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()),
+            n1.add_data(explicit_ufo_order(0)),
+            n2.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp)
+                .with_num(Atom::one())
+                .with_lmb_id(LoopIndex(0)),
             false,
         );
 
         underlying.add_edge(
-            n1.add_data(ParseHedgeData::default()),
-            n3.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()),
+            n1.add_data(explicit_ufo_order(1)),
+            n3.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(hp).with_num(Atom::one()),
             false,
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedgeData::default()),
-            n3.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+            n2.add_data(explicit_ufo_order(1)),
+            n3.add_data(explicit_ufo_order(1)),
+            ParseEdge::new(tp).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(2, 10, GS.dim)
             } else {
                 Atom::one()
@@ -2876,20 +2708,22 @@ mod failing {
         );
 
         underlying.add_edge(
-            n3.add_data(ParseHedgeData::default()),
-            n4.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
-                spenso_lor_atom(3, 20, GS.dim)
-            } else {
-                Atom::one()
-            }),
+            n3.add_data(explicit_ufo_order(2)),
+            n4.add_data(explicit_ufo_order(0)),
+            ParseEdge::new(tp)
+                .with_num(if uv_dod >= 1 {
+                    spenso_lor_atom(3, 20, GS.dim)
+                } else {
+                    Atom::one()
+                })
+                .with_lmb_id(LoopIndex(1)),
             true,
         );
 
         underlying.add_edge(
-            n4.add_data(ParseHedgeData::default()),
-            n2.add_data(ParseHedgeData::default()),
-            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+            n4.add_data(explicit_ufo_order(1)),
+            n2.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(tp).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(4, 10, GS.dim)
             } else {
                 Atom::one()
@@ -2898,15 +2732,15 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n1.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()),
+            n1.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(hp).with_num(Atom::one()),
             false,
             Flow::Sink,
         );
 
         underlying.add_external_edge(
-            n4.add_data(ParseHedgeData::default()),
-            ParseEdge::new(hp.clone()).with_num(if uv_dod >= 1 {
+            n4.add_data(explicit_ufo_order(2)),
+            ParseEdge::new(hp).with_num(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {
                 Atom::one()
@@ -2917,7 +2751,7 @@ mod failing {
 
         let underlying = ParseGraph {
             graph: underlying.build(),
-            global_data: ParseData::default(),
+            global_data: ParseData::default().with_projectors(Atom::one()),
         };
 
         let loop_momentum_basis = LoopMomentumBasis {
@@ -2975,9 +2809,7 @@ mod failing {
                 ^ -1"
         );
 
-        let num_2 = parse!(
-            "(-OSE(2) * OSE(4) + dot(Q3(3,spenso::mink(4)), Q3(3,spenso::mink(4)))) * OSE(3)^2"
-        );
+        let num_2 = parse!("(-OSE(2) * OSE(4) + dot(Q3(3), Q3(3))) * OSE(3)^2");
 
         let mut expr = &num_2 * &cff;
 

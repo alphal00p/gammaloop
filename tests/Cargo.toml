@@ -17,17 +17,23 @@ bincode = { workspace = true }
 color-eyre = { workspace = true }
 colored = { workspace = true }
 eyre = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
+feynkit-model = { workspace = true }
 gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
-insta = { workspace = true, features = ["json", "ron", "serde"] }
+idenso = { workspace = true }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 itertools = { workspace = true }
 linnet = { workspace = true }
 momtrop = { workspace = true }
 ndarray = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
+rayon.workspace = true
 serde_json = { workspace = true }
-parking_lot = { version = "0.12", default-features = false }
-spenso = { workspace = true, features = ["native", "symbolica"] }
+serial_test = "3.2.0"
+spenso = { workspace = true, features = ["native", "shadowing"] }
+symbolica-utils = { workspace = true, features = ["native"] }
 tabled = { workspace = true, features = ["ansi"] }
 three-dimensional-reps = { workspace = true, features = ["eval"] }
 toml = { workspace = true }

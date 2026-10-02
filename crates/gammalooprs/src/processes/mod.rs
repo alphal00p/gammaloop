@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
@@ -44,7 +40,7 @@ pub use selection::{
 };
 pub(crate) use selection::{GraphCutSelectionSubject, GraphSelectionSubject};
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
@@ -58,7 +54,7 @@ pub enum TensorNetworkContractionOrder {
     IntermediateCost,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum ExecutionMode {
     Sequential,
@@ -67,13 +63,13 @@ pub enum ExecutionMode {
     SequentialExtract,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum ContractionMode {
     SmallestDegree,
     MinResultRank,
 }
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     /// Perform symbolic tensor and scalar algebra before lowering to an evaluator.
@@ -88,8 +84,7 @@ pub struct EvaluatorSettings {
     /// Build one evaluator for the sum of all contributions instead of separate evaluators.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
-    /// Sum all orientations, retaining each selected orientation as a separate
-    /// Symbolica function-map alias instead of merging them into one expression.
+    /// Represent a summed evaluator through a shared Symbolica function map.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
     /// Compile the lowered evaluator using the configured generation compilation backend.
@@ -101,12 +96,6 @@ pub struct EvaluatorSettings {
     /// Apply function-map replacements before numerical lowering.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
-    /// Inline generated numerator functions instead of retaining shared evaluator bodies.
-    #[serde(
-        default = "evaluator_default_inline_numerator_functions",
-        skip_serializing_if = "is_true"
-    )]
-    pub inline_numerator_functions: bool,
     /// Translate compatible symbolic expressions directly into Spenso networks.
     #[serde(
         default = "evaluator_default_direct_translation",
@@ -175,10 +164,6 @@ const fn evaluator_default_direct_translation() -> bool {
     true
 }
 
-const fn evaluator_default_inline_numerator_functions() -> bool {
-    true
-}
-
 const fn evaluator_default_horner_iterations() -> usize {
     1
 }
@@ -218,7 +203,6 @@ impl Default for EvaluatorSettings {
             direct_translation: evaluator_default_direct_translation(),
             compile: false,
             do_fn_map_replacements: false,
-            inline_numerator_functions: evaluator_default_inline_numerator_functions(),
             store_atom: false,
             horner_iterations: evaluator_default_horner_iterations(),
             n_cores: evaluator_default_n_cores(),
@@ -260,175 +244,13 @@ pub struct ProcessList {
     pub processes: Vec<Process>,
 }
 
-/// Restricts which saved processes and integrands are loaded into a process list.
-///
-/// An unqualified integrand selector applies to every process containing an
-/// integrand with that name, while a qualified selector applies only to its
-/// named process. Process selectors take precedence and load every integrand
-/// in the selected process.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ProcessLoadSelection {
-    pub process_names: BTreeSet<String>,
-    pub integrand_selectors: Vec<ProcessLoadIntegrandSelector>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProcessLoadIntegrandSelector {
-    Name(String),
-    Qualified {
-        process_name: String,
-        integrand_name: String,
-    },
-}
-
-impl ProcessLoadSelection {
-    pub fn is_unrestricted(&self) -> bool {
-        self.process_names.is_empty() && self.integrand_selectors.is_empty()
-    }
-
-    pub fn selected_integrand_names<'a, I>(
-        &self,
-        process_name: &str,
-        available_names: I,
-    ) -> BTreeSet<String>
-    where
-        I: IntoIterator<Item = &'a str>,
-    {
-        let available_names = available_names.into_iter();
-        if self.process_names.contains(process_name) {
-            return available_names.map(str::to_string).collect();
-        }
-
-        available_names
-            .filter(|integrand_name| {
-                self.integrand_selectors
-                    .iter()
-                    .any(|selector| match selector {
-                        ProcessLoadIntegrandSelector::Name(name) => name == *integrand_name,
-                        ProcessLoadIntegrandSelector::Qualified {
-                            process_name: selected_process,
-                            integrand_name: selected_integrand,
-                        } => {
-                            selected_process == process_name
-                                && selected_integrand == *integrand_name
-                        }
-                    })
-            })
-            .map(str::to_string)
-            .collect()
-    }
-}
-
-#[cfg(test)]
-mod process_load_selection_tests {
-    use super::{ProcessLoadIntegrandSelector, ProcessLoadSelection};
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn process_and_integrand_selectors_are_unioned() {
-        let selection = ProcessLoadSelection {
-            process_names: BTreeSet::from(["all".to_string()]),
-            integrand_selectors: vec![
-                ProcessLoadIntegrandSelector::Name("shared".to_string()),
-                ProcessLoadIntegrandSelector::Qualified {
-                    process_name: "one".to_string(),
-                    integrand_name: "specific".to_string(),
-                },
-            ],
-        };
-
-        assert_eq!(
-            selection.selected_integrand_names("all", ["a", "b"]),
-            BTreeSet::from(["a".to_string(), "b".to_string()])
-        );
-        assert_eq!(
-            selection.selected_integrand_names("one", ["shared", "specific", "other"]),
-            BTreeSet::from(["shared".to_string(), "specific".to_string()])
-        );
-        assert_eq!(
-            selection.selected_integrand_names("two", ["shared", "specific"]),
-            BTreeSet::from(["shared".to_string()])
-        );
-    }
-}
-
-fn validate_process_load_selection(
-    processes_root: &Path,
-    selection: &ProcessLoadSelection,
-) -> Result<()> {
-    let mut available: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (directory, binary, kind) in [
-        ("amplitudes", "amp.bin", "amplitude"),
-        ("cross_sections", "cs.bin", "cross section"),
-    ] {
-        let root = processes_root.join(directory);
-        if !root.exists() {
-            continue;
-        }
-        for entry in
-            fs::read_dir(&root).with_context(|| format!("Error reading {}", root.display()))?
-        {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let Some(process_name) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-            let child_dirs = process::saved_child_dirs(&entry.path(), binary, kind)?;
-            let names = available.entry(process_name).or_default();
-            names.extend(child_dirs.into_iter().filter_map(|path| {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .map(str::to_owned)
-            }));
-        }
-    }
-
-    let mut errors = Vec::new();
-
-    for process_name in &selection.process_names {
-        if !available.contains_key(process_name) {
-            errors.push(format!("process '{process_name}' was not found"));
-        }
-    }
-    for selector in &selection.integrand_selectors {
-        match selector {
-            ProcessLoadIntegrandSelector::Name(integrand_name) => {
-                if !available.values().any(|names| names.contains(integrand_name)) {
-                    errors.push(format!("integrand '{integrand_name}' was not found"));
-                }
-            }
-            ProcessLoadIntegrandSelector::Qualified {
-                process_name,
-                integrand_name,
-            } => match available.get(process_name) {
-                None => errors.push(format!(
-                    "process '{process_name}' in selector '{process_name}@{integrand_name}' was not found"
-                )),
-                Some(names) if !names.contains(integrand_name) => errors.push(format!(
-                    "integrand '{integrand_name}' was not found in process '{process_name}'"
-                )),
-                Some(_) => {}
-            },
-        }
-    }
-
-    if errors.is_empty() {
-        return Ok(());
-    }
-
-    Err(eyre!(
-        "Cannot load the requested process/integrand selection: {}. Available integrands by process: {:?}",
-        errors.join("; "),
-        available,
-    ))
-}
-
 /// Controls which graph details and algebraic transformations are included in DOT exports.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     /// Write all diagrams of an integrand to one file during filesystem export.
@@ -449,7 +271,10 @@ pub struct DotExportSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub struct StandaloneExportSettings {
     #[serde(default)]
     pub mode: StandaloneExportMode,
@@ -459,7 +284,7 @@ pub struct StandaloneExportSettings {
     pub precision: StandaloneNumericTarget,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -470,7 +295,7 @@ pub enum StandaloneExportMode {
     Python,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -481,7 +306,7 @@ pub enum StandaloneDataFormat {
     Json,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -493,9 +318,9 @@ pub enum StandaloneNumericTarget {
     Arb,
 }
 
-#[cfg(feature = "python")]
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(feature = "python", pyo3::pymethods)]
+#[cfg(feature = "python_api")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_api", pyo3::pymethods)]
 impl DotExportSettings {
     /// Construct DOT export settings with GammaLoop's defaults.
     #[new]
@@ -551,21 +376,9 @@ impl ProcessList {
     }
 
     pub fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        Self::load_with_selection(path, context, None)
-    }
-
-    pub fn load_with_selection(
-        path: impl AsRef<Path>,
-        context: GammaLoopContextContainer,
-        selection: Option<&ProcessLoadSelection>,
-    ) -> Result<Self> {
         let mut process_list = Self::new();
-        let selection = selection.filter(|selection| !selection.is_unrestricted());
 
         let path = path.as_ref().join("processes");
-        if let Some(selection) = selection {
-            validate_process_load_selection(&path, selection)?;
-        }
         let amplitudes_path = path.join("amplitudes");
         if amplitudes_path.exists() {
             debug!("Looking for amplitudes in {}", amplitudes_path.display());
@@ -577,31 +390,9 @@ impl ProcessList {
                     continue;
                 };
                 let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands = match (selection, process_name) {
-                    (Some(selection), Some(process_name)) => {
-                        let available = process::saved_child_dirs(&path, "amp.bin", "amplitude")?;
-                        Some(
-                            selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ),
-                        )
-                    }
-                    _ => None,
-                };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process = Process::load_amplitude(path, context, selected_integrands.as_ref())
-                    .context("Error loading amplitude")?;
-                process_list.processes.push(process);
+                process_list.processes.push(
+                    Process::load_amplitude(path, context).context("Error loading amplitude")?,
+                );
             }
         }
 
@@ -615,42 +406,14 @@ impl ProcessList {
             for entry in fs::read_dir(cross_sections_path)? {
                 let entry = entry?;
                 let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands =
-                    match (selection, process_name) {
-                        (Some(selection), Some(process_name)) => {
-                            let available =
-                                process::saved_child_dirs(&path, "cs.bin", "cross section")?;
-                            Some(selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ))
-                        }
-                        _ => None,
-                    };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process =
-                    Process::load_cross_section(path, context, selected_integrands.as_ref())?;
-                process_list.processes.push(process);
+                process_list
+                    .processes
+                    .push(Process::load_cross_section(path, context)?);
             }
         }
         process_list
             .processes
             .sort_by_key(|p| p.definition.process_id);
-
-        if selection.is_some() {
-            for (process_id, process) in process_list.processes.iter_mut().enumerate() {
-                process.definition.process_id = process_id;
-            }
-        }
 
         Ok(process_list)
     }
@@ -743,6 +506,7 @@ impl ProcessList {
 
     pub fn export_uv_forests(
         &self,
+        model: &Model,
         path: impl AsRef<Path>,
         process_id: usize,
         integrand_name: &str,
@@ -758,7 +522,7 @@ impl ProcessList {
                 self.processes.len()
             )
         })?;
-        process.export_uv_forests(&path, integrand_name, graph_ids, settings)
+        process.export_uv_forests(model, &path, integrand_name, graph_ids, settings)
     }
 
     pub fn export_standalone(
@@ -787,12 +551,6 @@ impl ProcessList {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<GeneratedGraphReport>> {
-        // Reject unsupported settings before any process changes its graphs or history.
-        for process in &self.processes {
-            settings
-                .generation
-                .validate_for_process(process.definition.generation_type)?;
-        }
         let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
             reports.extend(process.preprocess(
@@ -865,22 +623,16 @@ pub mod amplitude;
 pub use amplitude::*;
 pub mod cross_section;
 pub use cross_section::*;
-pub mod threshold_counterterms;
-pub use threshold_counterterms::*;
-
-#[cfg(test)]
-mod no_directive_equivalence_tests;
-#[cfg(test)]
-mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {
+    use std::fs::OpenOptions;
+
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
+        GammaLoopContextContainer, finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         settings::{
             RuntimeSettings,
             global::{
@@ -892,130 +644,92 @@ mod tests {
         utils::load_generic_model,
     };
 
-    use super::{AmplitudeGraph, EvaluatorSettings};
+    use super::AmplitudeGraph;
 
-    #[test]
-    fn numerator_inlining_defaults_and_explicit_opt_out_round_trip() {
-        use crate::utils::serde_utils::ShowDefaultsGuard;
+    mod failing {
+        use super::*;
 
-        assert!(EvaluatorSettings::default().inline_numerator_functions);
-        for input in ["", "n_cores = 2"] {
-            let settings: EvaluatorSettings = toml::from_str(input).unwrap();
-            assert!(settings.inline_numerator_functions);
-        }
+        #[test]
+        fn test_encode_decode_amplitude_graph() {
+            crate::initialisation::test_initialise().unwrap();
+            // load the model and hack the masses, go through serializable model since arc is not mutable
+            let model = load_generic_model("sm");
 
-        {
-            let _guard = ShowDefaultsGuard::new(false);
-            let settings = EvaluatorSettings::default();
-            let serialized = toml::to_string(&settings).unwrap();
-            assert!(!serialized.contains("inline_numerator_functions"));
-            assert_eq!(
-                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
-                settings
-            );
-
-            let settings: EvaluatorSettings =
-                toml::from_str("inline_numerator_functions = false").unwrap();
-            let serialized = toml::to_string(&settings).unwrap();
-            assert!(serialized.contains("inline_numerator_functions = false"));
-            assert_eq!(
-                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
-                settings
-            );
-        }
-
-        let _guard = ShowDefaultsGuard::new(true);
-        let serialized = toml::to_string(&EvaluatorSettings::default()).unwrap();
-        assert!(serialized.contains("inline_numerator_functions = true"));
-    }
-
-    #[test]
-    fn test_encode_decode_amplitude_graph() {
-        test_initialise().unwrap();
-        // Use the model routing produced by graph import for the persistence roundtrip.
-        let model = load_generic_model("sm");
-
-        let graph: Graph = dot!(
-            digraph G{
-                e1      [style=invis]
-                e2      [style=invis]
-                e1 -> n1  [particle=H]
-                n4 -> e2    [particle=H]
-                n1 -> n2    [particle=H]
-                n1 -> n3    [particle=H]
-                n2 -> n3    [particle=t]
-                n3 -> n4    [particle=t]
-                n4 -> n2    [particle=t]
-            }
-        )
-        .unwrap();
-        let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
-
-        amplitude
-            .preprocess(
-                &model,
-                &GenerationSettings {
-                    compile: GammaloopCompileOptions {
-                        compilation_mode: CompilationMode::Cpp,
-                        jit_direct_translation: true,
-                        fast_math: false,
-                        optimization_level: CompilationOptimizationLevel::O0,
-                        unsafe_math: false,
-                        compiler: crate::settings::global::default_external_compiler().to_owned(),
-                        custom: Vec::new(),
-                    },
-                    tropical_subgraph_table: TropicalSubgraphTableSettings {
-                        panic_on_fail: false,
-                        target_omega: 1.0,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                &LockedRuntimeSettings::from(&RuntimeSettings::default()),
+            let graph: Graph = finalized_runtime_dot!(
+                digraph G{
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
+                    ext [style=invis]
+                    ext -> n1  [particle=H sink="{ufo_order:0}"]
+                    ext -> n4  [particle=H sink="{ufo_order:0}"]
+                    n1 -> n2  [particle=H lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                    n1 -> n3  [particle=H source="{ufo_order:2}" sink="{ufo_order:0}"]
+                    n2 -> n3  [particle=t lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                    n3 -> n4  [particle=t source="{ufo_order:2}" sink="{ufo_order:1}"]
+                    n4 -> n2  [particle=t source="{ufo_order:2}" sink="{ufo_order:2}"]
+                }
             )
             .unwrap();
 
-        let mut symbols = Vec::new();
-        State::export(&mut symbols).unwrap();
-        let state_map = State::import(&mut std::io::Cursor::new(symbols), None).unwrap();
+            let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 
-        let context = GammaLoopContextContainer {
-            model: &model,
-            state_map: &state_map,
-        };
+            amplitude
+                .preprocess(
+                    &model,
+                    &GenerationSettings {
+                        compile: GammaloopCompileOptions {
+                            compilation_mode: CompilationMode::Cpp,
+                            fast_math: false,
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            unsafe_math: false,
+                            compiler: crate::settings::global::default_external_compiler()
+                                .to_owned(),
+                            custom: Vec::new(),
+                        },
+                        tropical_subgraph_table: TropicalSubgraphTableSettings {
+                            panic_on_fail: false,
+                            target_omega: 1.0,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    &LockedRuntimeSettings::from(&RuntimeSettings::default()),
+                )
+                .unwrap();
 
-        let encoded_amplitude =
-            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+            let mut temp = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("test.bin")
+                .unwrap();
 
-        let decoded: AmplitudeGraph = bincode::decode_from_slice_with_context(
-            &encoded_amplitude,
-            bincode::config::standard(),
-            context,
-        )
-        .expect("amplitude decode failed")
-        .0;
+            State::export(&mut temp).unwrap();
+            drop(temp);
 
-        assert_eq!(decoded.graph.name, amplitude.graph.name);
-        assert_eq!(decoded.graph.overall_factor, amplitude.graph.overall_factor);
-        assert_eq!(
-            decoded.graph.loop_momentum_basis,
-            amplitude.graph.loop_momentum_basis
-        );
-        assert_eq!(
-            decoded.graph.param_builder.reps,
-            amplitude.graph.param_builder.reps
-        );
-        assert_eq!(
-            decoded.graph.param_builder.values,
-            amplitude.graph.param_builder.values
-        );
-        assert_eq!(
-            decoded.derived_data.all_mighty_integrand,
-            amplitude.derived_data.all_mighty_integrand
-        );
-        assert_eq!(
-            decoded.derived_data.all_mighty_numerators,
-            amplitude.derived_data.all_mighty_numerators
-        );
+            let mut temp = OpenOptions::new().read(true).open("test.bin").unwrap();
+            let state_map = State::import(&mut temp, None).unwrap();
+
+            let context = GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            };
+
+            println!("context created");
+
+            let encoded_amplitude =
+                bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+
+            let _amplitude: AmplitudeGraph = bincode::decode_from_slice_with_context(
+                &encoded_amplitude,
+                bincode::config::standard(),
+                context,
+            )
+            .expect("amplitude decode failed")
+            .0;
+
+            println!("amplitude graph passed");
+        }
     }
 }
