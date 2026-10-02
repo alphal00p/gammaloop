@@ -583,6 +583,48 @@ impl SpensorLibrary {
         )
     }
 
+    /// Display stored tensors with on-demand component and construction details.
+    ///
+    /// Parameters
+    /// ----------
+    /// settings : DisplaySettings, optional
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Notes
+    /// -----
+    /// Stored entries can be selected to inspect the same component explorer
+    /// as a standalone Tensor. On-demand factories are listed separately.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorLibrary
+    /// >>> library = TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> value = library
+    /// >>> html = value.to_html()
+    #[pyo3(signature = (*, settings=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        settings: Option<crate::display::DisplaySettings>,
+    ) -> PyResult<String> {
+        crate::display::library::to_html(py, self, &settings.unwrap_or_default())
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        self.to_html(py, None).ok()
+    }
+
     /// Create an empty tensor component library.
     ///
     /// Examples

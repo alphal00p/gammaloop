@@ -19,7 +19,7 @@ use spenso::structure::{
 use symbolica::api::python::PythonExpression;
 
 use crate::{
-    ModuleInit,
+    ModuleInit, display,
     structure::{SpensoRepresentation, SpensoSlot},
 };
 
@@ -49,7 +49,19 @@ pub struct SpensoRepresentationName {
 
 impl ModuleInit for SpensoRepresentationName {}
 
-impl SpensoRepresentationName {}
+impl SpensoRepresentationName {
+    pub(crate) fn metric_rule(&self) -> &'static str {
+        if !self.rep.is_self_dual() {
+            "dual pairing"
+        } else if self.rep == spenso::structure::representation::ExtendibleReps::MINKOWSKI {
+            "(+, −, …)"
+        } else if matches!(self.rep, LibraryRep::InlineMetric(_)) {
+            "index-dependent"
+        } else {
+            "(+, +, …)"
+        }
+    }
+}
 
 #[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[spenso_macros::track_usage(crate::record_usage, on_success)]
@@ -162,6 +174,26 @@ impl SpensoRepresentationName {
             self.name(),
             self.duality()
         )
+    }
+
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation
+    /// >>> value = Representation.mink(4).name
+    /// >>> html = value.to_html()
+    fn to_html(&self) -> String {
+        display::metadata::representation_name(self)
+    }
+
+    fn _repr_html_(&self) -> String {
+        self.to_html()
     }
 }
 
@@ -462,5 +494,37 @@ impl SpensoTensorStructure {
             .collect::<Vec<_>>()
             .join(", ");
         format!("TensorStructure([{slots}])")
+    }
+
+    /// Render a compact HTML view of this tensor metadata.
+    ///
+    /// Parameters
+    /// ----------
+    /// settings : DisplaySettings, optional
+    ///     Index and tensor presentation choices; defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     HTML fragment for display in a notebook or page.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> value = A.structure
+    /// >>> html = value.to_html()
+    #[pyo3(signature = (*, settings=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        settings: Option<display::DisplaySettings>,
+    ) -> PyResult<String> {
+        display::metadata::structure(py, self, &settings.unwrap_or_default())
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None)
     }
 }
