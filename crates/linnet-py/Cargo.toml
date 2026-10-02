@@ -27,9 +27,6 @@ pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 pyo3-stub-gen-derive = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tempfile = "3.8"
-walkdir = { workspace = true }
-
 
 [features]
 default = []

@@ -3644,8 +3644,6 @@ dependencies = [
  "pyo3-stub-gen-derive",
  "serde",
  "serde_json",
- "tempfile",
- "walkdir",
 ]
 
 [[package]]
