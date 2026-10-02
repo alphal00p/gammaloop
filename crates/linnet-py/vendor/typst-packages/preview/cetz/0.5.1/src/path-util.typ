@@ -145,6 +145,13 @@
   return bounds
 }
 
+// Keep the full extrema traversal and AABB reduction in one plugin call.
+// `finite` tells aggregators when the two corners preserve the point stream's
+// comparison behavior; nonfinite coordinates retain the ordinary traversal.
+#let _bounds-aabb(path) = {
+  bezier.call_wasm(bezier.cetz-core.path_aabb_func, (path: path))
+}
+
 /// Returns an array of arrays with the lengths of all path segments.
 /// One sub-array for each subpath and its segments.
 ///
@@ -449,19 +456,15 @@
       segments.push(("l", origin))
     }
 
-    // Filter out zero-length lines
-    segments = segments.enumerate().filter(((i, segment)) => {
-      let (kind, ..args) = segment
-      if kind == "l" {
-        let end = args.last()
-        return if i == 0 {
-          end != origin
-        } else {
-          end != segments.at(i - 1).last()
-        }
-      }
-      return true
-    }).map(((i, segment)) => segment)
+    // Retain the preceding original endpoint while filtering in one pass.
+    let previous = origin
+    let filtered = ()
+    for segment in segments {
+      let end = segment.last()
+      if segment.first() != "l" or end != previous { filtered.push(segment) }
+      previous = end
+    }
+    segments = filtered
 
     path.at(subpath-index) = (origin, closed, segments)
   }

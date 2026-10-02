@@ -71,7 +71,12 @@
   assert(tags.all(v => type(v) == str))
 
   if type(drawables) == array {
-    return drawables.map(d => apply-tags(d, ..tags))
+    return drawables.map(d => {
+      if type(d) == array { apply-tags(d, ..tags) } else {
+        d.insert("tags", (d.at("tags", default: ()) + tags).dedup())
+        d
+      }
+    })
   }
 
   drawables.insert("tags", (drawables.at("tags", default: ()) + tags).dedup())
@@ -86,7 +91,11 @@
 /// -> array An array of type:drawable
 #let filter-tagged(drawables, ..tags) = {
   if type(drawables) == array {
-    return drawables.map(d => filter-tagged(d, ..tags)).filter(d => d != none)
+    let tags = tags.pos()
+    return drawables.map(d => {
+      if type(d) == array { filter-tagged(d, ..tags) }
+      else if not d.at("tags", default: ()).any(t => t in tags) { d }
+    }).filter(d => d != none)
   }
 
   let tags = tags.pos()
@@ -140,13 +149,20 @@
 /// -> drawable
 #let line-strip(points, close: false, fill: none, stroke: none, fill-rule: "non-zero", tags: ()) = {
   assert.eq(type(points), array)
-
-  return path(
-    ((points.first(), close, points.slice(1).map((pt) => ("l", pt))),),
-    stroke: stroke,
-    fill: fill,
-    fill-rule: fill-rule,
-    tags: tags)
+  let origin = points.first()
+  assert.eq(type(origin), array)
+  assert.eq(type(close), bool)
+  let current = origin
+  let segments = ()
+  for point in points.slice(1) {
+    if point != current { segments.push(("l", point)) }
+    current = point
+  }
+  if close and current != origin { segments.push(("l", origin)) }
+  (
+    type: "path", segments: ((origin, close, segments),),
+    fill: fill, fill-rule: fill-rule, stroke: stroke, tags: tags,
+  )
 }
 
 

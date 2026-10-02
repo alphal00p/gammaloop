@@ -296,15 +296,9 @@
 /// - c2 (vector): Control point 2
 /// -> float
 #let cubic-arclen(s, e, c1, c2, samples: 20) = {
-  let d = 0
-  for i in range(1, samples + 1) {
-    let t0 = (i - 1) / samples
-    let t1 = i / samples
-    d += vector.dist(
-      cubic-point(s, e, c1, c2, t0),
-      cubic-point(s, e, c1, c2, t1))
-  }
-  return d
+  call_wasm(cetz-core.cubic_arclen_func, (
+    start: s, end: e, control_start: c1, control_end: c2, samples: samples,
+  ))
 }
 
 /// Shorten the curve by offsetting s and c1 or e and c2 by distance d. If d is positive the curve gets shortened by moving s and c1 closer to e, if d is negative, e and c2 get moved closer to s.
@@ -343,32 +337,10 @@
 /// - d  (float): The distance along the bezier to find `t`.
 /// -> float
 #let cubic-t-for-distance(s, e, c1, c2, d, samples: 20) = {
-  let travel-forwards(s, e, c1, c2, d) = {
-    let sum = 0
-    for n in range(1, samples + 1) {
-      let t0 = (n - 1) / samples
-      let t1 = n / samples
-
-      let segment-dist = vector.dist(cubic-point(s, e, c1, c2, t0),
-                                     cubic-point(s, e, c1, c2, t1))
-      if sum <= d and d <= sum + segment-dist {
-        let lambda = (d - sum) / segment-dist
-        return (1 - lambda) * t0 + lambda * t1
-      }
-      sum += segment-dist
-    }
-    return 1
-  }
-
-  if d == 0 {
-    return 0
-  }
-
-  if d > 0 {
-    return travel-forwards(s, e, c1, c2, d)
-  } else {
-    return 1 - travel-forwards(e, s, c2, c1, -d)
-  }
+  call_wasm(cetz-core.cubic_t_for_distance_func, (
+    start: s, end: e, control_start: c1, control_end: c2, samples: samples,
+    distance: d,
+  ))
 }
 
 /// Shorten curve by distance `d`. This keeps the curvature of the curve by finding new values along the original curve. If `d` is positive the curve gets shortened by moving `s` closer to `e`, if `d` is negative, `e` is moved closer to `s`. The points `s` and `e` are moved along the curve, keeping the curve's curvature the same (the control points get recalculated).

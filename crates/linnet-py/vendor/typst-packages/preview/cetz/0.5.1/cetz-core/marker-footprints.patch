@@ -1,0 +1,978 @@
+diff --git a/cetz-core/src/bounds.rs b/cetz-core/src/bounds.rs
+index 3b96e0a..7c40958 100644
+--- a/cetz-core/src/bounds.rs
++++ b/cetz-core/src/bounds.rs
+@@ -1,13 +1,14 @@
+ use super::{aabb, cubic_extrema, deserialize_point, handle_cbor, normalize_point3, Bounds, Point};
+-use serde::{Deserialize, Serialize};
++use serde::{Deserialize, Serialize, Serializer};
+ 
+ #[derive(Deserialize)]
+ #[serde(transparent)]
+ struct BoundsPoint(#[serde(deserialize_with = "deserialize_point")] Point);
+ 
+-struct BoundsSegment {
+-    kind: String,
+-    points: Vec<Point>,
++#[derive(Clone, Debug)]
++pub(super) struct BoundsSegment {
++    pub(super) kind: String,
++    pub(super) points: Vec<Point>,
+ }
+ 
+ impl<'de> Deserialize<'de> for BoundsSegment {
+@@ -36,6 +37,39 @@ impl<'de> Deserialize<'de> for BoundsSegment {
+     }
+ }
+ 
++impl Serialize for BoundsSegment {
++    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        use serde::ser::SerializeSeq;
++        let mut seq = serializer.serialize_seq(Some(self.points.len() + 1))?;
++        seq.serialize_element(&self.kind)?;
++        for point in &self.points {
++            seq.serialize_element(point)?;
++        }
++        seq.end()
++    }
++}
++impl BoundsSegment {
++    /// Append the original path-util.bounds point stream. Both the public AABB
++    /// API and marker footprints use this owner, including its extrema rounding.
++    pub(super) fn append_bounds(&self, bounds: &mut Vec<Point>) -> Result<(), String> {
++        match self.kind.as_str() {
++            "l" => bounds.extend(self.points.iter().cloned()),
++            "c" if self.points.len() == 3 => {
++                bounds.extend(cubic_extrema(
++                    normalize_point3(bounds.last().unwrap().clone()),
++                    normalize_point3(self.points[2].clone()),
++                    normalize_point3(self.points[0].clone()),
++                    normalize_point3(self.points[1].clone()),
++                )?);
++                bounds.push(self.points[2].clone());
++            }
++            "c" => return Err("A cubic requires three points".to_owned()),
++            _ => {}
++        }
++        Ok(())
++    }
++}
++
+ #[derive(Deserialize)]
+ struct PathAabbArgs {
+     path: Vec<(BoundsPoint, bool, Vec<BoundsSegment>)>,
+@@ -52,24 +86,8 @@ impl PathAabbArgs {
+         let mut bounds = Vec::new();
+         for (BoundsPoint(origin), _, segments) in self.path {
+             bounds.push(origin);
+-            for mut segment in segments {
+-                match segment.kind.as_str() {
+-                    "l" => bounds.extend(segment.points),
+-                    "c" if segment.points.len() == 3 => {
+-                        let end = segment.points.pop().unwrap();
+-                        let c2 = segment.points.pop().unwrap();
+-                        let c1 = segment.points.pop().unwrap();
+-                        bounds.extend(cubic_extrema(
+-                            normalize_point3(bounds.last().unwrap().clone()),
+-                            normalize_point3(end.clone()),
+-                            normalize_point3(c1),
+-                            normalize_point3(c2),
+-                        )?);
+-                        bounds.push(end);
+-                    }
+-                    "c" => return Err("A cubic requires three points".to_owned()),
+-                    _ => {}
+-                }
++            for segment in segments {
++                segment.append_bounds(&mut bounds)?;
+             }
+         }
+         let finite = bounds
+diff --git a/cetz-core/src/lib.rs b/cetz-core/src/lib.rs
+index 6efad3b..6771d32 100644
+--- a/cetz-core/src/lib.rs
++++ b/cetz-core/src/lib.rs
+@@ -4,12 +4,12 @@ use serde::Deserialize;
+ use serde::Serialize;
+ use wasm_minimal_protocol::*;
+ 
+-mod layout;
+-mod path_bool;
+ mod bounds;
+ mod content;
+-mod sampled;
++mod layout;
+ mod marker;
++mod path_bool;
++mod sampled;
+ pub use layout::{InputTree, OutputTree};
+ initiate_protocol!();
+ 
+@@ -266,3 +266,8 @@ pub fn cubic_t_for_distance_func(input: &[u8]) -> Result<Vec<u8>, String> {
+ pub fn marker_geometry_func(input: &[u8]) -> Result<Vec<u8>, String> {
+     marker::geometry(input)
+ }
++
++#[wasm_func]
++pub fn marker_footprints_func(input: &[u8]) -> Result<Vec<u8>, String> {
++    marker::footprints(input)
++}
+diff --git a/cetz-core/src/marker.rs b/cetz-core/src/marker.rs
+index a802352..cc107d7 100644
+--- a/cetz-core/src/marker.rs
++++ b/cetz-core/src/marker.rs
+@@ -1,22 +1,45 @@
+ //! Shared marker contacts and shaft trimming for painting and collision bounds.
+ //! The shapes/styles remain CeTZ-owned. Only their resolved numeric carriers and
+ //! reference contacts cross this boundary, in one batch for candidate placement.
+-use crate::{deserialize_point, handle_cbor, sampled::SampledCubic, F64ish, Point};
++use crate::{
++    aabb, bounds::BoundsSegment as Command, deserialize_point, handle_cbor, sampled::SampledCubic,
++    F64ish, Point,
++};
+ use ciborium::Value;
+-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
++use serde::{de::Error, Deserialize, Deserializer, Serialize};
+ 
+ type Path = Vec<(Point, bool, Vec<Command>)>;
+ #[derive(Deserialize)]
+ struct MarkerPoint(#[serde(deserialize_with = "deserialize_point")] Point);
+ fn deserialize_path<'de, D: Deserializer<'de>>(de: D) -> Result<Path, D::Error> {
+-    Ok(Vec::<(MarkerPoint, bool, Vec<Command>)>::deserialize(de)?
++    let path: Path = Vec::<(MarkerPoint, bool, Vec<Command>)>::deserialize(de)?
+         .into_iter()
+         .map(|(MarkerPoint(point), closed, commands)| (point, closed, commands))
+-        .collect())
++        .collect();
++    if path
++        .iter()
++        .flat_map(|(_, _, commands)| commands)
++        .any(|command| {
++            (command.kind == "c" && command.points.len() != 3)
++                || (command.kind == "l" && command.points.is_empty())
++                || !["c", "l"].contains(&command.kind.as_str())
++        })
++    {
++        return Err(D::Error::custom("expected a line or cubic segment"));
++    }
++    Ok(path)
+ }
+ fn deserialize_number<'de, D: Deserializer<'de>>(de: D) -> Result<f64, D::Error> {
+     F64ish::deserialize(de)?.into_f64()
+ }
++#[derive(Deserialize)]
++struct Numeric(#[serde(deserialize_with = "deserialize_number")] f64);
++fn deserialize_matrix<'de, D: Deserializer<'de>>(de: D) -> Result<Matrix, D::Error> {
++    Ok(<[[Numeric; 4]; 4]>::deserialize(de)?.map(|row| row.map(|x| x.0)))
++}
++fn deserialize_optional_number<'de, D: Deserializer<'de>>(de: D) -> Result<Option<f64>, D::Error> {
++    Ok(Option::<Numeric>::deserialize(de)?.map(|x| x.0))
++}
+ type Matrix = [[f64; 4]; 4];
+ const IDENTITY: Matrix = [
+     [1.0, 0.0, 0.0, 0.0],
+@@ -25,53 +48,6 @@ const IDENTITY: Matrix = [
+     [0.0, 0.0, 0.0, 1.0],
+ ];
+ 
+-#[derive(Clone, Debug)]
+-struct Command {
+-    kind: String,
+-    points: Vec<Point>,
+-}
+-impl<'de> Deserialize<'de> for Command {
+-    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+-        let mut values = Vec::<Value>::deserialize(de)?.into_iter();
+-        let kind = match values.next() {
+-            Some(Value::Text(kind)) => kind,
+-            _ => return Err(D::Error::custom("missing segment kind")),
+-        };
+-        let points = values
+-            .map(|value| {
+-                let Value::Array(point) = value else {
+-                    return Err(D::Error::custom("expected point"));
+-                };
+-                point
+-                    .into_iter()
+-                    .map(|x| match x {
+-                        Value::Float(x) => Ok(x),
+-                        Value::Integer(x) => Ok(i128::from(x) as f64),
+-                        _ => Err(D::Error::custom("expected coordinate")),
+-                    })
+-                    .collect()
+-            })
+-            .collect::<Result<Vec<_>, _>>()?;
+-        if (kind == "c" && points.len() != 3)
+-            || (kind == "l" && points.is_empty())
+-            || !["c", "l"].contains(&kind.as_str())
+-        {
+-            return Err(D::Error::custom("expected a line or cubic segment"));
+-        }
+-        Ok(Self { kind, points })
+-    }
+-}
+-impl Serialize for Command {
+-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+-        use serde::ser::SerializeSeq;
+-        let mut seq = serializer.serialize_seq(Some(self.points.len() + 1))?;
+-        seq.serialize_element(&self.kind)?;
+-        for point in &self.points {
+-            seq.serialize_element(point)?;
+-        }
+-        seq.end()
+-    }
+-}
+ impl Command {
+     fn end(&self) -> &Point {
+         self.points.last().unwrap()
+@@ -511,6 +487,446 @@ pub(super) fn geometry(input: &[u8]) -> Result<Vec<u8>, String> {
+     })
+ }
+ 
++// Candidate arrows share canonical templates, but their stations and trimming
++// still use the same carrier painter as visible marks.
++#[derive(Deserialize)]
++struct Distance {
++    #[serde(deserialize_with = "deserialize_number")]
++    value: f64,
++    relative: bool,
++}
++impl Distance {
++    fn resolve(&self, total: f64) -> f64 {
++        if self.relative {
++            self.value * total
++        } else {
++            self.value
++        }
++    }
++}
++#[derive(Deserialize)]
++#[serde(tag = "type", rename_all = "kebab-case")]
++enum TemplateDrawable {
++    Path {
++        #[serde(deserialize_with = "deserialize_path")]
++        segments: Path,
++        #[serde(deserialize_with = "deserialize_number")]
++        radius: f64,
++        visible: bool,
++    },
++    Content {
++        #[serde(deserialize_with = "deserialize_point")]
++        pos: Point,
++        #[serde(deserialize_with = "deserialize_number")]
++        width: f64,
++        #[serde(deserialize_with = "deserialize_number")]
++        height: f64,
++        #[serde(deserialize_with = "deserialize_number")]
++        radius: f64,
++        visible: bool,
++    },
++}
++#[derive(Deserialize)]
++struct MarkTemplate {
++    #[serde(deserialize_with = "deserialize_point")]
++    tip: Point,
++    #[serde(deserialize_with = "deserialize_point")]
++    back: Point,
++    #[serde(deserialize_with = "deserialize_number")]
++    length: f64,
++    side: usize,
++    shorten: bool,
++    straight: bool,
++    pos: Option<Distance>,
++    offset: Distance,
++    #[serde(deserialize_with = "deserialize_number")]
++    sep: f64,
++    drawables: Vec<TemplateDrawable>,
++}
++impl MarkTemplate {
++    fn placed(&self, at: &mut f64, total: f64) -> Mark {
++        if let Some(pos) = &self.pos {
++            *at = pos.resolve(total);
++        }
++        *at += self.offset.resolve(total);
++        let mark = Mark {
++            tip: self.tip.clone(),
++            back: self.back.clone(),
++            length: self.length,
++            at: *at,
++            side: self.side,
++            shorten: self.shorten,
++            straight: self.straight,
++        };
++        *at += self.length + self.sep;
++        mark
++    }
++}
++#[derive(Deserialize)]
++#[serde(rename_all = "kebab-case")]
++struct FootprintPath {
++    #[serde(deserialize_with = "deserialize_path")]
++    segments: Path,
++    #[serde(deserialize_with = "deserialize_number")]
++    shaft_radius: f64,
++    shaft_visible: bool,
++}
++#[derive(Deserialize)]
++struct FootprintBatch {
++    #[serde(default)]
++    paths: Vec<FootprintPath>,
++    #[serde(deserialize_with = "deserialize_matrix")]
++    transform: Matrix,
++    flat: bool,
++    #[serde(deserialize_with = "deserialize_optional_number")]
++    ratio: Option<f64>,
++    #[serde(deserialize_with = "deserialize_number")]
++    shift: f64,
++    marks: Vec<MarkTemplate>,
++}
++
++// The transport may retain Kurvst's canonical numeric paths as CBOR between
++// plugins. Resolve only their styles here, before entering the shared painter.
++#[derive(Deserialize)]
++#[serde(rename_all = "kebab-case")]
++struct FootprintInput {
++    paths: FootprintPaths,
++    shaft_styles: Option<[ShaftStyle; 2]>,
++    #[serde(flatten)]
++    batch: FootprintBatch,
++}
++#[derive(Deserialize)]
++#[serde(untagged)]
++enum FootprintPaths {
++    Resolved(Vec<FootprintPath>),
++    Packets(Vec<NumericPaths>),
++}
++#[derive(Deserialize)]
++#[serde(rename_all = "kebab-case")]
++struct ShaftStyle {
++    #[serde(deserialize_with = "deserialize_number")]
++    shaft_radius: f64,
++    shaft_visible: bool,
++}
++#[derive(Deserialize)]
++struct NumericPath {
++    #[serde(deserialize_with = "deserialize_path")]
++    segments: Path,
++    single: bool,
++}
++struct NumericPaths(Vec<NumericPath>);
++impl<'de> Deserialize<'de> for NumericPaths {
++    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        let Value::Bytes(bytes) = Value::deserialize(deserializer)? else {
++            return Err(D::Error::custom("expected a CBOR path packet"));
++        };
++        ciborium::from_reader(bytes.as_slice())
++            .map(Self)
++            .map_err(D::Error::custom)
++    }
++}
++impl FootprintInput {
++    fn resolve(mut self) -> Result<FootprintBatch, String> {
++        self.batch.paths = match self.paths {
++            FootprintPaths::Resolved(paths) => paths,
++            FootprintPaths::Packets(packets) => {
++                let styles = self
++                    .shaft_styles
++                    .ok_or("missing shaft styles for path packets")?;
++                packets
++                    .into_iter()
++                    .flat_map(|packet| packet.0)
++                    .map(|path| {
++                        let style = &styles[usize::from(!path.single)];
++                        FootprintPath {
++                            segments: path.segments,
++                            shaft_radius: style.shaft_radius,
++                            shaft_visible: style.shaft_visible,
++                        }
++                    })
++                    .collect()
++            }
++        };
++        Ok(self.batch)
++    }
++}
++#[derive(Debug, PartialEq, Serialize)]
++struct Footprint {
++    left: f64,
++    right: f64,
++    bottom: f64,
++    top: f64,
++}
++impl Footprint {
++    fn points(points: Vec<Point>, radius: f64) -> Result<Self, String> {
++        if points.iter().flatten().any(|x| !x.is_finite()) {
++            return Err("marker footprint overflow".into());
++        }
++        let bounds = aabb(None, points)?;
++        let footprint = Self {
++            left: bounds.low[0] - radius,
++            right: bounds.high[0] + radius,
++            bottom: bounds.low[1] - radius,
++            top: bounds.high[1] + radius,
++        };
++        if [
++            footprint.left,
++            footprint.right,
++            footprint.bottom,
++            footprint.top,
++        ]
++        .iter()
++        .any(|x| !x.is_finite())
++        {
++            return Err("marker footprint overflow".into());
++        }
++        Ok(footprint)
++    }
++    fn path(segments: &Path, radius: f64) -> Result<Option<Self>, String> {
++        let mut points = Vec::new();
++        for (origin, _, commands) in segments {
++            points.push(origin.clone());
++            for command in commands {
++                command.append_bounds(&mut points)?;
++            }
++        }
++        if points.is_empty() {
++            Ok(None)
++        } else {
++            Self::points(points, radius).map(Some)
++        }
++    }
++}
++impl FootprintBatch {
++    fn valid_point(point: &Point) -> bool {
++        (2..=3).contains(&point.len()) && point.iter().all(|x| x.is_finite())
++    }
++    fn valid_path(path: &Path) -> bool {
++        path.iter().all(|(origin, _, commands)| {
++            Self::valid_point(origin)
++                && commands
++                    .iter()
++                    .all(|c| c.points.iter().all(Self::valid_point))
++        })
++    }
++    fn point(matrix: &Matrix, point: &Point) -> Point {
++        if *matrix == IDENTITY {
++            let mut point = point.clone();
++            point.resize(3, 0.0);
++            return point;
++        }
++        let (x, y, z) = (point[0], point[1], point.get(2).copied().unwrap_or(0.0));
++        matrix[..3]
++            .iter()
++            .map(|row| row[0] * x + row[1] * y + row[2] * z + row[3] * 1.0)
++            .collect()
++    }
++    fn transform_path(matrix: &Matrix, path: &mut Path) {
++        // drawable.apply-transform returns unchanged geometry for identity.
++        if *matrix == IDENTITY {
++            return;
++        }
++        for (origin, _, commands) in path {
++            *origin = Self::point(matrix, origin);
++            for command in commands {
++                for point in &mut command.points {
++                    *point = Self::point(matrix, point);
++                }
++            }
++        }
++    }
++    fn joined(path: Path) -> Path {
++        let mut joined: Path = Vec::new();
++        for (mut origin, closed, mut commands) in path {
++            origin.resize(3, 0.0);
++            for command in &mut commands {
++                for point in &mut command.points {
++                    point.resize(3, 0.0);
++                }
++            }
++            let end = commands.last().map(Command::end).unwrap_or(&origin);
++            if closed && *end != origin {
++                commands.push(Command {
++                    kind: "l".into(),
++                    points: vec![origin.clone()],
++                });
++            }
++            // Normalize each drawable before joining, as _cetz-carrier does
++            // under the identity transform. Keep the previous original end.
++            let mut previous = origin.clone();
++            commands.retain(|command| {
++                let keep = command.kind != "l" || *command.end() != previous;
++                previous = command.end().clone();
++                keep
++            });
++            if let Some((start, _, prior)) = joined.first_mut() {
++                let end = prior.last().map(Command::end).unwrap_or(start);
++                if *end != origin {
++                    prior.push(Command {
++                        kind: "l".into(),
++                        points: vec![origin],
++                    });
++                }
++                prior.extend(commands);
++            } else {
++                joined.push((origin, false, commands));
++            }
++        }
++        joined
++    }
++    fn bounds(self) -> Result<Vec<Vec<Footprint>>, String> {
++        let valid_radius = |r: f64| r.is_finite() && r >= 0.0;
++        if self.transform.iter().flatten().any(|x| !x.is_finite())
++            || !self.shift.is_finite()
++            || self.ratio.is_some_and(|x| !x.is_finite())
++            || self
++                .paths
++                .iter()
++                .any(|p| !valid_radius(p.shaft_radius) || !Self::valid_path(&p.segments))
++            || self.marks.iter().any(|m| {
++                m.side > 1
++                    || !Self::valid_point(&m.tip)
++                    || !Self::valid_point(&m.back)
++                    || m.tip.len() != m.back.len()
++                    || !m.length.is_finite()
++                    || m.length < 0.0
++                    || !m.sep.is_finite()
++                    || !m.offset.value.is_finite()
++                    || m.pos.as_ref().is_some_and(|p| !p.value.is_finite())
++                    || m.drawables.iter().any(|d| match d {
++                        TemplateDrawable::Path {
++                            segments, radius, ..
++                        } => !valid_radius(*radius) || !Self::valid_path(segments),
++                        TemplateDrawable::Content {
++                            pos,
++                            width,
++                            height,
++                            radius,
++                            ..
++                        } => {
++                            !valid_radius(*radius)
++                                || !Self::valid_point(pos)
++                                || !width.is_finite()
++                                || !height.is_finite()
++                        }
++                    })
++            })
++        {
++            return Err(
++                "marker footprints require finite 2D/3D geometry and nonnegative radii/lengths"
++                    .into(),
++            );
++        }
++        let mut projection = IDENTITY;
++        projection[2][2] = 0.0;
++        let flat_transform = multiply(projection, &[self.transform]);
++        let mut all = Vec::with_capacity(self.paths.len());
++        for input in self.paths {
++            let mut segments = Self::joined(input.segments);
++            if self.flat {
++                Self::transform_path(&flat_transform, &mut segments);
++            }
++            let mut total = 0.0;
++            for (origin, _, commands) in &segments {
++                let mut previous = origin;
++                let mut subtotal = 0.0;
++                for command in commands {
++                    subtotal += command.length(previous);
++                    previous = command.end();
++                }
++                total += subtotal;
++            }
++            if !total.is_finite() {
++                return Err("marker carrier length overflow".into());
++            }
++            let mut at = match self.ratio {
++                None => [0.0, 0.0],
++                Some(ratio) => [
++                    ratio * total + self.shift,
++                    (1.0 - ratio) * total - self.shift,
++                ],
++            };
++            let marks = if total > 0.0 {
++                self.marks
++                    .iter()
++                    .map(|m| m.placed(&mut at[m.side], total))
++                    .collect()
++            } else {
++                Vec::new()
++            };
++            let mut painted = Carrier {
++                segments,
++                total,
++                paint: true,
++                marks,
++            }
++            .paint()?;
++            if !self.flat {
++                Self::transform_path(&self.transform, &mut painted.segments);
++            }
++            let mut bounds = Vec::new();
++            if input.shaft_visible {
++                for (origin, _, commands) in &painted.segments {
++                    let mut previous = origin;
++                    for command in commands {
++                        let mut points = vec![previous.clone()];
++                        command.append_bounds(&mut points)?;
++                        bounds.push(Footprint::points(points, input.shaft_radius)?);
++                        previous = command.end();
++                    }
++                }
++            }
++            for (template, placement) in self.marks.iter().zip(painted.marks) {
++                for drawable in &template.drawables {
++                    match drawable {
++                        TemplateDrawable::Path {
++                            segments,
++                            radius,
++                            visible,
++                        } if *visible => {
++                            let mut segments = segments.clone();
++                            Self::transform_path(&placement.alignment, &mut segments);
++                            if !self.flat {
++                                Self::transform_path(&self.transform, &mut segments);
++                            }
++                            if let Some(bound) = Footprint::path(&segments, *radius)? {
++                                bounds.push(bound);
++                            }
++                        }
++                        TemplateDrawable::Content {
++                            pos,
++                            width,
++                            height,
++                            radius,
++                            visible,
++                        } if *visible => {
++                            let mut pos = Self::point(&placement.alignment, pos);
++                            if !self.flat {
++                                pos = Self::point(&self.transform, &pos);
++                            }
++                            // CeTZ transforms content position but retains these
++                            // dimensions; collision boxes intentionally stay AABBs.
++                            bounds.push(Footprint::points(
++                                vec![
++                                    vec![pos[0] - width / 2.0, pos[1] - height / 2.0],
++                                    vec![pos[0] + width / 2.0, pos[1] + height / 2.0],
++                                ],
++                                *radius,
++                            )?);
++                        }
++                        _ => {}
++                    }
++                }
++            }
++            all.push(bounds);
++        }
++        Ok(all)
++    }
++}
++pub(super) fn footprints(input: &[u8]) -> Result<Vec<u8>, String> {
++    handle_cbor(input, |input: FootprintInput| input.resolve()?.bounds())
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -573,4 +989,276 @@ mod tests {
+         assert!(painted.segments.is_empty());
+         assert_eq!(painted.marks[0].alignment[0][0], 0.5);
+     }
++    fn footprint_batch() -> FootprintBatch {
++        let base = carrier();
++        FootprintBatch {
++            paths: vec![FootprintPath {
++                segments: base.segments,
++                shaft_radius: 0.05,
++                shaft_visible: true,
++            }],
++            transform: IDENTITY,
++            flat: false,
++            ratio: None,
++            shift: 0.0,
++            marks: vec![MarkTemplate {
++                tip: vec![0.0, 0.0, 0.0],
++                back: vec![0.2, 0.0, 0.0],
++                length: 0.2,
++                side: 0,
++                shorten: true,
++                straight: false,
++                pos: None,
++                offset: Distance {
++                    value: 0.0,
++                    relative: false,
++                },
++                sep: 0.0,
++                drawables: vec![TemplateDrawable::Path {
++                    segments: vec![(
++                        vec![0.0, 0.0, 0.0],
++                        true,
++                        vec![Command {
++                            kind: "l".into(),
++                            points: vec![
++                                vec![0.2, 0.1, 0.0],
++                                vec![0.2, -0.1, 0.0],
++                                vec![0.0, 0.0, 0.0],
++                            ],
++                        }],
++                    )],
++                    radius: 0.02,
++                    visible: true,
++                }],
++            }],
++        }
++    }
++    #[test]
++    fn footprints_retain_shaft_trim_and_whole_marker_bounds() {
++        let bounds = footprint_batch().bounds().unwrap();
++        assert_eq!(
++            bounds,
++            vec![vec![
++                Footprint {
++                    left: 0.2 - 0.05,
++                    right: 2.0 + 0.05,
++                    bottom: -0.05,
++                    top: 0.05
++                },
++                Footprint {
++                    left: -0.02,
++                    // Existing station projection: dot(back, axis) / length,
++                    // then chord compression; preserve its floating-point order.
++                    right: 0.2 * ((0.2 * 0.2 / 0.2) / 0.2) + 0.02,
++                    bottom: -0.1 - 0.02,
++                    top: 0.1 + 0.02
++                },
++            ]]
++        );
++    }
++    #[test]
++    fn footprint_content_dimensions_survive_nonflat_transforms() {
++        let mut input = footprint_batch();
++        input.transform[0][0] = 2.0;
++        input.transform[1][1] = 3.0;
++        input.paths[0].shaft_visible = false;
++        input.marks[0].drawables = vec![TemplateDrawable::Content {
++            pos: vec![0.0, 0.0],
++            width: 0.4,
++            height: 0.6,
++            radius: 0.02,
++            visible: true,
++        }];
++        assert_eq!(
++            input.bounds().unwrap(),
++            vec![vec![Footprint {
++                left: -0.2 - 0.02,
++                right: 0.2 + 0.02,
++                bottom: -0.3 - 0.02,
++                top: 0.3 + 0.02,
++            }]]
++        );
++    }
++    #[test]
++    fn placement_distances_resolve_per_carrier_and_keep_side_accumulators() {
++        let mut input = footprint_batch();
++        input.ratio = Some(0.25);
++        input.shift = 0.1;
++        input.marks[0].shorten = false;
++        input.marks[0].offset = Distance {
++            value: 0.1,
++            relative: true,
++        };
++        input.paths.push(FootprintPath {
++            segments: vec![(
++                vec![0.0, 0.0],
++                false,
++                vec![Command {
++                    kind: "l".into(),
++                    points: vec![vec![4.0, 0.0]],
++                }],
++            )],
++            shaft_radius: 0.05,
++            shaft_visible: true,
++        });
++        let bounds = input.bounds().unwrap();
++        assert_eq!(bounds[0][1].left, 0.8 - 0.02);
++        assert_eq!(bounds[1][1].left, 1.5 - 0.02);
++    }
++    #[test]
++    fn joining_normalizes_before_a_singular_projection() {
++        let input = vec![
++            (
++                vec![0.0, 0.0],
++                true,
++                vec![Command {
++                    kind: "l".into(),
++                    points: vec![vec![1.0, 0.0]],
++                }],
++            ),
++            (
++                vec![0.0, 1.0],
++                false,
++                vec![Command {
++                    kind: "l".into(),
++                    points: vec![vec![2.0, 1.0]],
++                }],
++            ),
++        ];
++        let mut joined = FootprintBatch::joined(input);
++        assert_eq!(joined.len(), 1);
++        assert_eq!(joined[0].2.len(), 4); // segment, close, joining segment, segment
++        let mut transform = IDENTITY;
++        transform[1][1] = 0.0;
++        FootprintBatch::transform_path(&transform, &mut joined);
++        assert_eq!(joined[0].2.len(), 4); // no normalization after projection
++        assert_eq!(joined[0].2[2].end(), &vec![0.0, 0.0, 0.0]);
++    }
++    #[test]
++    fn footprint_batches_validate_geometry_and_handle_empty_candidates() {
++        let mut input = footprint_batch();
++        input.paths[0].segments.clear();
++        assert_eq!(input.bounds().unwrap(), vec![vec![]]);
++        let mut input = footprint_batch();
++        input.paths[0].segments[0].0.clear();
++        assert!(input.bounds().is_err());
++        let mut input = footprint_batch();
++        input.transform[0][0] = f64::NAN;
++        assert!(input.bounds().is_err());
++        let mut input = footprint_batch();
++        input.marks[0].side = 2;
++        assert!(input.bounds().is_err());
++    }
++
++    #[test]
++    fn footprint_path_packets_preserve_exact_bounds_and_styles() {
++        use ciborium::cbor;
++        let encode = |value: &Value| {
++            let mut bytes = Vec::new();
++            ciborium::into_writer(value, &mut bytes).unwrap();
++            bytes
++        };
++        let paths = [
++            cbor!([[[0, -0.0], false, [["c", [0, 0], [2, 1], [3, 1]]]]]).unwrap(),
++            cbor!([
++                [[0, 0, 0], false, [["l", [1, 0, 0], [2, 1, 0]]]],
++                [[3, 1, 0], true, [["l", [4, 1, 0]]]]
++            ])
++            .unwrap(),
++        ];
++        let styles = [(0.05, true), (0.02, false)];
++        let expanded = paths
++            .iter()
++            .zip(styles)
++            .map(|(path, (radius, visible))| {
++                cbor!({"segments" => path, "shaft-radius" => radius,
++                "shaft-visible" => visible})
++                .unwrap()
++            })
++            .collect::<Vec<_>>();
++        let packets = paths
++            .iter()
++            .enumerate()
++            .map(|(i, path)| {
++                Value::Bytes(encode(
++                    &cbor!([{"segments" => path, "single" => i == 0}]).unwrap(),
++                ))
++            })
++            .collect::<Vec<_>>();
++        let mut spec = cbor!({
++            "paths" => expanded,
++            "shaft-styles" => [{"shaft-radius" => 0.05, "shaft-visible" => true},
++                {"shaft-radius" => 0.02, "shaft-visible" => false}],
++            "transform" => IDENTITY, "flat" => false, "ratio" => 0.25, "shift" => 0,
++            "marks" => [{
++                "tip" => [0, 0], "back" => [0.2, 0], "length" => 0.2,
++                "side" => 1, "shorten" => true, "straight" => false,
++                "pos" => null, "offset" => {"value" => 0.1, "relative" => true}, "sep" => 0,
++                "drawables" => [{"type" => "content", "pos" => [0, 0],
++                    "width" => 0.4, "height" => 0.6, "radius" => 0.02, "visible" => true}],
++            }],
++        })
++        .unwrap();
++        let expected = footprints(&encode(&spec)).unwrap();
++        spec.as_map_mut()
++            .unwrap()
++            .iter_mut()
++            .find(|(k, _)| k.as_text() == Some("paths"))
++            .unwrap()
++            .1 = Value::Array(packets);
++        assert_eq!(footprints(&encode(&spec)).unwrap(), expected);
++        // Flatten packet order without introducing an extra candidate dimension.
++        let combined = cbor!([
++            {"segments" => paths[0], "single" => true},
++            {"segments" => paths[1], "single" => false},
++        ])
++        .unwrap();
++        spec.as_map_mut()
++            .unwrap()
++            .iter_mut()
++            .find(|(k, _)| k.as_text() == Some("paths"))
++            .unwrap()
++            .1 = Value::Array(vec![Value::Bytes(encode(&combined))]);
++        assert_eq!(footprints(&encode(&spec)).unwrap(), expected);
++    }
++
++    #[test]
++    fn footprint_path_packets_reject_invalid_transport_and_geometry() {
++        use ciborium::cbor;
++        let spec = |paths: Value, styles: Value| {
++            let input = cbor!({"paths" => paths, "shaft-styles" => styles,
++                "transform" => IDENTITY, "flat" => false, "ratio" => null,
++                "shift" => 0, "marks" => []})
++            .unwrap();
++            let mut bytes = Vec::new();
++            ciborium::into_writer(&input, &mut bytes).unwrap();
++            bytes
++        };
++        let styles = cbor!([{"shaft-radius" => 0.05, "shaft-visible" => true},
++            {"shaft-radius" => 0.02, "shaft-visible" => false}])
++        .unwrap();
++        let empty = Value::Array(vec![Value::Bytes(vec![0x80])]);
++        assert_eq!(
++            footprints(&spec(empty.clone(), styles.clone())).unwrap(),
++            vec![0x80]
++        );
++        assert!(footprints(&spec(empty, Value::Null)).is_err());
++        for bytes in [vec![], vec![0x81], vec![0xa0]] {
++            assert!(footprints(&spec(
++                Value::Array(vec![Value::Bytes(bytes)]),
++                styles.clone()
++            ))
++            .is_err());
++        }
++        for point in [cbor!([0]).unwrap(), cbor!([0, f64::NAN]).unwrap()] {
++            let packet = cbor!([{"segments" => [[point, false, []]], "single" => false}]).unwrap();
++            let mut bytes = Vec::new();
++            ciborium::into_writer(&packet, &mut bytes).unwrap();
++            assert!(footprints(&spec(
++                Value::Array(vec![Value::Bytes(bytes)]),
++                styles.clone()
++            ))
++            .is_err());
++        }
++    }
+ }
+diff --git a/cetz-core/src/path_bool/op.rs b/cetz-core/src/path_bool/op.rs
+index 9fb34e5..f9d061d 100644
+--- a/cetz-core/src/path_bool/op.rs
++++ b/cetz-core/src/path_bool/op.rs
+@@ -112,14 +112,20 @@ mod tests {
+     #[test]
+     fn parse_op_all_valid() {
+         assert!(matches!(parse_op("union"), Ok(BinaryOp::Union)));
+-        assert!(matches!(parse_op("intersection"), Ok(BinaryOp::Intersection)));
++        assert!(matches!(
++            parse_op("intersection"),
++            Ok(BinaryOp::Intersection)
++        ));
+         assert!(matches!(parse_op("difference"), Ok(BinaryOp::Difference)));
+         assert!(matches!(parse_op("xor"), Ok(BinaryOp::Xor)));
+     }
+ 
+     #[test]
+     fn parse_op_invalid() {
+-        assert!(matches!(parse_op("subtract"), Err(PathBoolErr::InvalidOp(_))));
++        assert!(matches!(
++            parse_op("subtract"),
++            Err(PathBoolErr::InvalidOp(_))
++        ));
+         assert!(matches!(parse_op(""), Err(PathBoolErr::InvalidOp(_))));
+     }
+ 

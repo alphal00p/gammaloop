@@ -1,0 +1,185 @@
+--- a/cetz-core/src/lib.rs
++++ b/cetz-core/src/lib.rs
+@@ -8,6 +8,7 @@
+ mod path_bool;
+ mod bounds;
+ mod content;
++mod sampled;
+ pub use layout::{InputTree, OutputTree};
+ initiate_protocol!();
+ 
+@@ -249,3 +250,13 @@
+ pub fn content_rects_func(input: &[u8]) -> Result<Vec<u8>, String> {
+     content::content_rects(input)
+ }
++
++#[wasm_func]
++pub fn cubic_arclen_func(input: &[u8]) -> Result<Vec<u8>, String> {
++    sampled::cubic_arclen(input)
++}
++
++#[wasm_func]
++pub fn cubic_t_for_distance_func(input: &[u8]) -> Result<Vec<u8>, String> {
++    sampled::cubic_t_for_distance(input)
++}
+--- /dev/null
++++ b/cetz-core/src/sampled.rs
+@@ -0,0 +1,158 @@
++//! CeTZ's fixed-sample cubic measurements, preserving the scalar Typst order.
++//!
++//! These intentionally use the Bernstein/vector evaluation in bezier.typ,
++//! rather than the cubic-extrema evaluator or an adaptive arc-length algorithm.
++use crate::{deserialize_point, handle_cbor, F64ish, Point};
++use ciborium::Value;
++use serde::Deserialize;
++
++#[derive(Deserialize)]
++struct SampledCubic {
++    #[serde(deserialize_with = "deserialize_point")]
++    start: Point,
++    #[serde(deserialize_with = "deserialize_point")]
++    end: Point,
++    #[serde(deserialize_with = "deserialize_point")]
++    control_start: Point,
++    #[serde(deserialize_with = "deserialize_point")]
++    control_end: Point,
++    samples: i64,
++    distance: Option<F64ish>,
++}
++
++impl SampledCubic {
++    fn point(&self, t: f64) -> Point {
++        let a = (1.0 - t).powi(3);
++        let b = 3.0 * (1.0 - t).powi(2) * t;
++        let c = 3.0 * (1.0 - t) * t.powi(2);
++        let d = t.powi(3);
++        let dimensions = [
++            &self.start,
++            &self.end,
++            &self.control_start,
++            &self.control_end,
++        ]
++        .iter()
++        .map(|p| p.len())
++        .max()
++        .unwrap_or(0);
++        (0..dimensions)
++            .map(|i| {
++                // Keep both inner vector additions before the outer addition and
++                // coordinate * scale order. Missing vector components are zero.
++                let first = self.start.get(i).map_or(0.0, |x| x * a)
++                    + self.control_start.get(i).map_or(0.0, |x| x * b);
++                let second = self.control_end.get(i).map_or(0.0, |x| x * c)
++                    + self.end.get(i).map_or(0.0, |x| x * d);
++                first + second
++            })
++            .collect()
++    }
++
++    fn distance(a: &[f64], b: &[f64]) -> f64 {
++        let square = |i: usize| {
++            let delta = b[i] - a[i];
++            delta * delta
++        };
++        match a.len() {
++            2 => (square(0) + square(1)).sqrt(),
++            3 => (square(0) + square(1) + square(2)).sqrt(),
++            _ => (0..a.len()).fold(0.0, |sum, i| sum + square(i)).sqrt(),
++        }
++    }
++
++    fn segment_distance(&self, i: i64) -> f64 {
++        Self::distance(
++            &self.point((i - 1) as f64 / self.samples as f64),
++            &self.point(i as f64 / self.samples as f64),
++        )
++    }
++
++    fn length(&self) -> Value {
++        if self.samples < 1 {
++            return Value::Integer(0.into());
++        }
++        let mut length = 0.0;
++        for i in 1..=self.samples {
++            length += self.segment_distance(i);
++        }
++        Value::Float(length)
++    }
++
++    fn forwards(&self, distance: f64) -> Value {
++        let mut sum = 0.0;
++        for i in 1..=self.samples {
++            let t0 = (i - 1) as f64 / self.samples as f64;
++            let t1 = i as f64 / self.samples as f64;
++            let segment = self.segment_distance(i);
++            if sum <= distance && distance <= sum + segment {
++                let lambda = (distance - sum) / segment;
++                return Value::Float((1.0 - lambda) * t0 + lambda * t1);
++            }
++            sum += segment;
++        }
++        Value::Integer(1.into())
++    }
++
++    fn parameter(mut self) -> Result<Value, String> {
++        let distance = match self.distance.take().ok_or("missing cubic distance")? {
++            F64ish::Float(x) => x,
++            F64ish::Signed(x) => x as f64,
++            F64ish::Unsigned(x) => x as f64,
++        };
++        if distance == 0.0 {
++            return Ok(Value::Integer(0.into()));
++        }
++        if distance > 0.0 {
++            return Ok(self.forwards(distance));
++        }
++        std::mem::swap(&mut self.start, &mut self.end);
++        std::mem::swap(&mut self.control_start, &mut self.control_end);
++        Ok(match self.forwards(-distance) {
++            Value::Float(t) => Value::Float(1.0 - t),
++            Value::Integer(_) => Value::Integer(0.into()),
++            _ => unreachable!(),
++        })
++    }
++}
++
++pub(super) fn cubic_arclen(input: &[u8]) -> Result<Vec<u8>, String> {
++    handle_cbor(input, |cubic: SampledCubic| Ok(cubic.length()))
++}
++
++pub(super) fn cubic_t_for_distance(input: &[u8]) -> Result<Vec<u8>, String> {
++    handle_cbor(input, SampledCubic::parameter)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn curve(samples: i64, distance: f64) -> SampledCubic {
++        SampledCubic {
++            start: vec![0.0, 0.0],
++            end: vec![2.0, 0.0],
++            control_start: vec![0.0, 0.0],
++            control_end: vec![2.0, 0.0],
++            samples,
++            distance: Some(F64ish::Float(distance)),
++        }
++    }
++    #[test]
++    fn sampled_measurements_preserve_endpoint_and_empty_numeric_types() {
++        assert_eq!(curve(25, 0.0).length(), Value::Float(2.0));
++        assert_eq!(curve(0, 0.0).length(), Value::Integer(0.into()));
++        assert_eq!(
++            curve(25, 0.0).parameter().unwrap(),
++            Value::Integer(0.into())
++        );
++        assert_eq!(
++            curve(25, 3.0).parameter().unwrap(),
++            Value::Integer(1.into())
++        );
++        assert_eq!(
++            curve(25, -3.0).parameter().unwrap(),
++            Value::Integer(0.into())
++        );
++        assert_eq!(curve(25, 1.0).parameter().unwrap(), Value::Float(0.5));
++    }
++}
