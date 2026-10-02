@@ -34,15 +34,20 @@ from symbolica.community import tensor as spenso
 expression = spenso.TensorExpression(E('(a/(b+c)+d/(e+f))*(g+h)+z'))
 long_sum = spenso.TensorExpression(E('+'.join(f'a{i}/(b{i}+c{i})' for i in range(12))))
 wide_term = spenso.TensorExpression(E('*'.join(f'x{i}' for i in range(30)) + '+z'))
+wide_product = spenso.TensorExpression(E('*'.join(f'x{i}' for i in range(30))))
+wide_fraction = spenso.TensorExpression(E('(' + '*'.join(f'x{i}' for i in range(30)) + '+z)/(D+1)'))
 print(json.dumps([expression.to_html(), spenso.load_math_font(),
-                  long_sum.to_html(), wide_term.to_html()]))
+                  long_sum.to_html(), wide_term.to_html(),
+                  wide_product.to_html(), wide_fraction.to_html()]))
 """,
         ],
         check=True,
         capture_output=True,
         text=True,
     )
-    html, setup, long_sum, wide_term = json.loads(result.stdout)
+    html, setup, long_sum, wide_term, wide_product, wide_fraction = json.loads(
+        result.stdout
+    )
     assert "data:font" not in html
     assert len(html.encode()) < 10_000
     assert setup.count("data:font/woff2;base64,") == 1
@@ -72,6 +77,8 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
                 html * 10
                 + f'<section id="sum" style="width:1200px">{long_sum}</section>'
                 + f'<section id="wide" style="width:240px">{wide_term}</section>'
+                + f'<section id="product" style="width:240px">{wide_product}</section>'
+                + f'<section id="fraction" style="width:240px">{wide_fraction}</section>'
             ).replace('local("STIX Two Math"),', "")
             page.set_content((setup if offline else "") + output)
             page.evaluate("() => document.fonts.ready")
@@ -121,9 +128,27 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
                 rows.append(layout["rows"])
             assert rows[0] == rows[2] == 1 and rows[1] > 1, rows
             assert page.locator("#sum math").inner_html() == original_math
-            assert page.locator("#wide [data-spenso-math]").evaluate(
-                "box => box.scrollWidth > box.clientWidth"
-            )
+            # A scrollbar alone is insufficient: centered overflowing math can
+            # put its leading factors outside the reachable scroll area.
+            for selector in ("#wide", "#product", "#fraction"):
+                bounds = page.locator(f"{selector} [data-spenso-math]").evaluate(
+                    """box => {
+                        const children = [...box.querySelector('math').children];
+                        box.scrollLeft = 0;
+                        const left = Math.min(...children.map(
+                            x => x.getBoundingClientRect().left));
+                        box.scrollLeft = box.scrollWidth;
+                        const right = Math.max(...children.map(
+                            x => x.getBoundingClientRect().right));
+                        box.scrollLeft = 0;
+                        const viewport = box.getBoundingClientRect();
+                        return {left, right, start: viewport.left, end: viewport.right,
+                                width: box.clientWidth, scroll: box.scrollWidth};
+                    }"""
+                )
+                assert bounds["scroll"] > bounds["width"], (selector, bounds)
+                assert bounds["left"] >= bounds["start"] - 1, (selector, bounds)
+                assert bounds["right"] <= bounds["end"] + 1, (selector, bounds)
             print(
                 f"offline={offline}: sum rows at 1200/280/1200px = {rows}; wide term scrolls"
             )

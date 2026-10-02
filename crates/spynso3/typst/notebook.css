@@ -13,6 +13,13 @@
   font-synthesis: none;
 }
 
+/* Center short equations without putting wide fractions or products outside
+   the scrollable area on the left. Wrapped sums size their individual terms. */
+[data-spenso-math] math[display="block"]:not([data-spenso-wrap]) {
+  width: max-content;
+  min-width: 100%;
+}
+
 /* Keep slash notation visible in native MathML, including scripted labels.
    The stroke scales with the surrounding math and follows light/dark colors. */
 [data-spenso-math] [data-spenso-cancel] {
@@ -31,7 +38,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: center;
+  justify-content: safe center;
   row-gap: 0.6em;
 }
 
