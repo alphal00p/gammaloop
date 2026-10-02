@@ -81,7 +81,95 @@ def _(Representation, TensorExpression, TensorName):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 1. Open ports and index labels
+    ## 1. Vectors: names, indices and labels
+
+    A vector is a **rank-one tensor**. `TensorName.vector("p")` declares the
+    name; applying it to a representation constructs the vector:
+    `p = TensorName.vector("p")(Representation.mink(4))`. This is a
+    four-dimensional Minkowski vector, with metric
+    $g=\operatorname{diag}(1,-1,-1,-1)$. The same vector constructor works
+    for Euclidean vectors, spinors and other index spaces.
+
+    The default head is an ordinary $p$. Its slot carries the index information:
+    the unresolved vector has a hollow square; `p("mu")` assigns the abstract
+    Lorentz index $\mu$ and displays $p^\mu$. This is the whole indexed vector,
+    rather than its numerical component at some coordinate.
+
+    A vector family can also have scalar arguments. For
+    `P = TensorName.vector("P")`, `P(7, lorentz)` displays a family label
+    underneath the head. `P(7, lorentz("mu"))` gives $P_7^\mu$.
+    **The 7 identifies a member of the family; the $\mu$ labels its tensor
+    axis.** Component coordinates are introduced later through tensor data.
+
+    A sum of vectors in the same space has one axis too: `(p + q)("mu")` means
+    $p^\mu+q^\mu$. A dot contracts that axis, while supplying the vector
+    to another tensor fills one of its ports. Both operations are shown below.
+
+    Arrows and bold heads are optional print mappings, rather than different
+    tensor operations. They keep the same index-space and slot conventions.
+    """)
+    return
+
+
+@app.cell
+def _(TensorName, lorentz, mo, p, q):
+    _P = TensorName.vector("notation::P")
+    _family = _P(7, lorentz)
+    _family_indexed = _P(7, lorentz("mu"))
+    _sum = (p + q)("mu")
+    _arrow = TensorName.vector(
+        "notation::v_arrow", print={"typst": "arrow(v)", "latex": r"\vec{v}"}
+    )(lorentz)
+    _bold = TensorName.vector(
+        "notation::v_bold", print={"typst": "bold(v)", "latex": r"\mathbf{v}"}
+    )(lorentz)
+    assert _family_indexed == _family("mu")
+    assert _sum.rank == _family.rank == _family_indexed.rank == 1
+    mo.vstack(
+        [
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("**Unresolved:** `p`"), p]),
+                    mo.vstack([mo.md('**Indexed:** `p("mu")`'), p("mu")]),
+                    mo.vstack([mo.md("**Family member:** `P(7, lorentz)`"), _family]),
+                    mo.vstack(
+                        [
+                            mo.md('**Family member and index:** `P(7, lorentz("mu"))`'),
+                            _family_indexed,
+                        ]
+                    ),
+                ],
+                wrap=True,
+                align="start",
+            ),
+            mo.hstack(
+                [
+                    mo.vstack([mo.md('**Vector sum:** `(p + q)("mu")`'), _sum]),
+                    mo.vstack(
+                        [
+                            mo.md('**Optional arrow:** `print={"typst": "arrow(v)"}`'),
+                            _arrow("mu"),
+                        ]
+                    ),
+                    mo.vstack(
+                        [
+                            mo.md('**Optional bold:** `print={"typst": "bold(v)"}`'),
+                            _bold("mu"),
+                        ]
+                    ),
+                ],
+                wrap=True,
+                align="start",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 2. Open ports and index labels
 
     `A` has two bispinor axes and one Lorentz axis. Without assigned labels,
     its three hollow squares identify unresolved ports. Hover a square to see
@@ -114,7 +202,7 @@ def _(A, AUTO, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2. Alphabets, graph identities and scoped copies
+    ## 3. Alphabets, graph identities and scoped copies
 
     The default alphabet display gives generated Lorentz indices Greek letters
     and bispinor indices Latin letters. These letters label axes; their position
@@ -176,7 +264,7 @@ def _(DisplaySettings, S, gamma, mo, notation, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3. Dots and ordinary multiplication
+    ## 4. Dots and ordinary multiplication
 
     A dot is a **complete scalar contraction**. In Minkowski space,
     $p\cdot q=g_{\mu\nu}p^\mu q^\nu$. Multiplying two unresolved vectors has
@@ -217,7 +305,7 @@ def _(dot, mo, p, q):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4. A metric relabels an axis
+    ## 5. A metric relabels an axis
 
     `TensorExpression.g(lorentz("mu"), lorentz("nu"))` constructs and indexes
     the metric directly. Contracting it with $p^\nu$ gives $p^\mu$ in the
@@ -247,7 +335,7 @@ def _(TensorExpression, lorentz, mo, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 5. Supplied ports: filled shapes and bra/ket notation
+    ## 6. Supplied ports: filled shapes and bra/ket notation
 
     Contracting a vector into an axis can be written as a tensor with that vector
     in its argument, or as a bra/ket around the tensor. For example,
@@ -294,7 +382,7 @@ def _(A, AUTO, B, Q, Symbol, mo, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 6. Dirac slashes use the same port conventions
+    ## 7. Dirac slashes use the same port conventions
 
     A slash means $\not p=\gamma^\mu p_\mu$, a matrix in bispinor space.
     The slash has **two** spinor ports and no Lorentz port. Supplying $Q$ to
@@ -327,7 +415,7 @@ def _(AUTO, Q, Symbol, gamma, mo, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 7. Ordered chains and traces
+    ## 8. Ordered chains and traces
 
     $[\not p\,\not q]_{ac}$ is the matrix word
     $\sum_b(\not p)_{ab}(\not q)_{bc}$. Square brackets group the ordered
@@ -367,7 +455,7 @@ def _(AUTO, Q, gamma, mo, p, q):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 8. Ports, Schoonschip and call layouts
+    ## 9. Ports, Schoonschip and call layouts
 
     Ports layout is the default: supplied vectors appear in a bra/ket and
     occupied axes have filled markers. Schoonschip layout writes supplied
@@ -404,7 +492,7 @@ def _(DisplaySettings, generic_compact, mo, notation):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 9. Scalar color invariants
+    ## 10. Scalar color invariants
 
     The compact symbols $C_F$, $C_A$ and $T_R$ are respectively the quadratic
     Casimirs of the fundamental and adjoint representations, and the quadratic
@@ -460,7 +548,7 @@ def _(DisplaySettings, Representation, mo, notation):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 10. Tensor components are coordinates, not index labels
+    ## 11. Tensor components are coordinates, not index labels
 
     For a tensor with shape $2\times3$, $C(x,7)^{0,1}$ means its component at
     coordinates $(0,1)$. Array mode writes the same component as $C(x,7)[0,1]$.
@@ -508,7 +596,7 @@ def _(DisplaySettings, Representation, S, TensorName, mo, notation):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 11. Custom tensor names and pure Typst source
+    ## 12. Custom tensor names and pure Typst source
 
     A `TensorName` print mapping customizes the head. The tensor printer still
     places its arguments, ports and component coordinates. Here `macron(J)`
@@ -546,7 +634,7 @@ def _(TensorName, joined, mo, spinor):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 12. Contraction changes notation, not components or tensor type
+    ## 13. Contraction changes notation, not components or tensor type
 
     The checks below evaluate the generic tensor and the Dirac word before and
     after `contract()`. Every component agrees. The contracted expressions
