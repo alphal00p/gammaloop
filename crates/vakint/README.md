@@ -13,7 +13,7 @@ Use the canonical Typst documentation for maintained workflows:
 
 The crate also contains source examples under [`examples/`](examples/); check them against the
 versioned API reference before adapting them. Vakint is exposed to Python through
-`symbolica.community.vakint` when that community module is included in the installed Symbolica
+`symbolica.community.hep.vakint` when that community module is included in the installed Symbolica
 assembly, not as an independent Python distribution.
 
 Symbolica has its own license terms. FORM, MATAD, FMFT, and pySecDec are required only by the
