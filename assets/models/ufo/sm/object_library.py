@@ -9,6 +9,7 @@
 
 from __future__ import absolute_import
 import cmath
+from fractions import Fraction
 
 
 class UFOBaseClass(object):
@@ -141,17 +142,19 @@ class Particle(UFOBaseClass):
         if self.selfconjugate:
             raise Exception('%s has no anti particle.' % self.name) 
         outdic = {}
-        for k,v in self.__dict__.items():
+        for k, v in self.__dict__.items():
             if k not in self.require_args_all:
-                outdic[k] = None if v is None else -v
-        # Charge conjugation exchanges fermion chiralities. A missing chirality
-        # is unspecified, not a zero hypercharge (Q = T3 + Y/2).
-        if self.spin == 2 and (hasattr(self, 'Y') or hasattr(self, 'YRight')):
-            left_y = getattr(self, 'Y', None)
-            right_y = getattr(self, 'YRight', None)
-            outdic['Y'] = None if right_y is None else -right_y
-            outdic['YRight'] = None if left_y is None else -left_y
-        if self.color in [1,8]:
+                if k in ("Y", "YRight", "charge_exact"):
+                    outdic[k] = None if v is None else str(-Fraction(str(v)))
+                else:
+                    outdic[k] = None if v is None else -v
+        # Charge conjugation exchanges chiralities and preserves unspecified charges.
+        if self.spin == 2 and (hasattr(self, "Y") or hasattr(self, "YRight")):
+            left_y = getattr(self, "Y", None)
+            right_y = getattr(self, "YRight", None)
+            outdic["Y"] = None if right_y is None else str(-Fraction(str(right_y)))
+            outdic["YRight"] = None if left_y is None else str(-Fraction(str(left_y)))
+        if self.color in [1, 8]:
             newcolor = self.color
         else:
             newcolor = -self.color
