@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "anywidget==0.9.18",
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -22,7 +22,7 @@ def _():
     import sys
 
     import anywidget
-    import linnet_py as lp
+    import linnet as lp
     import marimo as mo
     import traitlets
 
@@ -96,13 +96,13 @@ def _(mo):
         20,
         600,
         step=20,
-        value=200,
+        value=100,
         show_value=True,
         debounce=True,
         label="Steps per epoch",
     )
     epochs = mo.ui.slider(
-        1, 24, value=8, show_value=True, debounce=True, label="Epochs"
+        1, 60, value=30, show_value=True, debounce=True, label="Epochs"
     )
     every = mo.ui.slider(
         1, 24, value=4, show_value=True, debounce=True, label="Steps per frame"

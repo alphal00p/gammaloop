@@ -3,7 +3,7 @@
 import math
 import unittest
 
-import linnet_py as lp
+import linnet as lp
 
 DOT = """digraph {
     incoming [style=invis]
@@ -19,7 +19,15 @@ DOT = """digraph {
 class LayoutStreamTests(unittest.TestCase):
     def test_lazy_iteration_keeps_topology_and_batches_one_run(self):
         stream = lp.LayoutStream.from_dot(
-            DOT, steps=5, epochs=3, every=4, early_tolerance=0
+            DOT,
+            steps=5,
+            epochs=3,
+            every=4,
+            early_tolerance=0,
+            spring_length_scale=0.75,
+            external_pull=1,
+            initial_repulsion=0.15,
+            repulsion_growth=0.7,
         )
         self.assertIs(iter(stream), stream)
         self.assertEqual(stream.node_names, ["a", "b"])
@@ -37,6 +45,14 @@ class LayoutStreamTests(unittest.TestCase):
         for frame in frames:
             self.assertEqual(len(frame.nodes), 2)
             self.assertEqual(len(frame.edges), 3)
+            self.assertEqual(
+                frame.paths,
+                [
+                    [frame.edges[0], frame.nodes[0]],
+                    [frame.nodes[0], frame.edges[1], frame.nodes[1]],
+                    [frame.nodes[1], frame.edges[2]],
+                ],
+            )
             self.assertEqual(frame.nodes[0], (1.0, 2.0))
             self.assertTrue(math.isfinite(frame.max_movement))
             self.assertTrue(
@@ -48,12 +64,61 @@ class LayoutStreamTests(unittest.TestCase):
             )
         whole = list(
             lp.LayoutStream.from_dot(
-                DOT, steps=5, epochs=3, every=100, early_tolerance=0
+                DOT,
+                steps=5,
+                epochs=3,
+                every=100,
+                early_tolerance=0,
+                spring_length_scale=0.75,
+                external_pull=1,
+                initial_repulsion=0.15,
+                repulsion_growth=0.7,
             )
         )[-1]
         self.assertEqual(whole.nodes, frames[-1].nodes)
         self.assertEqual(whole.edges, frames[-1].edges)
         self.assertEqual(stream.endpoints, [(None, 0), (0, 1), (1, None)])
+
+    def test_external_pull_balance_default_and_exponents_reach_the_solver(self):
+        # Two external legs per side share one internal connection, so full
+        # topology balancing gives each leg half the uniform pull at exponent 1.
+        dot = """digraph {
+            ext [style=invis]
+            a [id=0 pos="0,0!"]
+            b [id=1]
+            ext -> a; ext -> a; a -> b; b -> ext; b -> ext;
+        }"""
+
+        def final(**options):
+            return list(
+                lp.LayoutStream.from_dot(
+                    dot,
+                    steps=8,
+                    epochs=3,
+                    every=5,
+                    seed=11,
+                    depth_scale=0,
+                    flattening_end=0,
+                    early_tolerance=0,
+                    **options,
+                )
+            )[-1]
+
+        default = final(external_pull=1)
+        balanced = final(external_pull=1, external_pull_balance=1)
+        self.assertEqual(default.nodes, balanced.nodes)
+        self.assertEqual(default.edges, balanced.edges)
+        for balance, equivalent_pull in ((0, 1), (0.5, 0.5**0.5), (1, 0.5), (2, 0.25)):
+            with self.subTest(balance=balance):
+                actual = final(external_pull=1, external_pull_balance=balance)
+                uniform = final(external_pull=equivalent_pull, external_pull_balance=0)
+                for a, b in zip(
+                    actual.nodes + actual.edges, uniform.nodes + uniform.edges
+                ):
+                    for x, y in zip(a, b):
+                        self.assertAlmostEqual(x, y, places=11)
+        uniform = final(external_pull=1, external_pull_balance=0)
+        self.assertNotEqual(uniform.edges, balanced.edges)
 
     def test_frames_and_topology_are_independent_copies(self):
         stream = lp.LayoutStream.from_dot(DOT, every=1, steps=6, epochs=1)
@@ -95,6 +160,19 @@ class LayoutStreamTests(unittest.TestCase):
             {"spring_strength": -1},
             {"repulsion": float("inf")},
             {"length_scale": 0},
+            {"spring_length_scale": 0},
+            {"external_pull": -1},
+            {"external_pull_balance": -0.1},
+            {"external_pull_balance": float("nan")},
+            {"external_pull_balance": float("inf")},
+            {"external_pull_balance": -float("inf")},
+            {"external_pull_attachment": -0.1},
+            {"external_pull_attachment": float("nan")},
+            {"external_pull_attachment": float("inf")},
+            {"external_pull_attachment": -float("inf")},
+            {"initial_repulsion": -0.1},
+            {"initial_repulsion": 1.1},
+            {"repulsion_growth": 1.1},
             {"depth_scale": -1},
             {"flattening_end": 1.1},
             {"delta": -1},

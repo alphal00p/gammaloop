@@ -1,8 +1,6 @@
 //! Python bindings for Linnet's typed graph, DOT, and Typst drawing APIs.
 
 use pyo3::prelude::*;
-#[cfg(feature = "python-stubs")]
-use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod dot;
 mod drawing;
@@ -10,11 +8,13 @@ mod graph;
 mod mutations;
 mod native_graph;
 mod render;
+pub use render::PreparedRender;
 mod streaming;
+mod svg;
 mod topology;
 mod typst;
 
-#[pymodule]
+#[pymodule(name = "linnet")]
 fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graph::register(module)?;
     topology::register(module)?;
@@ -26,13 +26,20 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-stubs")]
-define_stub_info_gatherer!(stub_info);
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    // Dependency classes without an explicit module belong to Symbolica;
+    // Linnet declarations explicitly name their own module.
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
 
 // Rust's `PyAny` boundary is intentionally wider than the Python API: values
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 const STUB_TYPE_ALIASES: &str = r#"class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
 class _TypstFunctionRef(typing.Protocol):
@@ -142,6 +149,7 @@ _DrawingPointDict = typing.TypedDict(
     {"x": _DrawingCoordinate, "y": _DrawingCoordinate},
 )
 _DrawingPoint: typing.TypeAlias = builtins.list[_DrawingCoordinate] | builtins.tuple[_DrawingCoordinate, _DrawingCoordinate] | _DrawingPointDict | _ValueExpression | None | Inherit
+_DrawingPoints: typing.TypeAlias = typing.Sequence[builtins.list[_DrawingCoordinate] | builtins.tuple[_DrawingCoordinate, _DrawingCoordinate] | _DrawingPointDict | _ValueExpression] | _ValueExpression | None | Inherit
 _DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
 _DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
 _DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
@@ -189,20 +197,13 @@ _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
 /// Render the installed and documented Python surface from one stub inventory.
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info
         .modules
-        .get("linnet_py")
-        .expect("linnet StubInfo must contain the linnet_py module");
-    Ok(canonical_stub_from_module(module))
-}
-
-/// Render a gathered Linnet module without collecting the global inventory again.
-#[cfg(feature = "python-stubs")]
-#[doc(hidden)]
-pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> String {
+        .get("linnet")
+        .expect("linnet StubInfo must contain the linnet module");
     let mut exports = module
         .class
         .values()
@@ -214,29 +215,30 @@ pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> S
     exports.sort_unstable();
     exports.dedup();
 
-    let generated = module.to_string();
-    // Only the leading prelude contains imports; docstrings can start with
-    // "from" or "import" too.
+    // Rust collection constructors are valid PyO3 defaults but are not Python
+    // syntax. Keep the generated stub's conventional unspecified default.
+    let generated = module.to_string().replace(" = Vec :: new()", " = ...");
+    Python::initialize();
+    let import_end_line = Python::attach(|py| -> PyResult<usize> {
+        let ast = py.import("ast")?;
+        let mut import_end = 0;
+        for node in ast
+            .call_method1("parse", (&generated,))?
+            .getattr("body")?
+            .try_iter()?
+        {
+            let node = node?;
+            if matches!(node.get_type().name()?.to_str()?, "Import" | "ImportFrom") {
+                import_end = node.getattr("end_lineno")?.extract()?;
+            }
+        }
+        Ok(import_end)
+    })?;
     let import_end = generated
         .split_inclusive('\n')
-        .take_while(|line| {
-            let line = line.trim_start();
-            line.is_empty()
-                || line.starts_with('#')
-                || line.starts_with("import ")
-                || line.starts_with("from ")
-        })
-        .scan(0, |offset, line| {
-            *offset += line.len();
-            Some((line, *offset))
-        })
-        .filter(|(line, _)| {
-            let line = line.trim_start();
-            line.starts_with("import ") || line.starts_with("from ")
-        })
-        .map(|(_, offset)| offset)
-        .last()
-        .expect("linnet stub must import its referenced Python types");
+        .take(import_end_line)
+        .map(str::len)
+        .sum::<usize>();
     let declarations = generated[import_end..].trim_matches('\n');
     let exports = exports
         .into_iter()
@@ -291,9 +293,6 @@ pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> S
     ] {
         stub = stub.replace(rust, python);
     }
-    // Rust collection constructors are valid PyO3 defaults but are not Python
-    // syntax. Keep the generated stub's conventional unspecified default.
-    stub = stub.replace(" = Vec :: new()", " = ...");
     // Stub generation runs without signature inference, so non-builtin Rust
     // values collapse to `...`. These closed enums have one API-wide default.
     for (type_name, default) in [
@@ -318,5 +317,5 @@ pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> S
         .collect::<Vec<_>>()
         .join("\n");
     canonical.push('\n');
-    canonical
+    Ok(canonical)
 }

@@ -772,16 +772,16 @@ fn dictionary_source(
 }
 
 /// Type of the `AUTO` sentinel, which requests automatic selection.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(skip_from_py_object, frozen, name = "Auto")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", skip_from_py_object, frozen, name = "Auto")]
 #[derive(Clone, Copy, Debug)]
 struct PyAuto;
 
-#[cfg(feature = "python-stubs")]
-pyo3_stub_gen::module_variable!("linnet_py", "AUTO", PyAuto);
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::module_variable!("linnet", "AUTO", PyAuto);
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyAuto {
     fn __repr__(&self) -> &'static str {
@@ -798,16 +798,16 @@ impl PyAuto {
 }
 
 /// Type of the `INHERIT` sentinel, which preserves a lower-precedence setting.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(skip_from_py_object, frozen, name = "Inherit")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", skip_from_py_object, frozen, name = "Inherit")]
 #[derive(Clone, Copy, Debug)]
 struct PyInherit;
 
-#[cfg(feature = "python-stubs")]
-pyo3_stub_gen::module_variable!("linnet_py", "INHERIT", PyInherit);
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::module_variable!("linnet", "INHERIT", PyInherit);
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyInherit {
     fn __repr__(&self) -> &'static str {
@@ -831,8 +831,8 @@ macro_rules! typst_string_enum {
         }
     ) => {
         $(#[$meta])*
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-        #[pyclass(from_py_object, eq, eq_int, name = $python)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
+        #[pyclass(module = "linnet", from_py_object, eq, eq_int, name = $python)]
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
         #[serde(rename_all = "kebab-case")]
         enum $rust {
@@ -859,6 +859,7 @@ typst_string_enum! {
     /// Algorithm used by a Linnest layout pass.
     PyLayoutAlgorithm, "LayoutAlgorithm", LayoutAlgorithm {
         Force => "force",
+        Impred => "impred",
         Anneal => "anneal",
         Tree => "tree",
         Dot => "dot",
@@ -880,6 +881,7 @@ typst_string_enum! {
         Normal => "normal",
         DanglingTangent => "dangling-tangent",
         FixedLength => "fixed-length",
+        FixedGap => "fixed-gap",
     }
 }
 
@@ -995,8 +997,11 @@ typst_string_enum! {
 }
 
 /// Finite debug detail accepted by Linnest's drawing layer.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, name = "DebugLevel")]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "DebugLevel")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum PyDebugLevel {
@@ -1098,16 +1103,16 @@ typst_string_enum! {
 }
 
 /// A Typst length such as `2pt` or `1.2em`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Length")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Length")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLength {
     value: f64,
     unit: LengthUnit,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLength {
     #[new]
@@ -1163,15 +1168,15 @@ impl PyLength {
 }
 
 /// A Typst ratio expressed in percent.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Ratio")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Ratio")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyRatio {
     percent: f64,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRatio {
     #[new]
@@ -1197,16 +1202,16 @@ impl PyRatio {
 }
 
 /// A sum of a Typst ratio and length.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "RelativeLength")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "RelativeLength")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyRelativeLength {
     ratio: Option<f64>,
     length: Option<(f64, LengthUnit)>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRelativeLength {
     #[new]
@@ -1235,16 +1240,16 @@ impl PyRelativeLength {
 }
 
 /// A Typst angle in degrees or radians.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Angle")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Angle")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyAngle {
     value: f64,
     unit: String,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyAngle {
     #[new]
@@ -1278,15 +1283,15 @@ impl PyAngle {
 }
 
 /// A Typst fractional track size such as `1fr`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Fraction")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Fraction")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyFraction {
     value: f64,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyFraction {
     #[new]
@@ -1307,15 +1312,15 @@ impl PyFraction {
 }
 
 /// A safe Typst color value.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Color")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Color")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyColor {
     value: ColorValue,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyColor {
     #[new]
@@ -1374,7 +1379,9 @@ enum ValueRule {
     NonNegativeInt,
     Number,
     NonNegativeNumber,
+    NonNegativeFiniteNumber,
     Point,
+    PointList,
     Angle,
     Enum(EnumKind),
     EnumOrFunction(EnumKind),
@@ -1432,6 +1439,11 @@ impl ValueRule {
                     || matches!(value, NativeValue::Float(number) if *number >= 0.0)
                     || expression_kind(SymbolKind::Value)
             }
+            Self::NonNegativeFiniteNumber => {
+                matches!(value, NativeValue::Int(number) if *number >= 0)
+                    || matches!(value, NativeValue::Float(number) if number.is_finite() && *number >= 0.0)
+                    || expression_kind(SymbolKind::Value)
+            }
             Self::Point => {
                 matches!(value, NativeValue::Array(values) if values.len() == 2 && values.iter().all(|value| Self::Number.accepts(value)))
                     || matches!(value, NativeValue::Dict(values) if {
@@ -1439,6 +1451,10 @@ impl ValueRule {
                             && values.get("x").is_some_and(|value| Self::Number.accepts(value))
                             && values.get("y").is_some_and(|value| Self::Number.accepts(value))
                     })
+                    || expression_kind(SymbolKind::Value)
+            }
+            Self::PointList => {
+                matches!(value, NativeValue::Array(values) if values.iter().all(|point| Self::Point.accepts(point)))
                     || expression_kind(SymbolKind::Value)
             }
             Self::Angle => {
@@ -1585,7 +1601,9 @@ impl ValueRule {
             Self::NonNegativeInt => "a non-negative int",
             Self::Number => "a number",
             Self::NonNegativeNumber => "a non-negative number",
+            Self::NonNegativeFiniteNumber => "a non-negative finite number",
             Self::Point => "a two-number point dictionary or array, or module value",
+            Self::PointList => "an array of two-number points, or module value",
             Self::Angle => "an Angle, number, or module value",
             Self::Enum(kind) => kind.name(),
             Self::EnumOrFunction(kind) => match kind {
@@ -1724,15 +1742,15 @@ const STROKE_FIELDS: &[FieldSpec] = &[
 ];
 
 /// A typed Typst stroke dictionary.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Stroke")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Stroke")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyStroke {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyStroke {
     #[new]
@@ -1753,15 +1771,15 @@ impl PyStroke {
 }
 
 /// A named or explicit Typst dash pattern.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Dash")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Dash")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyDash {
     value: DashValue,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDash {
     #[new]
@@ -1830,15 +1848,15 @@ const INSET_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Typed CeTZ/Typst inset values.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Insets")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Insets")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyInsets {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyInsets {
     #[new]
@@ -1884,15 +1902,15 @@ const MARK_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Typed CeTZ mark configuration.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "Mark")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "Mark")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMark {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyMark {
     #[new]
@@ -1945,15 +1963,15 @@ const TEXT_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Literal text content with optional typed text styling.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "TextLabel")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "TextLabel")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTextLabel {
     value: TextValue,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTextLabel {
     #[new]
@@ -2005,15 +2023,15 @@ fn math_script(value: &Bound<'_, PyAny>, what: &str) -> PyResult<MathScript> {
 }
 
 /// Safe mathematical identifier content, optionally with scripts.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "MathSymbol")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "MathSymbol")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMathSymbol {
     value: MathValue,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyMathSymbol {
     #[new]
@@ -2047,15 +2065,15 @@ impl PyMathSymbol {
 }
 
 /// A local or package Typst module whose exports can be referenced safely.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "TypstModule")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstModule")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PyTypstModule {
     source: TypstModuleSource,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstModule {
     #[staticmethod]
@@ -2147,15 +2165,15 @@ fn call_arguments(
 }
 
 /// A typed export from a Typst module.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "TypstRef")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstRef")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstRef {
     expression: TypstExpression,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstRef {
     #[pyo3(signature = (*args, **kwargs))]
@@ -2217,15 +2235,15 @@ impl PyTypstRef {
 }
 
 /// A call to an explicitly imported Typst function.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "TypstCall")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstCall")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstCall {
     expression: TypstExpression,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstCall {
     fn __repr__(&self) -> &'static str {
@@ -2234,15 +2252,15 @@ impl PyTypstCall {
 }
 
 /// A Typst function partially applied through its native `.with` method.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "TypstBind")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstBind")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstBind {
     expression: TypstExpression,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstBind {
     #[pyo3(signature = (*args, **kwargs))]
@@ -2533,15 +2551,15 @@ pub(crate) struct SelectorCallbacks {
 }
 
 /// Per-render Python callbacks returning typed drawing patches.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(skip_from_py_object, name = "DrawingSelectors")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", skip_from_py_object, name = "DrawingSelectors")]
 #[derive(Clone, Debug, Default)]
 struct PyDrawingSelectors {
     settings: SelectorSettings,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDrawingSelectors {
     #[new]
@@ -2588,15 +2606,15 @@ impl PyDrawingSelectors {
 }
 
 /// Options applied by `linnest.graph.style` before layout measurement.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "GraphStyleOptions")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "GraphStyleOptions")]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyGraphStyleOptions {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraphStyleOptions {
     #[new]
@@ -2617,6 +2635,70 @@ impl PyGraphStyleOptions {
 }
 
 const LAYOUT_FIELDS: &[FieldSpec] = &[
+    FieldSpec::new(
+        "impred_spacing",
+        "impred-spacing",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_repulsion",
+        "impred-repulsion",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_attraction",
+        "impred-attraction",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_parallel_balance",
+        "impred-parallel-balance",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new("impred_pull", "impred-pull", ValueRule::NonNegativeNumber),
+    FieldSpec::new(
+        "impred_pull_balance",
+        "impred-pull-balance",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_pull_attachment",
+        "impred-pull-attachment",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_external_max_points",
+        "impred-external-max-points",
+        ValueRule::NonNegativeInt,
+    ),
+    FieldSpec::new(
+        "impred_split_length_ratio",
+        "impred-split-length-ratio",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_contract_chord_ratio",
+        "impred-contract-chord-ratio",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_edge_clearance",
+        "impred-edge-clearance",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_node_edge_strength",
+        "impred-node-edge-strength",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new("impred_steps", "impred-steps", ValueRule::NonNegativeInt),
+    FieldSpec::new(
+        "impred_step_scale",
+        "impred-step-scale",
+        ValueRule::NonNegativeInt,
+    ),
+    FieldSpec::new("impred_level", "impred-level", ValueRule::Bool),
+    FieldSpec::new("impred_labels", "impred-labels", ValueRule::Bool),
     FieldSpec::new("subgraph", "subgraph", ValueRule::HedgeSelection).none(),
     FieldSpec::new("viewport_width", "viewport-w", ValueRule::NonNegativeNumber),
     FieldSpec::new(
@@ -2637,6 +2719,21 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("delta", "delta", ValueRule::NonNegativeNumber),
     FieldSpec::new("beta", "beta", ValueRule::Number),
     FieldSpec::new("spring_strength", "k-spring", ValueRule::Number),
+    FieldSpec::new(
+        "spring_length_scale",
+        "spring-length-scale",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "initial_repulsion",
+        "initial-repulsion",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "repulsion_growth",
+        "repulsion-growth",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("centering_strength", "g-center", ValueRule::Number),
     FieldSpec::new("epochs", "epochs", ValueRule::NonNegativeInt),
     FieldSpec::new("crossing_penalty", "crossing-penalty", ValueRule::Number),
@@ -2646,11 +2743,27 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
         "gamma-dangling-centroid",
         ValueRule::Number,
     ),
+    FieldSpec::new("external_pull", "external-pull", ValueRule::Number),
+    FieldSpec::new(
+        "external_pull_balance",
+        "external-pull-balance",
+        ValueRule::NonNegativeFiniteNumber,
+    ),
+    FieldSpec::new(
+        "external_pull_attachment",
+        "external-pull-attachment",
+        ValueRule::NonNegativeFiniteNumber,
+    ),
     FieldSpec::new("edge_edge_repulsion", "gamma-ee", ValueRule::Number),
     FieldSpec::new("directional_force", "directional-force", ValueRule::Number),
     FieldSpec::new(
-        "label_length_scale",
-        "label-length-scale",
+        "internal_label_length_scale",
+        "internal-label-length-scale",
+        ValueRule::Number,
+    ),
+    FieldSpec::new(
+        "external_label_length_scale",
+        "external-label-length-scale",
         ValueRule::Number,
     ),
     FieldSpec::new("label_spring", "label-spring", ValueRule::Number),
@@ -2715,21 +2828,37 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 ];
 
 /// One or more ordered Linnest layout passes.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "LayoutOptions")]
+///
+/// `impred_steps` is the nominal cooling budget (default 500).
+/// `impred_step_scale` is a positive maximum integration stride (default 2):
+/// the first 20% uses fine steps, then strides land on the existing checkpoints.
+/// Use 1 for the reference schedule. Native reports count actual solves, while
+/// progress callbacks count nominal ticks.
+/// `impred_level` (default true) rotates mixed incoming/outgoing drawings to
+/// their external-pull optimum at every refinement checkpoint.
+/// `impred_labels` (default false) opts into label-aware layout: drawn labels
+/// are fed back as tethered boxes into short warm ImPrEd passes.
+///
+/// `external_pull_attachment` is a finite nonnegative multiplier for extra demand
+/// from distributed owners sharing an external X coordinate (default 1).
+/// `external_pull_balance` is a finite nonnegative exponent on topology weights:
+/// 0 gives uniform pull, 1 (the default) balances topology, and values above 1
+/// strengthen balancing. It does not change radial pull.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "LayoutOptions")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLayoutOptions {
     passes: Vec<BTreeMap<String, NativeValue>>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLayoutOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "(*, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2755,7 +2884,7 @@ impl PyLayoutOptions {
 
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "($self, *, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2788,6 +2917,16 @@ const DRAW_FIELDS: &[FieldSpec] = &[
         .auto(),
     FieldSpec::new("subgraph", "subgraph", ValueRule::DrawSubgraphs).none(),
     FieldSpec::new("debug", "debug", ValueRule::Enum(EnumKind::DebugLevel)),
+    FieldSpec::new(
+        "debug_label_collisions",
+        "debug-label-collisions",
+        ValueRule::Bool,
+    ),
+    FieldSpec::new(
+        "label_collision_padding",
+        "label-collision-padding",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("show_half_edge_ids", "show-half-edge-ids", ValueRule::Bool),
     FieldSpec::new("node_radius", "node-radius", ValueRule::Radius).auto(),
     FieldSpec::new(
@@ -2839,6 +2978,11 @@ const DRAW_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("sink_style", "sink-style", ValueRule::StyleLayers).none(),
     FieldSpec::new("edge_label", "edge-label", ValueRule::ContentOrFunction).none(),
     FieldSpec::new("edge_label_style", "edge-label-style", ValueRule::Style).none(),
+    FieldSpec::new(
+        "external_label_gap",
+        "external-label-gap",
+        ValueRule::NonNegativeNumber,
+    ),
     FieldSpec::new("edge_omega", "edge-omega", ValueRule::Number),
     FieldSpec::new(
         "edge_trim_accuracy",
@@ -2871,21 +3015,21 @@ const DRAW_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Full typed option surface for `linnest.draw`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, frozen, name = "DrawOptions")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", from_py_object, frozen, name = "DrawOptions")]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyDrawOptions {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDrawOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., debug_label_collisions=..., label_collision_padding=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., external_label_gap=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2945,8 +3089,8 @@ fn deep_overlay(
 }
 
 /// Complete typed rendering configuration.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(skip_from_py_object, name = "RenderConfig")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", skip_from_py_object, name = "RenderConfig")]
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PyRenderConfig {
     template: PathSetting,
@@ -2955,8 +3099,8 @@ pub(crate) struct PyRenderConfig {
     selectors: SelectorSettings,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRenderConfig {
     #[new]
@@ -3152,6 +3296,40 @@ impl PyRenderConfig {
         self.assign("template_options", value)
     }
 
+    /// The options a native renderer can honour without Typst.
+    ///
+    /// Returns ``(template_options, layout)`` with plain template option values
+    /// and the ``impred-*`` options of a single layout pass, keyed by their
+    /// Typst names, or ``None`` when this configuration needs the Typst renderer
+    /// (templates, selectors, graph styles, drawing options or titles).
+    ///
+    /// Examples
+    /// --------
+    /// >>> import linnet as ln
+    /// >>> ln.RenderConfig(template_options={"momentum-arrows": True}).native_drawing_options()
+    /// ({'momentum-arrows': True}, {})
+    /// >>> ln.RenderConfig(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
+    #[gen_stub(override_return_type(
+        type_repr = "tuple[dict[str, typing.Any], dict[str, typing.Any]] | None",
+        imports = ("typing")
+    ))]
+    fn native_drawing_options(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
+        let Some(maps) = self.native_drawing_values() else {
+            return Ok(None);
+        };
+        let dicts = maps
+            .iter()
+            .map(|values| {
+                let dict = PyDict::new(py);
+                for (key, value) in values {
+                    dict.set_item(key, native_to_py(py, value)?)?;
+                }
+                Ok(dict)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(Some(PyTuple::new(py, dicts)?.unbind()))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "RenderConfig(template={:?}, source_root={:?}, fields={})",
@@ -3172,7 +3350,7 @@ impl PyRenderConfig {
     }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyStroke:
@@ -3180,7 +3358,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyInsets:
@@ -3188,7 +3366,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyMark:
@@ -3196,7 +3374,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyTextLabel:
@@ -3204,7 +3382,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -3214,7 +3392,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyDrawingSelectors:
@@ -3222,28 +3400,28 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
 
         class PyLayoutOptions:
-            def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-            def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
 
         class PyDrawOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyRenderConfig:
@@ -3419,6 +3597,60 @@ impl PyRenderConfig {
         values.insert("version".to_owned(), NativeValue::Int(1));
         values.insert("elements".to_owned(), elements);
         NativeValue::Dict(values)
+    }
+
+    /// Plain template options and the `impred-*` options of one layout pass;
+    /// `None` when Typst must draw, as templates, selectors, graph styles,
+    /// drawing options and titles require.
+    fn native_drawing_values(&self) -> Option<[BTreeMap<String, NativeValue>; 2]> {
+        if matches!(self.template, PathSetting::Value(_))
+            || !(self.selectors.is_inherit() || self.selectors.is_none())
+        {
+            return None;
+        }
+        let plain = |value: &NativeValue| {
+            matches!(
+                value,
+                NativeValue::None
+                    | NativeValue::Auto
+                    | NativeValue::Bool(_)
+                    | NativeValue::Int(_)
+                    | NativeValue::Float(_)
+                    | NativeValue::String(_)
+            )
+        };
+        // Option groups list every field; unset ones inherit.
+        let set = |values: &BTreeMap<String, NativeValue>| -> BTreeMap<String, NativeValue> {
+            values
+                .iter()
+                .filter(|(_, value)| !matches!(value, NativeValue::Inherit))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect()
+        };
+        let [mut options, mut layout] = [BTreeMap::new(), BTreeMap::new()];
+        for (key, value) in &self.values {
+            match (key.as_str(), value) {
+                ("title", NativeValue::Auto)
+                | ("style" | "draw" | "options", NativeValue::None) => {}
+                ("style" | "draw", NativeValue::Dict(values)) if set(values).is_empty() => {}
+                ("options", NativeValue::Dict(values)) if set(values).values().all(plain) => {
+                    options = set(values);
+                }
+                ("layouts", NativeValue::Array(passes)) => match passes.as_slice() {
+                    [] => {}
+                    [NativeValue::Dict(values)]
+                        if set(values)
+                            .iter()
+                            .all(|(key, value)| key.starts_with("impred-") && plain(value)) =>
+                    {
+                        layout = set(values);
+                    }
+                    _ => return None,
+                },
+                _ => return None,
+            }
+        }
+        Some([options, layout])
     }
 }
 
@@ -3859,6 +4091,7 @@ const EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
 const HALF_EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("label", "label", ValueRule::Content).none(),
     FieldSpec::new("statement", "statement", ValueRule::String).none(),
+    FieldSpec::new("route_points", "route_points", ValueRule::PointList).none(),
     FieldSpec::new("port_label", "port_label", ValueRule::String).none(),
     FieldSpec::new("compass", "compass", ValueRule::Enum(EnumKind::Compass)).none(),
     FieldSpec::new("anchor", "anchor", ValueRule::Enum(EnumKind::Anchor))

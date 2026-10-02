@@ -24,8 +24,11 @@ use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyT
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
 /// The directed role of a half-edge within its edge.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, name = "Flow")]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "Flow")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
     Source,
@@ -51,8 +54,11 @@ impl From<Flow> for PyFlow {
 }
 
 /// How an edge's declared endpoints determine its logical direction.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "Orientation")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
     #[default]
@@ -82,8 +88,8 @@ impl From<Orientation> for PyOrientation {
 }
 
 /// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "NodeSpec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -110,8 +116,8 @@ impl PyNodeSpec {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNodeSpec {
     #[getter]
@@ -176,8 +182,8 @@ impl EndpointRole {
 }
 
 /// A declarative edge endpoint produced by `source()` or `sink()`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "HalfEdgeSpec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", unsendable, name = "HalfEdgeSpec")]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
     role: EndpointRole,
@@ -185,8 +191,8 @@ pub struct PyHalfEdgeSpec {
     drawing: Option<Py<PyDict>>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdgeSpec {
     #[getter]
@@ -231,8 +237,8 @@ impl PyHalfEdgeSpec {
 }
 
 /// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "EdgeSpec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", unsendable, name = "EdgeSpec")]
 pub struct PyEdgeSpec {
     name: Option<String>,
     first: Option<Py<PyHalfEdgeSpec>>,
@@ -242,8 +248,8 @@ pub struct PyEdgeSpec {
     orientation: PyOrientation,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdgeSpec {
     #[getter]
@@ -296,14 +302,17 @@ impl PyEdgeSpec {
 
 /// Describe a node while preserving its arbitrary Python data by identity.
 #[cfg_attr(
-    feature = "python-stubs",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "linnet",
+        python = r#"
     import typing
 
     def node(name: _OptionalString = None, *, data: typing.Any = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeSpec:
         """Describe a node while preserving its arbitrary Python data by identity."""
         ...
-"#)
+"#
+    )
 )]
 #[pyfunction(signature = (name=None, *, data=None, **drawing))]
 pub fn node(
@@ -347,14 +356,17 @@ fn endpoint(
 
 /// Attach a source endpoint resolved by `build()` or `Graph.add_edge()`.
 #[cfg_attr(
-    feature = "python-stubs",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "linnet",
+        python = r#"
     import typing
 
     def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
         """Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
-"#)
+"#
+    )
 )]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn source(
@@ -368,14 +380,17 @@ pub fn source(
 
 /// Attach a sink endpoint resolved by `build()` or `Graph.add_edge()`.
 #[cfg_attr(
-    feature = "python-stubs",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "linnet",
+        python = r#"
     import typing
 
     def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
         """Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
-"#)
+"#
+    )
 )]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn sink(
@@ -389,14 +404,17 @@ pub fn sink(
 
 /// Describe an edge from one or two endpoint specs.
 #[cfg_attr(
-    feature = "python-stubs",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "linnet",
+        python = r#"
     import typing
 
     def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
         """Describe an edge from one or two endpoint specs."""
         ...
-"#)
+"#
+    )
 )]
 #[pyfunction(signature = (first, name=None, second=None, *, data=None, orientation=PyOrientation::Default, **drawing))]
 pub fn edge(
@@ -514,8 +532,15 @@ impl GraphState {
 }
 
 /// An owned topology with arbitrary element data and typed rendering configuration.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Graph")]
+///
+/// Examples
+/// --------
+/// ```python
+/// import linnet
+/// graph = linnet.build(linnet.node("source"), linnet.node("sink"))
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "linnet", unsendable, name = "Graph")]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
 }
@@ -628,8 +653,8 @@ enum ViewIndex {
 macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[pyclass(module = "linnet", unsendable, name = $python)]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,
@@ -773,8 +798,8 @@ impl PyEdge {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNode {
     #[getter]
@@ -864,8 +889,8 @@ impl PyNode {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdge {
     #[getter]
@@ -959,8 +984,8 @@ impl PyEdge {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdge {
     #[getter]
@@ -1109,8 +1134,8 @@ fn view_for(
     })
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraph {
     #[new]
@@ -1527,7 +1552,7 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<crate::render::PreparedRender> {
-        crate::render::prepare_graph(py, &slf, config)
+        crate::render::prepare_graph(py, &slf, config, None)
     }
 
     #[pyo3(signature = (output, *, config=None))]
@@ -1556,6 +1581,12 @@ impl PyGraph {
 
     #[pyo3(signature = ())]
     fn _repr_svg_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
+        crate::render::graph_to_svg(py, &slf, None)
+    }
+
+    /// Display the SVG with hover details and local interactive selection.
+    #[pyo3(signature = ())]
+    fn _repr_html_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
         crate::render::graph_to_svg(py, &slf, None)
     }
 
@@ -2229,14 +2260,17 @@ impl PyEdgeSpec {
 
 /// Build a graph from declarative node and edge specs.
 #[cfg_attr(
-    feature = "python-stubs",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(
+        module = "linnet",
+        python = r#"
     import typing
 
     def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderConfig = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
         """Build a graph from declarative node and edge specs."""
         ...
-"#)
+"#
+    )
 )]
 #[pyfunction(signature = (*items, name=None, global_data=None, codec=None, render_config=None, node_store=PyNodeStore::Vec))]
 pub fn build(

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "linnet-py==0.1.0",
+#     "linnet==0.1.0",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -19,7 +19,7 @@ app = marimo.App(width="medium")
 def _():
     from dataclasses import dataclass
 
-    import linnet_py as lp
+    import linnet as lp
     import marimo as mo
 
     @dataclass(eq=False)
@@ -217,7 +217,6 @@ def _(
         _layouts = lp.LayoutOptions(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
-            steps=260,
             directional_force=0.55,
             label_steps=60,
         )
