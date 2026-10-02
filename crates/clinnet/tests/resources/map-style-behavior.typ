@@ -2,12 +2,12 @@
 #import graph: edge, node, pin, pos, sink, source
 #import "map-style.typ" as feynman
 
-// Keep the pre-configuration presets explicit so default comparisons do not
-// merely compare two callbacks backed by the same new implementation.
-#let legacy-stroke = (paint: black, thickness: 0.5pt, cap: "round")
-#let legacy-node = (radius: 0.18, fill: white, stroke: legacy-stroke)
-#let legacy-fermion = (
-  stroke: legacy-stroke,
+// Keep the reference presets explicit so default comparisons do not
+// merely compare two callbacks backed by the same implementation.
+#let reference-stroke = (paint: black, thickness: 0.5pt, cap: "round")
+#let reference-node = (radius: 0.08, fill: black, stroke: reference-stroke)
+#let reference-fermion = (
+  stroke: reference-stroke,
   mark: (
     end: (
       symbol: ">",
@@ -21,44 +21,47 @@
   mark-position: "center-if-dangling",
   mark-orientation: "edge",
 )
-#let legacy-photon = (
-  stroke: legacy-stroke,
+#let reference-photon = (
+  stroke: reference-stroke,
   pattern: "wave",
   pattern-amplitude: 0.10,
   pattern-wavelength: 0.50,
 )
-#let legacy-gluon = (
-  stroke: legacy-stroke,
+#let reference-gluon = (
+  stroke: reference-stroke,
   pattern: "coil",
   pattern-amplitude: 0.15,
-  pattern-wavelength: 0.60,
-  pattern-coil-longitudinal-scale: 1.60,
+  pattern-wavelength: 0.45,
+  pattern-fit: true,
+  pattern-phase: calc.pi / 2,
+  pattern-natural-endpoints: true,
+  pattern-coil-longitudinal-scale: 1.4,
 )
-#let legacy-scalar = (
-  stroke: legacy-stroke + (thickness: 1pt, dash: (0.1em, 0.45em)),
+#let reference-scalar = (
+  stroke: reference-stroke + (thickness: 1pt, dash: (0.1em, 0.45em)),
 )
-#let legacy-particles = (
-  a: legacy-photon,
-  photon: legacy-photon,
-  g: legacy-gluon,
-  gluon: legacy-gluon,
-  scalar: legacy-scalar,
-  ghG: legacy-scalar,
+#let reference-particles = (
+  a: reference-photon,
+  photon: reference-photon,
+  g: reference-gluon,
+  gluon: reference-gluon,
+  scalar: reference-scalar,
+  ghG: reference-scalar,
 )
-#let legacy-geometry = (
-  offset: 0.62,
+#let reference-geometry = (
+  offset: 0.35,
   offset-side: "label",
   label-side: auto,
   label-gap: 0.45,
   label-style: (anchor: auto),
 )
-#let legacy-arrow = (
-  legacy-geometry
+#let reference-arrow = (
+  reference-geometry
     + (
-      length: 1.0,
+      length: 1.4,
       shift: 0,
-      ratio: none,
-      resolve-length: "length",
+      ratio: 0.5,
+      resolve-length: "min",
       stroke: (paint: black, thickness: 0.4pt, cap: "round"),
       mark: (
         end: (
@@ -74,9 +77,14 @@
       mark-orientation: "path",
     )
 )
-#let legacy-label = (
-  legacy-geometry
+#let reference-label = (
+  reference-geometry
     + (
+      offset: 0,
+      offset-side: none,
+      label-only: true,
+      label-path: reference-arrow,
+      label-slide: true,
       length: none,
       ratio: none,
       resolve-length: "none",
@@ -87,12 +95,12 @@
       label-shift: 0,
     )
 )
-#let legacy-graph = (
+#let reference-graph = (
   unit: 1.35,
   node-label: none,
   node-style: node => if node.fields.at("hidden", default: false) {
     (radius: 0, fill: none, stroke: none)
-  } else { legacy-node },
+  } else { reference-node },
   edge-label: edge => hide([$p_(#edge.eid)$]),
   edge-label-style: (anchor: "center", padding: 0.05),
 )
@@ -103,27 +111,26 @@
 #assert.eq(feynman.draw-style.edge-dangling-tangent, "horizontal")
 #let defaults = feynman.graph-style()
 #let empty-edge = (fields: (:), momentum: [])
-#let legacy-layers = (
-  legacy-fermion + (mark-shift: 0),
-  legacy-arrow,
-  legacy-label,
+#let reference-layers = (
+  reference-fermion + (mark-shift: 0),
+  reference-label,
 )
 #assert.eq(defaults.unit, 1.35)
 #assert.eq(defaults.node-label, none)
-#assert.eq(defaults.edge-label-style, legacy-graph.edge-label-style)
+#assert.eq(defaults.edge-label-style, reference-graph.edge-label-style)
 #assert.eq(defaults.scope.feynman, (
-  node-style: legacy-node,
-  fermion: legacy-fermion,
-  particles: legacy-particles,
-  momentum-stroke: legacy-arrow.stroke,
-  momentum-mark: legacy-arrow.mark,
+  node-style: reference-node,
+  fermion: reference-fermion,
+  particles: reference-particles,
+  momentum-stroke: reference-arrow.stroke,
+  momentum-mark: reference-arrow.mark,
 ))
-#assert.eq(feynman.node-style((fields: (:))), legacy-node)
-#assert.eq(feynman.edge-style(empty-edge), legacy-layers)
-#assert.eq(feynman.node-style(defaults.scope + (fields: (:))), legacy-node)
+#assert.eq(feynman.node-style((fields: (:))), reference-node)
+#assert.eq(feynman.edge-style(empty-edge), reference-layers)
+#assert.eq(feynman.node-style(defaults.scope + (fields: (:))), reference-node)
 #assert.eq(
   (feynman.draw-style.edge-style)(defaults.scope + empty-edge),
-  legacy-layers,
+  reference-layers,
 )
 
 // Exercise each width independently as well as all overrides together.
@@ -177,7 +184,7 @@
 )
 #let variants = (
   defaults: defaults,
-  legacy: legacy-graph,
+  reference: reference-graph,
   scaled: feynman.graph-style(unit: 20pt, node-radius: 0.3),
   derived: feynman.graph-style(
     unit: 10pt,
@@ -191,7 +198,7 @@
   variants.scaled.scope.feynman,
   defaults.scope.feynman
     + (
-      node-style: legacy-node + (radius: 0.3),
+      node-style: reference-node + (radius: 0.3),
     ),
 )
 
@@ -213,9 +220,8 @@
   ) {
     assert.eq(feynman.edge-style(scope + (fields: fields, momentum: [$k$])), (
       expected.fermion + (mark-shift: 0),
-      legacy-arrow
-        + (stroke: expected.momentum-stroke, mark: expected.momentum-mark),
-      legacy-label + (label: [$k$]),
+      reference-label + (label: [$k$], label-path: reference-arrow
+        + (stroke: expected.momentum-stroke, mark: expected.momentum-mark)),
     ))
   }
   // Disabled momentum must not read its text or parse unused placement fields.
@@ -325,8 +331,8 @@
     label-style: (anchor: "south-west"),
   )
   assert.eq(
-    layers.at(1),
-    legacy-arrow
+    layers.at(1).label-path,
+    reference-arrow
       + geometry
       + (
         length: 0.7,
@@ -337,7 +343,7 @@
   )
   assert.eq(
     layers.last(),
-    legacy-label + geometry + (label: [$k$], label-shift: -0.75),
+    reference-label + geometry + (offset: 0, label: [$k$], label-shift: -0.75, label-path: layers.at(1).label-path),
   )
   let shifted = feynman.edge-style(
     scope
@@ -346,12 +352,12 @@
         fields: feynman.momentum(shift: 0.5),
       ),
   )
-  assert.eq(shifted.at(1).shift, 0.5)
+  assert.eq(shifted.at(1).label-path.shift, 0.5)
   assert.eq(shifted.last().label-shift, 0.5)
 }
 #assert.eq(feynman.graph-style().scope, defaults.scope)
-#assert.eq(feynman.node-style((fields: (:))), legacy-node)
-#assert.eq(feynman.edge-style(empty-edge), legacy-layers)
+#assert.eq(feynman.node-style((fields: (:))), reference-node)
+#assert.eq(feynman.edge-style(empty-edge), reference-layers)
 
 // Visibility follows native data through defaults, named maps, and cut fragments.
 #for inherited in (true, false) {
@@ -390,8 +396,8 @@
           assert.eq(edge.data.show-momentum, show-momentum)
           assert.eq(edge.fields.show-momentum, show-momentum)
           let layers = feynman.edge-style(edge.fields + (fields: edge.fields))
-          assert.eq(layers.first(), legacy-photon + (mark-shift: 0))
-          assert.eq(layers.len(), if show-momentum { 3 } else { 1 })
+          assert.eq(layers.first(), reference-photon + (mark-shift: 0))
+          assert.eq(layers.len(), if show-momentum { 2 } else { 1 })
           if show-momentum {
             assert.eq(layers.last().label, [$k$])
           }
@@ -439,7 +445,7 @@
 #for (name, config) in variants {
   cases.insert(name, context {
     let styled = graph.style(base, ..config)
-    let expected-node = if name == "legacy" { legacy-node } else {
+    let expected-node = if name == "reference" { reference-node } else {
       config.scope.feynman.node-style
     }
     let unit = if type(config.unit) in (int, float) {
@@ -479,15 +485,15 @@
       assert.eq(edge.fields.momentum-arrow-offset, 0.4)
       assert.eq(edge.fields.momentum-label-shift, 1)
       assert.eq(edge.fields.momentum-label-gap, 0.2)
-      if name == "legacy" {
+      if name == "reference" {
         (
-          legacy-particles.at(
+          reference-particles.at(
             edge.fields.at("particle", default: "d"),
-            default: legacy-fermion,
+            default: reference-fermion,
           )
             + (mark-shift: 0),
-          legacy-arrow + (offset: 0.4, label-gap: 0.2),
-          legacy-label + (offset: 0.4, label-gap: 0.2, label-shift: 1),
+          reference-label + (label-gap: 0.2, label-shift: 1,
+            label-path: reference-arrow + (offset: 0.4, label-gap: 0.2)),
         )
       } else {
         assert.eq(
@@ -496,7 +502,7 @@
           message: name + ": inherited drawing scope",
         )
         let layers = (feynman.draw-style.edge-style)(edge)
-        assert.eq(layers.at(1).offset, 0.4)
+        assert.eq(layers.at(1).label-path.offset, 0.4)
         assert.eq(layers.last().label-gap, 0.2)
         assert.eq(layers.last().label-shift, 1)
         layers
