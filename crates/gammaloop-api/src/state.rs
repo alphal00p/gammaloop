@@ -1592,6 +1592,7 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 11 persists function inlining policies and caller-scope alias metadata.
 // Version 10 records UFO and subgraph printer registrations, including symbols removed
 // from a restricted model. Older archives cannot restore those callbacks and must be regenerated.
 // Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
@@ -1606,7 +1607,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
+// Local UV forest contributions remain compatible with this layout because
+// they are combined into one persisted integrand before evaluator construction.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 11;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

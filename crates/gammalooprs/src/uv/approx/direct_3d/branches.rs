@@ -12,9 +12,9 @@ use eyre::{ensure, eyre};
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
-    domains::rational::Rational,
+    domains::{atom::AtomField, rational::Rational},
     id::Replacement,
-    poly::series::SeriesDepth,
+    poly::series::{Series, SeriesDepth},
     symbol,
 };
 
@@ -458,6 +458,8 @@ impl DirectResidueBranches {
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|error| eyre!(error))?,
             tags: vec![scope.1],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         Self::from_keyed(
             self.iter_keys()
@@ -492,6 +494,8 @@ impl DirectResidueBranches {
     /// Expand shared bodies once, retaining formal coefficient families until
     /// branch specialization. Native finite series supply conservative lower
     /// bounds; a vanishing probe is not a claim of an identically zero body.
+    /// Retain root-probe coefficients so energy denominators are expanded once;
+    /// normalized numerator jets are composed into those coefficients afterward.
     pub(crate) fn series_preserving_numerators(
         &self,
         variable: Symbol,
@@ -499,15 +503,77 @@ impl DirectResidueBranches {
         depth: i64,
         scope: Atom,
     ) -> Result<Self> {
+        self.series_preserving_numerators_with(
+            variable,
+            center,
+            (depth, depth.max(0)),
+            scope,
+            |atom, order| Ok(atom.series(variable, center, SeriesDepth::absolute(order))?),
+            |atom| atom.series_preserving_factors(variable, center, depth, &[]),
+        )
+    }
+
+    /// Offline certificate path: all probes and final coefficients use the
+    /// deterministic finite-jet owner, including roots without shared families.
+    #[cfg(test)]
+    pub(crate) fn series_preserving_numerators_exact(
+        &self,
+        variable: Symbol,
+        center: AtomView<'_>,
+        depth: i64,
+        scope: Atom,
+    ) -> Result<Self> {
+        use crate::numerator::exact_soft_jet::ExactSoftJet;
+
+        ensure!(center.is_zero(), "exact soft jets require a zero center");
+        self.series_preserving_numerators_with(
+            variable,
+            center,
+            (depth, depth),
+            scope,
+            |atom, order| ExactSoftJet::series(atom, variable, order),
+            |atom| {
+                // Match the production scalar boundary: independent tensor
+                // factors never enter coefficient arithmetic.
+                let mut independent = Atom::one();
+                let mut dependent = atom.clone();
+                if let AtomView::Mul(product) = atom.as_view() {
+                    dependent = Atom::one();
+                    for factor in product.iter() {
+                        if factor.contains_symbol(variable) {
+                            dependent *= factor;
+                        } else {
+                            independent *= factor;
+                        }
+                    }
+                }
+                let series = ExactSoftJet::series(&dependent, variable, depth.into())?;
+                Ok((independent * series.to_atom()).collect_compact_factors())
+            },
+        )
+    }
+
+    fn series_preserving_numerators_with(
+        &self,
+        variable: Symbol,
+        center: AtomView<'_>,
+        (depth, root_probe_depth): (i64, i64),
+        scope: Atom,
+        mut expand: impl FnMut(&Atom, Rational) -> Result<Series<AtomField>>,
+        mut finish: impl FnMut(&Atom) -> Result<Atom>,
+    ) -> Result<Self> {
         let all_definitions = self.0[0].1.clone().with_numerators(
             self.iter_keys()
                 .flat_map(|(_, integrands)| integrands.numerators().iter().cloned()),
         )?;
         let definitions = all_definitions.numerators();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "shared_taylor_start", scope = %scope, depth,
+            source_families = definitions.len(), residue_rows = self.0.len(),
+            "Starting shared Taylor construction"
+        );
         if definitions.is_empty() {
-            return self.fallible_map(|_, atom| {
-                atom.series_preserving_factors(variable, center, depth, &[])
-            });
+            return self.fallible_map(|_, atom| finish(atom));
         }
         let family = symbol!("gammalooprs::uv::numerator_family");
         let delta = Atom::var(variable) - center;
@@ -664,7 +730,25 @@ impl DirectResidueBranches {
                 independent = normalized.clone();
                 dependent = Atom::one();
             }
-            let probe = dependent.series(variable, center, SeriesDepth::absolute(0))?;
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "shared_taylor_body_probe_start", scope = %scope, index,
+                source_bytes = entry.rhs.as_view().get_byte_size(),
+                normalized_bytes = normalized.as_view().get_byte_size(),
+                independent_bytes = independent.as_view().get_byte_size(),
+                dependent_bytes = dependent.as_view().get_byte_size(),
+                "Probing a shared numerator's Laurent order"
+            );
+            let started = std::time::Instant::now();
+            let probe = expand(&dependent, Rational::from(0))?;
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "shared_taylor_body_probe_done", scope = %scope, index,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                absolute_order = %probe.absolute_order(), relative_order = %probe.relative_order(),
+                coefficient_count = probe.terms().count(),
+                coefficient_bytes = probe.terms().map(|(_, c)| c.as_view().get_byte_size()).sum::<usize>(),
+                max_coefficient_bytes = probe.terms().map(|(_, c)| c.as_view().get_byte_size()).max().unwrap_or(0),
+                "Shared numerator Laurent probe completed"
+            );
             let bound = if probe.is_zero() {
                 probe.absolute_order()
             } else {
@@ -681,11 +765,11 @@ impl DirectResidueBranches {
                 }
                 .replacement(),
             );
-            bodies.push((independent, dependent, bound));
+            bodies.push((independent, dependent, bound, probe));
         }
 
         let mut extra = Rational::from(0);
-        let mut root_bounds = BTreeMap::new();
+        let mut root_probes = BTreeMap::new();
         for (branch_index, (_, integrands)) in self.iter_keys().enumerate() {
             for (cut, atom) in integrands.iter() {
                 let mut invalid = None;
@@ -731,24 +815,80 @@ impl DirectResidueBranches {
                     invalid
                 );
                 let proxy = atom.replace_multiple(&probes);
-                let probe = proxy.series(variable, center, SeriesDepth::absolute(0))?;
+                crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                    stage = "shared_taylor_root_probe_start", scope = %scope, branch_index, ?cut,
+                    input_bytes = atom.as_view().get_byte_size(),
+                    proxy_bytes = proxy.as_view().get_byte_size(), proxy_terms = proxy.nterms(),
+                    "Probing a residue root's Laurent order"
+                );
+                crate::debug_tags!(#generation, #profile, #uv, #numerator, #trace;
+                    stage = "shared_taylor_root_probe_input", scope = %scope, branch_index, ?cut,
+                    file.expr = %proxy,
+                    "Residue-root Laurent probe input"
+                );
+                let started = std::time::Instant::now();
+                // The native route keeps its existing probe through at least
+                // zero. The exact audit needs only the requested endpoint:
+                // normalized family substitutions have nonnegative powers, so
+                // an empty root probe cannot acquire a lower-order coefficient.
+                let probe = expand(&proxy, Rational::from(root_probe_depth))?;
+                crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                    stage = "shared_taylor_root_probe_done", scope = %scope, branch_index, ?cut,
+                    elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                    absolute_order = %probe.absolute_order(), relative_order = %probe.relative_order(),
+                    coefficient_count = probe.terms().count(),
+                    coefficient_bytes = probe.terms().map(|(_, c)| c.as_view().get_byte_size()).sum::<usize>(),
+                    max_coefficient_bytes = probe.terms().map(|(_, c)| c.as_view().get_byte_size()).max().unwrap_or(0),
+                    "Residue-root Laurent probe completed"
+                );
                 let bound = if probe.is_zero() {
                     probe.absolute_order()
                 } else {
                     probe.absolute_order() - probe.relative_order()
                 };
                 extra = extra.max(Rational::from(depth) - &bound);
-                root_bounds.insert((branch_index, *cut), bound);
+                root_probes.insert((branch_index, *cut), (bound, probe));
             }
         }
 
         let mut replacements = Vec::with_capacity(definitions.len());
         let mut coefficients = BTreeMap::new();
-        for (index, (entry, (independent, dependent, bound))) in
+        for (index, (entry, (independent, dependent, bound, probe))) in
             definitions.iter().zip(bodies).enumerate()
         {
-            let series =
-                dependent.series(variable, center, SeriesDepth::absolute(bound + &extra))?;
+            let requested_order = &bound + &extra;
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "shared_taylor_body_series_start", scope = %scope, index,
+                lower_bound = %bound, extra_order = %extra, requested_order = %requested_order,
+                independent_bytes = independent.as_view().get_byte_size(),
+                dependent_bytes = dependent.as_view().get_byte_size(),
+                "Constructing shared numerator coefficients"
+            );
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #trace;
+                stage = "shared_taylor_body_series_input", scope = %scope, index,
+                requested_order = %requested_order, file.expr = %dependent,
+                "Shared numerator series input"
+            );
+            let started = std::time::Instant::now();
+            let reused_probe = requested_order < probe.absolute_order();
+            let mut series = if reused_probe {
+                probe
+            } else {
+                expand(&dependent, requested_order.clone())?
+            };
+            // Match Symbolica's inclusive absolute-depth convention on the
+            // requested rational lattice, without recomputing known coefficients.
+            series.truncate_absolute_order(
+                &requested_order + &(1.into(), requested_order.denominator()).into(),
+            );
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "shared_taylor_body_series_done", scope = %scope, index, reused_probe,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                coefficient_count = series.terms().count(),
+                coefficient_bytes = series.terms().map(|(_, c)| c.as_view().get_byte_size()).sum::<usize>(),
+                max_coefficient_bytes = series.terms().map(|(_, c)| c.as_view().get_byte_size()).max().unwrap_or(0),
+                "Shared numerator coefficients constructed"
+            );
             let mut retained = Vec::new();
             let mut rhs = Atom::Zero;
             for (exponent, coefficient) in series.terms() {
@@ -764,12 +904,17 @@ impl DirectResidueBranches {
                 let lhs = family.call_args(
                     std::iter::once(tag.clone()).chain(entry.args.iter().cloned().map(Atom::from)),
                 );
-                rhs += &lhs * delta.pow(Atom::num(exponent));
+                // The root probe already includes delta^bound. Replacing its
+                // formal family by N/delta^bound leaves a regular polynomial,
+                // so no omitted root coefficient can contribute at lower order.
+                rhs += &lhs * delta.pow(Atom::num(&exponent - &bound));
                 retained.push(Arc::new(FnMapEntry {
                     lhs,
                     rhs: coefficient,
                     args: entry.args.clone(),
                     tags: vec![tag],
+                    inlining: entry.inlining,
+                    is_alias: entry.is_alias,
                 }));
             }
             replacements.push(
@@ -781,8 +926,8 @@ impl DirectResidueBranches {
             );
             coefficients.insert(entry.lhs.clone(), retained);
         }
-        crate::debug_tags!(#generation, #profile, #uv, #numerator;
-            stage = "shared_numerator_taylor_coefficients",
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "shared_numerator_taylor_coefficients", scope = %scope,
             source_families = definitions.len(),
             residue_rows = self.0.len(),
             coefficient_families = coefficients.values().map(Vec::len).sum::<usize>(),
@@ -797,11 +942,33 @@ impl DirectResidueBranches {
                     let roots = integrands
                         .iter()
                         .map(|(cut, atom)| {
-                            let series = if root_bounds[&(branch_index, *cut)] > depth {
+                            let (bound, probe) = root_probes
+                                .remove(&(branch_index, *cut))
+                                .expect("every residue root was probed");
+                            let series = if bound > depth {
                                 Atom::Zero
                             } else {
-                                atom.replace_multiple(&replacements)
-                                    .series_preserving_factors(variable, center, depth, &[])?
+                                // Scalar denominators and energies in these
+                                // coefficients are now Taylor-independent. Only
+                                // the retained numerator polynomials are composed.
+                                let probed = probe.to_atom();
+                                let expanded_families = probed.replace_multiple(&replacements);
+                                crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                                    stage = "shared_taylor_root_series_start", scope = %scope, branch_index, ?cut, depth,
+                                    input_bytes = atom.as_view().get_byte_size(),
+                                    reused_probe_bytes = probed.as_view().get_byte_size(),
+                                    substituted_bytes = expanded_families.as_view().get_byte_size(),
+                                    "Constructing residue-root Taylor coefficients"
+                                );
+                                let started = std::time::Instant::now();
+                                let result = finish(&expanded_families)?;
+                                crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                                    stage = "shared_taylor_root_series_done", scope = %scope, branch_index, ?cut,
+                                    elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                                    result_bytes = result.as_view().get_byte_size(), result_terms = result.nterms(),
+                                    "Residue-root Taylor coefficients constructed"
+                                );
+                                result
                             };
                             Ok((*cut, series))
                         })
@@ -924,6 +1091,8 @@ mod tests {
                     rhs: body,
                     args: vec![s.into(), z.into()],
                     tags: vec![tag.clone()],
+                    inlining: symbolica::evaluate::InliningPolicy::Always,
+                    is_alias: false,
                 });
                 let rows = [[1, 2], [-1, 0], [0, 0]];
                 let branches = DirectResidueBranches::from_keyed(
@@ -1045,6 +1214,8 @@ mod tests {
             rhs: body,
             args: vec![parameter.into()],
             tags: vec![tag.clone()],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         let cut = CutCFFIndex::new_all_none();
         let branches = DirectResidueBranches::production(
@@ -1089,7 +1260,7 @@ mod tests {
         });
         let index = LibraryRep::from(Minkowski {})
             .to_symbolic([Atom::var(symbol!("shared_series_factor_test::mu"))]);
-        let g = (GS.emr_vec_index(EdgeIndex(0), &index) + GS.emr_vec_index(EdgeIndex(1), &index))
+        let g = (GS.emr_vec(EdgeIndex(0), &index) + GS.emr_vec(EdgeIndex(1), &index))
             * (Atom::var(symbol!("shared_series_factor_test::u"))
                 + Atom::var(symbol!("shared_series_factor_test::v")));
         let family = symbol!("gammalooprs::uv::numerator_family");
@@ -1107,6 +1278,8 @@ mod tests {
                 rhs: body.clone(),
                 args: vec![],
                 tags: vec![tag],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             let source = DirectResidueBranches::production(
                 OrientationID(0),
@@ -1211,6 +1384,8 @@ mod tests {
                             .collect::<std::result::Result<_, _>>()
                             .unwrap(),
                         tags: vec![tags[index].clone()],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
                     })
                 })
                 .collect::<Vec<_>>();
@@ -1303,6 +1478,64 @@ mod tests {
     }
 
     #[test]
+    fn shared_numerator_series_differentiates_scalar_denominators_once() -> Result<()> {
+        test_initialise()?;
+        static DERIVATIVES: AtomicUsize = AtomicUsize::new(0);
+        let variable = symbol!("direct_probe_reuse_test::t");
+        let t = Atom::var(variable);
+        let energy = symbol!("direct_probe_reuse_test::energy"; Scalar;
+            norm = |view, out| {
+                if let AtomView::Fun(call) = view
+                    && call.get_nargs() == 1 && call.get(0).is_zero()
+                {
+                    **out = Atom::one();
+                }
+            },
+            der = |_, argument, out| {
+                assert_eq!(argument, 0);
+                DERIVATIVES.fetch_add(1, Ordering::Relaxed);
+                **out = Atom::one();
+            }
+        );
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let tag = DirectResidueBranches::numerator_scope().1;
+        let call = family.call_args([tag.clone()]);
+        let root = &call / (t.pow(2) * energy.call_args([t.clone()]).pow(3));
+        DERIVATIVES.store(0, Ordering::Relaxed);
+        root.series(variable, Atom::Zero, SeriesDepth::absolute(0))?;
+        let probe_derivatives = DERIVATIVES.swap(0, Ordering::Relaxed);
+        assert!(probe_derivatives > 0);
+        let entry = Arc::new(FnMapEntry {
+            lhs: call,
+            rhs: Atom::one() + &t + t.pow(2),
+            args: vec![],
+            tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        });
+        let cut = CutCFFIndex::new_all_none();
+        let branches = DirectResidueBranches::production(
+            OrientationID(0),
+            Integrands::from_iter([(cut, root)]).with_numerators([entry])?,
+        )?;
+        let expanded = branches.series_preserving_numerators(
+            variable,
+            Atom::Zero.as_view(),
+            0,
+            DirectResidueBranches::numerator_scope().1,
+        )?;
+        assert_eq!(DERIVATIVES.load(Ordering::Relaxed), probe_derivatives);
+        let expected = ((Atom::one() + &t + t.pow(2)) / (t.pow(2) * (Atom::one() + &t).pow(3)))
+            .series(variable, Atom::Zero, SeriesDepth::absolute(0))?
+            .to_atom();
+        assert_eq!(
+            expanded.0[0].1.resolved()?.iter().next().unwrap().1,
+            &expected
+        );
+        Ok(())
+    }
+
+    #[test]
     fn shared_numerator_series_handles_finite_zero_probes_and_cancellation() -> Result<()> {
         test_initialise()?;
         let variable = symbol!("direct_zero_series_test::t");
@@ -1323,6 +1556,8 @@ mod tests {
                 rhs: body,
                 args: vec![],
                 tags: vec![tag],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             for root in [
                 &call / t.pow(7),
@@ -1354,6 +1589,116 @@ mod tests {
     }
 
     #[test]
+    fn shared_numerator_exact_series_keeps_tiny_inverse_differences() -> Result<()> {
+        test_initialise()?;
+        let variable = symbol!("shared_exact_inverse_test::t");
+        let t = Atom::var(variable);
+        let x = Atom::var(symbol!("shared_exact_inverse_test::x"));
+        let spectator = Atom::var(symbol!("shared_exact_inverse_test::spectator"));
+        let epsilon = Atom::num(1) / Atom::num(10).pow(30);
+        let shifted = &x + &epsilon;
+        let body = (&shifted + &t).pow(-1) - (&x + &t).pow(-1);
+        let expected = &spectator
+            * ((shifted.pow(-1) - x.pow(-1)) / t.pow(2)
+                + (x.pow(-2) - shifted.pow(-2)) / &t
+                + shifted.pow(-3)
+                - x.pow(-3));
+        let cut = CutCFFIndex::new_all_none();
+        for retained in [false, true] {
+            let integrands = if retained {
+                let tag = DirectResidueBranches::numerator_scope().1;
+                let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+                Integrands::from_iter([(cut, &spectator * &lhs / t.pow(2))]).with_numerators([
+                    Arc::new(FnMapEntry {
+                        lhs,
+                        rhs: body.clone(),
+                        args: Vec::new(),
+                        tags: vec![tag],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
+                    }),
+                ])?
+            } else {
+                Integrands::from_iter([(cut, &spectator * &body / t.pow(2))])
+            };
+            let branches = DirectResidueBranches::production(OrientationID(0), integrands)?;
+            let expanded = branches.series_preserving_numerators_exact(
+                variable,
+                Atom::Zero.as_view(),
+                0,
+                DirectResidueBranches::numerator_scope().1,
+            )?;
+            let resolved = expanded.0[0].1.resolved()?;
+            let actual = resolved.iter().next().unwrap().1;
+            assert!(!actual.is_zero());
+            // This small scalar oracle uses the explicit geometric coefficients;
+            // neither the oracle nor the tested path uses native series.
+            assert!((actual - &expected).cancel().is_zero());
+            assert!(
+                branches
+                    .series_preserving_numerators_exact(
+                        variable,
+                        Atom::one().as_view(),
+                        0,
+                        DirectResidueBranches::numerator_scope().1,
+                    )
+                    .is_err()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn shared_numerator_exact_negative_endpoint_lifts_bodies_and_keeps_empty_roots() -> Result<()> {
+        test_initialise()?;
+        let variable = symbol!("shared_exact_endpoint_test::t");
+        let t = Atom::var(variable);
+        let a = Atom::var(symbol!("shared_exact_endpoint_test::a"));
+        let b = Atom::var(symbol!("shared_exact_endpoint_test::b"));
+        let c = Atom::var(symbol!("shared_exact_endpoint_test::c"));
+        let cut = CutCFFIndex::new_all_none();
+        for (body, scalar, expected) in [
+            (
+                &a + &b * &t + &c * t.pow(2),
+                Atom::one() / (t.pow(3) * (Atom::one() - &t)),
+                &a / t.pow(3) + (&a + &b) / t.pow(2),
+            ),
+            (t.pow(2) * (&a + &b * &t), t.pow(-4), &a / t.pow(2)),
+            (&a + &b * &t, t.pow(-1), Atom::Zero),
+        ] {
+            let tag = DirectResidueBranches::numerator_scope().1;
+            let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+            let integrands =
+                Integrands::from_iter([(cut, &lhs * scalar)]).with_numerators([Arc::new(
+                    FnMapEntry {
+                        lhs,
+                        rhs: body,
+                        args: Vec::new(),
+                        tags: vec![tag],
+                        inlining: symbolica::evaluate::InliningPolicy::Always,
+                        is_alias: false,
+                    },
+                )])?;
+            let branches = DirectResidueBranches::production(OrientationID(0), integrands)?;
+            let jets = branches.series_preserving_numerators_exact(
+                variable,
+                Atom::Zero.as_view(),
+                -2,
+                DirectResidueBranches::numerator_scope().1,
+            )?;
+            let resolved = jets.0[0].1.resolved()?;
+            let actual = resolved.iter().next().unwrap().1;
+            // Join this synthetic scalar's rational terms before cancellation;
+            // cancel() alone deliberately leaves differently factored sums intact.
+            assert!(
+                (actual - &expected).together().cancel().is_zero(),
+                "actual: {actual}; expected: {expected}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn shared_numerator_series_rejects_singular_specialization_and_hidden_calls() -> Result<()> {
         test_initialise()?;
         let variable = symbol!("direct_invalid_series_test::t");
@@ -1380,6 +1725,8 @@ mod tests {
                 rhs,
                 args: vec![parameter.into()],
                 tags: vec![tag.clone()],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             let branches = DirectResidueBranches::production(
                 OrientationID(0),

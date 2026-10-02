@@ -124,7 +124,8 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     a_: vk_symbol!("a_"),
     b_: vk_symbol!("b_"),
     c_: vk_symbol!("c_"),
-    cmplx_i: vk_symbol!("𝑖"),
+    // Register the placeholder explicitly: bare 𝑖 parses as a numeric coefficient.
+    cmplx_i: symbol!(format!("{}::𝑖", crate::NAMESPACE)),
     lambda: vk_symbol!("VakintLambdaScalingAnalysis"),
     lambda_a: Atom::var(vk_symbol!("VakintLambdaScalingAnalysis")),
     prop: vk_symbol!("prop"),

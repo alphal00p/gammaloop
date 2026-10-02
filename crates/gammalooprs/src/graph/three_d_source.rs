@@ -540,7 +540,7 @@ impl ExactSourceEnergyMapper {
                     && index.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
                 {
                     let owner = EdgeIndex(owner);
-                    **output = GS.emr_vec_index(owner, momentum.get(1))
+                    **output = GS.emr_vec(owner, momentum.get(1))
                         + GS.emr_mom(owner, GS.cind(0)) * GS.energy_delta(momentum.get(1));
                 }
             });
@@ -976,7 +976,7 @@ impl ExactSourceEnergyMapper {
             ));
             replacements.push(Replacement::new(
                 GS.emr_mom(*edge, &mink_index).to_pattern(),
-                (GS.emr_vec_index(*edge, &mink_index) + energy * GS.energy_delta(&mink_index))
+                (GS.emr_vec(*edge, &mink_index) + energy * GS.energy_delta(&mink_index))
                     .to_pattern(),
             ));
         }
@@ -1012,7 +1012,7 @@ impl ExactSourceEnergyMapper {
                     .add_arg(mink_index.as_view())
                     .finish()
                     .to_pattern(),
-                (GS.emr_vec_index(*loop_edge, &mink_index) + energy * GS.energy_delta(&mink_index))
+                (GS.emr_vec(*loop_edge, &mink_index) + energy * GS.energy_delta(&mink_index))
                     .to_pattern(),
             ));
         }
@@ -5284,8 +5284,8 @@ mod tests {
         let abstract_loops = loop_component(0, &mink_index) + loop_component(1, &mink_index);
         assert_eq!(
             mapper.map_numerator(std::slice::from_ref(&active_map), &[], &abstract_loops)?,
-            GS.emr_vec_index(parent_edges[0], &mink_index)
-                + GS.emr_vec_index(parent_edges[1], &mink_index)
+            GS.emr_vec(parent_edges[0], &mink_index)
+                + GS.emr_vec(parent_edges[1], &mink_index)
                 + Atom::num(5) * &active_energy * GS.energy_delta(&mink_index)
         );
         assert_eq!(
@@ -5294,7 +5294,7 @@ mod tests {
                 &[],
                 &GS.emr_mom(mapped_edge, &mink_index),
             )?,
-            GS.emr_vec_index(mapped_edge, &mink_index)
+            GS.emr_vec(mapped_edge, &mink_index)
                 + (-&active_energy + crate::utils::external_energy_atom_from_index(external_edge))
                     * GS.energy_delta(&mink_index)
         );
@@ -5625,7 +5625,7 @@ mod tests {
                     "each dispatched temporal factor must retain hard sign {hard_sign} for raw signs {raw_signs:?} and parsed sign {parsed_sign}",
                 );
 
-                let expected_vector = Atom::num(hard_sign) * GS.emr_vec_index(owner, &mink_index)
+                let expected_vector = Atom::num(hard_sign) * GS.emr_vec(owner, &mink_index)
                     + Atom::num(hard_sign) * &energy * GS.energy_delta(&mink_index);
                 for occurrence in occurrences.into_iter().skip(1) {
                     let forced_candidates =
@@ -6305,7 +6305,7 @@ mod tests {
         );
         let fixed_abstract_plan = EnergyPowerAnalyzer::for_physical_emr_edges(owners)
             .plan_atom_assignment(&fixed_abstract, &candidates)?;
-        let mapped_vectors = owners.map(|owner| GS.emr_vec_index(owner, &abstract_index));
+        let mapped_vectors = owners.map(|owner| GS.emr_vec(owner, &abstract_index));
         assert_eq!(
             mapper.map_planned_numerator(
                 &loop_energy_map,
@@ -7050,13 +7050,13 @@ mod tests {
             .zip(&owners[..2])
             .map(|(direct_owner, physical_owner)| {
                 Replacement::new(
-                    GS.emr_vec_index(*direct_owner, &mink_index).to_pattern(),
-                    GS.emr_vec_index(*physical_owner, &mink_index).to_pattern(),
+                    GS.emr_vec(*direct_owner, &mink_index).to_pattern(),
+                    GS.emr_vec(*physical_owner, &mink_index).to_pattern(),
                 )
             })
             .collect::<Vec<_>>();
-        let spatial_from = GS.emr_vec_index(owners[1], &mink_index);
-        let spatial_to = -GS.emr_vec_index(owners[0], &mink_index);
+        let spatial_from = GS.emr_vec(owners[1], &mink_index);
+        let spatial_to = -GS.emr_vec(owners[0], &mink_index);
         let direct_surface_replacements = direct.expression.surfaces.get_all_replacements_gs(&[]);
         let exact_surface_replacements = exact.expression.surfaces.get_all_replacements_gs(&[]);
         let direct_terms = direct

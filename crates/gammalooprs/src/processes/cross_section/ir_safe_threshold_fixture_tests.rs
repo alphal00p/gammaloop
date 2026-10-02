@@ -538,6 +538,7 @@ fn gl297_profiles(
                         0,
                         Some(0),
                         momentum_path(direction, lambda.0, top_mass),
+                        None,
                         true,
                     )
                     .unwrap();
@@ -682,6 +683,7 @@ fn gl638_correlated_approach_fits(
                     0,
                     Some(0),
                     loop_momenta,
+                    None,
                     true,
                 )
                 .unwrap();

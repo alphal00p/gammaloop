@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use color_eyre::eyre::{Context, Result, eyre};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, Symbol},
-    evaluate::FunctionMap,
+    evaluate::{FunctionMap, InliningPolicy},
     symbol,
 };
 
@@ -106,6 +106,8 @@ impl ThresholdMultiplierFunctions {
                 rhs: body,
                 args: formals.into_iter().map(Indeterminate::from).collect(),
                 tags: Vec::new(),
+                inlining: InliningPolicy::Always,
+                is_alias: false,
             });
         }
         Ok(Self { entries })
@@ -125,12 +127,8 @@ impl ThresholdMultiplierFunctions {
         )?;
         let mut functions = FunctionMap::new();
         for entry in &entries {
-            functions
-                .add_function(
-                    entry.lhs.as_fun_view().unwrap().get_symbol(),
-                    entry.args.clone(),
-                    entry.rhs.clone(),
-                )
+            entry
+                .register(&mut functions)
                 .map_err(|error| eyre!("failed to bind threshold function: {error}"))?;
         }
         Ok((source, functions, entries))

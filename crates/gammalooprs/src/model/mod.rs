@@ -35,7 +35,7 @@ use idenso::{
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::complex::Complex;
-use spenso::network::library::symbolic::ETS;
+use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 use spenso::structure::OrderedStructure;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
@@ -988,13 +988,18 @@ impl Particle {
                 } else {
                     let temporal_component = GS.emr_mom(eid, GS.cind(0));
                     let n_a = temporal_component.clone() * GS.energy_delta(W_.a_)
-                        - GS.emr_vec_index(eid, W_.a_);
+                        - GS.emr_vec(eid, W_.a_);
                     let n_b = temporal_component.clone() * GS.energy_delta(W_.b_)
-                        - GS.emr_vec_index(eid, W_.b_);
+                        - GS.emr_vec(eid, W_.b_);
+                    // Q3 is a spatial vector embedded in Minkowski space, so
+                    // Q3·Q3 = -|q⃗|² and q·n = q₀² - Q3·Q3.
+                    let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
                     let q_dot_n = temporal_component.pow(2)
-                        + Euclidean {}
-                            .new_rep(4)
-                            .inner_product(GS.emr_vec(eid), GS.emr_vec(eid));
+                        - function!(
+                            SPENSO_TAG.dot,
+                            GS.emr_vec(eid, minkowski.as_view()),
+                            GS.emr_vec(eid, minkowski.as_view())
+                        );
 
                     minus_metric
                         + (GS.emr_mom(eid, W_.a_) * n_b + n_a * GS.emr_mom(eid, W_.b_)) / q_dot_n

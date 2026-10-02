@@ -32,6 +32,8 @@ impl PartialEq for Hsurface {
     }
 }
 
+impl Eq for Hsurface {}
+
 impl Hsurface {
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let (symbolic_positive_energies, symbolic_negative_energies) =
@@ -161,6 +163,31 @@ mod tests {
             hsurface
                 .equality_under_energy_conservation(&other, &[&constraint])
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn cache_equality_includes_the_external_shift_but_not_the_shore() {
+        let base = Hsurface {
+            positive_energies: vec![EdgeIndex::from(0)],
+            negative_energies: vec![EdgeIndex::from(1)],
+            external_shift: vec![(EdgeIndex::from(2), 1)],
+            vertex_set: VertexSet::from_usize(0),
+        };
+        let different_shore = Hsurface {
+            vertex_set: VertexSet::from_usize(1),
+            ..base.clone()
+        };
+        let different_shift = Hsurface {
+            external_shift: vec![(EdgeIndex::from(3), 1)],
+            ..base.clone()
+        };
+
+        assert_eq!(base, different_shore);
+        assert_ne!(base, different_shift);
+        assert_ne!(
+            base.to_atom(&[]).to_canonical_string(),
+            different_shift.to_atom(&[]).to_canonical_string()
         );
     }
 

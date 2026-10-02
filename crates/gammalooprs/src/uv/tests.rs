@@ -24,8 +24,8 @@ use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
 use crate::uv::{
-    ApproximationType, RenormalizationPrescriptionSettings, Spinney, UVOrchestrator,
-    UVgenerationSettings, UltravioletGraph,
+    ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings, Spinney,
+    UVOrchestrator, UVgenerationSettings, UltravioletGraph,
     marker::{UvMarker, UvOperation},
 };
 
@@ -140,6 +140,8 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
         rhs: body.clone(),
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let call = function!(family, &scope, 2);
@@ -225,6 +227,8 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
         rhs: Atom::num(2),
         args: Vec::new(),
         tags: vec![scope],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots = Integrands::from_iter([(cut, call.clone())]);
@@ -287,6 +291,8 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
                 .map(|p| Indeterminate::try_from(p).unwrap())
                 .collect(),
             tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
         });
         assert!(Integrands::from_iter([]).with_numerators([entry]).is_err());
     }
@@ -298,6 +304,8 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
         rhs: parameter.clone(),
         args: vec![Indeterminate::try_from(parameter).unwrap()],
         tags: vec![scope.clone()],
+        inlining: symbolica::evaluate::InliningPolicy::Always,
+        is_alias: false,
     });
     let cut = CutCFFIndex::new_all_none();
     let roots =
@@ -331,7 +339,8 @@ fn scalar_bubble_root_integrand_reference(
     let cutstructure = CutStructure {
         cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
     };
-    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
+    let woods =
+        CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv).unwrap();
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
     let production = amplitude_graph
@@ -615,8 +624,12 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
         .into_iter()
         .next()
         .expect("expected at least one UV spinney");
-    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis).unwrap();
-    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis).unwrap();
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis)
+        .unwrap()
+        .unwrap();
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis)
+        .unwrap()
+        .unwrap();
 
     assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
 }
@@ -816,7 +829,7 @@ fn nested_bubble_soft_ct() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph());
+    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1018,7 +1031,7 @@ fn nested_bubble_scalar_quad() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph());
+    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
@@ -1201,7 +1214,7 @@ fn nested_bubble_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph());
+    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1361,7 +1374,7 @@ fn disconnect_forest_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph());
+    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
@@ -1556,7 +1569,7 @@ fn disconnect_forest_scalar() {
 
 //     println!("{}", uv_graph.base_dot());
 
-//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
 //     println!("{}", wood.dot(&uv_graph));
 //     println!("{}", wood.show_graphs(&uv_graph));
@@ -1595,7 +1608,7 @@ fn disconnect_forest_scalar() {
 
 //     println!("tbt_dot{}", uv_graph.base_dot());
 
-//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
 //     println!("{}", wood.dot(&uv_graph));
 
@@ -1665,7 +1678,7 @@ fn disconnect_forest_scalar() {
 
 //     println!("{}", uv_graph.base_dot());
 
-//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
 //     assert_eq!(20, wood.n_spinneys());
 //     println!("{}", wood.dot(&uv_graph));
@@ -1727,7 +1740,7 @@ fn disconnect_forest_scalar() {
 
 //     // println!("{}", uv_graph.base_dot());
 
-//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 //     assert_eq!(26, wood.n_spinneys());
 
 //     // println!("{}", wood.dot(&uv_graph));
@@ -1793,7 +1806,7 @@ fn disconnect_forest_scalar() {
 
 //     println!("{}", uv_graph.base_dot());
 
-//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
 
 //     assert_eq!(25, wood.n_spinneys());
 
@@ -2245,6 +2258,11 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     );
 }
 
+#[test]
+fn disconnected_spinney_classification_is_factorwise() {
+    failing::disconnected_spinney_classification_is_factorwise();
+}
+
 mod failing {
     use super::*;
 
@@ -2373,8 +2391,9 @@ mod failing {
             ..Default::default()
         };
 
-        let spinneys =
-            graph.classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis);
+        let spinneys = graph
+            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
+            .unwrap();
         let spinney = spinneys
             .iter()
             .find(|spinney| {
@@ -2383,6 +2402,89 @@ mod failing {
             .unwrap_or_else(|| panic!("dod2 bubble should have a massive power-divergent spinney"));
 
         assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
+    }
+
+    pub(super) fn disconnected_spinney_classification_is_factorwise() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("scalars");
+        let graph: Graph = include_str!(
+            "../../../../tests/resources/graphs/uv_tests/scalar_spectacles_self_energy.dot"
+        )
+        .into_graph(&model)
+        .unwrap();
+        let union = graph
+            .spinneys(&graph.full_filter())
+            .into_iter()
+            .find(|spinney| graph.underlying.connected_components(spinney).len() > 1)
+            .expect("spectacles should contain a disconnected spinney");
+        let components = graph.underlying.connected_components(&union);
+        let union_identifier = graph.ct_identifier(&union);
+        let component_identifiers = components
+            .iter()
+            .map(|component| graph.ct_identifier(component))
+            .collect::<Vec<_>>();
+        assert!(
+            component_identifiers
+                .iter()
+                .all(|identifier| identifier != &union_identifier),
+            "the aggregate override must not also match a component"
+        );
+
+        let prescription = |overrides| RenormalizationPrescriptionSettings {
+            log_divergent: ApproximationType::OS,
+            massive_power_divergent: ApproximationType::OS,
+            massless_power_divergent: ApproximationType::OS,
+            overrides,
+        };
+        let aggregate_override = UVgenerationSettings {
+            renormalization_prescription: prescription(vec![CTRenormalizationRule::new(
+                union_identifier,
+                ApproximationType::Unsubtracted,
+            )]),
+            ..Default::default()
+        };
+        let classified = graph
+            .classified_spinneys(
+                &graph.full_filter(),
+                &aggregate_override,
+                &graph.loop_momentum_basis,
+            )
+            .unwrap();
+        let classified_union = classified
+            .iter()
+            .find(|spinney| spinney.subgraph == union)
+            .expect("retained components should retain their disconnected union");
+        assert_eq!(
+            classified_union.renormalization_scheme,
+            ApproximationType::MUV
+        );
+        for component in &components {
+            let factor = classified
+                .iter()
+                .find(|spinney| spinney.filter() == component)
+                .expect("each component factor should be retained");
+            assert_eq!(factor.renormalization_scheme, ApproximationType::OS);
+        }
+
+        let component_override = UVgenerationSettings {
+            renormalization_prescription: prescription(vec![CTRenormalizationRule::new(
+                component_identifiers[0].clone(),
+                ApproximationType::Unsubtracted,
+            )]),
+            ..Default::default()
+        };
+        let classified = graph
+            .classified_spinneys(
+                &graph.full_filter(),
+                &component_override,
+                &graph.loop_momentum_basis,
+            )
+            .unwrap();
+        assert!(
+            classified.iter().all(|spinney| spinney.subgraph != union),
+            "suppressing a component must also suppress its disconnected union"
+        );
     }
 
     #[test]
@@ -2835,7 +2937,9 @@ mod failing {
                 ^ -1"
         );
 
-        let num_2 = parse!("(-OSE(2) * OSE(4) + dot(Q3(3), Q3(3))) * OSE(3)^2");
+        let num_2 = parse!(
+            "(-OSE(2) * OSE(4) + dot(Q3(3,spenso::mink(4)), Q3(3,spenso::mink(4)))) * OSE(3)^2"
+        );
 
         let mut expr = &num_2 * &cff;
 

@@ -20,6 +20,7 @@ use spenso::{
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
 };
+use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
@@ -642,8 +643,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = GammaLoopContext)]
+#[derive(Clone, bincode_trait_derive::Encode)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
@@ -655,18 +655,99 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-#[derive(
-    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
-)]
-#[trait_decode(trait = GammaLoopContext)]
+impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T> {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let values = Decode::decode(decoder)?;
+        let pairs = Decode::decode(decoder)?;
+        let polarization_cache = Decode::decode(decoder)?;
+        let reps: Vec<FnMapEntry> = Decode::decode(decoder)?;
+        // Consume the existing wire field, then rebuild from the recorded entries:
+        // Symbolica's imported map can retain stale inline argument symbol IDs.
+        let _: FunctionMap = Decode::decode(decoder)?;
+        let mut fn_map = FunctionMap::new();
+        for entry in &reps {
+            entry
+                .register(&mut fn_map)
+                .map_err(bincode::error::DecodeError::OtherString)?;
+        }
+        Ok(Self {
+            values,
+            pairs,
+            polarization_cache,
+            reps,
+            fn_map,
+        })
+    }
+}
+
+#[derive(Clone, bincode_trait_derive::Encode, Debug, PartialEq, Eq, Hash)]
 pub struct FnMapEntry {
     pub lhs: Atom,
     pub rhs: Atom,
     pub args: Vec<Indeterminate>,
     pub tags: Vec<Atom>,
+    pub inlining: InliningPolicy,
+    pub is_alias: bool,
 }
 
+impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let lhs = Decode::decode(decoder)?;
+        let rhs = Decode::decode(decoder)?;
+        let args: Vec<Indeterminate> = Decode::decode(decoder)?;
+        // The Symbol/Atom is remapped on import; Indeterminate's inline symbol
+        // cache is not. Recreate the formal from its remapped representation.
+        let args = args
+            .into_iter()
+            .map(|arg| Indeterminate::try_from(Atom::from(arg)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(bincode::error::DecodeError::OtherString)?;
+        Ok(Self {
+            lhs,
+            rhs,
+            args,
+            tags: Decode::decode(decoder)?,
+            inlining: Decode::decode(decoder)?,
+            is_alias: Decode::decode(decoder)?,
+        })
+    }
+}
+
+pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
+
 impl FnMapEntry {
+    /// Keep registration policy and caller-scope aliases intact when rebuilding a map.
+    pub fn register(&self, fn_map: &mut FunctionMap) -> Result<(), String> {
+        if self.is_alias {
+            if !self.args.is_empty() || self.inlining != InliningPolicy::Always {
+                return Err(
+                    "Caller-scope aliases require no formal arguments and Always inlining".into(),
+                );
+            }
+            return fn_map
+                .add_aliases([(self.lhs.clone(), self.rhs.clone())])
+                .map_err(|error| error.to_string());
+        }
+        let name = match self.lhs.as_view() {
+            AtomView::Fun(function) => function.get_symbol(),
+            AtomView::Var(variable) if self.tags.is_empty() => variable.get_symbol(),
+            _ => return Err("Function definitions require a symbol or function call".into()),
+        };
+        fn_map
+            .add_tagged_function_with_options(
+                name,
+                self.tags.clone(),
+                self.args.clone(),
+                self.rhs.clone(),
+                FunctionRegistrationOptions::new().inlining(self.inlining),
+            )
+            .map_err(|error| error.to_string())
+    }
+
     pub fn replacement(&self) -> Replacement {
         let mut rhs = self.rhs.clone();
         let mut lhs = self.lhs.clone();
@@ -685,7 +766,7 @@ impl FnMapEntry {
         Replacement::new(lhs.to_pattern(), rhs)
     }
 
-    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
+    pub fn archive<T: ExportAtomTo>(&self) -> Result<SerializedFnMapEntry<T>> {
         Ok((
             T::export_atom_to(&self.lhs)?,
             T::export_atom_to(&self.rhs)?,
@@ -697,6 +778,8 @@ impl FnMapEntry {
                 .iter()
                 .map(|t| T::export_atom_to(&Atom::from(t.clone())))
                 .collect::<Result<Vec<_>>>()?,
+            self.inlining,
+            self.is_alias,
         ))
     }
 }
@@ -1060,22 +1143,23 @@ impl<T: FloatLike> ParamBuilder<T> {
     ) -> Result<(), String> {
         let args = args.into_iter().map(|a| a.into()).collect_vec();
         let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
-
-        self.reps.push(FnMapEntry {
+        self.add_function_entry(FnMapEntry {
             lhs: FunctionBuilder::new(name)
                 .add_args(&tags)
                 .add_args(&atom_args)
                 .finish(),
-            rhs: body.clone(),
-            tags: tags.clone(),
-            args: args.clone(),
-        });
+            rhs: body,
+            tags,
+            args,
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        })
+    }
 
-        self.fn_map
-            .add_tagged_function(name, tags, args, body)
-            .map_err(|e| e.to_string())
-
-        // body.evaluate(coeff_map, const_map, function_map)
+    pub fn add_function_entry(&mut self, entry: FnMapEntry) -> Result<(), String> {
+        entry.register(&mut self.fn_map)?;
+        self.reps.push(entry);
+        Ok(())
     }
 
     pub fn add_function<A: Into<Indeterminate> + Clone>(
@@ -1084,18 +1168,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
-        let args = args.into_iter().map(|a| a.into()).collect_vec();
-        let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
-        self.reps.push(FnMapEntry {
-            lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
-            rhs: body.clone(),
-            tags: vec![],
-            args: args.clone(),
-        });
-
-        self.fn_map
-            .add_function(name, args, body)
-            .map_err(|e| e.to_string())
+        self.add_tagged_function(name, Vec::new(), String::new(), args, body)
     }
 
     pub fn initialize_duals(&mut self, max_dual_size: usize) {
@@ -1133,17 +1206,15 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
-        self.reps.push(FnMapEntry {
-            lhs: key.clone(),
-            rhs: Atom::num(value.clone()),
+        self.add_function_entry(FnMapEntry {
+            lhs: key,
+            rhs: Atom::num(value),
             tags: vec![],
             args: vec![],
-        });
-
-        self.fn_map
-            .add_aliases([(key, Atom::num(value))])
-            .map_err(|e| e.to_string())
-            .expect("failed to add constant to function map");
+            inlining: InliningPolicy::Always,
+            is_alias: true,
+        })
+        .expect("failed to add constant to function map");
     }
 
     pub(crate) fn new_empty() -> Self {
@@ -1178,6 +1249,15 @@ impl<T: FloatLike> ParamBuilder<T> {
         let arg = symbol!("argument");
         new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
             .unwrap();
+        // Compile the energy definition once at the evaluator boundary. The
+        // integrand keeps a semantic function with visible momentum dependence.
+        let invariant = symbol!("energy_invariant");
+        new.add_function(
+            GS.energy_surface,
+            vec![symbol!("energy_surface_owner"), invariant],
+            Atom::var(invariant).pow((1, 2)),
+        )
+        .unwrap();
 
         let lmb_ose_replacements = graph
             .iter_edge_ids()
@@ -1734,6 +1814,84 @@ mod tests {
         momentum::sample::{BareMomentumSample, LoopMomenta},
         utils::{ArbPrec, SamplingFloat},
     };
+
+    #[test]
+    fn function_entry_roundtrip_preserves_policy_and_alias_scope() {
+        use crate::GammaLoopContextContainer;
+        use std::io::Cursor;
+        use symbolica::prelude::State;
+
+        let x = Atom::var(symbol!("entry_roundtrip::x"));
+        let global = Atom::var(symbol!("entry_roundtrip::global"));
+        let alias = symbol!("entry_roundtrip::alias").call_args([Atom::num(0)]);
+        let function = symbol!("entry_roundtrip::function");
+        for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+            let entries = vec![
+                FnMapEntry {
+                    lhs: alias.clone(),
+                    rhs: x.pow(2),
+                    args: vec![],
+                    tags: vec![Atom::num(0)],
+                    inlining: InliningPolicy::Always,
+                    is_alias: true,
+                },
+                FnMapEntry {
+                    lhs: function.call_args([Atom::num(7), x.clone()]),
+                    rhs: &alias + &global,
+                    args: vec![x.clone().try_into().unwrap()],
+                    tags: vec![Atom::num(7)],
+                    inlining,
+                    is_alias: false,
+                },
+            ];
+            let encoded = bincode::encode_to_vec(&entries, bincode::config::standard()).unwrap();
+            let mut state = Vec::new();
+            State::export(&mut state).unwrap();
+            let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+            let model = Model::default();
+            let (restored, consumed): (Vec<FnMapEntry>, _) =
+                bincode::decode_from_slice_with_context(
+                    &encoded,
+                    bincode::config::standard(),
+                    GammaLoopContextContainer {
+                        state_map: &state_map,
+                        model: &model,
+                    },
+                )
+                .unwrap();
+            assert_eq!(consumed, encoded.len());
+            assert_eq!(restored, entries);
+            let mut builder = ParamBuilder::<f64>::new_empty();
+            for entry in restored {
+                builder.add_function_entry(entry).unwrap();
+            }
+            assert_eq!(builder.reps, entries);
+            assert!(builder.add_function_entry(entries[1].clone()).is_err());
+            assert_eq!(builder.reps.len(), 2);
+            let root = function.call_args([Atom::num(7), Atom::num(2)])
+                + function.call_args([Atom::num(7), Atom::num(3)]);
+            let mut evaluator = root
+                .evaluator(&[global.clone(), x.clone()])
+                .function_map(builder.fn_map)
+                .horner_iterations(1)
+                .build()
+                .unwrap()
+                .map_coeff(&|c| {
+                    symbolica::domains::float::Complex::new(c.re.to_f64(), c.im.to_f64())
+                });
+            assert_eq!(
+                evaluator.export_instructions().sub_evaluators.len(),
+                usize::from(inlining == InliningPolicy::Never)
+            );
+            assert_eq!(
+                evaluator.evaluate_single(&[
+                    symbolica::domains::float::Complex::new(10.0, 0.0),
+                    symbolica::domains::float::Complex::new(11.0, 0.0),
+                ]),
+                symbolica::domains::float::Complex::new(33.0, 0.0)
+            );
+        }
+    }
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {

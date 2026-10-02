@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="18e0491628f9eac5c788659cabfcdb7575f6986d"
+    tymbolica_revision="b96c1f3ebd1c2563bf91079a0dd6dc5ec82191c0"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -76,7 +76,6 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_version="3.0.0"
     check_dir="$(mktemp -d)"
     trap 'rm -rf "$check_dir"' EXIT
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
@@ -92,12 +91,14 @@ check: build check-wasm-features
       unset CARGO_TARGET_DIR
       nix run --no-write-lock-file "path:$PWD#build"
     )
-    expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$symbolica_version")"
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
-      for package in symbolica numerica graphica; do
+      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
+        package="${specification%:*}"
+        version="${specification#*:}"
+        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $symbolica_version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
           exit 1
         fi
       done

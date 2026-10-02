@@ -1805,6 +1805,13 @@ Rust dependencies. Deriving the exact list preserves narrow invalidation
 while preventing a newly annotated API item from compiling in the full
 workspace but disappearing from the isolated `crate-deps-*` build.
 
+Embedded test graphs belong to the compiling test package's source slice. In
+particular, the GammaLoop core slice includes the GL256 and GL262 three-loop
+four-photon fixtures used with `include_str!`. Its RQFT renormalization graphs
+are runtime inputs instead. Declaring these files at their owning boundaries
+keeps isolated Nix test runs equivalent to a complete checkout without widening
+unrelated production sources.
+
 The Python ABI artifact family now selects Cargo library targets explicitly.
 Its `pyo3-extension-module` feature intentionally leaves Python symbols for
 the interpreter to resolve when the shared object is loaded. Building the

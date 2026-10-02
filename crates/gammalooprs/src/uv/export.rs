@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use linnet::half_edge::subgraph::SubSetOps;
+use linnet::parser::DotGraph;
+use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use symbolica::atom::{Atom, AtomCore};
 
@@ -11,18 +15,55 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::ProcessIntegrand,
-    processes::DotExportSettings,
+    processes::{DotExportSettings, ProcessCollection, process::Process},
     settings::global::GenerationSettings,
     uv::{
         UVOrchestrator,
-        approx::{CutStructure, OrientationProjection},
+        approx::{
+            CutStructure, OrientationProjection,
+            local_3d::Local3DProjectionPath,
+            local_4d::{Local4dBranchProvenance, Local4dComponentProvenance},
+        },
         forest::CutForests,
         hedge_poset::Wood as HedgePosetWood,
+        orchestrator::validate_local_counterterm_schemes,
+        settings::FinalIntegrandDimension,
         wood::CutWoods,
     },
 };
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct UVForestNodeProvenance {
+    pub parent_keys: Vec<String>,
+    pub local: UVForestLocalProvenance,
+}
+
+/// The provenance representation must match the numerator exported beside it.
+/// A direct 3D export therefore records its CFF projection paths rather than
+/// forcing construction of an unrelated 4D counterterm atom.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "representation")]
+pub(crate) enum UVForestLocalProvenance {
+    #[serde(rename = "4d")]
+    FourD {
+        components: Vec<Local4dComponentProvenance>,
+        branches: Vec<Local4dBranchProvenance>,
+    },
+    #[serde(rename = "3d")]
+    ThreeD {
+        projection_paths: Vec<Local3DProjectionPath>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct UVForestProvenance {
+    pub node: UVForestNodeProvenance,
+}
+
 pub struct UVForestExportSettings {
+    /// Whether to evaluate forest nodes. Computed exports consume the
+    /// orientations already selected while generating the graph term;
+    /// structure-only exports do not evaluate orientation-dependent atoms.
     pub computed: bool,
 }
 
@@ -50,6 +91,21 @@ impl UVForestNodeTerm {
             self.node_index, key, self.term_index, residue
         )
     }
+
+    /// Return the atom-free provenance embedded in this computed Hedge DOT.
+    ///
+    /// Parsing remains encapsulated here so callers do not need a direct DOT
+    /// parser dependency. Legacy and structure-only exports return `None`.
+    pub fn forest_provenance(&self) -> Result<Option<serde_json::Value>> {
+        let dot: DotGraph = DotGraph::from_string(&self.dot)
+            .map_err(|error| eyre!("failed to parse UV forest node DOT: {error}"))?;
+        let Some(json) = dot.global_data.statements.get("forest_provenance") else {
+            return Ok(None);
+        };
+        Ok(Some(
+            serde_json::from_str(json).context("while parsing UV forest provenance JSON")?,
+        ))
+    }
 }
 
 pub(crate) struct UVForestNodeExpression {
@@ -59,18 +115,83 @@ pub(crate) struct UVForestNodeExpression {
     pub term_index: usize,
     pub residue_index: CutCFFIndex,
     pub numerator: Atom,
+    pub forest_provenance: Option<Arc<UVForestProvenance>>,
 }
 
-impl ProcessIntegrand {
-    pub(crate) fn export_uv_forest_graph(
+impl Process {
+    pub fn export_uv_forest_graph(
         &self,
+        integrand_name: &str,
         graph_id: usize,
-        orientation: Option<OrientationProjection<'_>>,
-        generation_settings: &GenerationSettings,
-        export_settings: &UVForestExportSettings,
+        settings: &UVForestExportSettings,
     ) -> Result<UVForestExport> {
-        match self {
-            Self::Amplitude(integrand) => {
+        let generation_settings = &self
+            .settings_history
+            .as_ref()
+            .ok_or_else(|| {
+                eyre!(
+                    "Cannot export UV forests for process {} without generation settings history",
+                    self.definition.folder_name
+                )
+            })?
+            .generation;
+        let resolved = self.get_integrand(integrand_name)?;
+        let integrand = resolved.require_generated()?;
+        let source = if settings.computed {
+            let (graph, expression) = match &self.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    let source = amplitudes[&resolved.canonical_name]
+                        .graphs
+                        .get(graph_id)
+                        .ok_or_else(|| eyre!("Missing source amplitude graph {graph_id}"))?;
+                    (&source.graph, source.derived_data.cff_expression.as_ref())
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    let source = cross_sections[&resolved.canonical_name]
+                        .supergraphs
+                        .get(graph_id)
+                        .ok_or_else(|| eyre!("Missing source cross-section graph {graph_id}"))?;
+                    (
+                        &source.graph,
+                        source.derived_data.global_cff_expression.as_ref(),
+                    )
+                }
+            };
+            // Generation and persistent selection preserve graph order;
+            // reject stale runtime metadata instead of pairing a different
+            // graph with this stored production residue map.
+            if integrand.graph_name_by_id(graph_id) != Some(graph.name.as_str()) {
+                return Err(eyre!(
+                    "Source/runtime graph mismatch for computed UV forest export at id {graph_id}"
+                ));
+            }
+            Some((
+                graph,
+                expression.ok_or_else(|| {
+                    eyre!(
+                        "Graph {} has no stored production CFF for computed UV forest export",
+                        graph.name
+                    )
+                })?,
+            ))
+        } else {
+            None
+        };
+        let cff_options = source
+            .map(|(graph, _)| graph.production_cff_3d_expression_options(generation_settings))
+            .transpose()?;
+        let orientation = source
+            .zip(cff_options.as_ref())
+            .map(|((_, expression), options)| {
+                OrientationProjection::exact_expression(
+                    expression,
+                    options,
+                    &generation_settings.orientation_pattern,
+                    generation_settings.explicit_orientation_sum_only,
+                )
+            });
+        match integrand {
+            ProcessIntegrand::Amplitude(integrand) => {
                 let term = integrand.data.graph_terms.get(graph_id).ok_or_else(|| {
                     eyre!(
                         "Graph id {} is out of range for amplitude integrand {}",
@@ -84,11 +205,11 @@ impl ProcessIntegrand {
                     cut_structure,
                     orientation,
                     generation_settings,
-                    export_settings,
+                    settings,
                     |_, atom| atom,
                 )
             }
-            Self::CrossSection(integrand) => {
+            ProcessIntegrand::CrossSection(integrand) => {
                 let term = integrand.data.graph_terms.get(graph_id).ok_or_else(|| {
                     eyre!(
                         "Graph id {} is out of range for cross-section integrand {}",
@@ -130,7 +251,7 @@ impl ProcessIntegrand {
                     cut_structure,
                     orientation,
                     generation_settings,
-                    export_settings,
+                    settings,
                     |forest_index, atom| atom * &lu_prefactors[forest_index],
                 )
             }
@@ -151,6 +272,7 @@ fn export_graph(
             "UV forest export does not support uv.orchestrator = compare"
         ));
     }
+    validate_local_counterterm_schemes(graph, &cut_structure, &generation_settings.uv)?;
 
     let mut forest_dot = String::new();
     let mut node_terms = Vec::new();
@@ -210,7 +332,7 @@ fn export_legacy_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let cut_woods = CutWoods::new(cut_structure, graph, &generation_settings.uv);
+    let cut_woods = CutWoods::new(cut_structure, graph, &generation_settings.uv)?;
     let mut cut_forests = cut_woods.unfold(graph);
     let Some(forest) = cut_forests.forests.first_mut() else {
         return Err(eyre!("Legacy UV exporter produced no forest"));
@@ -222,6 +344,15 @@ fn export_legacy_forest(
         return Ok(());
     }
 
+    if matches!(
+        generation_settings.uv.final_integrand,
+        FinalIntegrandDimension::FourD
+    ) {
+        return Err(eyre!(
+            "computed 4D UV forest export is not supported by the legacy DAG forest for graph '{}' (forest {forest_index}); use the HedgePoset orchestrator",
+            graph.name,
+        ));
+    }
     let orientation = orientation.ok_or_else(|| {
         eyre!("Computed UV forest export requires its stored production CFF expression")
     })?;
@@ -267,7 +398,7 @@ fn export_hedge_poset_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let wood = HedgePosetWood::new(cut_structure, graph, &generation_settings.uv);
+    let wood = HedgePosetWood::new(cut_structure, graph, &generation_settings.uv)?;
     let mut forests = wood.unfold();
     forest_dot.push_str(&name_dot_graph(forests.dot_serialize(), forest_name));
     forest_dot.push('\n');
@@ -276,17 +407,28 @@ fn export_hedge_poset_forest(
         return Ok(());
     }
 
-    forests.compute(
-        graph,
-        crate::utils::vakint()?,
-        orientation.ok_or_else(|| {
-            eyre!("Computed UV forest export requires its stored production CFF expression")
-        })?,
-        &generation_settings.uv,
-    )?;
+    let expressions = match &generation_settings.uv.final_integrand {
+        FinalIntegrandDimension::FourD => {
+            forests.integrate(graph, crate::utils::vakint()?, &generation_settings.uv)?;
+            forests.export_4d_node_expressions(forest_index)?
+        }
+        FinalIntegrandDimension::ThreeD => {
+            // A computed 3D export carries provenance from the direct
+            // orientation-local CFF projections themselves. Do not construct
+            // unrelated 4D atoms merely to annotate this diagnostic output.
+            forests.compute(
+                graph,
+                crate::utils::vakint()?,
+                orientation.ok_or_else(|| {
+                    eyre!("Computed UV forest export requires its stored production CFF expression")
+                })?,
+                &generation_settings.uv,
+            )?;
+            forests.export_node_expressions(forest_index, post_process)?
+        }
+    };
     node_terms.extend(
-        forests
-            .export_node_expressions(forest_index, post_process)?
+        expressions
             .into_iter()
             .map(|term| node_expression_to_dot(graph, forest_name, term))
             .collect::<Result<Vec<_>>>()?,
@@ -334,6 +476,14 @@ fn node_expression_to_dot(
         "forest_residue_index".into(),
         residue_suffix(term.residue_index),
     );
+    if let Some(provenance) = term.forest_provenance.as_deref() {
+        let provenance = serde_json::to_string(provenance)
+            .context("while serializing UV forest provenance as JSON")?;
+        dot_graph
+            .global_data
+            .statements
+            .insert("forest_provenance".into(), provenance);
+    }
     let full_num = term
         .numerator
         .printer(SpensoPrintSettings::typst_options())
@@ -398,10 +548,17 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
-    use symbolica::{atom::Atom, function};
+    use std::sync::{Arc, Once, OnceLock};
+
+    use linnet::parser::DotGraph;
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        function, symbol,
+    };
 
     use super::{
-        UVForestExportSettings, UVForestNodeExpression, UVForestNodeTerm, export_graph,
+        UVForestExportSettings, UVForestLocalProvenance, UVForestNodeExpression,
+        UVForestNodeProvenance, UVForestNodeTerm, UVForestProvenance, export_graph,
         node_expression_to_dot, sanitize_file_component,
     };
     use crate::{
@@ -412,10 +569,21 @@ mod tests {
         settings::global::GenerationSettings,
         utils::GS,
         uv::{
-            UVOrchestrator,
-            approx::{CutStructure, OrientationProjection},
+            ApproximationType, UVOrchestrator, UVgenerationSettings,
+            approx::{
+                CutStructure, OrientationProjection,
+                local_4d::{
+                    Local4dBranch, Local4dBranchProvenance, Local4dComponentProvenance,
+                    Local4dRouteSignature,
+                },
+            },
+            settings::FinalIntegrandDimension,
         },
     };
+
+    static EXPORT_TEST_INIT: Once = Once::new();
+    static SM_MODEL: OnceLock<crate::model::Model> = OnceLock::new();
+    static SCALAR_MODEL: OnceLock<crate::model::Model> = OnceLock::new();
 
     #[test]
     fn node_term_file_name_contains_stable_indices_key_and_residue() {
@@ -459,18 +627,18 @@ mod tests {
 
     #[test]
     fn computed_node_full_numerator_is_a_spenso_aware_typst_fragment() {
-        test_initialise().unwrap();
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
         let graph: Graph = dot!(digraph G {
-            ext [style=invis]
-            node [num=1]
-            ext -> A
-            C -> A
-            A -> D
-            D -> B
-            B -> C
-            C -> D
-            B -> ext
-        })
+                ext [style=invis]
+                node [num=1]
+                ext -> A
+                C -> A
+                A -> D
+                D -> B
+                B -> C
+                C -> D
+                B -> ext
+            }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
         .unwrap();
         let term = UVForestNodeExpression {
             forest_index: 0,
@@ -479,12 +647,327 @@ mod tests {
             term_index: 2,
             residue_index: CutCFFIndex::new_all_none(),
             numerator: function!(GS.uv_truncate, Atom::num(1)),
+            forest_provenance: None,
         };
 
         let exported = node_expression_to_dot(&graph, "uv_typst", term).unwrap();
 
         assert!(exported.dot.contains(r#"full_num = "op(\"Tr\")(1)";"#));
         assert!(!exported.dot.contains("gammalooprs::Truncate"));
+        assert!(!exported.dot.contains("forest_provenance"));
+    }
+
+    #[test]
+    fn computed_node_full_numerator_distinguishes_physical_and_uv_mass_denominators() {
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let graph: Graph = dot!(digraph G {
+                ext [style=invis]
+                node [num=1]
+                ext -> A
+                A -> A
+                A -> ext
+            }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
+        .unwrap();
+        let momentum_squared = Atom::var(symbol!("inspect_momentum_squared"));
+        let physical_mass = Atom::var(symbol!("inspect_physical_mass"));
+        let uv_expansion_mass = Atom::var(GS.m_uv_expansion);
+        let uv_vacuum_mass = Atom::var(GS.m_uv_vacuum);
+        let physical_denominator = function!(
+            GS.den,
+            1,
+            momentum_squared.clone(),
+            physical_mass.clone().pow(2),
+            &momentum_squared - physical_mass.clone().pow(2)
+        );
+        let terminal_uv_denominator = function!(
+            GS.den,
+            2,
+            momentum_squared.clone(),
+            uv_expansion_mass.clone().pow(2),
+            momentum_squared - uv_vacuum_mass.clone().pow(2)
+        );
+        let term = UVForestNodeExpression {
+            forest_index: 0,
+            node_index: 1,
+            node_key: "{1}".to_string(),
+            term_index: 0,
+            residue_index: CutCFFIndex::new_all_none(),
+            numerator: physical_denominator * terminal_uv_denominator,
+            forest_provenance: None,
+        };
+
+        let exported = node_expression_to_dot(&graph, "uv_mass_provenance", term).unwrap();
+        let parsed: DotGraph = DotGraph::from_string(&exported.dot).unwrap();
+        let full_num = parsed
+            .global_data
+            .statements
+            .get("full_num")
+            .expect("computed inspect DOT must contain its full numerator");
+
+        assert_eq!(
+            full_num.matches("denom").count(),
+            2,
+            "inspect output must retain the physical and terminal-UV denominators separately: {full_num}"
+        );
+        assert!(
+            full_num.contains("inspect_physical_mass"),
+            "inspect output lost the physical-mass denominator: {full_num}"
+        );
+        assert!(
+            full_num.contains("UVexp") && full_num.contains("UV"),
+            "inspect output lost the distinct UV expansion and vacuum-mass roles: {full_num}"
+        );
+    }
+
+    #[test]
+    fn computed_hedge_4d_export_has_one_all_none_term_per_node() {
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
+            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+            .unwrap();
+        let generation_settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                final_integrand: FinalIntegrandDimension::FourD,
+                orchestrator: UVOrchestrator::HedgePoset,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let export = export_graph(
+            &graph,
+            CutStructure::empty(&graph),
+            None,
+            &generation_settings,
+            &UVForestExportSettings { computed: true },
+            |_, _| panic!("a computed 4D export must not apply 3D post-processing"),
+        )
+        .unwrap();
+
+        assert!(!export.node_terms.is_empty());
+        let mut nodes = std::collections::BTreeSet::new();
+        for term in &export.node_terms {
+            assert!(nodes.insert((term.forest_index, term.node_index, &term.node_key)));
+            assert_eq!(term.term_index, 0);
+            assert_eq!(term.residue_index, CutCFFIndex::new_all_none());
+            let provenance = term
+                .forest_provenance()
+                .unwrap()
+                .expect("computed Hedge export must retain 4D provenance");
+            assert!(provenance.get("local_3d").is_none());
+            assert_eq!(provenance.as_object().unwrap().len(), 1);
+            assert!(provenance["node"].get("components").is_none());
+            assert!(provenance["node"].get("local_4d_branches").is_none());
+            assert_eq!(provenance["node"]["local"]["representation"], "4d");
+            assert!(provenance["node"]["local"]["components"].is_array());
+            assert!(provenance["node"]["local"]["branches"].is_array());
+        }
+    }
+
+    #[test]
+    fn computed_hedge_3d_export_retains_direct_projection_provenance() {
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let mut graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
+            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+            .unwrap();
+        let generation_settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                final_integrand: FinalIntegrandDimension::ThreeD,
+                orchestrator: UVOrchestrator::HedgePoset,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let options = graph
+            .production_cff_3d_expression_options(&generation_settings)
+            .unwrap();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let numerator = graph.production_numerator_atom_for_full_3d_expression();
+        let production = graph
+            .generate_3d_expression_for_integrand(&[], &canonization, &options, Some(&numerator))
+            .unwrap();
+        let orientation = OrientationProjection::exact_expression(
+            &production,
+            &options,
+            &generation_settings.orientation_pattern,
+            generation_settings.explicit_orientation_sum_only,
+        );
+        let export = export_graph(
+            &graph,
+            CutStructure::empty(&graph),
+            Some(orientation),
+            &generation_settings,
+            &UVForestExportSettings { computed: true },
+            |_, atom| atom,
+        )
+        .unwrap();
+
+        assert!(!export.node_terms.is_empty());
+        let provenances = export
+            .node_terms
+            .iter()
+            .map(|term| {
+                term.forest_provenance()
+                    .unwrap()
+                    .expect("computed 3D Hedge export must retain direct projection provenance")
+            })
+            .collect::<Vec<_>>();
+        assert!(provenances.iter().all(|provenance| {
+            provenance["node"].get("components").is_none()
+                && provenance["node"].get("local_4d_branches").is_none()
+                && provenance["node"]["local"]["representation"] == "3d"
+                && provenance["node"]["local"]["projection_paths"].is_array()
+        }));
+        assert!(
+            provenances
+                .iter()
+                .any(|provenance| provenance["node"]["local"]["projection_paths"]
+                    .as_array()
+                    .is_some_and(|paths| paths.iter().any(|path| path["steps"]
+                        .as_array()
+                        .is_some_and(|steps| !steps.is_empty())))),
+            "a non-root computed 3D term must report its actual CFF projection path"
+        );
+        for step in provenances
+            .iter()
+            .flat_map(|provenance| {
+                provenance["node"]["local"]["projection_paths"]
+                    .as_array()
+                    .expect("projection paths were validated above")
+            })
+            .flat_map(|path| {
+                path["steps"]
+                    .as_array()
+                    .expect("a direct projection path must contain a steps array")
+            })
+        {
+            assert!(step["current_component"].is_string());
+            assert!(step["given_component"].is_string());
+            assert!(step["active_subgraph"].is_string());
+            assert!(step["rescaled_subgraph"].is_string());
+            assert!(step["canonical_route_loop_edges"].is_array());
+            assert!(step["route_loop_edges"].is_array());
+            assert_eq!(step["conceptual_branches"][0]["branch"], "U");
+            assert_eq!(
+                step["conceptual_branches"][0]["coefficient"].as_i64(),
+                Some(1)
+            );
+            assert_eq!(step["materialization"], "direct_u");
+        }
+    }
+
+    #[test]
+    fn computed_legacy_4d_export_is_rejected_contextually() {
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
+            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+            .unwrap();
+        let generation_settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                final_integrand: FinalIntegrandDimension::FourD,
+                orchestrator: UVOrchestrator::LegacyDagForest,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let error = export_graph(
+            &graph,
+            CutStructure::empty(&graph),
+            None,
+            &generation_settings,
+            &UVForestExportSettings { computed: true },
+            |_, atom| atom,
+        )
+        .err()
+        .expect("legacy computed 4D export must fail before expression generation");
+
+        let message = error.to_string();
+        assert!(message.contains("computed 4D UV forest export"));
+        assert!(message.contains("legacy DAG forest"));
+        assert!(message.contains("graph 'bubble'"));
+        assert!(message.contains("forest 0"));
+        assert!(message.contains("HedgePoset"));
+    }
+
+    #[test]
+    fn computed_hedge_provenance_survives_json_and_dot_round_trip() {
+        EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let graph: Graph = dot!(digraph G {
+                ext [style=invis]
+                node [num=1]
+                ext -> A
+                A -> A
+                A -> ext
+            }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
+        .unwrap();
+        let provenance = Arc::new(UVForestProvenance {
+            node: UVForestNodeProvenance {
+                parent_keys: vec!["parent:{1}".to_string()],
+                local: UVForestLocalProvenance::FourD {
+                    components: vec![Local4dComponentProvenance {
+                        component: "12".to_string(),
+                        scheme: ApproximationType::IR,
+                        dod: 2,
+                        route_loop_edges: vec![1],
+                        route_external_edges: vec![0, 2],
+                        route_signatures: vec![Local4dRouteSignature {
+                            edge: 1,
+                            loop_signature: "+".to_string(),
+                            external_signature: "00".to_string(),
+                        }],
+                    }],
+                    branches: vec![
+                        Local4dBranchProvenance {
+                            branch: Local4dBranch::U,
+                            byte_size: 11,
+                        },
+                        Local4dBranchProvenance {
+                            branch: Local4dBranch::S,
+                            byte_size: 7,
+                        },
+                        Local4dBranchProvenance {
+                            branch: Local4dBranch::US,
+                            byte_size: 5,
+                        },
+                        Local4dBranchProvenance {
+                            branch: Local4dBranch::Combined,
+                            byte_size: 13,
+                        },
+                    ],
+                },
+            },
+        });
+        let term = UVForestNodeExpression {
+            forest_index: 3,
+            node_index: 4,
+            node_key: "{1};{2}".to_string(),
+            term_index: 5,
+            residue_index: CutCFFIndex::new_all_none(),
+            numerator: Atom::one(),
+            forest_provenance: Some(provenance.clone()),
+        };
+        let exported = node_expression_to_dot(&graph, "uv_provenance", term).unwrap();
+        assert_eq!(
+            exported.forest_provenance().unwrap(),
+            Some(serde_json::to_value(provenance.as_ref()).unwrap())
+        );
+        let reparsed: DotGraph = DotGraph::from_string(&exported.dot).unwrap();
+        let json = &reparsed.global_data.statements["forest_provenance"];
+        let round_trip: UVForestProvenance = serde_json::from_str(json).unwrap();
+
+        assert_eq!(round_trip, *provenance);
+        assert_eq!(reparsed.global_data.statements["forest_index"], "3");
+        assert_eq!(reparsed.global_data.statements["forest_node_index"], "4");
+        assert_eq!(
+            reparsed.global_data.statements["forest_node_key"],
+            "{1};{2}"
+        );
+        assert_eq!(reparsed.global_data.statements["forest_term_index"], "5");
+        assert_eq!(
+            reparsed.global_data.statements["forest_residue_index"],
+            "all_none"
+        );
     }
 
     #[test]
@@ -548,20 +1031,15 @@ mod tests {
                 settings.generation.evaluator.compile = false;
                 process.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
                 process.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
-                let (graph, production, expected) = match &process.collection {
+                let (graph, expected) = match &process.collection {
                     ProcessCollection::Amplitudes(amplitudes) => {
                         let graph = &amplitudes["default"].graphs[0];
-                        (
-                            &graph.graph,
-                            graph.derived_data.cff_expression.as_ref().unwrap(),
-                            graph.derived_data.resolved_integrand()?,
-                        )
+                        (&graph.graph, graph.derived_data.resolved_integrand()?)
                     }
                     ProcessCollection::CrossSections(cross_sections) => {
                         let graph = &cross_sections["default"].supergraphs[0];
                         (
                             &graph.graph,
-                            graph.derived_data.global_cff_expression.as_ref().unwrap(),
                             graph
                                 .derived_data
                                 .cut_paramatric_integrand
@@ -575,22 +1053,11 @@ mod tests {
                         )
                     }
                 };
-                let options = graph.production_cff_3d_expression_options(&settings.generation)?;
-                let orientation = OrientationProjection::exact_expression(
-                    production,
-                    &options,
-                    &settings.generation.orientation_pattern,
-                    true,
-                );
-                let exported = process
-                    .get_integrand("default")?
-                    .require_generated()?
-                    .export_uv_forest_graph(
-                        0,
-                        Some(orientation),
-                        &settings.generation,
-                        &UVForestExportSettings { computed: true },
-                    )?;
+                let exported = process.export_uv_forest_graph(
+                    "default",
+                    0,
+                    &UVForestExportSettings { computed: true },
+                )?;
                 let split = graph
                     .iter_edges_of(
                         &graph

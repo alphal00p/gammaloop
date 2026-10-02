@@ -3736,6 +3736,8 @@ where
     }
 
     let mut terms = Vec::with_capacity(targets.len());
+    // Closed contractions may retain lazy tensor leaves. Extract their scalar
+    // entries before addition, independently of which kind of leaf comes first.
     for (_, leaf) in targets {
         match leaf.result_scalar(
             |tensor| store.tensor(tensor),

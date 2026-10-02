@@ -44,7 +44,7 @@ use crate::{
         tags::SPENSO_TAG,
     },
     shadowing,
-    shadowing::Concretize,
+    shadowing::{Concretize, ProjectorExpander},
     structure::{
         HasStructure, OrderedStructure, ScalarStructure, TensorShell, TensorStructure,
         representation::{LibraryRep, Representation},
@@ -889,6 +889,25 @@ where
                 function_library,
                 settings,
             );
+        }
+
+        if factors.iter().any(|factor| {
+            [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
+                .into_iter()
+                .any(|projector| factor.contains_symbol(projector))
+        }) {
+            // Projector factors describe ordered products inside this trace.
+            // Expand only that finite projector before assigning the links.
+            let expanded = value.as_view().expand_projectors();
+            if expanded.as_view() != value.as_view() {
+                return Self::try_from_view_impl(
+                    expanded.as_view(),
+                    state,
+                    library,
+                    function_library,
+                    settings,
+                );
+            }
         }
 
         let links = (0..factors.len())

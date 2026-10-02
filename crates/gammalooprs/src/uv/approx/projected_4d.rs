@@ -495,6 +495,8 @@ impl Localizer<'_> {
                     .collect::<std::result::Result<Vec<_>, _>>()
                     .map_err(|error| eyre!(error))?,
                 tags: vec![scope],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             for (carrier, arguments) in rows {
                 let arguments = arguments
@@ -1256,7 +1258,7 @@ mod tests {
         let outer_subgraph =
             InternalSubGraph::cleaned_filter_optimist(full.clone(), graph.as_ref());
         let inner_spinney =
-            Spinney::new(inner_subgraph.clone(), &graph, &graph.loop_momentum_basis)
+            Spinney::new(inner_subgraph.clone(), &graph, &graph.loop_momentum_basis)?
                 .ok_or_else(|| eyre!("the inner component fixture has no compatible sub-LMB"))?;
         let shell_lmb = graph.shrunken_sub_lmb(
             &full,

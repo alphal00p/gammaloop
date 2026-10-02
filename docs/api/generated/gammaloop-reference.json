@@ -17782,6 +17782,14 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.evaluator.inline_numerator_functions",
+      "value_type": "boolean",
+      "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.evaluator.iterative_orientation_optimization",
       "value_type": "boolean",
       "description": "Re-optimize orientation expressions iteratively while building the evaluator.",

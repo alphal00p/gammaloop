@@ -282,6 +282,28 @@ mod tests {
     }
 
     #[test]
+    fn undo_shorthands_preserves_radial_powers() {
+        use symbolica::atom::AtomCore;
+
+        test_initialize();
+        for representation in [mink!(4), mink!(dim)] {
+            let momentum = vector!(Q, 9, representation);
+            let radial = spenso::dot!(&momentum, &momentum);
+            for power in [-9, -5, -3, -2, -1, 0, 1, 2, 3, 5, 9] {
+                let original = radial.clone().pow(power);
+                // Integrated UV conversion runs these three parsing/execution
+                // passes in sequence. A cube must stay a cube at every boundary.
+                let schoonschip = original.undo_schoonschip::<AbstractIndex>().unwrap();
+                assert_eq!(schoonschip, original, "schoonschip, power {power}");
+                let chain = schoonschip.undo_chain::<AbstractIndex>().unwrap();
+                assert_eq!(chain, original, "chain, power {power}");
+                let trace = chain.undo_trace::<AbstractIndex>().unwrap();
+                assert_eq!(trace, original, "trace, power {power}");
+            }
+        }
+    }
+
+    #[test]
     fn undo_schoonschip_across_chain() {
         let _ = test_initialize();
         let expr = chain!(

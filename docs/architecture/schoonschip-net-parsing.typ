@@ -92,9 +92,10 @@ the contraction code in
     expressions are turned into network structure.],
     [`contraction_order`], [Chooses the graph edge selection strategy
     used during execution.],
-    [`expand_contracted_sums`], [Enables sum-by-sum contraction
-    expansion inside `Schoonschipify`. It does not change parser
-    shorthand mode.],
+    [`expand_contracted_sums`], [Enables finite contraction of tensor
+    sums inside `Schoonschipify`, including a sum contracted with a
+    single tensor. Spectator factors remain factored, and parser
+    shorthand mode is unchanged.],
     [`simplify_chain_like_functions`], [Controls the optional chain-like
     metric simplifier in the pattern implementation. The network
     implementation does not read this field.],
@@ -125,7 +126,9 @@ the contraction code in
     [Special contractions], [Metrics rewrite the target slot with the
     metric\'s free slot. Rank-one tensors strip their consumed
     representation slot and are inserted into the contracted target
-    slot.],
+    slot. With contracted-sum expansion enabled, a composite vector
+    sum contracts term by term through the same slot replacement.
+    If that replacement is unavailable, its product stays factored.],
     [General product], [If no shortcut applies, the expressions are
     multiplied and wrapped as a composite tensor. For genuine contracted
     sum-by-sum products, the expanded mode first tries a direct
@@ -224,9 +227,10 @@ Shorthand is represented once, then simplified by the network rules.
     a fixed point.],
     [Contracted sums], [With contracted-sum expansion enabled, genuine
     sum-by-sum contractions such as `(A(mu)+B(mu)) * (C(mu)+D(mu))` are
-    expanded inside the contraction step. One-sided sums such as
-    `g(mu, nu) * (A(nu)+B(nu))` are left to the metric shortcut instead
-    of being blindly distributed.],
+    expanded inside the contraction step. Metrics retain their direct
+    shortcut. A vector sum such as `(a*p(mu)+b*q(mu))*F(mu)` uses
+    certified slot replacements to produce `a*F(p)+b*F(q)` while all
+    factors outside that contraction remain factored.],
 )
 
 == Expected Outcome

@@ -41,7 +41,7 @@ use std::{
 };
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
 #[cfg(feature = "symbolica_community_module")]
@@ -883,7 +883,9 @@ impl Integral {
                 let momenta = get_individual_momenta(m.get(&vk_symbol!("q_")).unwrap().as_view())?;
 
                 let mass_symbol_string = if let Some(a) = m.get(&vk_symbol!("mUVsq_")) {
-                    if let Some(m3) = a
+                    if a.is_zero() {
+                        "0".to_string()
+                    } else if let Some(m3) = a
                         .pattern_match(
                             &vk_parse!("msq(mid_)").unwrap().to_pattern(),
                             Some(&Condition::from((
@@ -907,7 +909,7 @@ impl Integral {
                         )
                     } else {
                         return Err(VakintError::InvalidGenericExpression(format!(
-                            "Generic expression does not have masses formatted as msq(integer in [1,n_props]): {}",
+                            "Generic expression does not have masses formatted as zero or msq(integer in [1,n_props]): {}",
                             a
                         )));
                     }
@@ -1129,7 +1131,11 @@ impl Integral {
             canonical_expression,
             short_expression,
             short_expression_pattern: Some(short_expression_pattern.to_pattern()),
-            alphaloop_expression: Some(alphaloop_expression),
+            // AlphaLoop's uvprop representation has no mass slot. A partly
+            // massless topology must retain its mass labels in an analytic
+            // backend that supports them.
+            alphaloop_expression: (!graph.edges.values().any(|edge| edge.mass.is_zero()))
+                .then_some(alphaloop_expression),
             applicable_evaluation_methods,
             graph,
             unoriented_generic_pattern,
@@ -4400,7 +4406,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 None,
                 None,
             )
-            .next()
+            .find(|matched| !matched[&vk_symbol!("m_sq_")].is_zero())
         {
             match m.get(&vk_symbol!("m_sq_")).unwrap() {
                 Atom::Var(s) => (
@@ -4992,12 +4998,22 @@ Evaluated (n_loops=1, mu_r=1) :
         // algebra or symbol identities, and complex numbers need parentheses.
         match expression {
             AtomView::Num(number) => {
-                let literal = expression.to_canonical_string();
                 if number.get_coeff_view().is_real() {
-                    literal
-                } else {
-                    format!("({literal})")
+                    return expression.to_canonical_string();
                 }
+                // Serialize the two components explicitly. Display printing
+                // may omit a unit imaginary numerator, while backend adapters
+                // need an explicit numeric token for their imaginary unit.
+                let (real, imaginary) = match number.get_coeff_view().to_owned() {
+                    Coefficient::Complex(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    Coefficient::Float(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    _ => return format!("({})", expression.to_canonical_string()),
+                };
+                format!(
+                    "({}+({})*1𝑖)",
+                    real.to_canonical_string(),
+                    imaginary.to_canonical_string()
+                )
             }
             AtomView::Var(variable) => get_full_name(&variable.get_symbol()),
             AtomView::Fun(function) => format!(

@@ -563,7 +563,6 @@ mod tests {
     use spenso::{
         algebra::{algebraic_traits::IsZero, complex::Complex},
         network::{ExecutionResult, Sequential, SmallestDegree},
-        structure::representation::{Minkowski, RepName},
     };
     use symbolica::domains::dual::HyperDual;
     use symbolica::{
@@ -886,7 +885,7 @@ mod tests {
             .get_edge_subgraph(EdgeIndex(5))
             .union(&graph.get_edge_subgraph(EdgeIndex(6)));
         let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
-        let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)
+        let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)?
             .expect("the GL24 e5/e6 bubble has a compatible nonempty UV sub-LMB");
         assert!(!child_spinney.subgraph.is_empty());
 
@@ -1046,7 +1045,7 @@ mod tests {
             .get_edge_subgraph(EdgeIndex(0))
             .union(&graph.get_edge_subgraph(EdgeIndex(1)));
         let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
-        let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)
+        let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)?
             .expect("the doubled edge is a logarithmic one-loop UV subgraph");
         let orientation_pattern = OrientationPattern::default();
         let settings = UVgenerationSettings {
@@ -1279,7 +1278,7 @@ mod tests {
             &graph.loop_momentum_basis,
             ApproximationType::MUV,
             2,
-        )
+        )?
         .expect("the self-energy bubble has a compatible sub-LMB");
         assert_eq!(child_spinney.dod, 2);
         let cutset = CutSet::empty(graph.n_hedges());
@@ -1427,6 +1426,8 @@ mod tests {
                 .with(W_.d_)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_)
+                .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                .with(Atom::var(W_.prop_).pow((1, 2)))
                 .expand_dots()
                 .expect("test-only component expansion must succeed")
         };
@@ -1578,7 +1579,7 @@ mod tests {
                 let subgraph =
                     InternalSubGraph::cleaned_filter_optimist(filter.clone(), graph.as_ref());
                 spinneys.push(
-                    Spinney::new(subgraph, &graph, &graph.loop_momentum_basis)
+                    Spinney::new(subgraph, &graph, &graph.loop_momentum_basis)?
                         .expect("each nested banana has a compatible sub-LMB"),
                 );
             }
@@ -1704,6 +1705,8 @@ mod tests {
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
+                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .with(Atom::var(W_.prop_).pow((1, 2)))
                     .expand_dots()
                     .expect("test-only component expansion must succeed")
             };
@@ -1932,7 +1935,7 @@ mod tests {
                 &graph.loop_momentum_basis,
                 ApproximationType::MUV,
                 1,
-            )
+            )?
             .expect("the self-energy bubble has a compatible sub-LMB");
             let orientation_pattern = OrientationPattern::default();
 
@@ -2109,18 +2112,18 @@ mod tests {
                             Atom::Zero
                         };
                         expression = expression
-                            .replace(
-                                Minkowski {}
-                                    .new_rep(4)
-                                    .inner_product(GS.emr_vec(left), GS.emr_vec(right)),
-                            )
+                            .replace(function!(
+                                GS.dot,
+                                GS.emr_vec(left, compact_minkowski.as_view()),
+                                GS.emr_vec(right, compact_minkowski.as_view())
+                            ))
                             .with(-&left_spatial * right_spatial);
                     }
                     expression = expression
                         .replace(function!(
                             GS.dot,
                             time_direction.as_view(),
-                            GS.emr_vec_index(left, compact_minkowski.as_view())
+                            GS.emr_vec(left, compact_minkowski.as_view())
                         ))
                         .with(Atom::Zero);
                 }
@@ -2149,7 +2152,7 @@ mod tests {
                             expression = expression
                                 .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
                                 .with(Atom::Zero)
-                                .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                                .replace(GS.emr_vec(edge, GS.cind(spatial_index)))
                                 .with(Atom::Zero);
                         }
                     } else {
@@ -2157,7 +2160,7 @@ mod tests {
                         expression = expression
                             .replace(GS.emr_mom(edge, GS.cind(1)))
                             .with(base_spatial_momentum(edge) * &rescale)
-                            .replace(GS.emr_vec_index(edge, GS.cind(1)))
+                            .replace(GS.emr_vec(edge, GS.cind(1)))
                             .with(base_spatial_momentum(edge) * &rescale)
                             .replace(GS.ose(edge))
                             .with(on_shell_energy.clone())
@@ -2167,7 +2170,7 @@ mod tests {
                             expression = expression
                                 .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
                                 .with(Atom::Zero)
-                                .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                                .replace(GS.emr_vec(edge, GS.cind(spatial_index)))
                                 .with(Atom::Zero);
                         }
                     }
@@ -2193,6 +2196,9 @@ mod tests {
                 ])
             };
             let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+                let expression = expression
+                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .with(Atom::var(W_.prop_).pow((1, 2)));
                 let parameters = [Atom::var(GS.pi)];
                 let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
                     .evaluator(&parameters)
@@ -2326,6 +2332,8 @@ mod tests {
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
+                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .with(Atom::var(W_.prop_).pow((1, 2)))
                     .expand_dots()?;
                 expression = scalarize(expression)?;
                 let t = Atom::var(GS.rescale);
@@ -2385,7 +2393,7 @@ mod tests {
                         expression = expression
                             .replace(GS.emr_mom(edge, GS.cind(component + 1)))
                             .with(spatial_component.clone())
-                            .replace(GS.emr_vec_index(edge, GS.cind(component + 1)))
+                            .replace(GS.emr_vec(edge, GS.cind(component + 1)))
                             .with(spatial_component.clone());
                     }
                 }
@@ -2433,6 +2441,8 @@ mod tests {
                         .with(W_.d_)
                         .replace(function!(GS.ose, W_.mass_, W_.prop_))
                         .with(W_.prop_)
+                        .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                        .with(Atom::var(W_.prop_).pow((1, 2)))
                 })
                 .collect::<Vec<_>>();
             let expected_production_jets = production_expressions

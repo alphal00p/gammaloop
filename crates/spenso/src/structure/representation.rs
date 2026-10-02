@@ -522,9 +522,12 @@ impl<T: RepName> Representation<T> {
 
     // [allow(clippy::cast_possible_wrap)]
     #[cfg(feature = "shadowing")]
-    /// An atom representing the identity tensor with aind a, and b.
-    /// a is dualized, b is not.
+    /// Construct compact `dot(a(rep), b(rep))` notation from unrepresented
+    /// vector function heads (or vector symbols).
     ///
+    /// This appends the representation to both operands. Inputs which already
+    /// carry a representation or explicit index do not satisfy the precondition;
+    /// applying this method to them would append a second structure argument.
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
             match value {

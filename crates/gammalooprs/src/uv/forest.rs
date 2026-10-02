@@ -201,6 +201,7 @@ impl Forest {
                     term_index,
                     residue_index,
                     numerator: numerator.clone(),
+                    forest_provenance: None,
                 });
             }
         }
@@ -340,7 +341,9 @@ impl Forest {
 
             let integrated = n.data.integrated(graph)?;
             let physical = match n.data.renormalization_scheme() {
-                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                ApproximationType::MUV | ApproximationType::IR => {
+                    integrated.physical_finite_counterterm_atom()
+                }
                 ApproximationType::PolePart => integrated.physical_pole_atom(),
                 scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
             };
@@ -479,6 +482,8 @@ mod tests {
         let scope = Atom::var(symbol!("uv_forest_test::scope"));
         let coordinate = Atom::var(symbol!("uv_forest_test::coordinate"));
         let definition = Arc::new(FnMapEntry {
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
             lhs: function!(family, &scope, parameter),
             rhs: Atom::var(parameter) + &coordinate,
             args: vec![parameter.into()],

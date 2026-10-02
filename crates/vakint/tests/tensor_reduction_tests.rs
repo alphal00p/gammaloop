@@ -99,6 +99,19 @@ fn run_tensor_reduction_tests() {
 }
 
 #[test_log::test]
+fn public_parser_initializes_dot_attributes_before_first_input() {
+    // Parsing is a public entry point and must also work before Vakint::new().
+    let input = vakint_parse!("dot(k(1),k(2))+dot(k(2),k(1))").unwrap();
+    let expected = vakint_parse!(
+        "2*vakint::dot(vakint::k(1),vakint::k(2))",
+        "public_parser_test"
+    )
+    .unwrap();
+    assert_eq!(input, expected);
+    assert_eq!(vakint_parse!("dot(2*k(1),k(2))").unwrap(), expected);
+}
+
+#[test_log::test]
 fn dot_conversion_preserves_factorized_scalar_powers() {
     use vakint::Vakint;
 
@@ -313,6 +326,47 @@ fn loop_normalization_uses_numeric_imaginary_coefficients() {
             let expected = vakint_parse!("1𝑖*𝜋^2").unwrap().pow(-loops);
             assert!((actual - expected).together().is_zero());
         }
+    }
+}
+
+#[test_log::test]
+fn tensor_reduction_preserves_complex_numeric_coefficients() {
+    use symbolica::atom::AtomCore;
+
+    let vakint = get_vakint(VakintSettings {
+        allow_unknown_integrals: false,
+        use_dot_product_notation: true,
+        ..VakintSettings::default()
+    });
+    for coefficient in [
+        "1𝑖",
+        "-1𝑖",
+        "1𝑖/16",
+        "-1𝑖/16",
+        "2𝑖",
+        "3𝑖/16",
+        "1+1𝑖",
+        "1-1𝑖/16",
+        "123456789012345678901234567890𝑖/16",
+    ] {
+        let coefficient = vakint_parse!(coefficient).unwrap();
+        let (_, sanitized, indices) = vakint
+            .vakint
+            .sanitize_user_expressions(&vakint.settings, coefficient.as_view(), false, &[])
+            .unwrap();
+        let round_trip = vakint
+            .vakint
+            .process_form_output(&vakint.settings, sanitized, indices, Default::default())
+            .unwrap();
+        assert_eq!(round_trip, coefficient);
+
+        // Exercise FORM itself as well as the Rust round trip: a parser may
+        // accept malformed products that FORM rejects (such as (*i_/16)).
+        let source = &coefficient * vakint_parse!("k(1,1)*k(1,2)*topo(I1L(muvsq,1))").unwrap();
+        let actual = vakint.tensor_reduce(source.as_view()).unwrap();
+        let expected = coefficient
+            * vakint_parse!("-(2*ε-4)^-1*dot(k(1),k(1))*g(1,2)*topo(I1L(muvsq,1))").unwrap();
+        assert!((actual - expected).together().is_zero());
     }
 }
 

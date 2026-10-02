@@ -17,15 +17,19 @@ use crate::{
         approx::{
             ForestNodeLike, UVCtx,
             integrated::IntegratedCts,
-            local_3d::{FrozenActiveCt, Localizer},
+            local_3d::{
+                FrozenActiveCt, Local3DLoopRescaling, Local3DProjectionPath, Localizer,
+                paths_with_step,
+            },
         },
         marker::{UvMarker, UvOperation},
+        uv_graph::UVE,
     },
 };
 
 use super::{
     branches::{DirectResidueBranches, DirectResidueKey},
-    kernel::{DirectCoordinateFrame, apply_taylor, coordinate_lmb},
+    kernel::{DirectCoordinateFrame, LOCAL_3D_MASS_SCOPE, apply_taylor, coordinate_lmb},
 };
 
 fn extend_coordinate_frames(
@@ -55,6 +59,7 @@ pub(crate) struct DirectSector {
     /// expanded. Descendants retain disjoint frames separately and combine
     /// them only when one enclosing Taylor operation contains both parts.
     pub(crate) coordinate_frames: Vec<DirectCoordinateFrame>,
+    pub(crate) projection_paths: Vec<Local3DProjectionPath>,
     pub(crate) active: DirectResidueBranches,
     pub(crate) frozen_integrands: Integrands,
 }
@@ -79,6 +84,7 @@ impl Neg for DirectSector {
         Self {
             active_subgraph: self.active_subgraph,
             coordinate_frames: self.coordinate_frames,
+            projection_paths: self.projection_paths,
             active: -self.active,
             frozen_integrands: self.frozen_integrands,
         }
@@ -213,6 +219,32 @@ impl Direct3dCts {
         }
     }
 
+    pub(crate) fn projection_paths(&self) -> Vec<Local3DProjectionPath> {
+        match self {
+            Self::Root(_) => Vec::new(),
+            Self::Sectors(sectors) => {
+                sectors
+                    .iter()
+                    // Retain zero sectors for active-mask replay, but do not publish
+                    // a projection history for a branch that contributes no integrand.
+                    .filter(|sector| {
+                        sector.active.iter_keys().any(|(_, integrands)| {
+                            integrands.iter().any(|(residue, atom)| {
+                                !atom.is_zero()
+                                    && sector.frozen_integrands.iter().any(
+                                        |(frozen_residue, frozen)| {
+                                            residue == frozen_residue && !frozen.is_zero()
+                                        },
+                                    )
+                            })
+                        })
+                    })
+                    .flat_map(|sector| sector.projection_paths.iter().cloned())
+                    .collect()
+            }
+        }
+    }
+
     pub(crate) fn map(&self, mut map: impl FnMut(&Atom) -> Result<Atom>) -> Result<Self> {
         match self {
             Self::Root(branches) => Ok(Self::Root(branches.fallible_map(|_, atom| map(atom))?)),
@@ -223,6 +255,7 @@ impl Direct3dCts {
                         Ok(DirectSector {
                             active_subgraph: sector.active_subgraph.clone(),
                             coordinate_frames: sector.coordinate_frames.clone(),
+                            projection_paths: sector.projection_paths.clone(),
                             active: sector.active.fallible_map(|_, atom| map(atom))?,
                             frozen_integrands: sector.frozen_integrands.clone(),
                         })
@@ -290,7 +323,7 @@ impl<'a> Direct3dApproximation<'a> {
         let integrated = (!finite_counterterm.is_zero())
             .then(|| {
                 self.run_integrated(
-                    [(finite_counterterm, given.subgraph())],
+                    &[(&finite_counterterm, given)],
                     given,
                     current,
                     given,
@@ -317,11 +350,17 @@ impl<'a> Direct3dApproximation<'a> {
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
+        if current.renormalization_scheme() == crate::uv::ApproximationType::OS {
+            unimplemented!(
+                "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
+            );
+        }
         let ctx = UVCtx::new(self.graph, self.settings);
         let reduced_subgraph = current.reduced_subgraph(given);
         let sectors = match local {
             Direct3dCts::Root(branches) => vec![(
                 self.graph.empty_subgraph(),
+                Vec::new(),
                 Vec::new(),
                 branches,
                 branches.identity_integrands(),
@@ -332,6 +371,7 @@ impl<'a> Direct3dApproximation<'a> {
                     (
                         sector.active_subgraph.clone(),
                         sector.coordinate_frames.clone(),
+                        sector.projection_paths.clone(),
                         &sector.active,
                         sector.frozen_integrands.clone(),
                     )
@@ -341,12 +381,12 @@ impl<'a> Direct3dApproximation<'a> {
         let next = sectors
             .into_iter()
             .map(
-                |(prior_active_subgraph, prior_frames, active, frozen_integrands)| {
+                |(prior_active_subgraph, prior_frames, prior_paths, active, frozen_integrands)| {
                     let active_subgraph = prior_active_subgraph.union(&reduced_subgraph);
                     // Retain the complete active mask for descendants, but rescale
                     // only the component-local part covered by this path.
                     let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
-                    let coordinate_lmb = coordinate_lmb(
+                    let (canonical_lmb, coordinate_lmb) = coordinate_lmb(
                         &ctx,
                         current,
                         given,
@@ -365,9 +405,19 @@ impl<'a> Direct3dApproximation<'a> {
                     // operations. Transform the complete active CFF, scaling finite
                     // integrated coefficients only when their owners lie in the current
                     // component, and retain the frozen kernel outside the series.
+                    let step = Local3DLoopRescaling::FullSubgraph.projection_step(
+                        &ctx,
+                        current,
+                        given,
+                        &active_subgraph,
+                        Some(&rescaled_subgraph),
+                        &canonical_lmb,
+                        &coordinate_lmb,
+                    );
                     Ok(DirectSector {
                         active_subgraph,
                         coordinate_frames,
+                        projection_paths: paths_with_step(&prior_paths, &step),
                         active: -apply_taylor(
                             &ctx,
                             self.localizer.orientation,
@@ -394,31 +444,55 @@ impl<'a> Direct3dApproximation<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn run_integrated<'b, S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
+    pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
         &mut self,
-        integrated: impl IntoIterator<Item = (Atom, &'b SuBitGraph)>,
+        finite_counterterms: &[(&Atom, &I)],
         integrated_node: &I,
         current: &S,
         given: &S,
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
-        // Preserve each completed component's mass before multiplying coefficients.
-        // A disjoint Taylor operation leaves it fixed; an enclosing operation gives
-        // it the same hard weight as the component's loop momenta. The one-argument
-        // mUV head has the ordinary mass's attributes and no Taylor-dependent payload.
-        let finite = integrated
-            .into_iter()
-            .fold(Atom::one(), |product, (factor, owner)| {
-                product
-                    * factor
+        // Each finite effective vertex retains its connected source owner.
+        // Equal masses in disjoint integrated prefixes must remain distinct
+        // until an enclosing operation contains their respective components.
+        let finite_counterterm =
+            finite_counterterms
+                .iter()
+                .fold(Atom::one(), |product, (coefficient, component)| {
+                    let mass_scope =
+                        function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);
+                    // Preserve each completed component's vacuum mass before multiplying
+                    // coefficients. A disjoint Taylor operation leaves it fixed;
+                    // an enclosing operation gives it the same hard weight as
+                    // the component's loop momenta. The one-argument mUV head
+                    // retains the ordinary mass attributes and no Taylor-dependent
+                    // payload.
+                    let mut coefficient = coefficient
                         .replace(GS.m_uv_vacuum)
-                        .with(function!(GS.m_uv_vacuum, owner.symbol()))
-            });
-        let (active, frozen_integrands) = self.localize_integrated(&finite, integrated_node)?;
+                        .with(function!(GS.m_uv_vacuum, component.subgraph().symbol()));
+                    let mut masses = Vec::new();
+                    for (pair, _, edge) in self.graph.iter_edges_of(component.subgraph()) {
+                        let mass = edge.data.mass_atom();
+                        if pair.is_paired() && !mass.is_zero() && !masses.contains(&mass) {
+                            // The soft jet holds scalar mass logarithms fixed.
+                            // Only algebraic mass factors carry the effective
+                            // vertex's engineering weight in the hard-dual chart.
+                            coefficient = coefficient
+                                .replace(mass.clone())
+                                .max_level(0)
+                                .with(&mass * &mass_scope);
+                            masses.push(mass);
+                        }
+                    }
+                    product * coefficient
+                });
+        let (active, frozen_integrands) =
+            self.localize_integrated(&finite_counterterm, integrated_node)?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
-        let coordinate_lmb = coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
+        let (canonical_lmb, coordinate_lmb) =
+            coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
         let active = -apply_taylor(
             &ctx,
             self.localizer.orientation,
@@ -428,8 +502,18 @@ impl<'a> Direct3dApproximation<'a> {
             &coordinate_lmb,
             &active,
         )?;
+        let step = Local3DLoopRescaling::ReducedSubgraph.projection_step(
+            &ctx,
+            current,
+            given,
+            &active_subgraph,
+            Some(&active_subgraph),
+            &canonical_lmb,
+            &coordinate_lmb,
+        );
         let sector = DirectSector {
             active_subgraph: active_subgraph.clone(),
+            projection_paths: paths_with_step(&[], &step),
             coordinate_frames: vec![DirectCoordinateFrame {
                 active_subgraph,
                 lmb: coordinate_lmb,

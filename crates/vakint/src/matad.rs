@@ -373,7 +373,7 @@ impl Vakint {
         let vakint_to_matad_edge_map = match integral_name.as_str().split("_pinch_").next().unwrap()
         {
             "I1L" => vec![1],
-            "I2L" => vec![2, 3, 1],
+            "I2L" | "I2L_MM0" | "I2L_M00" => vec![2, 3, 1],
             "I3L" => vec![4, 5, 6, 1, 2, 3],
             _ => {
                 return Err(VakintError::InvalidGenericExpression(format!(
@@ -505,10 +505,18 @@ impl Vakint {
             })
             .collect::<Vec<_>>();
 
+        let masses = integral_specs.get_propagator_property_list("mUVsq_");
         let integral_string = powers
             .iter()
             .zip(vakint_to_matad_edge_map)
-            .map(|(pwr, matag_edge_index)| format!("s{}m^{}", matag_edge_index, pwr))
+            .enumerate()
+            .map(|(index, (power, matad_edge_index))| {
+                if masses.get(&(index + 1)).is_some_and(Atom::is_zero) {
+                    format!("(p{matad_edge_index}.p{matad_edge_index})^({})", -power)
+                } else {
+                    format!("s{matad_edge_index}m^{power}")
+                }
+            })
             .collect::<Vec<_>>()
             .join("*");
 

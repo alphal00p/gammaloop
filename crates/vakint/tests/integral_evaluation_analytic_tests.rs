@@ -258,6 +258,67 @@ fn analytic_backends_reject_unavailable_epsilon_depth() {
 }
 
 #[test_log::test]
+fn partly_massless_sunsets_match_independent_gamma_integrals() {
+    use symbolica::domains::float::RealLike;
+
+    let vakint = get_vakint(VakintSettings {
+        number_of_terms_in_epsilon_expansion: 4,
+        integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+        evaluation_order: EvaluationOrder::matad_only(None),
+        ..VakintSettings::default()
+    });
+    let tadpole = vakint
+        .evaluate(
+            vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,2))")
+                .unwrap()
+                .as_view(),
+        )
+        .unwrap();
+    // Independent Schwinger-parameter integration gives, at D=4-2*epsilon,
+    // I_MM0(2,2,1)/T_2^2 = -epsilon^2/[x(1-epsilon)(1+2*epsilon)],
+    // I_M00(3,1,1)/T_2^2 = -epsilon*Gamma(1-epsilon)*Gamma(1+2*epsilon)
+    //                       /[2*x*(1-epsilon)*Gamma(1+epsilon)].
+    // Here x=M^2; the common two-loop normalization cancels, and the minus
+    // is the Wick factor for five denominators. The second Gamma ratio is
+    // 1+pi^2*epsilon^2/3+O(epsilon^3), sufficient through O(epsilon).
+    let parameters = vakint.params_from_f64(&HashMap::from_iter([
+        ("muvsq".into(), 4.0),
+        ("mursq".into(), 3.0),
+    ]));
+    for (family, powers, ratio, first_power) in [
+        ("I2L_MM0", "2,2,1", "-ε^2/(muvsq*(1-ε)*(1+2*ε))", 0),
+        ("I2L_M00", "3,1,1", "-ε*(1+𝜋^2*ε^2/3)/(2*muvsq*(1-ε))", -1),
+    ] {
+        let input = vakint_parse!(format!("topo({family}(muvsq,{powers}))")).unwrap();
+        let actual = vakint.evaluate(input.as_view()).unwrap();
+        let reference = (tadpole.pow(2) * vakint_parse!(ratio).unwrap())
+            .series(vakint::vakint_symbol!("ε"), Atom::Zero, Rational::from(1))
+            .unwrap()
+            .to_atom();
+        let (actual, _) = vakint
+            .numerical_evaluation(actual.as_view(), &parameters, &HashMap::default(), None)
+            .unwrap();
+        let (reference, _) = vakint
+            .numerical_evaluation(reference.as_view(), &parameters, &HashMap::default(), None)
+            .unwrap();
+        for power in -2..=1 {
+            let actual = actual.get_epsilon_coefficient(power);
+            let expected = reference.get_epsilon_coefficient(power);
+            assert!(
+                (actual.re.to_f64() - expected.re.to_f64()).abs() < 1e-11,
+                "{family} differs at epsilon^{power}: {actual} versus {expected}"
+            );
+            assert!((actual.im.to_f64() - expected.im.to_f64()).abs() < 1e-11);
+            if power < first_power {
+                assert!(actual.re.to_f64().abs() < 1e-11 && actual.im.to_f64().abs() < 1e-11);
+            }
+        }
+        let leading = actual.get_epsilon_coefficient(first_power);
+        assert!(leading.re.to_f64().abs() + leading.im.to_f64().abs() > 1e-5);
+    }
+}
+
+#[test_log::test]
 fn test_integrate_1l_a() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,

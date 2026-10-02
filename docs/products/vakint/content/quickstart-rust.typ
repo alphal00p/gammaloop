@@ -15,7 +15,7 @@ keeping matching policy and expression ownership in Rust.
 
 == Create a Rust project
 
-Use Rust 1.89 or newer:
+Use Rust 1.96 or newer:
 
 // docs-example: syntax
 ```sh
@@ -23,8 +23,8 @@ cargo new vakint-quickstart
 cd vakint-quickstart
 cargo add vakint \
   --git https://github.com/alphal00p/gammaloop.git \
-  --rev 6a09acd2a310b40332e5c22042a468bc18876ce5
-cargo add symbolica@3.0.0 --no-default-features
+  --rev 875114f143442b543d4795b5c29586bc6f40f2e6
+cargo add symbolica@3.0.1 --no-default-features
 ```
 
 Replace `src/main.rs` with:

@@ -314,6 +314,79 @@ fn parse_trace_materializes_closed_links() {
 }
 
 #[test]
+fn trace_projectors_preserve_exposed_slots_and_close_with_metrics() {
+    use crate::{antisym, sym};
+
+    let trace_rep = Lorentz {}.new_rep(4);
+    let external_rep = mink4();
+    let factors = [
+        (
+            tensor_symbol!(projected_trace_f),
+            slot!(external_rep, a).to_atom(),
+        ),
+        (
+            tensor_symbol!(projected_trace_g),
+            slot!(external_rep, b).to_atom(),
+        ),
+        (
+            tensor_symbol!(projected_trace_h),
+            slot!(external_rep, c).to_atom(),
+        ),
+        (
+            tensor_symbol!(projected_trace_j),
+            slot!(external_rep, d).to_atom(),
+        ),
+    ]
+    .map(|(name, slot)| chain_factor_with_external(name, slot));
+    let traces = [
+        trace!(&trace_rep, sym!(; factors.clone())),
+        trace!(
+            &trace_rep,
+            factors[0].clone(),
+            antisym!(; factors[1..].iter().cloned())
+        ),
+    ];
+    let metrics = function!(
+        ETS.metric,
+        slot!(external_rep, a).to_atom(),
+        slot!(external_rep, b).to_atom()
+    ) * function!(
+        ETS.metric,
+        slot!(external_rep, c).to_atom(),
+        slot!(external_rep, d).to_atom()
+    );
+    let scale = (Atom::var(symbol!("trace_scale_x")) + Atom::num(2))
+        * (Atom::var(symbol!("trace_scale_y")) + Atom::num(3));
+
+    for settings in [
+        ParseSettings::default(),
+        opaque_fast_settings(),
+        opaque_expanded_settings(),
+    ] {
+        for trace in &traces {
+            let open = (scale.clone() * trace)
+                .parse_to_atom_net::<AbstractIndex>(&settings)
+                .unwrap();
+            assert_eq!(open.state, NetworkState::SelfDualTensor);
+            assert_eq!(open.graph.dangling_indices().len(), 4);
+            if matches!(settings.shorthand_parsing, ShorthandParsing::Opaque { .. }) {
+                assert_eq!(
+                    open.graph.n_nodes(),
+                    3,
+                    "the coefficient multiplies one opaque trace leaf"
+                );
+            }
+
+            let closed = (Atom::num(1) + scale.clone() * trace * &metrics)
+                .parse_to_atom_net::<AbstractIndex>(&settings)
+                .unwrap();
+            assert!(closed.state.is_scalar());
+            assert!(closed.graph.dangling_indices().is_empty());
+        }
+    }
+}
+
+#[test]
 fn parse_scalar_prefixed_trace_keeps_scalar_outside_trace() {
     let rep = mink4();
     let expr = Atom::num(-2) * trace!(&rep, chain_factor(tensor_symbol!(parse_prefixed_trace_f)));
@@ -977,4 +1050,98 @@ fn parse_chain_materializes_schoonschip_factor_argument() {
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
     assert_eq!(parsed.store.tensors.len(), 2);
+}
+
+#[test]
+fn scalar_sum_parsing_preserves_factorized_coefficients() {
+    let x = Atom::var(symbol!("sum_parse_x"));
+    let y = Atom::var(symbol!("sum_parse_y"));
+    let expression = Atom::add_many(
+        (1..65).map(|i| function!(symbol!("sum_parse_f"), i) * (&x + i).pow(2) / (&y + i)),
+    );
+
+    for precontract_scalars in [true, false] {
+        let settings = ParseSettings {
+            precontract_scalars,
+            ..Default::default()
+        };
+        let mut parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&settings)
+            .unwrap();
+        assert_eq!(parsed.state, NetworkState::PureScalar);
+        if precontract_scalars {
+            assert_eq!(parsed.graph.n_nodes(), 1);
+            assert_eq!(parsed.store.scalar, vec![expression.clone()]);
+        }
+        parsed.simple_execute();
+        let actual: Atom = parsed.result_scalar().unwrap().into();
+        assert_eq!(actual, expression);
+    }
+}
+
+#[test]
+fn scalar_sum_parsing_batches_coefficients_alongside_tensor_contractions() {
+    let index = slot!(mink4(), sum_parse_i).to_atom();
+    let tensors = vector!(sum_parse_p, &index) * vector!(sum_parse_q, &index)
+        + vector!(sum_parse_r, &index) * vector!(sum_parse_s, &index);
+    let expected_tensors = Atom::add_many((0..4).map(|component| {
+        let index = function!(AIND_SYMBOLS.cind, component);
+        let sign = if component == 0 { 1 } else { -1 };
+        Atom::num(sign) * vector!(sum_parse_p, &index) * vector!(sum_parse_q, &index)
+            + Atom::num(sign) * vector!(sum_parse_r, &index) * vector!(sum_parse_s, &index)
+    }));
+    let coefficients =
+        Atom::add_many((1..65).map(|i| function!(symbol!("sum_parse_coefficient"), i)));
+
+    // Exercise both a mixed sum and the path with no pure scalar summands.
+    for coefficients in [Atom::Zero, coefficients] {
+        let expression = &tensors + &coefficients;
+        let mut parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(parsed.state, NetworkState::Scalar);
+        if !coefficients.is_zero() {
+            assert!(parsed.store.scalar.contains(&coefficients));
+        }
+        parsed.simple_execute();
+        let actual: Atom = parsed.result_scalar().unwrap().into();
+        assert_eq!(actual, &expected_tensors + coefficients);
+    }
+}
+
+#[test]
+fn scalar_sum_parsing_still_rejects_incompatible_tensor_summands() {
+    let expression = Atom::var(symbol!("sum_parse_incompatible"))
+        + vector!(sum_parse_open, slot!(mink4(), sum_parse_i));
+    for precontract_scalars in [true, false] {
+        let settings = ParseSettings {
+            precontract_scalars,
+            ..Default::default()
+        };
+        assert!(matches!(
+            expression.parse_to_atom_net::<AbstractIndex>(&settings),
+            Err(TensorNetworkError::IncompatibleSummand(_))
+        ));
+    }
+
+    // Structure discovery deliberately skips compatibility checks on later terms.
+    let settings = ParseSettings {
+        take_first_term_from_sum: true,
+        ..Default::default()
+    };
+    let parsed = expression
+        .parse_to_atom_net::<AbstractIndex>(&settings)
+        .unwrap();
+    let AtomView::Add(sum) = expression.as_view() else {
+        unreachable!()
+    };
+    let first = sum.iter().next().unwrap();
+    let expected = first
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(parsed.state, expected.state);
+    assert_eq!(
+        parsed.graph.dangling_indices(),
+        expected.graph.dangling_indices()
+    );
 }

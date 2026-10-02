@@ -108,10 +108,11 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    version="3.0.0"
-    expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
-      for package in symbolica numerica graphica; do
+      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
+        package="${specification%:*}"
+        version="${specification#*:}"
+        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
           echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
