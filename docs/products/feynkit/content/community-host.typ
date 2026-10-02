@@ -99,6 +99,10 @@ The #link("guides/showcases/")[showcase gallery] runs in Marimo's browser Python
 The repository's combined host packages Symbolica, FeynKit, Spenso, and Idenso into one
 WebAssembly wheel. Its `wasm` feature selects portable numeric backends; its default
 `native` feature retains the desktop backends. Browser Symbolica runs without a license key.
+The browser wheel uses Zstandard level 22 inside the wheel's ZIP archive. Installing
+it requires Python 3.14 with Zstandard support, as provided by the pinned Pyodide
+runtime. Its ABI3 tag describes extension compatibility, not archive decompression
+support in older Python installers.
 
 The wheel command uses the checkout's pinned Emscripten Rust toolchain and provisions the
 matching Pyodide build environment through cibuildwheel. Then export the executable
