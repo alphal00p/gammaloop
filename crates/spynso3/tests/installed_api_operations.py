@@ -25,6 +25,30 @@ class TensorOperationsTests(unittest.TestCase):
         )
         return sp.Tensor.dense(self.A(self.rep, self.rep), values)
 
+    def test_expression_products_preserve_tensor_interfaces(self):
+        vector = self.A(self.rep)("i")
+        zero = sp.TensorExpression(0, structure=vector.structure)
+        for tensor in (vector, zero):
+            for result in (self.x * tensor, tensor * self.x, self.x.__mul__(tensor)):
+                with self.subTest(tensor=tensor, result=result):
+                    self.assertIsInstance(result, sp.TensorExpression)
+                    self.assertEqual(result.axes, tensor.axes)
+                    self.assertEqual(
+                        result.to_expression(), self.x * tensor.to_expression()
+                    )
+        raw = vector.to_expression()
+        self.assertEqual(raw.__mul__(vector), vector * vector)
+
+    def test_tensor_product_supports_the_generic_extension_protocol(self):
+        class Product:
+            def __symbolica_rmul__(self, left: Expression) -> tuple[Expression, str]:
+                return left, "product"
+
+        tensor = self.A(self.rep)
+        result = tensor * Product()
+        self.assertIs(result[0], tensor)
+        self.assertEqual(result[1], "product")
+
     def test_gamma_product_prefers_the_unresolved_spinor_partner(self):
         spinor, vector = sp.Representation.bis(4), sp.Representation.mink(4)
         Q = sp.TensorName.vector("preferred_ports::Q")(spinor)

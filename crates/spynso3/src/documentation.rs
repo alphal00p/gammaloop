@@ -404,6 +404,33 @@ Examples
 >>> A = TensorName("M")(space, space)
 >>> result = A - A"###
     };
+    ("TensorExpression.__mul_extension__") => {
+        r##"Multiply by an extension operand with its own multiplication result type.
+
+Parameters
+----------
+rhs : extension operand
+    Implements ``__symbolica_rmul__(left)``. The tensor is passed unchanged
+    as the left operand, so the extension can access its tensor structure.
+
+Returns
+-------
+extension result
+    The result declared by the extension's multiplication method.
+
+Examples
+--------
+>>> from symbolica import Expression
+>>> from symbolica.community.tensor import Representation, TensorName
+>>> class Product:
+...     def __symbolica_rmul__(self, left: Expression) -> tuple[Expression, str]:
+...         return left, "product"
+>>> vector = TensorName.vector("v")(Representation.euc(2))
+>>> result, label = vector * Product()
+>>> label
+'product'
+"##
+    };
     ("TensorExpression.__mul__") => {
         r###"Multiply tensors, contracting unambiguous compatible axes.
 
