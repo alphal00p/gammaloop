@@ -6845,7 +6845,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6874,7 +6877,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6903,7 +6909,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6932,7 +6941,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples

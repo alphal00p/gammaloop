@@ -2116,6 +2116,9 @@ impl SymbolicTensor<PartialStructure> {
             .validate_rewrite(&[self, right])
     }
 
+    /// Choose explicit contractions first, then established matrix composition.
+    /// Other pairings maximize the number of contractions and use the number of
+    /// unresolved-unresolved pairs to break ties. Equally preferred plans are ambiguous.
     pub fn product_plan(
         &self,
         right: &SymbolicTensor<PartialStructure>,
@@ -2174,46 +2177,71 @@ impl SymbolicTensor<PartialStructure> {
                 return Ok(ProductPlan::Compose(left_channel, right_channel));
             }
         }
-        // Augmenting paths find a maximum set of simultaneous contractions. Removing
-        // any selected edge must lower its size; otherwise a second pairing exists.
-        let maximum_matching = |excluded: Option<PortPair>| {
+        // Minimum-cost augmenting paths maximize simultaneous contractions first,
+        // then prefer unresolved-unresolved pairs. Matched edges run backwards so
+        // a later augmentation can revise an earlier choice without losing that priority.
+        let pair_cost = |pair: PortPair| {
+            isize::from(!matches!(
+                (left_slots[pair.left].aind, right_slots[pair.right].aind),
+                (PartialIndex::Open(_), PartialIndex::Open(_))
+            ))
+        };
+        let best_matching = |excluded: Option<PortPair>| {
             let mut left_matches: Vec<Option<usize>> = vec![None; left_slots.len()];
             let mut right_matches: Vec<Option<usize>> = vec![None; right_slots.len()];
-            for start in 0..left_slots.len() {
+            let right_offset = left_slots.len();
+            loop {
                 let mut predecessors = vec![None; right_slots.len()];
-                let mut visited = vec![false; left_slots.len()];
-                visited[start] = true;
-                let mut queue = vec![start];
-                let mut cursor = 0;
-                'augment: while cursor < queue.len() {
-                    let current = queue[cursor];
-                    cursor += 1;
-                    for pair in remaining
-                        .iter()
-                        .filter(|pair| pair.left == current && Some(**pair) != excluded)
-                    {
-                        if predecessors[pair.right].is_some() {
-                            continue;
-                        }
-                        predecessors[pair.right] = Some(current);
-                        if let Some(next) = right_matches[pair.right] {
-                            if !visited[next] {
-                                visited[next] = true;
-                                queue.push(next);
-                            }
+                let mut distances = vec![None; left_slots.len() + right_slots.len()];
+                for (position, matched) in left_matches.iter().enumerate() {
+                    if matched.is_none() {
+                        distances[position] = Some(0isize);
+                    }
+                }
+                // Reverse edges can have negative costs, so use Bellman-Ford rather
+                // than a breadth-first search. Optimal residual matchings have no negative cycles.
+                for _ in 0..distances.len() {
+                    let mut changed = false;
+                    for &pair in remaining.iter().filter(|&&pair| Some(pair) != excluded) {
+                        let (from, to, cost) = if left_matches[pair.left] == Some(pair.right) {
+                            (right_offset + pair.right, pair.left, -pair_cost(pair))
                         } else {
-                            let mut target = pair.right;
-                            loop {
-                                let source = predecessors[target].unwrap();
-                                let previous = left_matches[source].replace(target);
-                                right_matches[target] = Some(source);
-                                match previous {
-                                    Some(previous) => target = previous,
-                                    None => break,
-                                }
+                            (pair.left, right_offset + pair.right, pair_cost(pair))
+                        };
+                        let Some(distance) = distances[from] else {
+                            continue;
+                        };
+                        let distance = distance + cost;
+                        if distances[to].is_none_or(|current| distance < current) {
+                            distances[to] = Some(distance);
+                            if to >= right_offset {
+                                predecessors[pair.right] = Some(pair.left);
                             }
-                            break 'augment;
+                            changed = true;
                         }
+                    }
+                    if !changed {
+                        break;
+                    }
+                }
+                let target = right_matches
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, matched)| matched.is_none())
+                    .filter_map(|(position, _)| {
+                        distances[right_offset + position].map(|cost| (position, cost))
+                    })
+                    .min_by_key(|&(_, cost)| cost);
+                let Some((mut target, _)) = target else {
+                    break;
+                };
+                loop {
+                    let source = predecessors[target].unwrap();
+                    let previous = left_matches[source].replace(target);
+                    right_matches[target] = Some(source);
+                    match previous {
+                        Some(previous) => target = previous,
+                        None => break,
                     }
                 }
             }
@@ -2223,10 +2251,17 @@ impl SymbolicTensor<PartialStructure> {
                 .filter_map(|(right, left)| left.map(|left| PortPair { left, right }))
                 .collect::<Vec<_>>()
         };
-        let unmatched_pairs = maximum_matching(None);
+        let score = |pairs: &[PortPair]| {
+            (
+                pairs.len(),
+                pairs.iter().filter(|&&pair| pair_cost(pair) == 0).count(),
+            )
+        };
+        let unmatched_pairs = best_matching(None);
+        // A competing plan must tie on both contraction count and open-pair preference.
         if unmatched_pairs
             .iter()
-            .any(|&pair| maximum_matching(Some(pair)).len() == unmatched_pairs.len())
+            .any(|&pair| score(&best_matching(Some(pair))) == score(&unmatched_pairs))
         {
             return Err(TensorCompositionError::Ambiguous(remaining));
         }
@@ -3212,6 +3247,180 @@ mod tests {
                 .dangling_indices()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn unresolved_pairs_take_precedence_over_unmatched_named_ports() {
+        let named = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(114)));
+        let open = rep().slot(PartialIndex::open(0));
+        let vector = partial_tensor(
+            SPENSO_TAG.tensor_symbol("preferred_unresolved_vector"),
+            &[open],
+            &[open],
+        );
+        for ports in [[named, open], [open, named]] {
+            let matrix = partial_tensor(
+                SPENSO_TAG.tensor_symbol("preferred_unresolved_matrix"),
+                &ports,
+                &ports,
+            );
+            let open_position = ports.iter().position(|port| *port == open).unwrap();
+            for (left, right, expected) in [
+                (
+                    &vector,
+                    &matrix,
+                    PortPair {
+                        left: 0,
+                        right: open_position,
+                    },
+                ),
+                (
+                    &matrix,
+                    &vector,
+                    PortPair {
+                        left: open_position,
+                        right: 0,
+                    },
+                ),
+            ] {
+                assert!(matches!(
+                    left.product_plan(right),
+                    Ok(ProductPlan::Contract(pairs)) if pairs == [expected]
+                ));
+                let result = left.multiply(right).unwrap();
+                assert_eq!(result.structure.logical_slots(), vec![named]);
+                assert_eq!(
+                    result
+                        .expression
+                        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                        .unwrap()
+                        .graph
+                        .dangling_indices()
+                        .len(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unresolved_preference_preserves_ambiguity_between_open_partners() {
+        let named = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(115)));
+        let open = rep().slot(PartialIndex::open(0));
+        let vector = partial_tensor(
+            SPENSO_TAG.tensor_symbol("equally_preferred_vector"),
+            &[open],
+            &[open],
+        );
+        let ports = [named, open, rep().slot(PartialIndex::open(1))];
+        let tensor = partial_tensor(
+            SPENSO_TAG.tensor_symbol("equally_preferred_tensor"),
+            &ports,
+            &ports,
+        );
+        for (left, right) in [(&vector, &tensor), (&tensor, &vector)] {
+            assert!(matches!(
+                left.multiply(right),
+                Err(TensorCompositionError::Ambiguous(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn unresolved_pairing_matches_exhaustive_rank_three_plans() {
+        fn enumerate(
+            position: usize,
+            candidates: &[PortPair],
+            pairs: &mut Vec<PortPair>,
+            plans: &mut Vec<Vec<PortPair>>,
+        ) {
+            if position == 3 {
+                plans.push(pairs.clone());
+                return;
+            }
+            enumerate(position + 1, candidates, pairs, plans);
+            for &pair in candidates.iter().filter(|pair| pair.left == position) {
+                if pairs.iter().any(|existing| existing.right == pair.right) {
+                    continue;
+                }
+                pairs.push(pair);
+                enumerate(position + 1, candidates, pairs, plans);
+                pairs.pop();
+            }
+        }
+
+        let ports = |mask, offset| {
+            (0..3)
+                .map(|position| {
+                    let index = if mask & (1 << position) != 0 {
+                        PartialIndex::open(position)
+                    } else {
+                        PartialIndex::Explicit(AbstractIndex::Normal(position + offset))
+                    };
+                    rep().slot(index)
+                })
+                .collect::<Vec<_>>()
+        };
+        for left_mask in 0..8 {
+            for right_mask in 0..8 {
+                for offset in [0, 3] {
+                    let left_ports = ports(left_mask, 0);
+                    let right_ports = ports(right_mask, offset);
+                    let left = partial_tensor(
+                        SPENSO_TAG.tensor_symbol("exhaustive_preference_left"),
+                        &left_ports,
+                        &left_ports,
+                    );
+                    let right = partial_tensor(
+                        SPENSO_TAG.tensor_symbol("exhaustive_preference_right"),
+                        &right_ports,
+                        &right_ports,
+                    );
+                    let candidates = compatible_pairs(&left.structure, &right.structure);
+                    let named = candidates
+                        .iter()
+                        .filter(|pair| {
+                            matches!(
+                                (left_ports[pair.left].aind, right_ports[pair.right].aind),
+                                (PartialIndex::Explicit(_), PartialIndex::Explicit(_))
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut plans = Vec::new();
+                    enumerate(0, &candidates, &mut Vec::new(), &mut plans);
+                    plans.retain(|plan| named.iter().all(|pair| plan.contains(pair)));
+                    let score = |pairs: &[PortPair]| {
+                        (
+                            pairs.len(),
+                            pairs
+                                .iter()
+                                .filter(|pair| {
+                                    matches!(
+                                        (left_ports[pair.left].aind, right_ports[pair.right].aind),
+                                        (PartialIndex::Open(_), PartialIndex::Open(_))
+                                    )
+                                })
+                                .count(),
+                        )
+                    };
+                    let best = plans.iter().map(|plan| score(plan)).max().unwrap();
+                    let preferred = plans
+                        .iter()
+                        .filter(|plan| score(plan) == best)
+                        .collect::<Vec<_>>();
+                    match left.product_plan(&right) {
+                        Err(TensorCompositionError::Ambiguous(_)) => assert!(preferred.len() > 1),
+                        Ok(ProductPlan::Outer) => assert_eq!(best, (0, 0)),
+                        Ok(ProductPlan::Contract(actual)) => {
+                            assert_eq!(preferred.len(), 1);
+                            assert_eq!(actual.len(), preferred[0].len());
+                            assert!(actual.iter().all(|pair| preferred[0].contains(pair)));
+                        }
+                        plan => panic!("unexpected plan {plan:?}"),
+                    }
+                }
+            }
+        }
     }
 
     #[test]
