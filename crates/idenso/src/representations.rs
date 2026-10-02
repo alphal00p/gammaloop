@@ -130,7 +130,6 @@ pub fn initialize() {
     let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
     let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
     let _ = RS.a_;
-    let _ = MS.dummy;
     let _ = AGS.gamma;
     let _ = *crate::epsilon::EPSILON_SYMBOL;
     let _ = ETS.metric;

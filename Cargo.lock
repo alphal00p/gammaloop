@@ -153,7 +153,6 @@ name = "alphal00p-docs-python-exporter"
 version = "0.1.0"
 dependencies = [
  "gammaloop-api",
- "idenso",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
@@ -2827,6 +2826,8 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.12",
+ "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "blake3",
@@ -2838,13 +2839,13 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
- "pyo3",
- "pyo3-stub-gen",
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
