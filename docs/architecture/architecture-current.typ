@@ -625,7 +625,9 @@ execution, direct inspection and event metadata. Generated LMB basis IDs remain 
 identifiers, and physical cut IDs remain independent. Explicit generated `lmb(...)` selectors
 match admissible bases by exact ordered edges. Automatic and named selectors expand through
 this same catalogue; display never implements a second enumeration algorithm. Production
-`auto:surfaces` currently supplies optimized-LMB coverage without automatic surface discovery.
+`auto:surfaces` currently supplies optimized-LMB coverage without automatic E-surface or
+Fermi target discovery. Both target types use explicit named channels and the common
+`power` and `b * e_cm` radial settings.
 
 ==== Estimator and statistics
 
@@ -680,6 +682,31 @@ affine physical-to-raw pullback and determinant. Foreign inverses prepare the ge
 own supplied point. Fixed signed velocities are routed before radial scaling to avoid subtracting
 large already-scaled host-null components.
 
+Explicit amplitude `fermi(edge)` blocks reuse `SurfaceRadialMap` in the three-dimensional
+momentum of that parent-basis edge. Eligibility comes from generated active thermal-edge
+metadata, including surviving thermal counterterms; a model particle's chemical potential
+alone does not establish eligibility. The metadata changes the generated-state layout, so
+older integrands must be regenerated. Numeric masses and chemical potentials are resolved
+at warm-up. A regular shell requires `sign_edge * mu > abs(m)` and has
+`p_F = sqrt((abs(mu)-abs(m))*(abs(mu)+abs(m)))`. Production binds one cached proposal for
+the union over all runtime-selected physical orientations, for sampled and summed execution
+alike. A targeted diagnostic binding can select a single orientation. If the union has no
+shell, including zero chemical potential and absent or onset cases, the map uses the
+normalized full-support radial fallback. The catalogue and dimension stay fixed across
+these decisions. The chart targets the raw edge-momentum shell. Retained thermal counterterm
+factors establish eligibility but do not supply the pullback of their `rstar_sample`
+projection surfaces.
+
+Independent Fermi blocks compose with `product` and ordinary complements, retaining the
+existing affine pullback, exact inverse densities and raw-frame partition. At a regular
+intersection with independent energy normals `h1,h2`, power two gives a product density
+proportional to `1/sqrt(abs(h1*h2))`; the corresponding weight of a local
+`1/(abs(h1)+abs(h2))` corner is bounded. This local argument does not certify dependent
+shells, tangencies or other singular limits. Automatic discovery, temperature-dependent
+radial widths, physical-cut hosts and general joint Fermi geometry are not implemented.
+Zero-temperature thermal derivatives use the separate Fermi-surface localization described
+above; the sampling map does not supply their distributional terms.
+
 A physical-cut block may fit `radial_profile = "lu_h"` to the runtime LU h-function. It samples
 `t = R/r` through a normalized log-logistic plus broad proposal, using a safeguarded inverse CDF
 in log(t). Its derivative is the proposal's actual derivative, not an assumed inverse physical h.
@@ -712,16 +739,18 @@ its inverse or Jacobian. Existing blocks/context/partition owners provide that e
 ==== Warm-up, precision and physical centers
 
 Each graph's runtime-only sampling setup owns its catalogue, compiled programs and precision
-bridges. Warm-up runs after numeric masses and improved external kinematics are ready and
-publishes a complete valid binding transactionally. Settings mutation invalidates it. Workers
+bridges. Warm-up runs after numeric masses, chemical potentials and improved external kinematics
+are ready and publishes a complete valid binding transactionally. Settings mutation invalidates
+it. Workers
 share immutable programs and clone mutable evaluator buffers; maps and score programs are not
 compiled per point. Eager dual evaluators differentiate only requested active columns. Prepared
 parameters remain fixed; a singular derivative in an inactive column cannot contaminate an
 otherwise valid active Jacobian.
 
 The source policy is fixed at warm-up for the complete integrand epoch. It selects Quad when
-the catalogue, requested accuracy and represented inputs permit it, otherwise fixed 256-bit or
-Arb precision. It does not switch maps based on a point's physical stability. Each source draw
+the catalogue, requested accuracy and represented inputs, including Fermi chemical potentials,
+permit it, otherwise fixed 256-bit or Arb precision. It does not switch maps based on a point's
+physical stability. Each source draw
 retains its complete mapped points, `J*w` factors, support decisions and selected-host records in
 canonical storage. Physical Double/Quad/Arb attempts materialize independently from that anchor;
 they never redraw maps, choose another support branch or recompute the partition. Matching only

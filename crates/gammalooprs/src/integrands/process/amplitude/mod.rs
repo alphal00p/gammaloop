@@ -21,7 +21,7 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -74,7 +74,7 @@ use crate::{
     },
     settings::{
         GlobalSettings, RuntimeSettings,
-        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
+        global::{CompilationOptionsSnapshot, FrozenCompilationMode, MediumMode},
         runtime::{DiscreteGraphSamplingType, ParameterizationSettings, SamplingSettings},
     },
     subtraction::{
@@ -106,6 +106,8 @@ pub struct AmplitudeGraphTerm {
     pub original_integrand: EvaluatorStack,
     pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    /// Surviving medium factors, in physical edge IDs and production orientation order.
+    pub(crate) thermal_edges: TiVec<OrientationID, Vec<EdgeIndex>>,
     production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
@@ -117,7 +119,7 @@ pub struct AmplitudeGraphTerm {
     pub graph: Graph,
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder,
-    pub real_mass_vec: Option<EdgeVec<Option<F<f64>>>>,
+    pub mass_vec: Option<EdgeVec<Option<Complex<F<f64>>>>>,
     pub master_external_signature: SignatureLike<ExternalIndex>,
     pub master_external_pdgs: Vec<isize>,
 }
@@ -367,6 +369,12 @@ impl AmplitudeGraphTerm {
         stats.add_evaluator_build_timings(evaluator_timings);
         stats.evaluator_count += original_integrand.generic_evaluator_count();
 
+        // Inspect the same factorized roots as the evaluators. UV-reduced factors
+        // have already become vacuum constants and must not create Fermi targets.
+        let mut thermal_integrands = vec![(
+            &graph.derived_data.all_mighty_integrand,
+            graph.derived_data.all_mighty_numerators.as_slice(),
+        )];
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let resolved = graph.derived_data.resolved_threshold_counterterms.as_ref();
         let include_threshold_metadata = resolved.is_some_and(|resolved| {
@@ -413,6 +421,11 @@ impl AmplitudeGraphTerm {
                     return Err(eyre!("Generation interrupted by user"));
                 }
                 let masked_counterterm = if active_mask[raised_esurface_id] {
+                    thermal_integrands.extend(
+                        ct.parametric
+                            .iter()
+                            .map(|(_, atom)| (atom, ct.parametric.numerators())),
+                    );
                     ct.clone()
                 } else {
                     ct.zero_like()
@@ -556,6 +569,13 @@ impl AmplitudeGraphTerm {
                 let active =
                     selected_generation_raised_esurfaces.contains(&symbolic.raised_esurface_id);
                 let masked = if active {
+                    thermal_integrands.extend(
+                        symbolic
+                            .atom
+                            .parametric
+                            .iter()
+                            .map(|(_, atom)| (atom, symbolic.atom.parametric.numerators())),
+                    );
                     symbolic.atom.clone()
                 } else {
                     symbolic.atom.zero_like()
@@ -641,6 +661,86 @@ impl AmplitudeGraphTerm {
                 )?);
         }
 
+        let thermal_edges = if settings.generation.medium.mode == MediumMode::Vacuum {
+            ti_vec![Vec::new(); orientations.len()]
+        } else {
+            // Ordinary tensor numerators stay opaque. Bind only definitions that
+            // carry distributions, using their existing argument-aware replacements.
+            let thermal_integrands = thermal_integrands
+                .into_iter()
+                .map(|(atom, numerators)| {
+                    let replacements = numerators
+                        .iter()
+                        .filter(|entry| entry.rhs.contains_symbol(GS.thermal_distribution))
+                        .map(|entry| entry.replacement())
+                        .collect_vec();
+                    (atom, replacements)
+                })
+                .collect_vec();
+            selected_generation_orientations
+                .iter()
+                .zip(&production_orientation_ids)
+                .map(|(orientation, production_id)| {
+                    let mut edges = HashSet::new();
+                    for (atom, replacements) in &thermal_integrands {
+                        let selected = if settings.generation.explicit_orientation_sum_only {
+                            (*atom).clone()
+                        } else {
+                            orientation
+                                .data
+                                .orientation
+                                .select(production_id.select(*atom))
+                        };
+                        let selected = selected.replace_multiple(replacements);
+                        let selected = if settings.generation.explicit_orientation_sum_only {
+                            selected
+                        } else {
+                            orientation
+                                .data
+                                .orientation
+                                .select(production_id.select(selected))
+                        };
+                        selected.visitor(&mut |part| {
+                            if let AtomView::Fun(call) = part
+                                && call.get_symbol() == GS.thermal_distribution
+                                && let Some(edge) = call.iter().next()
+                                && let Ok(edge) = usize::try_from(edge)
+                            {
+                                edges.insert(EdgeIndex(edge));
+                            }
+                            true
+                        });
+                    }
+                    if settings.generation.explicit_orientation_sum_only {
+                        // Explicit sums have erased their selectors. The original
+                        // CFF weights retain which physical direction owns each edge.
+                        let supported = orientation
+                            .variants
+                            .iter()
+                            .flat_map(|variant| {
+                                variant
+                                    .thermal_weight
+                                    .distributions
+                                    .iter()
+                                    .map(|factor| factor.edge_id)
+                                    .chain(variant.thermal_weight.numerators.iter().flat_map(
+                                        |numerator| {
+                                            numerator
+                                                .positive_energies
+                                                .iter()
+                                                .chain(&numerator.negative_energies)
+                                                .copied()
+                                        },
+                                    ))
+                            })
+                            .collect::<HashSet<_>>();
+                        edges.retain(|edge| supported.contains(edge));
+                    }
+                    edges.into_iter().sorted().collect()
+                })
+                .collect()
+        };
+
         threshold_counterterm.local_esurface_exists = ti_vec![true; esurface_map.len()];
         threshold_counterterm.esurface_map = esurface_map;
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
@@ -666,6 +766,7 @@ impl AmplitudeGraphTerm {
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
+                thermal_edges,
                 production_orientation_keys,
                 explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 original_integrand,
@@ -702,7 +803,7 @@ impl AmplitudeGraphTerm {
                     .esurface_cache
                     .clone(),
                 param_builder,
-                real_mass_vec: None,
+                mass_vec: None,
                 master_external_signature: graph.graph.get_external_signature(),
                 master_external_pdgs: graph
                     .graph
@@ -1233,7 +1334,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         {
             // Tropical compensation previously used get_energy_cache, which
             // rejects complex masses on paired edges. Preserve that contract
-            // before caching only the real parts for canonical preparation.
+            // before canonical preparation projects the cached masses to real values.
             for (pair, edge_id, edge) in self.graph.iter_edges() {
                 if pair.is_paired()
                     && let Some(mass) = edge.data.mass_value::<f64>(model, &self.param_builder)
@@ -1250,9 +1351,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         }
         let masses = self
             .graph
-            .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder).map(|c| c.re));
+            .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder));
 
-        self.real_mass_vec = Some(masses);
+        self.mass_vec = Some(masses);
 
         Ok(())
     }
@@ -1409,7 +1510,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     external_momenta,
                 ));
             }
-            let cached_masses = self.real_mass_vec.as_ref().ok_or_else(|| {
+            let cached_masses = self.mass_vec.as_ref().ok_or_else(|| {
                 eyre!(
                     "amplitude surface sampling for graph '{}' requires warmup mass data",
                     self.graph.name
@@ -1417,7 +1518,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             })?;
             let masses = self.graph.new_edgevec(|_, edge, _| {
                 cached_masses[edge]
-                    .map(F::<T>::from_ff64)
+                    .map(|mass| F::<T>::from_ff64(mass.re))
                     .unwrap_or_else(|| zero.clone())
             });
             let externals =
@@ -1436,7 +1537,9 @@ impl GraphTerm for AmplitudeGraphTerm {
             for (channel, block, joint_program) in surface_channels {
                 if !matches!(
                     block.target,
-                    SamplingMapDefinition::Surface(_) | SamplingMapDefinition::Intersect(_)
+                    SamplingMapDefinition::Surface(_)
+                        | SamplingMapDefinition::Intersect(_)
+                        | SamplingMapDefinition::Fermi(_)
                 ) {
                     return Err(eyre!(
                         "amplitude sampling channel '{}' cannot use a Cutkosky host or side qualifier: {:?}",
@@ -1484,6 +1587,144 @@ impl GraphTerm for AmplitudeGraphTerm {
                             })
                     })
                     .collect::<Result<Vec<_>>>()?;
+                if let SamplingMapDefinition::Fermi(edge) = block.target {
+                    let edge = EdgeIndex(edge);
+                    if active_edges != [edge.0]
+                        || !self.thermal_edges.iter().any(|edges| edges.contains(&edge))
+                    {
+                        return Err(eyre!(
+                            "Fermi channel '{}' for graph '{}' requires an active thermal edge {} as its sole parent-basis coordinate",
+                            channel.name,
+                            self.graph.name,
+                            edge.0,
+                        ));
+                    }
+                    let particle = self.graph[edge]
+                        .particle()
+                        .filter(|p| p.is_fermion())
+                        .ok_or_else(|| {
+                            eyre!(
+                                "Fermi target {} in graph '{}' is not a fermion",
+                                edge.0,
+                                self.graph.name
+                            )
+                        })?;
+                    let chemical_potential = particle.chemical_potential.ok_or_else(|| {
+                        eyre!(
+                            "Fermi target {} in graph '{}' has no chemical potential",
+                            edge.0,
+                            self.graph.name
+                        )
+                    })?;
+                    let mu_atom = symbolica::atom::Atom::from(chemical_potential.0);
+                    let mu = self
+                        .param_builder
+                        .pairs
+                        .model_parameters
+                        .params
+                        .iter()
+                        .zip(self.param_builder.model_values())
+                        .find_map(|(parameter, value)| (parameter == &mu_atom).then_some(value))
+                        .ok_or_else(|| {
+                            eyre!(
+                                "Fermi target {} has no prepared value for {mu_atom}; call warm_up",
+                                edge.0
+                            )
+                        })?;
+                    if mu.im != mu.im.zero() || !mu.re.0.is_finite() || !mu.im.0.is_finite() {
+                        return Err(eyre!(
+                            "Fermi target {} requires a finite real chemical potential, got {mu}",
+                            edge.0
+                        ));
+                    }
+                    let mu = F::<T>::from_ff64(mu.re);
+                    if let Some(mass) = cached_masses[edge]
+                        && (mass.im != mass.im.zero() || !mass.im.0.is_finite())
+                    {
+                        return Err(eyre!(
+                            "Fermi target {} requires a finite real mass, got {mass}",
+                            edge.0
+                        ));
+                    }
+                    let mass = masses[edge].abs();
+                    if !mass.0.is_finite() {
+                        return Err(eyre!("Fermi target {} requires a finite real mass", edge.0));
+                    }
+                    if self.thermal_edges.len() != self.orientations.len()
+                        || orientation.is_some_and(|id| {
+                            id >= if self.explicit_orientation_sum_only {
+                                1
+                            } else {
+                                self.orientations.len()
+                            }
+                        })
+                    {
+                        return Err(eyre!(
+                            "Fermi target {} has inconsistent thermal orientation metadata",
+                            edge.0
+                        ));
+                    }
+                    // Production shares one proposal over the union of active physical
+                    // branches; a diagnostic binding can select a single orientation.
+                    // Thermal-factor signs and antiparticle signs are already encoded
+                    // by the generated factors and model; only GS.sign changes E-sigma*mu.
+                    let exists = self.orientation_filter.included_iter().any(|id| {
+                        (self.explicit_orientation_sum_only
+                            || orientation.is_none_or(|selected| selected == usize::from(id)))
+                            && self.thermal_edges[id].contains(&edge)
+                            && match self.orientations[id][edge] {
+                                Orientation::Default => mu > mass,
+                                Orientation::Reversed => -&mu > mass,
+                                Orientation::Undirected => false,
+                            }
+                    });
+                    let radius = exists.then(|| {
+                        let magnitude = mu.abs();
+                        ((&magnitude - &mass) * (&magnitude + &mass)).sqrt().0
+                    });
+                    let routing = &lmb.edge_signatures[edge];
+                    let sign = routing.internal[active[0]];
+                    if sign == SignOrZero::Zero
+                        || lmb.loop_edges.iter_enumerated().any(|(index, _)| {
+                            index != active[0] && routing.internal[index] != SignOrZero::Zero
+                        })
+                    {
+                        return Err(eyre!(
+                            "Fermi target {} is not an independent coordinate of parent {:?}",
+                            edge.0,
+                            channel.definition.parent_lmb
+                        ));
+                    }
+                    let spatial = externals
+                        .iter()
+                        .map(|momentum| momentum.spatial.clone())
+                        .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
+                    let offset: ThreeMomentum<F<T>> = routing.compute_momentum(&origin, &spatial);
+                    let center = [offset.px, offset.py, offset.pz]
+                        .into_iter()
+                        .map(|component| {
+                            if sign == SignOrZero::Plus {
+                                -component.0
+                            } else {
+                                component.0
+                            }
+                        })
+                        .collect();
+                    context.insert_geometry_map(
+                        block.target.clone(),
+                        channel.definition.parent_lmb.clone(),
+                        active_edges,
+                        block.preceding_lmb.clone(),
+                        CompiledSamplingMap::Surface(SurfaceRadialMap::new(
+                            3,
+                            center,
+                            radius,
+                            e_cm * parameterization_settings.b,
+                            parameterization_settings.power,
+                        )?),
+                    )?;
+                    continue;
+                }
                 let resolve_surface = |edges: &[usize]| -> Result<_> {
                     let (representative, eligible) =
                         self.sampling_target_surface(&channel.name, edges, &externals, lmb)?;
@@ -1849,12 +2090,12 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .sampling_parent_lmb(&channel.definition.parent_lmb)?;
                 let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
                 let cached_masses = self
-                    .real_mass_vec
+                    .mass_vec
                     .as_ref()
                     .ok_or_else(|| eyre!("amplitude joint alignment requires warmup mass data"))?;
                 let canonical_masses = self.graph.new_edgevec(|_, edge, _| {
                     cached_masses[edge]
-                        .map(F::<ArbPrec>::from_ff64)
+                        .map(|mass| F::<ArbPrec>::from_ff64(mass.re))
                         .unwrap_or_else(|| canonical_point.zero())
                 });
                 let native_masses = self.graph.get_real_mass_vector(context.model);
@@ -2042,9 +2283,14 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_real_mass_vector(&self) -> Result<EdgeVec<Option<F<f64>>>> {
-        self.real_mass_vec
+        self.mass_vec
             .as_ref()
-            .cloned()
+            .map(|masses| {
+                masses
+                    .iter()
+                    .map(|(_, mass)| mass.map(|mass| mass.re))
+                    .collect()
+            })
             .ok_or_else(|| eyre!("real mass vector is not initialized; call warm_up first"))
     }
 }
@@ -3386,6 +3632,9 @@ impl HasIntegrand for AmplitudeIntegrand {
 }
 
 #[cfg(test)]
+mod fermi_sampling_tests;
+
+#[cfg(test)]
 mod fermi_tests;
 
 #[cfg(test)]
@@ -4030,7 +4279,7 @@ parent_lmb = [4,6]
             let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
                 unreachable!()
             };
-            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            let masses = amplitude.data.graph_terms[0].mass_vec.take();
             assert!(amplitude.warm_up_sampling().is_err());
             assert!(
                 amplitude.data.graph_terms[0]
@@ -4038,7 +4287,7 @@ parent_lmb = [4,6]
                     .sampling_bridge::<f64>()
                     .is_err()
             );
-            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            amplitude.data.graph_terms[0].mass_vec = masses;
             amplitude.warm_up_sampling()?;
             // A failed warmup cannot keep the previous geometry usable.
             let SamplingSettings::MultiChanneling(channels) =
@@ -4122,7 +4371,7 @@ parent_lmb = [4,6]
             assert!(setup.sampling_catalogue.as_ref().is_some());
             // Removing an input which a fresh bind requires proves that repeated
             // requests reuse the cached result, without another center solve.
-            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            let masses = amplitude.data.graph_terms[0].mass_vec.take();
             for _ in 0..3 {
                 assert_eq!(
                     format!(
@@ -4133,7 +4382,7 @@ parent_lmb = [4,6]
                 );
                 amplitude.prepare_sampling_precision::<QuadFloat>()?;
             }
-            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            amplitude.data.graph_terms[0].mass_vec = masses;
             let source =
                 Sample::Continuous(F(1.0), [0.19, 0.27, 0.61, 0.39, 0.72, 0.58].map(F).to_vec());
             // q3 = q4 + Q, so the equal-mass A center is q4 = -Q/2.
@@ -4203,7 +4452,7 @@ parent_lmb = [4,6]
             let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
                 unreachable!()
             };
-            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            let masses = amplitude.data.graph_terms[0].mass_vec.take();
             let error = amplitude.warm_up_sampling().unwrap_err();
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
             assert!(
@@ -4217,7 +4466,7 @@ parent_lmb = [4,6]
                     .as_ref()
                     .is_none()
             );
-            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            amplitude.data.graph_terms[0].mass_vec = masses;
             let Externals::Constant { momenta, .. } =
                 &mut runtime.get_mut_settings().kinematics.externals;
             momenta[0] = ExternalMomenta::Independent([5.0, 0.0, 0.0, 0.0].map(F));
@@ -4326,11 +4575,14 @@ parent_lmb = [4,6]
                 .map(|p| p.spatial.clone())
                 .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
             let masses: EdgeVec<F<T>> = term
-                .real_mass_vec
+                .mass_vec
                 .as_ref()
                 .unwrap()
                 .iter()
-                .map(|(_, m)| m.map(F::<T>::from_ff64).unwrap_or_else(|| zero.clone()))
+                .map(|(_, mass)| {
+                    mass.map(|mass| F::<T>::from_ff64(mass.re))
+                        .unwrap_or_else(|| zero.clone())
+                })
                 .collect();
             let mut regular_raw = None;
             for (parent, active_edge) in [(vec![4, 6], 6), (vec![5, 4], 5)] {
@@ -4821,11 +5073,14 @@ parent_lmb = [4,6]
             assert_eq!(lmbs[LmbIndex::from(0)].loop_edges[k], EdgeIndex(4));
             assert_eq!(lmbs[LmbIndex::from(0)].ext_edges.len(), 2);
             let masses: EdgeVec<F<T>> = term
-                .real_mass_vec
+                .mass_vec
                 .as_ref()
                 .unwrap()
                 .iter()
-                .map(|(_, mass)| mass.map(F::<T>::from_ff64).unwrap_or_else(|| zero.clone()))
+                .map(|(_, mass)| {
+                    mass.map(|mass| F::<T>::from_ff64(mass.re))
+                        .unwrap_or_else(|| zero.clone())
+                })
                 .collect();
             let externals: ExternalFourMomenta<F<T>> = (0..2)
                 .map(|_| {
@@ -5639,14 +5894,14 @@ parent_lmb = [4,6]
                     .contains(diagnostic)
             );
         }
-        let cached_masses = term.real_mass_vec.take();
+        let cached_masses = term.mass_vec.take();
         assert!(
             term.compile_sampling_bridge(&parameterization, &settings, &externals, None)
                 .unwrap_err()
                 .to_string()
                 .contains("warmup mass data")
         );
-        term.real_mass_vec = cached_masses;
+        term.mass_vec = cached_masses;
         let boosted = term.compile_sampling_bridge(
             &parameterization,
             &settings,

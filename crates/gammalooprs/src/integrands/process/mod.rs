@@ -3123,12 +3123,59 @@ pub trait ProcessIntegrandImpl {
                 inputs.extend([mass.square(), mass]);
             }
         }
+        for term in self.get_group_masters() {
+            let Some(catalogue) = term.sampling_setup().sampling_catalogue.as_ref() else {
+                continue;
+            };
+            let graph = term.get_graph();
+            for edge in catalogue
+                .named_entries()
+                .flat_map(|channel| &channel.blocks)
+                .filter_map(|block| match block.target {
+                    SamplingMapDefinition::Fermi(edge) => Some(edge),
+                    _ => None,
+                })
+                .unique()
+            {
+                // These are the same prepared model slots the amplitude binder
+                // consumes. Include them before fixing the proposal precision.
+                let parameter = graph
+                    .iter_edges()
+                    .find_map(|(_, id, data)| {
+                        (id.0 == edge)
+                            .then(|| {
+                                data.data
+                                    .particle()
+                                    .and_then(|particle| particle.chemical_potential)
+                            })
+                            .flatten()
+                    })
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Fermi target {edge} in graph '{}' has no chemical potential",
+                            graph.name
+                        )
+                    })?;
+                let atom = symbolica::atom::Atom::from(parameter.0);
+                let value = graph.param_builder.pairs.model_parameters.params.iter()
+                    .zip(graph.param_builder.model_values())
+                    .find_map(|(parameter, value)| (parameter == &atom).then_some(value))
+                    .ok_or_else(|| eyre!("Fermi target {edge} has no prepared chemical potential {atom}; call warm_up"))?;
+                if value.im != value.im.zero() {
+                    return Err(eyre!(
+                        "Fermi target {edge} requires a real chemical potential, got {value}"
+                    ));
+                }
+                let mu = F::<ArbPrec>::from_ff64(value.re);
+                inputs.extend([mu.square(), mu]);
+            }
+        }
         if inputs
             .iter()
             .any(|value| value.is_nan() || value.is_infinite())
         {
             return Err(eyre!(
-                "sampling source has nonfinite fixed kinematic, mass or parameterization input"
+                "sampling source has nonfinite fixed kinematic, mass, chemical-potential or parameterization input"
             ));
         }
         let quad_representable = inputs
@@ -3306,9 +3353,14 @@ pub trait ProcessIntegrandImpl {
             GammaLoopSample::<T>::relative_accuracy_budget(self.get_settings())
         };
         let bridges = (0..self.graph_count()).map(|id| {
-            let graph = self.get_graph(id);
+            if T::sampling_bridge_cache(self.get_graph(id).sampling_setup()).as_ref().is_some() { return Ok(None); }
+            // All group members consume the master's retained draw. Bind that
+            // same proposal in every cache slot, even when a member has no
+            // thermal factor (or different masses) on a targeted master edge.
+            let group = self.graph_group_id_for_graph(id)
+                .ok_or_else(|| eyre!("sampling graph {id} has no group master"))?;
+            let graph = self.get_master_graph(GroupId(group));
             let setup = graph.sampling_setup();
-            if T::sampling_bridge_cache(setup).as_ref().is_some() { return Ok(None); }
             let catalogue = setup.sampling_catalogue.as_ref().ok_or_else(|| eyre!(
                 "sampling catalogue for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing", graph.name()
             ))?;

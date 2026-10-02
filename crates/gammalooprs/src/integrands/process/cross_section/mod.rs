@@ -25,7 +25,7 @@ use crate::{
             sampling::context::{SamplingLUHostPlan, SamplingMapContext},
             sampling::maps::{
                 ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
-                SamplingMapComposition, SamplingMapEmbedding,
+                SamplingMapComposition, SamplingMapDefinition, SamplingMapEmbedding,
             },
             sampling::selection::{CompiledSamplingMap, SamplingCatalogueEntry},
             threshold_multiplier::{
@@ -1705,6 +1705,16 @@ impl GraphTerm for CrossSectionGraphTerm {
         external_momenta: &[[T; 4]],
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>> {
+        if catalogue.named_entries().any(|channel| {
+            channel
+                .blocks
+                .iter()
+                .any(|block| matches!(block.target, SamplingMapDefinition::Fermi(_)))
+        }) {
+            return Err(eyre!(
+                "Fermi sampling targets are supported only for amplitudes; thermal cross sections are not implemented"
+            ));
+        }
         let e_cm = settings.kinematics.e_cm;
         let parent_lmb = self
             .multi_channeling_setup

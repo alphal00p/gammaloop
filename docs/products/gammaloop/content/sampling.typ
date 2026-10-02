@@ -4,8 +4,8 @@
 = Sampling channels and maps
 
 Sampling channels map unit-cube coordinates to the graph's unbounded spatial loop momenta.
-They can use ordinary loop-momentum bases (LMBs), concentrate near an energy surface, or combine
-a physical Cutkosky cut with thresholds in its remaining loop variables. They change the
+They can use ordinary loop-momentum bases (LMBs), concentrate near an energy or Fermi surface,
+or combine a physical Cutkosky cut with thresholds in its remaining loop variables. They change the
 integration measure and its partition, not the integrand's physical cut sum or its threshold
 counterterms. Amplitudes and cross sections use the same channel catalogue and integration engine.
 Channel names and IDs are independent of threshold `group_id` values. The
@@ -53,7 +53,7 @@ all three sum modes are `summed`.
   [`auto:optimized_lmb`], [The generated optimized subset, augmented for elementary massless-edge
     coverage when no explicit basis restriction is supplied.],
   [`auto:surfaces`], [Currently the same optimized-LMB coverage. Production does not yet discover
-    automatic surface candidates; add named surface channels explicitly.],
+    E-surface or Fermi candidates; add named channels explicitly.],
   [`lmb(6,12,13,14)`], [One generated basis with exactly these ordered edges. No named definition
     is required.],
   [`cut1_joint_HZ`], [A user-defined channel in this graph's `channel_definitions` table.],
@@ -101,7 +101,7 @@ graph routing determine the map; this is not a regular-expression mini-language.
   [`around`], [Map expression. Its `surface` or `cut` edges identify energy equations, not the
     independent variables used to solve them.],
   [`parent_lmb`], [Complete ordered parent basis defining the routing of the independent variables.],
-  [`subspace_lmb`], [Active parent edges for a simple surface map. For compositions,
+  [`subspace_lmb`], [Active parent edges for a simple surface or Fermi map. For compositions,
     `block(lmb(...), ...)` assigns the individual active blocks.],
   [`on_cut`], [Optional list of physical cut IDs used to check an explicitly identified host.
     It does not select the cuts evaluated by the integrand.],
@@ -120,6 +120,8 @@ resolved from a generated basis without changing the generated catalogue's IDs.
   columns: (auto, 1fr),
   table.header([*Expression*], [*Meaning*]),
   [`surface(a,b,...)`], [A routed positive-energy surface, including its external energy shift.],
+  [`fermi(a)`], [An amplitude Fermi shell in the three-dimensional momentum of active thermal
+    fermion edge `a`, which must itself be an edge of the parent basis.],
   [`phase_space(cut(a,b,...))`], [A physical-cut radial map retaining the auxiliary LU scale.],
   [`lmb(a,b,...)`], [An ordinary complete LMB map when used as a named channel's expression.],
   [`complement(a,b,...)`], [Ordinary coordinates for these remaining parent edges.],
@@ -194,6 +196,70 @@ is decided from the already sampled complement. Certified absent or pinched fibe
 normalized ordinary conditional fallback; forward and inverse use the same decision. An
 ambiguous numerical solve is an error, not permission to discard a point or reinterpret a
 regular surface as absent. This keeps the channel list and discrete grid dimensions fixed.
+
+== Amplitude example: Fermi surfaces
+
+`fermi(edge)` targets the shell where an active fermionic thermal factor changes across
+`E_edge = sign_edge * mu_edge`. The selected edge must carry a chemical potential and appear
+in the generated amplitude's thermal terms or surviving thermal counterterms. A chemical
+potential on its model particle alone is insufficient. The active subspace is exactly that
+edge's three-dimensional momentum: use `subspace_lmb = [edge]` for a simple channel or
+`block(lmb(edge), fermi(edge))` inside a composition. Other loop momenta remain ordinary
+complement coordinates. The target is the raw edge-momentum shell. Surviving counterterm
+factors establish eligibility, but the map does not focus their surfaces after the
+counterterm projection.
+
+For an amplitude with parent basis `[1,2,3]` and active thermal fermion edges 1 and 2, this
+explicit channel focuses both independent Fermi radii while sampling edge 3 ordinarily:
+
+// docs-example: syntax
+```toml
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "map_density"
+power = 2.0
+channel_selection = { G = ["fermi_pair", "ordinary"] }
+
+[sampling.channel_definitions.G.fermi_pair]
+around = "product(block(lmb(1),fermi(1)),block(lmb(2),fermi(2)),complement(3))"
+parent_lmb = [1,2,3]
+
+[sampling.channel_definitions.G.ordinary]
+around = "lmb(1,2,3)"
+parent_lmb = [1,2,3]
+```
+
+Replace `G` and the edge IDs with those of the loaded amplitude. Fermi channels follow the
+same selection policy as E-surface (eta) channels: define them explicitly, while
+`auto:surfaces` supplies optimized LMB coverage. Regenerate older saved integrands to supply
+the thermal-edge metadata required by this feature.
+
+For real mass and chemical potential, the regular radius is
+`p_F = sqrt((abs(mu) - abs(m)) * (abs(mu) + abs(m)))`. It is active only when the selected
+physical orientations include `sign_edge * mu > abs(m)`. Production uses one proposal for
+the union of all runtime-selected orientations, whether orientations are sampled or summed.
+It therefore retains the shell even for an individual sampled orientation with no transition
+there. If no selected orientation has a shell, the channel uses a normalized full-support
+radial fallback. This also covers zero chemical potential and onset or absence,
+`abs(mu) <= abs(m)`, without removing the channel or changing the integration dimension.
+The chemical potential and mass are resolved from the current model parameters at warm-up.
+
+The map shares the E-surface radial law and its existing `power` and `b * e_cm` settings;
+there is no separate Fermi profile setting. With `power = 2`, both sides of a regular shell
+are enhanced as `q ~ 1/sqrt(abs(r-p_F))`. The map retains the full radial domain and supplies
+its exact inverse density to the common partition. Independent Fermi blocks can be multiplied;
+this is useful for opposite-side intersections behaving locally as `1/(abs(h_1) + abs(h_2))`,
+where `h_i = E_i - sign_i * mu_i`. It does not cover dependent shells or tangencies, and
+an occupation step alone need not benefit from strong shell focusing.
+
+Fermi maps currently support amplitudes, independent basis-edge blocks and ordinary
+complements. They do not support physical cut hosts, general joint Fermi/threshold geometry,
+or a proposal width fitted to temperature. Zero-temperature thermal derivatives are handled
+by separate Fermi-surface localization, subject to its independent-routing and residual-step
+constraints; changing the sampling map does not supply their distributional terms.
 
 == Cross-section example: a cut and a joint threshold block
 

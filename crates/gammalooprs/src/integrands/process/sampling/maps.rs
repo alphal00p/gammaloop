@@ -31,6 +31,8 @@ pub enum SamplingMapDefinition {
     Lmb(Vec<usize>),
     /// An energy surface in the supplied edge subspace.
     Surface(Vec<usize>),
+    /// A thermal Fermi surface of one routed fermion edge.
+    Fermi(usize),
     /// A physical Cutkosky cut.
     Cut(Vec<usize>),
     /// A soft channel around one routed edge.
@@ -92,6 +94,7 @@ impl SamplingMapDefinition {
         match short_name {
             "lmb" => Self::ordered_edges(arguments, "lmb").map(Self::Lmb),
             "surface" => Self::edges(arguments, "surface").map(Self::Surface),
+            "fermi" => Self::one_edge(arguments, "fermi").map(Self::Fermi),
             "cut" => Self::edges(arguments, "cut").map(Self::Cut),
             "complement" => Self::edges(arguments, "complement").map(Self::Complement),
             "soft" => Self::one_edge(arguments, "soft").map(Self::Soft),
@@ -126,7 +129,7 @@ impl SamplingMapDefinition {
                 }
             }
             _ => Err(eyre!(
-                "unknown sampling-map constructor `{name}`; expected lmb, surface, cut, soft, collinear, complement, product, intersect, then, phase_space, left, right, at_cut or block"
+                "unknown sampling-map constructor `{name}`; expected lmb, surface, fermi, cut, soft, collinear, complement, product, intersect, then, phase_space, left, right, at_cut or block"
             )),
         }
     }
@@ -142,6 +145,7 @@ impl SamplingMapDefinition {
                 "surface",
                 edges.iter().copied().map(|edge| Atom::num(edge as i64)),
             ),
+            Self::Fermi(edge) => call("fermi", [Atom::num(*edge as i64)]),
             Self::Cut(edges) => call(
                 "cut",
                 edges.iter().copied().map(|edge| Atom::num(edge as i64)),
@@ -169,12 +173,14 @@ impl SamplingMapDefinition {
         }
     }
 
-    /// Physical equations are distinct from the active coordinate block. A
+    /// Physical equations are distinct from the active coordinate block. Fermi
+    /// targets identify one thermal energy, not a graph E-surface. A
     /// supported intersection keeps its two energy sets in normal-coordinate
     /// order; their union would lose the equations and their shared energy.
     pub fn energy_edge_sets(&self) -> Vec<&[usize]> {
         match self {
             Self::Surface(edges) | Self::Cut(edges) => vec![edges],
+            Self::Fermi(edge) => vec![std::slice::from_ref(edge)],
             Self::Intersect(maps)
                 if maps.len() == 2
                     && maps[0] != maps[1]
@@ -3953,6 +3959,145 @@ mod tests {
     }
 
     #[test]
+    fn fermi_ball_map_reproduces_volume_and_radial_second_moment() {
+        let count = 4096;
+        for radius in [1.0 / 1024.0, 2.0] {
+            for power in [1.0, 2.0] {
+                let map =
+                    SurfaceRadialMap::new(3, vec![0.0; 3], Some(radius), radius, power).unwrap();
+                let mut volume = 0.0;
+                let mut second_moment = 0.0;
+                for sample in 0..count {
+                    // Integrate the occupied ball through the full cube. In 3D
+                    // a radial target has an exact angular integral at any
+                    // nonsingular uniform-cos(theta) angular point.
+                    let coordinate = (sample as f64 + 0.5) / count as f64;
+                    let point = map.forward(&[F(coordinate), F(0.27), F(0.61)]).unwrap();
+                    let radius_squared = point
+                        .point
+                        .iter()
+                        .map(|component| component.0.powi(2))
+                        .sum::<f64>();
+                    if radius_squared < radius * radius {
+                        volume += point.jacobian.0 / count as f64;
+                        second_moment += point.jacobian.0 * radius_squared / count as f64;
+                    }
+                }
+                let expected_volume = 4.0 * std::f64::consts::PI * radius.powi(3) / 3.0;
+                let expected_moment = 4.0 * std::f64::consts::PI * radius.powi(5) / 5.0;
+                assert!(
+                    (volume / expected_volume - 1.0).abs() < 2.0e-6,
+                    "R={radius}, p={power}, volume={volume}, expected={expected_volume}"
+                );
+                assert!(
+                    (second_moment / expected_moment - 1.0).abs() < 2.0e-6,
+                    "R={radius}, p={power}, moment={second_moment}, expected={expected_moment}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fermi_product_map_bounds_opposite_side_corner_weights_at_unequal_rates() {
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let maps: Vec<Box<dyn SamplingMapComponent<T>>> = [4, 3]
+                .into_iter()
+                .map(|radius| {
+                    Box::new(
+                        SurfaceRadialMap::new(
+                            3,
+                            vec![zero.0.clone(); 3],
+                            Some(one.from_usize(radius).0),
+                            2.0,
+                            2.0,
+                        )
+                        .unwrap(),
+                    ) as Box<dyn SamplingMapComponent<T>>
+                })
+                .collect();
+            let map = SamplingMapComposition::product(maps).unwrap();
+            let chemical_potential = one.from_usize(5);
+            let masses = [one.from_usize(3), one.from_usize(4)];
+            let direction = one.from_usize(3).sqrt().inv();
+            let ten = one.from_usize(10);
+            let tolerance = &one / one.from_usize(20);
+            for first_inside in [false, true] {
+                for second_rate in [1, 2] {
+                    let mut previous_weight: Option<F<T>> = None;
+                    // The unbounded radial branch has corrections of order
+                    // sqrt(|xi|). Start inside the asymptotic regime while
+                    // keeping the unequal-rate residual representable in f64.
+                    for exponent in [3, 4, 5] {
+                        let distance = ten.powi(-exponent);
+                        let second_distance = distance.powi(second_rate);
+                        let energies = if first_inside {
+                            [
+                                &chemical_potential - &distance,
+                                &chemical_potential + &second_distance,
+                            ]
+                        } else {
+                            [
+                                &chemical_potential + &distance,
+                                &chemical_potential - &second_distance,
+                            ]
+                        };
+                        let point = energies
+                            .iter()
+                            .zip(&masses)
+                            .flat_map(|(energy, mass)| {
+                                let component =
+                                    (energy.square() - mass.square()).sqrt() * &direction;
+                                vec![component.0; 3]
+                            })
+                            .collect::<Vec<_>>();
+                        let inverse = map
+                            .inverse(&point, &mut SamplingMapContext::detached(&[]))
+                            .unwrap()
+                            .unwrap();
+                        let residuals = point
+                            .chunks_exact(3)
+                            .zip(&masses)
+                            .map(|(momentum, mass)| {
+                                let energy_squared =
+                                    momentum.iter().fold(mass.square(), |sum, component| {
+                                        sum + F(component.clone()).square()
+                                    });
+                                energy_squared.sqrt() - &chemical_potential
+                            })
+                            .collect::<Vec<_>>();
+                        assert!(&residuals[0] * &residuals[1] < zero);
+                        // A representative opposite-occupation corner has
+                        // magnitude 1/(|xi1|+|xi2|). Product power-two maps
+                        // give weights proportional to sqrt(|xi1*xi2|)/
+                        // (|xi1|+|xi2|): constant on balanced approaches and
+                        // decreasing when the second residual vanishes faster.
+                        let weight = F(inverse.inverse_jacobian).inv()
+                            / (residuals[0].abs() + residuals[1].abs());
+                        assert!(weight.0.is_finite() && weight > zero);
+                        if let Some(previous) = previous_weight {
+                            let expected_ratio = if second_rate == 1 {
+                                one.clone()
+                            } else {
+                                ten.sqrt().inv()
+                            };
+                            let ratio = &weight / previous;
+                            assert!(
+                                (ratio.clone() - expected_ratio).abs() < tolerance,
+                                "inside={first_inside}, rate={second_rate}, exponent={exponent}, weight ratio={ratio}"
+                            );
+                        }
+                        previous_weight = Some(weight);
+                    }
+                }
+            }
+        }
+        check::<f64>();
+        check::<crate::utils::QuadFloat>();
+    }
+
+    #[test]
     fn affine_map_round_trips_with_translation_and_exact_determinant() {
         let map = SamplingMapAffine::new(vec![vec![2.0, 1.0], vec![1.0, 3.0]], vec![0.5, -1.0])
             .expect("invertible affine map");
@@ -4207,6 +4352,26 @@ mod tests {
             "at_cut(cut(1))",
         ] {
             assert!(SamplingMapDefinition::parse(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn fermi_targets_round_trip_without_becoming_threshold_intersections() {
+        let map = SamplingMapDefinition::parse("block(lmb(7),fermi(7))").unwrap();
+        assert_eq!(
+            SamplingMapDefinition::from_atom(map.to_atom().as_view()).unwrap(),
+            map
+        );
+        assert_eq!(map.energy_edge_sets(), vec![[7].as_slice()]);
+        assert_eq!(map.host_cut(), None);
+        assert!(
+            SamplingMapDefinition::parse("intersect(fermi(7),surface(3,7))")
+                .unwrap()
+                .energy_edge_sets()
+                .is_empty()
+        );
+        for source in ["fermi()", "fermi(1,2)", "fermi(-1)", "fermi(1/2)"] {
+            assert!(SamplingMapDefinition::parse(source).is_err(), "{source}");
         }
     }
 

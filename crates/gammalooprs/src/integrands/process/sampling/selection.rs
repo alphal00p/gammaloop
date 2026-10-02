@@ -520,6 +520,16 @@ impl ResolvedNamedSamplingChannel {
                     Ok(())
                 }
                 _ => {
+                    if let Map::PhaseSpace(inner) = map
+                        && !matches!(inner.as_ref(), Map::Cut(_))
+                    {
+                        return Err(eyre!("phase_space requires a physical cut(...) target"));
+                    }
+                    if matches!(map, Map::Fermi(_)) && (host.is_some() || side.is_some()) {
+                        return Err(eyre!(
+                            "fermi(...) currently supports amplitude targets without cut hosts or side qualifiers"
+                        ));
+                    }
                     if matches!(map, Map::Intersect(_)) && map.energy_edge_sets().len() != 2 {
                         return Err(eyre!(
                             "intersect currently requires exactly two distinct surface(...) targets; qualify the whole joint block with its host or side"
@@ -544,6 +554,13 @@ impl ResolvedNamedSamplingChannel {
                     if requested.is_empty() {
                         return Err(eyre!(
                             "physical map requires subspace_lmb or an explicit block(lmb(...),map)"
+                        ));
+                    }
+                    if let Map::Fermi(edge) = map
+                        && requested != std::slice::from_ref(edge)
+                    {
+                        return Err(eyre!(
+                            "fermi({edge}) requires its own three-dimensional basis block [{edge}], received {requested:?}; choose a parent LMB containing edge {edge}"
                         ));
                     }
                     let active_lmb = if physical {
@@ -3071,7 +3088,9 @@ pub fn resolve_sampling_channel_selection_replacing_default(
 
 fn contains_surface_map(map: &SamplingMapDefinition) -> bool {
     match map {
-        SamplingMapDefinition::Surface(_) | SamplingMapDefinition::Cut(_) => true,
+        SamplingMapDefinition::Surface(_)
+        | SamplingMapDefinition::Fermi(_)
+        | SamplingMapDefinition::Cut(_) => true,
         SamplingMapDefinition::Product(maps)
         | SamplingMapDefinition::Intersect(maps)
         | SamplingMapDefinition::Then(maps) => maps.iter().any(contains_surface_map),
@@ -4754,6 +4773,118 @@ mod tests {
             parent_lmb: vec![1, 2],
             on_cut: vec![],
             singularity_proxy: None,
+        }
+    }
+
+    #[test]
+    fn fermi_targets_resolve_independent_basis_blocks_and_complements() {
+        let mut direct = definition("fermi(1)");
+        direct.parent_lmb = vec![2, 1];
+        direct.subspace_lmb = vec![1];
+        let mut product =
+            definition("product(block(lmb(2),fermi(2)),block(lmb(1),fermi(1)),complement(3))");
+        product.parent_lmb = vec![3, 1, 2];
+        product.subspace_lmb.clear();
+        let selection = SamplingChannelSelection {
+            default_channel_selection: vec!["direct".into(), "product".into()],
+            channel_definitions: BTreeMap::from([(
+                "G".into(),
+                BTreeMap::from([("direct".into(), direct), ("product".into(), product)]),
+            )]),
+            ..Default::default()
+        };
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let direct = resolved.named("direct").unwrap();
+        assert_eq!(direct.blocks.len(), 2);
+        assert_eq!(
+            direct.blocks[0].target,
+            SamplingMapDefinition::Complement(vec![2])
+        );
+        assert_eq!(direct.blocks[1].target, SamplingMapDefinition::Fermi(1));
+        assert_eq!(direct.blocks[1].active_lmb, vec![1]);
+        assert_eq!(direct.blocks[1].preceding_lmb, vec![2]);
+        assert!(direct.blocks[1].remaining_lmb.is_empty());
+        let product = resolved.named("product").unwrap();
+        assert_eq!(
+            product
+                .blocks
+                .iter()
+                .map(|block| block.target.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                SamplingMapDefinition::Fermi(2),
+                SamplingMapDefinition::Fermi(1),
+                SamplingMapDefinition::Complement(vec![3]),
+            ]
+        );
+        assert!(
+            product
+                .blocks
+                .iter()
+                .all(|block| block.preceding_lmb.is_empty())
+        );
+        assert_eq!(product.blocks[0].active_lmb, vec![2]);
+        assert_eq!(product.blocks[0].remaining_lmb, vec![3, 1]);
+    }
+
+    #[test]
+    fn fermi_targets_reject_nonbasis_blocks_hosts_and_joint_geometry() {
+        for (around, active, expected) in [
+            (
+                "fermi(1)",
+                vec![2],
+                "requires its own three-dimensional basis block",
+            ),
+            (
+                "fermi(1)",
+                vec![1, 2],
+                "requires its own three-dimensional basis block",
+            ),
+            ("block(lmb(3),fermi(3))", vec![], "contained in parent LMB"),
+            (
+                "at_cut(cut(7,9),fermi(1))",
+                vec![1],
+                "without cut hosts or side qualifiers",
+            ),
+            (
+                "left(fermi(1))",
+                vec![1],
+                "without cut hosts or side qualifiers",
+            ),
+            (
+                "right(fermi(1))",
+                vec![1],
+                "without cut hosts or side qualifiers",
+            ),
+            ("phase_space(fermi(1))", vec![1], "requires a physical cut"),
+            (
+                "intersect(fermi(1),surface(1,2))",
+                vec![1],
+                "requires exactly two distinct surface",
+            ),
+            (
+                "intersect(fermi(1),fermi(2))",
+                vec![1],
+                "requires exactly two distinct surface",
+            ),
+            (
+                "then(block(lmb(2),phase_space(cut(7,9))),block(lmb(1),fermi(1)))",
+                vec![],
+                "without cut hosts or side qualifiers",
+            ),
+        ] {
+            let mut channel = definition(around);
+            channel.subspace_lmb = active;
+            let selection = SamplingChannelSelection {
+                default_channel_selection: vec!["fermi".into()],
+                channel_definitions: BTreeMap::from([(
+                    "G".into(),
+                    BTreeMap::from([("fermi".into(), channel)]),
+                )]),
+                ..Default::default()
+            };
+            let error = resolve_sampling_channel_selection("G", &selection).unwrap_err();
+            assert!(error.to_string().contains(expected), "{around}: {error}");
         }
     }
 
