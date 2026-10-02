@@ -1,3 +1,4 @@
+use crate::model::ModelGammaLoopExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
@@ -14,6 +15,7 @@ mod gauge_sewing_tests;
 mod sewing_tests;
 
 // use bincode::{Decode, Encode};
+use crate::cff::{Esurface, EsurfaceID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use itertools::Itertools;
@@ -37,8 +39,8 @@ use crate::{
     },
     debug_tags, define_index,
     graph::{
-        GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
-        ThresholdPinchStatus,
+        FinalizedCut, FinalizedTopologyThresholdCandidate, GraphGroup, GroupId, LMBext,
+        LmbChannelFallback, LmbIndex, LoopMomentumBasis, ThresholdPinchStatus,
         cuts::{CutSet, LuCutSelection, ResidueSelector},
         edge::EdgeMass,
         parse::complete_group_parsing,
@@ -47,7 +49,7 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
         cross_section::CrossSectionIntegrandData, graph_to_group_id_for_group_structure,
     },
-    model::ArcParticle,
+    model::ParticleId,
     momentum::{
         Helicity,
         sample::{ExternalIndex, SubspaceData},
@@ -62,7 +64,7 @@ use crate::{
         GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
     },
     utils::{
-        DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS, W_,
+        DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
     },
     uv::{
@@ -87,13 +89,12 @@ use typed_index_collections::{TiVec, ti_vec};
 use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
-    cff::esurface::{Esurface, EsurfaceID},
     graph::{ExternalConnection, FeynmanGraph, Graph},
     integrands::process::{
         ProcessIntegrand,
         cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
-    model::Model,
+    model::{Model, ParticleGammaLoopExt, ParticleIdGammaLoopExt},
 };
 
 use crate::processes::ProcessDefinition;
@@ -344,7 +345,7 @@ impl ThresholdCountertermAssociation {
     pub fn classify_for_model(
         &self,
         graph: &Graph,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         model: &Model,
         param_builder: &ParamBuilder,
         runtime_settings: &RuntimeSettings,
@@ -354,9 +355,11 @@ impl ThresholdCountertermAssociation {
             return ThresholdCountertermStatus::PotentiallyExisting;
         }
 
-        match graph
-            .classify_threshold_pinch(&self.cut_boundary_edges, &self.threshold_boundary_edges)
-        {
+        match graph.classify_threshold_pinch(
+            model,
+            &self.cut_boundary_edges,
+            &self.threshold_boundary_edges,
+        ) {
             ThresholdPinchStatus::Always => {
                 return ThresholdCountertermStatus::AlwaysPinched;
             }
@@ -432,7 +435,7 @@ pub struct CrossSection {
     pub name: String,
     pub integrand: Option<ProcessIntegrand>,
     pub supergraphs: Vec<CrossSectionGraph>,
-    pub external_particles: Vec<ArcParticle>,
+    pub external_particles: Vec<ParticleId>,
     pub external_connections: Vec<ExternalConnection>,
     pub n_incmoming: usize,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
@@ -442,6 +445,7 @@ impl CrossSection {
     pub fn plan_graph_group_selection(
         &self,
         spec: &GraphGroupSelectionSpec,
+        model: &Model,
     ) -> Result<GraphGroupSelectionPlan> {
         if spec.mode() == GraphGroupSelectionMode::CrossSectionAmplitudeGraphs {
             return Err(eyre!(
@@ -453,7 +457,7 @@ impl CrossSection {
                 "Raised-cut signature selection for cross sections requires process and generation settings context."
             ));
         }
-        spec.plan(&self.graph_group_structure, |graph_id| {
+        spec.plan(model, &self.graph_group_structure, |graph_id| {
             self.supergraphs.get(graph_id).map(|graph| &graph.graph)
         })
     }
@@ -468,6 +472,7 @@ impl CrossSection {
         match spec.mode() {
             GraphGroupSelectionMode::MasterGraphs => {
                 spec.plan_with_analysis_contexts(
+                    model,
                     &self.graph_group_structure,
                     |graph_id| self.supergraphs.get(graph_id).map(|graph| &graph.graph),
                     |_master_graph_id, master_graph| {
@@ -488,6 +493,7 @@ impl CrossSection {
             }
             GraphGroupSelectionMode::CrossSectionAmplitudeGraphs => {
                 spec.plan_with_analysis_contexts(
+                    model,
                     &self.graph_group_structure,
                     |graph_id| self.supergraphs.get(graph_id).map(|graph| &graph.graph),
                     |master_graph_id, master_graph| {
@@ -583,7 +589,7 @@ impl CrossSection {
             .collect::<Vec<_>>();
 
         Ok(GraphSelectionSignatureInventory::from_analysis_subjects(
-            subjects,
+            model, subjects,
         ))
     }
 
@@ -784,7 +790,7 @@ impl CrossSection {
         }
     }
 
-    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, _model: &Model) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
         // println!("group structure: {:?}", cross_section.graph_group_structure);
@@ -889,7 +895,7 @@ impl CrossSection {
 
     pub fn build_integrand(
         &mut self,
-        model: &Model,
+        _model: &Model,
         process_definition: &ProcessDefinition,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
@@ -951,7 +957,7 @@ impl CrossSection {
                     let _progress_context_guard = generation_progress::enter_progress_context(
                         format!("{} / {} cuts", sg.graph.name, sg.cuts.len()),
                     );
-                    let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
+                    let (term, mut stats) = sg.generate_term_for_graph(global_settings)?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
@@ -1027,7 +1033,9 @@ impl CrossSection {
                 external_cache_id: 0,
                 base_external_cache_id: 0,
                 rotations: None,
-                symmetrize_left_right_states: process_definition.symmetrize_left_right_states,
+                symmetrize_left_right_states: process_definition
+                    .generation_options
+                    .symmetrizes_left_right(),
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -1157,14 +1165,7 @@ impl CrossSection {
     }
 }
 
-#[derive(Clone, bincode::Encode, bincode::Decode)]
-pub struct CrossSectionCut {
-    pub cut: OrientedCut,
-    pub left: SuBitGraph,
-    pub right: SuBitGraph,
-}
-
-impl CrossSectionCut {
+impl FinalizedCut {
     fn amplitude_side_subjects<'a>(&self, graph: &'a Graph) -> [GraphSelectionSubject<'a>; 2] {
         let cut_edges = self.cut.as_subgraph();
         [
@@ -1213,14 +1214,16 @@ impl CrossSectionCut {
                 .iter_edges(&cross_section_graph.graph.underlying)
                 .filter_map(|(orientation, edge_data)| {
                     Some(if orientation == Orientation::Reversed {
-                        edge_data.data.particle()?.get_anti_particle(model)
+                        edge_data.data.particle()?.antiparticle(model)
                     } else {
-                        edge_data.data.particle()?.clone()
+                        edge_data.data.particle()?
                     })
                 })
                 .collect_vec();
 
             let covariant_states = process.covariant_cut_states(model)?;
+            let unresolved =
+                feynkit_generator::unresolved_cut_content(model, &process.generation_options)?;
             let any_pdg_list_passes = covariant_states
                 .iter()
                 .map(|x| {
@@ -1231,7 +1234,10 @@ impl CrossSectionCut {
                     let mut cut_content = cut_content_builder.clone();
                     debug!(
                         "cut content: {:?}",
-                        cut_content.iter().map(|p| p.name.clone()).collect_vec()
+                        cut_content
+                            .iter()
+                            .map(|p| p.resolve(model).name.clone())
+                            .collect_vec()
                     );
 
                     for particle in particle_content {
@@ -1243,18 +1249,20 @@ impl CrossSectionCut {
                         }
                     }
 
-                    let (n_unresolved, unresolved_cut_content) =
-                        process.unresolved_cut_content(model);
+                    let n_unresolved = unresolved
+                        .as_ref()
+                        .map_or(0, |content| content.maximum_multiplicity);
 
                     if cut_content.len() > n_unresolved {
                         debug!(" too many unresolved particles");
                         return false;
                     }
 
-                    if !cut_content
-                        .iter()
-                        .all(|particle| unresolved_cut_content.contains(particle))
-                    {
+                    if !cut_content.iter().all(|particle| {
+                        unresolved
+                            .as_ref()
+                            .is_some_and(|content| content.particles.contains(particle))
+                    }) {
                         debug!("wrong unresolved particles");
                         return false;
                     }
@@ -1267,8 +1275,14 @@ impl CrossSectionCut {
                 return Ok(false);
             }
 
-            let amplitude_couplings = process.amplitude_filters.get_coupling_orders();
-            let amplitude_loop_count = process.amplitude_filters.get_loop_count_range();
+            let amplitude_loop_count = process
+                .generation_options
+                .filters(feynkit_generator::FilterScope::CutAmplitude)
+                .iter()
+                .find_map(|filter| match filter {
+                    feynkit_generator::GenerationFilter::LoopCountRange(range) => Some(*range),
+                    _ => None,
+                });
 
             if let Some((min_loop, max_loop)) = amplitude_loop_count {
                 let loop_range = min_loop..=max_loop;
@@ -1300,10 +1314,6 @@ impl CrossSectionCut {
                 }
             }
 
-            if amplitude_couplings.is_some() {
-                todo!("waiting for update")
-            }
-
             Ok(true)
         } else {
             debug!("cut is not s channel");
@@ -1329,7 +1339,8 @@ pub struct CrossSectionGraph {
     pub graph: Graph,
     pub source_nodes: HedgeNode,
     pub target_nodes: HedgeNode,
-    pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub cuts: TiVec<CutId, FinalizedCut>,
+    pub topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
     pub derived_data: CrossSectionDerivedData,
@@ -1344,14 +1355,18 @@ pub struct CutkoskyCutCount {
 }
 
 impl CrossSectionGraph {
-    pub(crate) fn new(graph: Graph) -> Self {
+    pub(crate) fn new(mut graph: Graph) -> Self {
         let (source_node, target_node) = graph.get_source_and_target();
+        let cuts = std::mem::take(&mut graph.finalized_cuts).into();
+        let topology_threshold_candidates =
+            std::mem::take(&mut graph.finalized_topology_threshold_candidates);
 
         Self {
             graph,
             source_nodes: source_node,
             target_nodes: target_node,
-            cuts: TiVec::new(),
+            cuts,
+            topology_threshold_candidates,
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
             derived_data: CrossSectionDerivedData::new_empty(),
@@ -1374,7 +1389,8 @@ impl CrossSectionGraph {
 
             match hel {
                 Helicity::Summed => {
-                    let Some(p) = p.polarization_sum(
+                    let Some(p) = p.resolve(model).polarization_sum(
+                        model,
                         eid,
                         false,
                         generation_settings.vector_polarization_sum_gauge,
@@ -1386,7 +1402,8 @@ impl CrossSectionGraph {
                         self.graph.global_prefactor.projector.replace_multiple(&[p]);
                 }
                 Helicity::SummedAveraged => {
-                    let Some(p) = p.polarization_sum(
+                    let Some(p) = p.resolve(model).polarization_sum(
+                        model,
                         eid,
                         true,
                         generation_settings.vector_polarization_sum_gauge,
@@ -1428,7 +1445,7 @@ impl CrossSectionGraph {
         debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
         debug_tags!(#generation; "generating esurfaces corresponding to cuts");
-        self.generate_esurface_cuts();
+        self.generate_esurface_cuts()?;
         debug_tags!(#generation; "generating cff");
         stats.merge_in_place(&self.generate_cff(settings)?);
         debug_tags!(#generation; "building lmbs");
@@ -1436,13 +1453,13 @@ impl CrossSectionGraph {
         debug_tags!(#generation; "building multi channeling channels");
 
         if self.graph.is_group_master {
-            self.build_multi_channeling_channels(settings.override_lmb_heuristics)?;
+            self.build_multi_channeling_channels(model, settings.override_lmb_heuristics)?;
         }
 
         let vk = crate::utils::vakint()?;
         debug_tags!(#generation; "building parametric integrand");
         let cff_energy_degree_bound_reports = Mutex::new(Vec::new());
-        self.build_parametric_integrand(settings, vk, &cff_energy_degree_bound_reports)?;
+        self.build_parametric_integrand(model, settings, vk, &cff_energy_degree_bound_reports)?;
         //self.build_parametric_integrand_cut_groups(settings)?;
 
         let (threshold_candidates, topological_threshold_esurfaces) =
@@ -1583,9 +1600,12 @@ impl CrossSectionGraph {
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<TiVec<CutId, CrossSectionCut>> {
-        if !self.cuts.is_empty() {
-            return Ok(self.cuts.clone());
+    ) -> Result<TiVec<CutId, FinalizedCut>> {
+        if self.cuts.is_empty() {
+            return Err(eyre!(
+                "cross-section graph '{}' has no finalized FeynKit cuts",
+                self.graph.name
+            ));
         }
         self.compute_process_valid_cuts(model, process_definition, settings)
             .map(|(_, cuts)| cuts)
@@ -1606,22 +1626,19 @@ impl CrossSectionGraph {
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<(CutkoskyCutCount, TiVec<CutId, CrossSectionCut>)> {
-        let all_st_cuts = self.graph.all_st_cuts_for_cs(
-            self.source_nodes.clone(),
-            self.target_nodes.clone(),
-            &self.graph.get_initial_state_tree(),
-        );
-        let candidate_st_cuts = all_st_cuts.len();
-
-        let multi_edge_cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
-            .into_iter()
-            .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
+    ) -> Result<(CutkoskyCutCount, TiVec<CutId, FinalizedCut>)> {
+        // Physical cuts are finalized by FeynKit. Threshold candidates describe
+        // a separate topology inventory and may omit every physical Born cut.
+        let candidate_st_cuts = self.cuts.len();
+        let multi_edge_cuts: TiVec<CutId, FinalizedCut> = self
+            .cuts
+            .iter()
             .filter(|cut| cut.cut.nedges(&self.graph) > 1)
+            .cloned()
             .collect();
         let multi_edge_candidate_cuts = multi_edge_cuts.len();
 
-        let mut cuts: TiVec<CutId, CrossSectionCut> = multi_edge_cuts
+        let mut cuts: TiVec<CutId, FinalizedCut> = multi_edge_cuts
             .into_iter()
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
@@ -1644,14 +1661,13 @@ impl CrossSectionGraph {
                 .collect_vec();
 
             cuts.retain(|cut| {
-                let edges_in_cut = self
+                let edges = self
                     .graph
                     .iter_edges_of(&cut.cut)
-                    .map(|(_, _, e)| e.data.name.value.clone())
+                    .map(|(_, _, edge)| edge.data.name.value.to_string())
                     .sorted()
                     .collect_vec();
-
-                force_cuts_sorted.contains(&edges_in_cut)
+                force_cuts_sorted.contains(&edges)
             });
         }
 
@@ -1697,7 +1713,7 @@ impl CrossSectionGraph {
         Ok(())
     }
 
-    fn generate_esurface_cuts(&mut self) {
+    fn generate_esurface_cuts(&mut self) -> Result<()> {
         debug!("generating esurfaces for cuts");
 
         let esurfaces: TiVec<CutId, Esurface> = self
@@ -1715,21 +1731,24 @@ impl CrossSectionGraph {
         debug!("generated esurfaces {:?}", esurfaces);
 
         self.cut_esurface = esurfaces;
+        Ok(())
     }
 
     pub(crate) fn build_parametric_integrand(
         &mut self,
+        model: &Model,
         settings: &GenerationSettings,
         vakint: &Vakint,
         cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<()> {
         self.derived_data.cut_paramatric_integrand =
-            self.build_integrand(settings, vakint, cff_energy_degree_bound_reports)?;
+            self.build_integrand(model, settings, vakint, cff_energy_degree_bound_reports)?;
         Ok(())
     }
 
     fn build_integrand(
         &mut self,
+        model: &Model,
         settings: &GenerationSettings,
         vakint: &Vakint,
         cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
@@ -1800,6 +1819,7 @@ impl CrossSectionGraph {
         let orchestration_started = std::time::Instant::now();
         let parametric_integrands = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            model,
             cut_structure,
             vakint,
             OrientationProjection::exact_expression(
@@ -1946,14 +1966,87 @@ impl CrossSectionGraph {
         .replace(GS.eta)
         .with(Atom::var(GS.eta_right));
 
-        let mut product = (left_prefactor * right_prefactor).expand();
+        // Each single-side helper is linear in its `f` derivative family. Split the two helpers
+        // into those coefficients before multiplying them. This keeps the analytic coefficients
+        // factored and avoids fully distributing their product, which makes Symbolica's evaluator
+        // lowering exceed the normal Rust test-thread stack for mixed orders starting at 2x3.
+        let left_coefficients = Self::coefficients_by_f_derivative(
+            left_prefactor,
+            GS.radius_star_left,
+            left_order,
+            "left",
+        );
+        let right_coefficients = Self::coefficients_by_f_derivative(
+            right_prefactor,
+            GS.radius_star_right,
+            right_order,
+            "right",
+        );
 
-        // The two single-side helpers start with the same generic `f` and `η` families.
-        // Iterated subtraction evaluates one bivariate `f` and distinct left/right inverse-map
-        // derivatives. Expansion exposes every product of univariate `f` derivatives so the
-        // replacements below can fuse them into the corresponding bivariate derivative.
-        product = product.replace_multiple(Self::fuse_left_right_replacement());
-        product
+        let f = symbol!("f");
+        let f_base = function!(f, GS.radius_star_left, GS.radius_star_right);
+        let mut result = Atom::zero();
+        for (left_derivative_order, left_coefficient) in left_coefficients.into_iter().enumerate() {
+            for (right_derivative_order, right_coefficient) in right_coefficients.iter().enumerate()
+            {
+                let mut f_derivative = f_base.clone();
+                for _ in 0..left_derivative_order {
+                    f_derivative = f_derivative.derivative(GS.radius_star_left);
+                }
+                for _ in 0..right_derivative_order {
+                    f_derivative = f_derivative.derivative(GS.radius_star_right);
+                }
+
+                result += &left_coefficient * right_coefficient * f_derivative;
+            }
+        }
+        result
+    }
+
+    fn coefficients_by_f_derivative(
+        prefactor: Atom,
+        derivative_variable: Symbol,
+        singularity_order: u8,
+        placeholder_family: &str,
+    ) -> Vec<Atom> {
+        let f = symbol!("f");
+        let mut f_derivative = function!(f, derivative_variable);
+        let derivative_family = (0..singularity_order)
+            .map(|derivative_order| {
+                if derivative_order > 0 {
+                    f_derivative = f_derivative.derivative(derivative_variable);
+                }
+                f_derivative.clone()
+            })
+            .collect_vec();
+        let placeholders = (0..singularity_order)
+            .map(|derivative_order| {
+                Atom::var(symbol!(format!(
+                    "gammaloop::iterated_threshold_{placeholder_family}_f_{derivative_order}"
+                )))
+            })
+            .collect_vec();
+        let replacements = derivative_family
+            .iter()
+            .zip(&placeholders)
+            .map(|(derivative, placeholder)| {
+                Replacement::new(derivative.to_pattern(), placeholder.clone())
+            })
+            .collect_vec();
+        let polynomial = prefactor.replace_multiple(&replacements);
+        let coefficient_list = polynomial.coefficient_list::<i8>(&placeholders);
+
+        placeholders
+            .into_iter()
+            .map(|placeholder| {
+                coefficient_list
+                    .iter()
+                    .find_map(|(monomial, coefficient)| {
+                        (monomial == &placeholder).then(|| coefficient.clone())
+                    })
+                    .unwrap_or_else(Atom::zero)
+            })
+            .collect()
     }
 
     pub(crate) fn single_th_prefactor_helper_params(order: u8, is_on_right: bool) -> Vec<Atom> {
@@ -2100,56 +2193,6 @@ impl CrossSectionGraph {
         Ok(evaluator)
     }
 
-    fn fuse_left_right_replacement() -> Vec<Replacement> {
-        let f = symbol!("f");
-
-        vec![
-            Replacement::new(
-                (function!(f, GS.radius_star_left) * function!(f, GS.radius_star_right))
-                    .to_pattern(),
-                function!(f, GS.radius_star_left, GS.radius_star_right),
-            ),
-            Replacement::new(
-                (function!(f, GS.radius_star_left)
-                    * function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    0,
-                    W_.x_,
-                    f,
-                    GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-            Replacement::new(
-                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
-                    * function!(f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    W_.x_,
-                    0,
-                    f,
-                    GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-            Replacement::new(
-                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
-                    * function!(Symbol::DERIVATIVE, W_.y_, f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    W_.x_,
-                    W_.y_,
-                    f,
-                    GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-        ]
-    }
     //fn th_prefactor_helper(
     //    &self,
     //    subspace_loop_count: usize,
@@ -2348,13 +2391,17 @@ impl CrossSectionGraph {
         Ok(())
     }
 
-    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) -> Result<()> {
+    fn build_multi_channeling_channels(
+        &mut self,
+        model: &Model,
+        override_lmb_heuristics: bool,
+    ) -> Result<()> {
         let lmbs = self.derived_data.lmbs.as_ref().unwrap();
         let channels = if override_lmb_heuristics {
             self.graph
                 .build_multi_channeling_channels(lmbs, override_lmb_heuristics)
         } else {
-            self.build_cross_section_multi_channeling_channels(lmbs)?
+            self.build_cross_section_multi_channeling_channels(model, lmbs)?
         };
 
         self.derived_data.multi_channeling_setup = Some(channels);
@@ -2363,9 +2410,10 @@ impl CrossSectionGraph {
 
     fn build_cross_section_multi_channeling_channels(
         &self,
+        model: &Model,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<LmbMultiChannelingSetup> {
-        let channels = self.select_cross_section_lmb_channel_indices(lmbs)?;
+        let channels = self.select_cross_section_lmb_channel_indices(model, lmbs)?;
         debug!(
             "number of lmbs: {}, number of cross-section channels: {}",
             lmbs.len(),
@@ -2380,6 +2428,7 @@ impl CrossSectionGraph {
 
     fn select_cross_section_lmb_channel_indices(
         &self,
+        model: &Model,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<TiVec<crate::integrands::process::ChannelIndex, LmbIndex>> {
         if self.cuts.is_empty() {
@@ -2407,7 +2456,8 @@ impl CrossSectionGraph {
                 .map(|(_, edge_id, _)| edge_id)
                 .sorted()
                 .collect_vec();
-            let Some(excluded_cut_edge) = self.excluded_cut_edge_for_lmb_channel(&cut_edge_ids)
+            let Some(excluded_cut_edge) =
+                self.excluded_cut_edge_for_lmb_channel(model, &cut_edge_ids)
             else {
                 continue;
             };
@@ -2460,24 +2510,29 @@ impl CrossSectionGraph {
         }
     }
 
-    fn excluded_cut_edge_for_lmb_channel(&self, cut_edge_ids: &[EdgeIndex]) -> Option<EdgeIndex> {
-        Self::excluded_cut_edge_for_lmb_channel_in(&self.graph, cut_edge_ids)
+    fn excluded_cut_edge_for_lmb_channel(
+        &self,
+        model: &Model,
+        cut_edge_ids: &[EdgeIndex],
+    ) -> Option<EdgeIndex> {
+        Self::excluded_cut_edge_for_lmb_channel_in(&self.graph, model, cut_edge_ids)
     }
 
     fn excluded_cut_edge_for_lmb_channel_in(
         graph: &Graph,
+        model: &Model,
         cut_edge_ids: &[EdgeIndex],
     ) -> Option<EdgeIndex> {
         cut_edge_ids
             .iter()
             .copied()
-            .filter(|edge_id| graph[*edge_id].particle.is_massive())
+            .filter(|edge_id| graph[*edge_id].particle.is_massive(model))
             .min()
             .or_else(|| {
                 cut_edge_ids
                     .iter()
                     .copied()
-                    .filter(|edge_id| graph[*edge_id].particle.is_fermion())
+                    .filter(|edge_id| graph[*edge_id].particle.is_fermion(model))
                     .min()
             })
             .or_else(|| cut_edge_ids.iter().copied().min())
@@ -2492,6 +2547,13 @@ impl CrossSectionGraph {
                 side_subgraph.sub(pair);
             }
         }
+        // A physical cut side is a hairy subgraph: cut lines and sewn initial
+        // states appear as boundary half-edges. Loop bases belong to its
+        // internal core. Passing the hairs to spanning-forest enumeration
+        // introduces boundary-only nodes that no internal forest can cover.
+        side_subgraph =
+            InternalSubGraph::cleaned_filter_pessimist(side_subgraph, &self.graph.underlying)
+                .filter;
 
         if self.graph.underlying.cyclotomatic_number(&side_subgraph) == 0 {
             return Ok(vec![Vec::new()]);
@@ -2567,7 +2629,7 @@ impl CrossSectionGraph {
         &self,
         association: &ThresholdCountertermAssociation,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         model: &Model,
@@ -2589,6 +2651,7 @@ impl CrossSectionGraph {
 
         let structural_status = if association.invariant_bound_is_applicable {
             self.graph.classify_threshold_pinch(
+                model,
                 &association.cut_boundary_edges,
                 &association.threshold_boundary_edges,
             )
@@ -2641,11 +2704,17 @@ impl CrossSectionGraph {
         Vec<TopologicalThresholdCandidate>,
         TiVec<TopologicalThresholdId, Esurface>,
     ) {
-        let mut candidates = self.graph.all_st_cuts_for_cs(
-            self.source_nodes.clone(),
-            self.target_nodes.clone(),
-            &self.graph.get_initial_state_tree(),
-        );
+        let mut candidates = self
+            .topology_threshold_candidates
+            .iter()
+            .map(|candidate| {
+                (
+                    candidate.left.clone(),
+                    candidate.cut.clone(),
+                    candidate.right.clone(),
+                )
+            })
+            .collect_vec();
         candidates.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
         candidates.sort_by(|a, b| a.1.cmp(&b.1));
 
@@ -2655,7 +2724,7 @@ impl CrossSectionGraph {
             .map(|(left, cut, right)| {
                 let threshold_esurface = Esurface::new_from_cut_left(
                     &self.graph.underlying,
-                    &CrossSectionCut {
+                    &FinalizedCut {
                         cut: cut.clone(),
                         left: left.clone(),
                         right: right.clone(),
@@ -3058,6 +3127,7 @@ impl CrossSectionGraph {
             .orchestrator
             .parametric_integrands(
                 &mut self.graph,
+                model,
                 cut_structure,
                 vakint,
                 OrientationProjection::exact_expression(
@@ -3284,7 +3354,6 @@ impl CrossSectionGraph {
 
     fn generate_term_for_graph(
         &self,
-        _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(CrossSectionGraphTerm, GraphGenerationStats)> {
         CrossSectionGraphTerm::from_cross_section_graph(self, settings)
@@ -3337,7 +3406,7 @@ impl CutGroup {
     pub(crate) fn lu_prefactor(
         &self,
         graph: &Graph,
-        cuts: &TiVec<CutId, CrossSectionCut>,
+        cuts: &TiVec<CutId, FinalizedCut>,
     ) -> Result<Atom> {
         let loop_number =
             graph.cyclotomatic_number(&graph.full_filter()) - graph.initial_state_cut.nedges(graph);
@@ -3389,7 +3458,7 @@ impl CutGroup {
     pub(crate) fn lu_cut_selection(
         &self,
         graph: &Graph,
-        cuts: &TiVec<CutId, CrossSectionCut>,
+        cuts: &TiVec<CutId, FinalizedCut>,
     ) -> LuCutSelection {
         let raised_edge_groups = graph.get_raised_edge_groups();
         let cut_edge_alternatives = self
@@ -3512,58 +3581,17 @@ pub(crate) fn build_derivative_structure_atom(
     singularity_order: u8,
     laurent_coefficient: i8,
 ) -> Atom {
-    assert!(
-        laurent_coefficient <= -1,
-        "only laurent coefficients up to -1 are supported"
-    );
-
-    assert!(
-        singularity_order >= 1,
-        "eta order must be at least 1, got {singularity_order}"
-    );
-    assert!(
-        singularity_order >= -laurent_coefficient as u8,
-        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {laurent_coefficient}"
-    );
-
-    let order = singularity_order as i32;
-    let laurent_coefficient = laurent_coefficient as i32;
-    let f = symbol!("f");
-
-    let expansion = function!(GS.eta, GS.rescale)
-        .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
-        .unwrap()
-        .to_atom()
-        .replace(function!(GS.eta, GS.rescale_star))
-        .min_level(0)
-        .max_level(Some(0))
-        .with(0);
-
-    let mut expression_to_derive = function!(f, GS.rescale)
-        * expansion.pow(-order)
-        * (GS.rescale - GS.rescale_star).pow(order);
-
-    for _ in 1..=(order + laurent_coefficient) {
-        expression_to_derive = expression_to_derive.derivative(GS.rescale);
+    feynkit_cff::SurfacePole {
+        surface: function!(GS.eta, GS.rescale),
+        order: singularity_order.into(),
     }
-
-    expression_to_derive = expression_to_derive
-        .replace(GS.rescale - GS.rescale_star)
-        .with(parse!("delta_t"));
-
-    let polynomial_in_delta_t = expression_to_derive
-        .series(symbol!("delta_t"), Atom::num(0), (0, 1))
-        .unwrap();
-
-    let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();
-    debug!("factorial prefactor: {}", factorial_prefactor);
-    let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
-
-    expression_to_derive = expression_to_derive
-        .replace(GS.rescale)
-        .with(GS.rescale_star);
-
-    expression_to_derive
+    .laurent_coefficient(
+        &function!(symbol!("f"), GS.rescale),
+        GS.rescale,
+        &Atom::var(GS.rescale_star),
+        laurent_coefficient.into(),
+    )
+    .expect("valid GammaLoop Laurent coefficient")
 }
 
 pub(crate) fn build_derivative_structure(
@@ -3706,13 +3734,14 @@ mod tests {
 
     use symbolica::{atom::AtomCore, function, symbol};
 
+    use crate::graph::FinalizedCut;
     use crate::{
         cff::{
             CutCFFIndex,
             esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
         },
-        dot,
-        graph::parse::from_dot::IntoGraph,
+        finalized_runtime_dot,
+        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         utils::GS,
     };
@@ -3781,14 +3810,14 @@ mod tests {
 
     #[test]
     fn scalar_cut_residue_keeps_the_propagator_i_exactly_once() {
-        use crate::graph::{FeynmanGraph, Graph};
+        use crate::graph::Graph;
         use symbolica::atom::Atom;
 
         test_initialise().unwrap();
         // This one-line cut is a residue-boundary diagnostic, not a 1->1
         // scattering-rate fixture. It deliberately bypasses the physical
         // process selector's requirement of at least two final particles.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph scalar_cut_line {
                 node [num=1];
                 edge [particle="scalar_0", num="1𝑖"];
@@ -3802,13 +3831,13 @@ mod tests {
         let mut graph = super::CrossSectionGraph::new(graph);
         graph.cuts = graph
             .graph
-            .all_st_cuts_for_cs(
-                graph.source_nodes.clone(),
-                graph.target_nodes.clone(),
-                &graph.graph.get_initial_state_tree(),
-            )
-            .into_iter()
-            .map(|(left, cut, right)| super::CrossSectionCut { cut, left, right })
+            .finalized_topology_threshold_candidates
+            .iter()
+            .map(|candidate| super::FinalizedCut {
+                cut: candidate.cut.clone(),
+                left: candidate.left.clone(),
+                right: candidate.right.clone(),
+            })
             .collect();
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {
@@ -4016,15 +4045,17 @@ mod tests {
     #[test]
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
-        let graph = dot!(
+        let model = crate::utils::load_generic_model("sm");
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
             digraph cut_edge_priority {
+                graph [projector=1]
                 edge [num=1]
                 node [num=1]
-                A -> B [id=0 particle="g"]
-                A -> B [id=1 particle="d"]
-                A -> B [id=2 particle="t" mass=1]
-                A -> B [id=3 particle="a"]
-                A -> B [id=4 mass=0]
+                A -> B [id=0 particle="g" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                A -> B [id=1 particle="d" lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=2 particle="t" mass=1 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                A -> B [id=3 particle="a" lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                A -> B [id=4 mass=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
             }
         )
         .unwrap();
@@ -4032,6 +4063,7 @@ mod tests {
         assert_eq!(
             super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
                 &graph,
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)]
             ),
             Some(EdgeIndex::from(2))
@@ -4039,6 +4071,7 @@ mod tests {
         assert_eq!(
             super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
                 &graph,
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(3)]
             ),
             Some(EdgeIndex::from(1))
@@ -4046,6 +4079,7 @@ mod tests {
         assert_eq!(
             super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
                 &graph,
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(3)]
             ),
             Some(EdgeIndex::from(0))
@@ -4057,12 +4091,12 @@ mod tests {
         assert_eq!(
             graph.underlying[EdgeIndex::from(2)]
                 .particle
-                .mass_atom()
+                .mass_atom(&model)
                 .to_string(),
             "1"
         );
         let empty: SuBitGraph = graph.underlying.empty_subgraph();
-        let cut = super::CrossSectionCut {
+        let cut = FinalizedCut {
             cut: OrientedCut {
                 left: empty.clone(),
                 right: empty.clone(),
@@ -4080,13 +4114,40 @@ mod tests {
             association.classify_for_model(
                 &graph,
                 &cut,
-                &crate::model::Model::default(),
+                &crate::model::Model::empty("threshold-classification-test"),
                 &graph.param_builder,
                 &crate::settings::RuntimeSettings::default(),
                 1.0e-7,
             ),
             super::ThresholdCountertermStatus::ProvenNonExisting,
         );
+    }
+
+    #[test]
+    fn cut_side_lmbs_ignore_boundary_hairs() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("scalars");
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
+            digraph hairy_cut_side {
+                graph [projector=1]
+                edge [num=1 particle="scalar_0"]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [id=0 sink="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                C -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            },
+            &model
+        )
+        .unwrap();
+        let side = graph.full_filter();
+        let cross_section = super::CrossSectionGraph::new(graph);
+
+        let edge_sets = cross_section.selected_cut_side_lmb_edge_sets(side).unwrap();
+
+        assert!(!edge_sets.is_empty());
+        assert!(edge_sets.iter().all(|edges| !edges.contains(&EdgeIndex(0))));
     }
 
     #[test]
@@ -4382,6 +4443,91 @@ mod tests {
                 });
             }
         }
+    }
+
+    #[test]
+    fn factorized_iterated_threshold_helper_matches_the_distributed_product() {
+        test_initialise().unwrap();
+
+        let left_order = 2;
+        let right_order = 3;
+        let factorized = super::CrossSectionGraph::iterated_th_prefactor_helper_atom(
+            left_order,
+            right_order,
+            1,
+            1,
+            true,
+        );
+
+        let left_prefactor =
+            super::CrossSectionGraph::single_th_prefactor_helper_atom(left_order, 1, false, true)
+                .replace(GS.eta)
+                .with(super::Atom::var(GS.eta_left));
+        let right_prefactor =
+            super::CrossSectionGraph::single_th_prefactor_helper_atom(right_order, 1, true, true)
+                .replace(GS.eta)
+                .with(super::Atom::var(GS.eta_right));
+
+        let f = symbol!("f");
+        let mut bivariate_derivatives = Vec::new();
+        let mut univariate_products = Vec::new();
+        let mut left_derivative = function!(f, GS.radius_star_left);
+        for left_derivative_order in 0..left_order {
+            if left_derivative_order > 0 {
+                left_derivative = left_derivative.derivative(GS.radius_star_left);
+            }
+
+            let mut right_derivative = function!(f, GS.radius_star_right);
+            for right_derivative_order in 0..right_order {
+                if right_derivative_order > 0 {
+                    right_derivative = right_derivative.derivative(GS.radius_star_right);
+                }
+
+                let mut bivariate_derivative =
+                    function!(f, GS.radius_star_left, GS.radius_star_right);
+                for _ in 0..left_derivative_order {
+                    bivariate_derivative = bivariate_derivative.derivative(GS.radius_star_left);
+                }
+                for _ in 0..right_derivative_order {
+                    bivariate_derivative = bivariate_derivative.derivative(GS.radius_star_right);
+                }
+                bivariate_derivatives.push(bivariate_derivative);
+                univariate_products.push(&left_derivative * &right_derivative);
+            }
+        }
+
+        let placeholders = bivariate_derivatives
+            .iter()
+            .enumerate()
+            .map(|(index, derivative)| {
+                (
+                    derivative,
+                    super::Atom::var(symbol!(format!(
+                        "gammaloop::iterated_threshold_equivalence_{index}"
+                    ))),
+                )
+            })
+            .collect::<Vec<_>>();
+        let factorized_to_placeholders = placeholders
+            .iter()
+            .map(|(derivative, placeholder)| {
+                super::Replacement::new(derivative.to_pattern(), placeholder.clone())
+            })
+            .collect::<Vec<_>>();
+        let distributed_to_placeholders = univariate_products
+            .iter()
+            .zip(&placeholders)
+            .map(|(product, (_, placeholder))| {
+                super::Replacement::new(product.to_pattern(), placeholder.clone()).max_level(0)
+            })
+            .collect::<Vec<_>>();
+
+        let difference = (factorized.replace_multiple(&factorized_to_placeholders)
+            - (left_prefactor * right_prefactor)
+                .expand()
+                .replace_multiple(&distributed_to_placeholders))
+        .expand();
+        assert_eq!(difference, super::Atom::zero());
     }
 
     #[test]

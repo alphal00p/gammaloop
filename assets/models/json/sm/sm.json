@@ -768,7 +768,7 @@
   }, {
     "name": "UUV1",
     "spins": [-1, -1, 3],
-    "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))"
+    "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))+UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,3))"
   }, {
     "name": "SSS1",
     "spins": [1, 1, 1],
@@ -865,6 +865,7 @@
     "lhablock": "SMINPUTS",
     "lhacode": [1],
     "name": "aEWM1",
+    "texname": "\\text{aEWM1}",
     "nature": "external",
     "parameter_type": "real",
     "value": [132.507, 0.0]
@@ -873,6 +874,7 @@
     "lhablock": "SMINPUTS",
     "lhacode": [2],
     "name": "Gf",
+    "texname": "G_f",
     "nature": "external",
     "parameter_type": "real",
     "value": [1.16639e-05, 0.0]
@@ -881,6 +883,7 @@
     "lhablock": "SMINPUTS",
     "lhacode": [3],
     "name": "aS",
+    "texname": "\\alpha _s",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.118, 0.0]
@@ -889,6 +892,7 @@
     "lhablock": "Wolfenstein",
     "lhacode": [1],
     "name": "lamWS",
+    "texname": "\\text{lamWS}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -897,6 +901,7 @@
     "lhablock": "Wolfenstein",
     "lhacode": [2],
     "name": "AWS",
+    "texname": "\\text{AWS}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -905,6 +910,7 @@
     "lhablock": "Wolfenstein",
     "lhacode": [3],
     "name": "rhoWS",
+    "texname": "\\text{rhoWS}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -913,6 +919,7 @@
     "lhablock": "Wolfenstein",
     "lhacode": [4],
     "name": "etaWS",
+    "texname": "\\text{etaWS}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -921,6 +928,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [4],
     "name": "ymc",
+    "texname": "\\text{ymc}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -929,6 +937,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [5],
     "name": "ymb",
+    "texname": "\\text{ymb}",
     "nature": "external",
     "parameter_type": "real",
     "value": [4.7, 0.0]
@@ -937,6 +946,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [6],
     "name": "ymt",
+    "texname": "\\text{ymt}",
     "nature": "external",
     "parameter_type": "real",
     "value": [173.0, 0.0]
@@ -945,6 +955,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [11],
     "name": "yme",
+    "texname": "\\text{yme}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -953,6 +964,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [13],
     "name": "ymm",
+    "texname": "\\text{ymm}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -961,6 +973,7 @@
     "lhablock": "YUKAWA",
     "lhacode": [15],
     "name": "ymtau",
+    "texname": "\\text{ymtau}",
     "nature": "external",
     "parameter_type": "real",
     "value": [1.777, 0.0]
@@ -969,6 +982,7 @@
     "lhablock": "MASS",
     "lhacode": [23],
     "name": "MZ",
+    "texname": "m_Z",
     "nature": "external",
     "parameter_type": "real",
     "value": [91.188, 0.0]
@@ -977,6 +991,7 @@
     "lhablock": "MASS",
     "lhacode": [4],
     "name": "MC",
+    "texname": "m_c",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -985,6 +1000,7 @@
     "lhablock": "MASS",
     "lhacode": [6],
     "name": "MT",
+    "texname": "m_t",
     "nature": "external",
     "parameter_type": "real",
     "value": [173.0, 0.0]
@@ -993,6 +1009,7 @@
     "lhablock": "MASS",
     "lhacode": [5],
     "name": "MB",
+    "texname": "m_b",
     "nature": "external",
     "parameter_type": "real",
     "value": [4.9, 0.0]
@@ -1001,6 +1018,7 @@
     "lhablock": "MASS",
     "lhacode": [25],
     "name": "MH",
+    "texname": "m_H",
     "nature": "external",
     "parameter_type": "real",
     "value": [125.0, 0.0]
@@ -1009,6 +1027,7 @@
     "lhablock": "MASS",
     "lhacode": [11],
     "name": "Me",
+    "texname": "m_e",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1017,6 +1036,7 @@
     "lhablock": "MASS",
     "lhacode": [13],
     "name": "MM",
+    "texname": "m_{\\mu}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1025,6 +1045,7 @@
     "lhablock": "MASS",
     "lhacode": [15],
     "name": "MTA",
+    "texname": "m_{\\tau}",
     "nature": "external",
     "parameter_type": "real",
     "value": [1.777, 0.0]
@@ -1033,6 +1054,7 @@
     "lhablock": "DECAY",
     "lhacode": [23],
     "name": "WZ",
+    "texname": "\\text{WZ}",
     "nature": "external",
     "parameter_type": "real",
     "value": [2.441404, 0.0]
@@ -1041,6 +1063,7 @@
     "lhablock": "DECAY",
     "lhacode": [24],
     "name": "WW",
+    "texname": "\\text{WW}",
     "nature": "external",
     "parameter_type": "real",
     "value": [2.0476, 0.0]
@@ -1049,6 +1072,7 @@
     "lhablock": "DECAY",
     "lhacode": [6],
     "name": "WT",
+    "texname": "\\text{WT}",
     "nature": "external",
     "parameter_type": "real",
     "value": [1.4915, 0.0]
@@ -1057,6 +1081,7 @@
     "lhablock": "DECAY",
     "lhacode": [25],
     "name": "WH",
+    "texname": "\\text{WH}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.00638233934, 0.0]
@@ -1065,6 +1090,7 @@
     "lhablock": "DECAY",
     "lhacode": [15],
     "name": "WTau",
+    "texname": "\\text{WTau}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1073,6 +1099,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "ZERO",
+    "texname": "0",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1081,6 +1108,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM3x3",
+    "texname": "\\text{CKM3x3}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [1.0, 0.0]
@@ -1089,6 +1117,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM1x1",
+    "texname": "\\text{CKM1x1}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [1.0, 0.0]
@@ -1097,6 +1126,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM1x2",
+    "texname": "\\text{CKM1x2}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1105,6 +1135,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM1x3",
+    "texname": "\\text{CKM1x3}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1113,6 +1144,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM2x1",
+    "texname": "\\text{CKM2x1}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1121,6 +1153,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM2x2",
+    "texname": "\\text{CKM2x2}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [1.0, 0.0]
@@ -1129,6 +1162,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM2x3",
+    "texname": "\\text{CKM2x3}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1137,6 +1171,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM3x1",
+    "texname": "\\text{CKM3x1}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1145,6 +1180,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "CKM3x2",
+    "texname": "\\text{CKM3x2}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1153,6 +1189,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "aEW",
+    "texname": "\\alpha _{\\text{EW}}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.0075467711139788835, 0.0]
@@ -1161,6 +1198,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "G",
+    "texname": "G",
     "nature": "internal",
     "parameter_type": "real",
     "value": [1.2177157847767195, 0.0]
@@ -1169,6 +1207,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "MW",
+    "texname": "m_W",
     "nature": "internal",
     "parameter_type": "real",
     "value": [80.41900244575616, 0.0]
@@ -1177,6 +1216,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "ee",
+    "texname": "e",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.3079537672443688, 0.0]
@@ -1185,6 +1225,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "sw2",
+    "texname": "\\text{sw2}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.22224648578577766, 0.0]
@@ -1193,6 +1234,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "cw",
+    "texname": "c_w",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.8819033474333922, 0.0]
@@ -1201,6 +1243,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "sw",
+    "texname": "s_w",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.4714302554840723, 0.0]
@@ -1209,6 +1252,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "g1",
+    "texname": "g_1",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.349192196787333, 0.0]
@@ -1217,6 +1261,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "gw",
+    "texname": "g_w",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.6532329303475798, 0.0]
@@ -1225,6 +1270,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "vev",
+    "texname": "\\text{vev}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [246.2184581018163, 0.0]
@@ -1233,6 +1279,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "lam",
+    "texname": "\\text{lam}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.1288691060169027, 0.0]
@@ -1241,6 +1288,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "yb",
+    "texname": "\\text{yb}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.02699555425046549, 0.0]
@@ -1249,6 +1297,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "yc",
+    "texname": "\\text{yc}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1257,6 +1306,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "ye",
+    "texname": "\\text{ye}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1265,6 +1315,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "ym",
+    "texname": "\\text{ym}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1273,6 +1324,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "yt",
+    "texname": "\\text{yt}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.9936661458150063, 0.0]
@@ -1281,6 +1333,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "ytau",
+    "texname": "\\text{ytau}",
     "nature": "internal",
     "parameter_type": "real",
     "value": [0.010206617000654717, 0.0]
@@ -1289,6 +1342,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "muH",
+    "texname": "\\mu",
     "nature": "internal",
     "parameter_type": "real",
     "value": [88.38834764831844, 0.0]
@@ -1297,6 +1351,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I1x31",
+    "texname": "\\text{I1x31}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1305,6 +1360,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I1x32",
+    "texname": "\\text{I1x32}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1313,6 +1369,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I1x33",
+    "texname": "\\text{I1x33}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.02699555425046549, 0.0]
@@ -1321,6 +1378,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x12",
+    "texname": "\\text{I2x12}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1329,6 +1387,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x13",
+    "texname": "\\text{I2x13}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1337,6 +1396,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x22",
+    "texname": "\\text{I2x22}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1345,6 +1405,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x23",
+    "texname": "\\text{I2x23}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1353,6 +1414,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x32",
+    "texname": "\\text{I2x32}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1361,6 +1423,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I2x33",
+    "texname": "\\text{I2x33}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.9936661458150063, 0.0]
@@ -1369,6 +1432,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x21",
+    "texname": "\\text{I3x21}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1377,6 +1441,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x22",
+    "texname": "\\text{I3x22}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1385,6 +1450,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x23",
+    "texname": "\\text{I3x23}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1393,6 +1459,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x31",
+    "texname": "\\text{I3x31}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1401,6 +1468,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x32",
+    "texname": "\\text{I3x32}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1409,6 +1477,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I3x33",
+    "texname": "\\text{I3x33}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.9936661458150063, 0.0]
@@ -1417,6 +1486,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I4x13",
+    "texname": "\\text{I4x13}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1425,6 +1495,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I4x23",
+    "texname": "\\text{I4x23}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.0, 0.0]
@@ -1433,6 +1504,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "I4x33",
+    "texname": "\\text{I4x33}",
     "nature": "internal",
     "parameter_type": "complex",
     "value": [0.02699555425046549, 0.0]
@@ -1440,7 +1512,7 @@
   "particles": [{
     "antiname": "a",
     "antitexname": "{\\gamma}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1450,11 +1522,11 @@
     "spin": 3,
     "texname": "{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "Z",
     "antitexname": "{Z}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1464,11 +1536,11 @@
     "spin": 3,
     "texname": "{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "W-",
     "antitexname": "{W^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1478,11 +1550,11 @@
     "spin": 3,
     "texname": "{W^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "W+",
     "antitexname": "{W^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1492,11 +1564,11 @@
     "spin": 3,
     "texname": "{W^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "g",
     "antitexname": "{g}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1506,11 +1578,11 @@
     "spin": 3,
     "texname": "{g}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghA~",
     "antitexname": "\\overline{\\tilde{\\gamma}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1520,11 +1592,11 @@
     "spin": -1,
     "texname": "\\tilde{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghA",
     "antitexname": "\\tilde{\\gamma}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1534,11 +1606,11 @@
     "spin": -1,
     "texname": "\\overline{\\tilde{\\gamma}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghZ~",
     "antitexname": "\\bar{\\tilde{Z}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1548,11 +1620,11 @@
     "spin": -1,
     "texname": "\\tilde{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghZ",
     "antitexname": "\\tilde{Z}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1562,11 +1634,11 @@
     "spin": -1,
     "texname": "\\bar{\\tilde{Z}}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWp~",
     "antitexname": "{\\bar{\\tilde{W}}^+}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1576,11 +1648,11 @@
     "spin": -1,
     "texname": "{\\tilde{W}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWp",
     "antitexname": "{\\tilde{W}^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1590,11 +1662,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWm~",
     "antitexname": "{\\bar{\\tilde{W}}^-}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1604,11 +1676,11 @@
     "spin": -1,
     "texname": "{\\tilde{W}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWm",
     "antitexname": "{\\tilde{W}^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1618,11 +1690,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghG~",
     "antitexname": "{\\bar{\\tilde{g}}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1632,11 +1704,11 @@
     "spin": -1,
     "texname": "{\\tilde{g}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghG",
     "antitexname": "{\\tilde{g}}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1646,11 +1718,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{g}}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ve~",
     "antitexname": "{\\overline{\\nu}_e}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1660,11 +1732,12 @@
     "spin": 2,
     "texname": "{\\nu_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "ve",
     "antitexname": "{\\nu_e}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1674,11 +1747,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1688,11 +1762,12 @@
     "spin": 2,
     "texname": "{\\nu_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "vm",
     "antitexname": "{\\nu_\\mu}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1702,11 +1777,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1716,11 +1792,12 @@
     "spin": 2,
     "texname": "{\\nu_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "vt",
     "antitexname": "{\\nu_\\tau}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1730,11 +1807,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1744,11 +1822,12 @@
     "spin": 2,
     "texname": "{u}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "u",
     "antitexname": "{u}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1758,11 +1837,12 @@
     "spin": 2,
     "texname": "{\\overline{u}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1772,11 +1852,12 @@
     "spin": 2,
     "texname": "{c}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "c",
     "antitexname": "{c}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1786,11 +1867,12 @@
     "spin": 2,
     "texname": "{\\overline{c}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1800,11 +1882,12 @@
     "spin": 2,
     "texname": "{t}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "t",
     "antitexname": "{t}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1814,11 +1897,12 @@
     "spin": 2,
     "texname": "{\\overline{t}}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1828,11 +1912,12 @@
     "spin": 2,
     "texname": "{d}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "d",
     "antitexname": "{d}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1842,11 +1927,12 @@
     "spin": 2,
     "texname": "{\\overline{d}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1856,11 +1942,12 @@
     "spin": 2,
     "texname": "{s}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "s",
     "antitexname": "{s}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1870,11 +1957,12 @@
     "spin": 2,
     "texname": "{\\overline{s}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1884,11 +1972,12 @@
     "spin": 2,
     "texname": "{b}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "b",
     "antitexname": "{b}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1898,11 +1987,12 @@
     "spin": 2,
     "texname": "{\\overline{b}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "H",
     "antitexname": "{H}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1912,11 +2002,11 @@
     "spin": 1,
     "texname": "{H}",
     "width": "WH",
-    "y_charge": 0
+    "y_charge": null
   }, {
     "antiname": "G0",
     "antitexname": "{G_0}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1927,11 +2017,11 @@
     "spin": 1,
     "texname": "{G_0}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": null
   }, {
     "antiname": "G-",
     "antitexname": "{G^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1942,11 +2032,11 @@
     "spin": 1,
     "texname": "{G^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "1"
   }, {
     "antiname": "G+",
     "antitexname": "{G^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1957,11 +2047,11 @@
     "spin": 1,
     "texname": "{G^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "-1"
   }, {
     "antiname": "e+",
     "antitexname": "{e^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1971,11 +2061,12 @@
     "spin": 2,
     "texname": "{e^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1985,11 +2076,12 @@
     "spin": 2,
     "texname": "{e^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1999,11 +2091,12 @@
     "spin": 2,
     "texname": "{\\mu^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2013,11 +2106,12 @@
     "spin": 2,
     "texname": "{\\mu^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -2027,11 +2121,12 @@
     "spin": 2,
     "texname": "{\\tau^-}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2041,7 +2136,8 @@
     "spin": 2,
     "texname": "{\\tau^+}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

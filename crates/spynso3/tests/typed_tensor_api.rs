@@ -30,7 +30,7 @@ fn logical_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("interface")?
+        .getattr("axes")?
         .extract::<Vec<SpensoRepresentation>>()
         .map(|representations| {
             representations
@@ -44,7 +44,7 @@ fn logical_slot_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("interface")?
+        .getattr("axes")?
         .extract::<Vec<SpensoSlot>>()
         .map(|slots| slots.into_iter().map(|slot| slot.slot.rep()).collect())
 }
@@ -78,11 +78,11 @@ fn typed_factories_expose_logical_interfaces_without_key_arguments() {
             .extract::<SpensoRepresentation>()?
             .representation;
 
-        let f = tensor_expression.call_method1("f", (8,))?;
+        let f = tensor_expression.call_method1("color_f", (8,))?;
         assert_eq!(logical_representations(&f)?, vec![coad8, coad8, coad8]);
         assert_eq!(symbolic_argument_count(&f)?, 3);
 
-        let t = tensor_expression.call_method1("t", (8, 3))?;
+        let t = tensor_expression.call_method1("color_t", (8, 3))?;
         let expected_t = vec![coad8, cof3, coaf3];
         assert_eq!(logical_representations(&t)?, expected_t);
         assert_eq!(symbolic_argument_count(&t)?, 3);
@@ -108,12 +108,12 @@ fn predefined_names_are_heads_and_user_names_remain_constructible() {
             .getattr("Representation")?
             .call_method1("euc", (2,))?;
 
-        let predefined = tensor_name.call_method0("t")?;
+        let predefined = tensor_name.call_method0("color_t")?;
         let error = predefined
             .call1(())
             .expect_err("predefined heads must use their typed factory");
         assert!(error.is_instance_of::<PyTypeError>(py));
-        assert!(error.to_string().contains("TensorExpression.t"));
+        assert!(error.to_string().contains("TensorExpression.color_t"));
 
         let globals = PyDict::new(py);
         globals.set_item("spenso", &module)?;
@@ -138,7 +138,7 @@ fn public_patterns_match_canonicalized_builtin_tensors() {
         let tensor_pattern = module.getattr("TensorPattern")?;
 
         let pattern = tensor_pattern.call_method1(
-            "t",
+            "color_t",
             (
                 PythonExpression::from(Atom::var(symbol!("factory_adjoint_dimension_"))),
                 PythonExpression::from(Atom::var(symbol!("factory_fundamental_dimension_"))),
@@ -148,7 +148,7 @@ fn public_patterns_match_canonicalized_builtin_tensors() {
             ),
         )?;
         let target = tensor_expression
-            .call_method1("t", (8, 3))?
+            .call_method1("color_t", (8, 3))?
             .call1(("a", "i", "j"))?
             .call_method0("to_expression")?;
         let replaced = target
@@ -182,8 +182,8 @@ fn unresolved_factory_ports_survive_composition() {
         let module = spenso_module(py)?;
         let tensor_expression = module.getattr("TensorExpression")?;
 
-        let generator = tensor_expression.call_method1("t", (8, 3))?;
-        let gamma = tensor_expression.call_method1("gamma", (4,))?;
+        let generator = tensor_expression.call_method1("color_t", (8, 3))?;
+        let gamma = tensor_expression.call_method1("dirac_gamma", (4,))?;
         let outer = generator.call_method1("outer", (&gamma,))?;
         let indexed = outer.call1(("a", "i", "j", "r", "s", "mu"))?;
         assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 6);
@@ -204,7 +204,7 @@ fn unresolved_factory_ports_survive_composition() {
         let kwargs = PyDict::new(py);
         kwargs.set_item("left", 2)?;
         kwargs.set_item("right", 0)?;
-        let contracted = gamma.call_method("contract", (vector,), Some(&kwargs))?;
+        let contracted = gamma.call_method("contract_ports", (vector,), Some(&kwargs))?;
         let indexed = contracted.call1(("r", "s"))?;
         assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 2);
 
@@ -233,6 +233,179 @@ fn unresolved_factory_ports_survive_composition() {
                 .extract::<usize>()?,
             5
         );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn metric_factory_accepts_dual_ports_and_preserves_logical_order() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let module = spenso_module(py)?;
+        let factory = module.getattr("TensorExpression")?;
+        let fundamental = module
+            .getattr("Representation")?
+            .call_method1("cof", (3,))?;
+        let dual = fundamental.call_method0("dual")?;
+        for (left, right) in [(&fundamental, &dual), (&dual, &fundamental)] {
+            let metric = factory.call_method1("g", (left, right))?;
+            let expected = vec![
+                left.extract::<SpensoRepresentation>()?.representation,
+                right.extract::<SpensoRepresentation>()?.representation,
+            ];
+            assert_eq!(logical_representations(&metric)?, expected);
+            assert_eq!(
+                logical_slot_representations(&metric.call1(("i", "j"))?)?,
+                expected
+            );
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("rank_one", false)?;
+            let trace = metric
+                .call1(("i", "i"))?
+                .call_method("contract", (), Some(&kwargs))?
+                .call_method0("to_expression")?
+                .extract::<PythonExpression>()?;
+            assert_eq!(trace.expr, Atom::num(3));
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn metric_factory_rejects_different_concrete_and_symbolic_spaces() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let module = spenso_module(py)?;
+        let factory = module.getattr("TensorExpression")?;
+        let representation = module.getattr("Representation")?;
+        let concrete = representation.call_method1("cof", (3,))?;
+        let n = representation.call_method1(
+            "cof",
+            (PythonExpression::from(Atom::var(symbol!(
+                "metric_dimension_n"
+            ))),),
+        )?;
+        let m = representation.call_method1(
+            "cof",
+            (PythonExpression::from(Atom::var(symbol!(
+                "metric_dimension_m"
+            ))),),
+        )?;
+        for (left, right) in [
+            (concrete.clone(), representation.call_method1("cof", (4,))?),
+            (concrete.clone(), representation.call_method1("coad", (3,))?),
+            (n.clone(), m.call_method0("dual")?),
+            (n.clone(), concrete.call_method0("dual")?),
+        ] {
+            let error = factory
+                .call_method1("g", (&left, &right))
+                .expect_err("metric dimensions and representation spaces must match exactly");
+            assert!(error.is_instance_of::<PyValueError>(py));
+        }
+        assert!(
+            factory
+                .call_method1("g", (&n, n.call_method0("dual")?))
+                .is_ok()
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn components_preserve_generated_identities_and_logical_order() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let globals = PyDict::new(py);
+        globals.set_item("spenso", spenso_module(py)?)?;
+        py.run(
+            c"
+euc = spenso.Representation.euc(2)
+bis = spenso.Representation.bis(4)
+name = spenso.TensorName('component_identity_matrix')
+expr = name(bis, euc)
+before = expr.to_expression()
+interface = expr.structure.axes
+components = expr.components()
+assert len(components) == 8
+assert len(set(str(x) for x in components)) == 8
+assert components == expr.components()
+assert components == name(bis('j'), euc('i')).components()
+assert components == name(bis('l'), euc('k')).components()
+assert expr.to_expression() == before
+assert expr.structure.axes == interface
+
+# Contracting one axis must select the same component identities and order.
+selector = spenso.Tensor.dense(
+    spenso.TensorName('component_selector')(bis), [0.0, 0.0, 1.0, 0.0]
+)
+network = name(bis('j'), euc('i')) * selector('j')
+network.execute()
+selected = network.result_tensor()[:]
+assert all((x - y).expand() == 0 for x, y in zip(selected, components[4:6]))
+
+# Scalar contractions return a one-element list, using the same generated atoms.
+v = spenso.TensorName('component_identity_vector')
+vector = v(euc).components()
+scalar = (v(euc('i')) * v(euc('i'))).components()
+assert len(scalar) == 1
+assert (scalar[0] - sum(x*x for x in vector)).expand() == 0
+",
+            Some(&globals),
+            None,
+        )?;
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn components_resolve_library_values_and_compound_expressions() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let globals = PyDict::new(py);
+        globals.set_item("spenso", spenso_module(py)?)?;
+        py.run(
+            c"
+euc = spenso.Representation.euc(2)
+bis = spenso.Representation.bis(4)
+name = spenso.TensorName('component_library_matrix')
+expr = name(bis, euc)
+lib = spenso.TensorLibrary()
+values = [float(i) for i in range(8)]
+tensor = spenso.Tensor.dense(expr, values)
+tensor = tensor.to_sparse()
+lib.register(tensor)
+assert expr.components(library=lib) == values
+assert name(bis('j'), euc('i')).components(library=lib) == values
+assert (2 * expr).components(library=lib) == [2*x for x in values]
+
+# Built-in values and sparse zeros retain the ordinary network result types.
+mink = spenso.Representation.mink(4)
+metric = mink.g('mu', 'nu').components(library=spenso.TensorLibrary.hep_lib_atom())
+assert metric == [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1]
+assert all(isinstance(x, float) for x in metric)
+
+# A symbolic library entry keeps exact coefficients and input identities.
+symbols = spenso.TensorName('component_exact_input')(euc).components()
+exact = [symbols[0] / 3, symbols[1] / 7]
+exact_name = spenso.TensorName('component_exact_library')
+lib.register(spenso.Tensor.dense(exact_name(euc), exact))
+assert exact_name(euc).components(library=lib) == exact
+
+# Components of an unknown, unbounded tensor cannot be enumerated.
+try:
+    name(spenso.Representation.euc('component_dimension')).components()
+except (ValueError, RuntimeError):
+    pass
+else:
+    raise AssertionError('symbolic dimensions must reject component enumeration')
+",
+            Some(&globals),
+            None,
+        )?;
         Ok(())
     })
     .unwrap();

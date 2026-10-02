@@ -1,0 +1,11 @@
+--- a/src/poly.rs
++++ b/src/poly.rs
+@@ -2380,7 +2380,7 @@
+             .iter()
+             .enumerate()
+             .map(|(index, v)| {
+-                if self.degree(index) == E::zero() {
++                if !self.contains(index) {
+                     return None;
+                 }
+ 

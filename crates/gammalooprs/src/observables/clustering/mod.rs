@@ -22,6 +22,16 @@ pub enum JetAlgorithm {
     AntiKt,
 }
 
+impl From<JetAlgorithm> for feynkit_kinematics::JetAlgorithm {
+    fn from(algorithm: JetAlgorithm) -> Self {
+        match algorithm {
+            JetAlgorithm::Kt => Self::Kt,
+            JetAlgorithm::CambridgeAachen => Self::CambridgeAachen,
+            JetAlgorithm::AntiKt => Self::AntiKt,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct JetClustering {
     algorithm: JetAlgorithm,

@@ -17,7 +17,7 @@ on:
     branches:
       - main
     tags:
-      - 'linnet-py-v*'
+      - 'linnet-python-v*'
   workflow_dispatch:
 
 permissions:
@@ -45,6 +45,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linnet-py-pyemscripten-wheel
+          name: linnet-pyemscripten-wheel
           path: wheelhouse/*.whl
           if-no-files-found: error

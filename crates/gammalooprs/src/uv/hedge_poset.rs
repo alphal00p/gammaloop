@@ -16,7 +16,12 @@ use std::cmp::Reverse;
 use ahash::AHashMap;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    tensor::SymbolicTensor,
+};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -28,6 +33,7 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
+use spenso::shadowing::TensorCollectFilter;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
@@ -42,6 +48,7 @@ use crate::{
         cuts::CutSet,
         parse::string_utils::{ToOrderedSimple, dot_attr_value},
     },
+    model::Model,
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
@@ -168,7 +175,12 @@ impl Wood {
         (current, given)
     }
 
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(
+        cuts: CutStructure,
+        graph: &Graph,
+        model: &Model,
+        settings: &UVgenerationSettings,
+    ) -> Self {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
         let mut spinneys = Vec::new();
@@ -177,6 +189,7 @@ impl Wood {
             let cut_sub = subgraph.subtract(&cut.union);
             spinneys.extend(graph.classified_spinneys(
                 &cut_sub,
+                model,
                 settings,
                 &graph.loop_momentum_basis,
             ));
@@ -1018,6 +1031,7 @@ impl Forests {
         &self,
         node: NodeIndex,
         graph: &Graph,
+        model: &Model,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<(Local4dCts, IntegratedCts)> {
@@ -1062,7 +1076,7 @@ impl Forests {
             .wrap_err_with(|| format!("while loading the 4D parent for {operation}"))?;
         let step_order = self.graph[parent].key.op_count();
         let (current, given) = self.wood.current_given_pair(edge, step_order);
-        let ctx = UVCtx::new(graph, settings);
+        let ctx = UVCtx::new(graph, model, settings);
         let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
         let local = local_4d::uv_limit(&full, &ctx, &current, &given, &current, &given)?;
         let integrated = if settings.generate_integrated {
@@ -1244,6 +1258,7 @@ impl Forests {
     pub fn integrate(
         &mut self,
         graph: &Graph,
+        model: &Model,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
@@ -1255,7 +1270,8 @@ impl Forests {
         {
             debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
             let operation = self.graph[nidx].clone();
-            let (local_4d, integrated) = self.compute_4d_for_node(nidx, graph, vakint, settings)?;
+            let (local_4d, integrated) =
+                self.compute_4d_for_node(nidx, graph, model, vakint, settings)?;
             let cover = operation
                 .covers()
                 .unwrap_or_else(|| self.graph.empty_subgraph())
@@ -1285,11 +1301,12 @@ impl Forests {
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
+        model: &Model,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.integrate(graph, vakint, settings)?;
+        self.integrate(graph, model, vakint, settings)?;
         let mut projection_context = Local4dProjectionContext::default();
 
         for (compatible_subset, cutset) in self.cuts.clone() {
@@ -1351,7 +1368,20 @@ impl Forests {
                     .require(operation)?
                     .cut(operation, cutset)?
                     .final_integrands
-                    .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
+                    .map_expressions(|integrand| {
+                        let color = TensorCollectFilter::Reps([
+                            ColorAdjoint {}.into(),
+                            ColorFundamental {}.into(),
+                            ColorSextet {}.into(),
+                        ]);
+                        let cooking = CookSettings::indices()
+                            .with_mode(CookMode::ReversibleEncoding)
+                            .with_representation_payloads(true, true);
+                        let collected =
+                            SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
+                                .collect(color)?;
+                        Ok(cooking.uncook(collected.expression().as_view()))
+                    })?;
                 sum = Some(match sum {
                     Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
@@ -1461,15 +1491,27 @@ impl Forests {
             let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
             debug!(
                 key=%key,
-               expr = % atom.expand_num().log_print(None),"Term before simplification"
+               expr = % atom.log_print(None),"Term before simplification"
             );
-            let atom = (&atom
+            let atom = &atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
+                * &graph.overall_factor;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let atom = cooking.uncook(reduced.expression().as_view());
 
             debug!(
                 key=%key,
@@ -1540,15 +1582,25 @@ impl Display for Forests {
 #[cfg(test)]
 mod tests {
     use crate::{
-        dot,
-        graph::{Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
         uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
     };
+    use idenso::tensor::ContractSettings;
+    use symbolica::id::ConditionResult;
 
     use super::*;
     use color_eyre::Result;
+
+    fn scalar_model() -> Model {
+        crate::utils::load_generic_model("scalars")
+    }
+
+    fn standard_model() -> Model {
+        crate::utils::load_generic_model("sm")
+    }
 
     impl Forests {
         fn normalized_node_label(&self, node: NodeIndex) -> String {
@@ -1596,18 +1648,22 @@ mod tests {
     #[test]
     fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = dot!(
+        let dumbell: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v2;
-                v1 -> v1;v1 -> v1;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
             },"scalars"
         )?;
 
         let forests = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         )
         .unfold();
@@ -1708,7 +1764,7 @@ mod tests {
     #[test]
     fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -1724,8 +1780,8 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        let mut forests = Wood::new(cut_structure, &graph, &graph.model, &settings).unfold();
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
 
         let unions = forests
             .graph
@@ -1762,12 +1818,15 @@ mod tests {
         use crate::graph::feynman_graph::FeynmanGraph;
 
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v2;
-                v1 -> v1;v1 -> v1;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
             },"scalars"
         )?;
         let settings = UVgenerationSettings::default();
@@ -1777,7 +1836,7 @@ mod tests {
             .first()
             .expect("empty cut structure has one cut")
             .clone();
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+        let mut forests = Wood::new(cut_structure, &graph, &scalar_model(), &settings).unfold();
 
         let root_disconnected = forests
             .graph
@@ -1957,18 +2016,31 @@ mod tests {
 
     #[test]
     fn heterogeneous_terminal_projects_components_before_multiplying() -> Result<()> {
+        // Symbolica's exact integrated projection is intentionally recursive and
+        // needs more than libtest's 2 MiB worker stack. GammaLoop's runtime main
+        // thread has the platform stack, so exercise the same operation here.
+        std::thread::Builder::new()
+            .name("heterogeneous-terminal-projection".to_string())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(heterogeneous_terminal_projects_components_before_multiplying_impl)
+            .expect("projection test thread should start")
+            .join()
+            .expect("projection test thread should not panic")
+    }
+
+    fn heterogeneous_terminal_projects_components_before_multiplying_impl() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 num = "1";
                 projector = "1";
                 overall_factor = "1";
-                edge [particle = "scalar_1"];
+                edge [particle = "scalar_1" num=1];
                 node [num = "1"];
-                v1 -> v2;
-                v1 -> v1;
-                v2 -> v3;
-                v2 -> v3;
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v1 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
+                v2 -> v3 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -1982,8 +2054,10 @@ mod tests {
             },
             ..Default::default()
         };
-        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings).unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        let model = scalar_model();
+        let mut forests =
+            Wood::new(CutStructure::empty(&graph), &graph, &model, &settings).unfold();
+        forests.integrate(&graph, &model, crate::utils::vakint()?, &settings)?;
 
         let terminals = forests
             .graph
@@ -2036,10 +2110,22 @@ mod tests {
         let wild = Atom::var(W_.x___);
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
-        let expected = expected
-            .simplify_color()
-            .expand_num()
-            .to_dots()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let expected = cooking
+            .uncook(expected.expression().as_view())
             .replace_multiple(&replacements)
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum);
@@ -2054,14 +2140,16 @@ mod tests {
     #[test]
     fn triple_tadpole() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = dot!(
+        let dumbell: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v3;
-                v3 -> v3;
-                v2 -> v2;
-                v1 -> v1;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
+                v3 -> v3 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v2 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"];
+                v1 -> v1 [lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
@@ -2073,6 +2161,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
 
@@ -2156,19 +2245,25 @@ mod tests {
     #[test]
     fn saclay() -> Result<()> {
         test_initialise().unwrap();
-        let dt: Graph = dot!(digraph GL16{
+        let dt: Graph = finalized_runtime_dot!(digraph GL16{
 
-        num = "spenso::g(spenso::coad(8,gammalooprs::hedge(8)),spenso::coad(8,gammalooprs::hedge(11)))"
+        num = "1"
+                projector = "1"
+                node [num=1]
                 ext	 [style=invis];
-                ext	-> 0  [dir=none id=0 particle="g"];
-                2	-> ext  [dir=none id=1 particle="g"];
-                0	-> 1 -> 2->3->0  [ particle="d"];
-                      1 ->3 [particle = "g"]
+                ext	-> 0  [dir=none id=0 particle="g" num=1 dod=-2 sink="{ufo_order:0}"];
+                2	-> ext  [dir=none id=1 particle="g" num=1 dod=-2 source="{ufo_order:0}"];
+                0 -> 1 [id=2 particle="d" num="Q(2,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                1 -> 2 [id=3 particle="d" num="Q(3,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                2 -> 3 [id=4 particle="d" num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                3 -> 0 [id=5 particle="d" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                1 -> 3 [id=6 particle="g" num=1 dod=-2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
                     })?;
 
         let f = Wood::new(
             CutStructure::empty(&dt),
             &dt,
+            &standard_model(),
             &UVgenerationSettings::default(),
         );
 
@@ -2195,12 +2290,14 @@ mod tests {
     #[test]
     fn dumbells() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = dot!(
+        let dumbell: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v2;
-                v1 -> v1;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
@@ -2212,6 +2309,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
 
@@ -2247,17 +2345,19 @@ mod tests {
     fn bugblatter() -> Result<()> {
         test_initialise().unwrap();
 
-        match dot!(
+        match finalized_runtime_dot!(
             digraph G{
-                A1 -> A2 [particle="t"];
-                A2 -> A3 [particle="t"];
-                A3 -> A1 [particle="t"];
-                B1 -> B2 [particle="t"];
-                B2 -> B3 [particle="t"];
-                B3 -> B1 [particle="t"];
-                A1 -> B1 [particle="a"];
-                A2 -> B2 [particle="a"];
-                A3 -> B3 [particle="a"];
+                graph [projector=1]
+                node [num=1]
+                A1 -> A2 [id=0 particle="t" num="Q(0,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                A2 -> A3 [id=1 particle="t" num="Q(1,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                A3 -> A1 [id=2 particle="t" num="Q(2,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                B1 -> B2 [id=3 particle="t" num="Q(3,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                B2 -> B3 [id=4 particle="t" num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                B3 -> B1 [id=5 particle="t" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                A1 -> B1 [id=6 particle="a" num=1 dod=-2 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                A2 -> B2 [id=7 particle="a" num=1 dod=-2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                A3 -> B3 [id=8 particle="a" num=1 dod=-2 lmb_id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
             },"sm"
         ) {
             Ok(g) => {
@@ -2270,6 +2370,7 @@ mod tests {
                 let f = Wood::new(
                     CutStructure::empty(&g),
                     &g,
+                    &standard_model(),
                     &UVgenerationSettings::default(),
                 );
 
@@ -2324,21 +2425,24 @@ mod tests {
     fn mercedes() -> Result<()> {
         test_initialise().unwrap();
 
-        let mercedes: Graph = dot!(
+        let mercedes: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v3;
-                v3 -> v1;
-                v1 -> v4;
-                v2 -> v4;
-                v3 -> v4;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
+                v3 -> v1 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v4 [source="{ufo_order:2}" sink="{ufo_order:0}"];
+                v2 -> v4 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+                v3 -> v4 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
         let f = Wood::new(
             CutStructure::empty(&mercedes),
             &mercedes,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -2360,20 +2464,22 @@ mod tests {
     fn sunrise() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = dot!( digraph sunrise{
+        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+            graph [projector=1]
             node [num = "1"]
-            edge [particle=scalar_1]
+            edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0   [ id=3 ]
-            B:1 -> e   [ id=4 ]
-            A -> B    [ id=0 ]
-            A -> B    [ id=1 ]
-            A -> B    [ id=2 ]
+            e -> A:0 [id=3 sink="{ufo_order:0}"]
+            B:1 -> e [id=4 source="{ufo_order:0}"]
+            A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            A -> B [id=2 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -2394,22 +2500,25 @@ mod tests {
     fn dotted_sunrise() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = dot!( digraph sunrise{
-            edge [particle=scalar_1]
+        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+            graph [projector=1]
+            node [num=1]
+            edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0   [ id=3]
-            B:1 -> e   [ id=4]
+            e -> A:0 [id=3 sink="{ufo_order:0}"]
+            B:1 -> e [id=4 source="{ufo_order:0}"]
 
-            A -> C    [ id=0]
-            C -> e
-            C -> B
-            A -> B    [ id=1]
-            A -> B    [ id=2]
+            A -> C [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            C -> e [source="{ufo_order:1}"]
+            C -> B [source="{ufo_order:2}" sink="{ufo_order:1}"]
+            A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            A -> B [id=2 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -2431,23 +2540,26 @@ mod tests {
     fn dotted() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = dot!( digraph sunrise{
-            edge [particle=scalar_1]
+        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+            graph [projector=1]
+            node [num=1]
+            edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0   [ id=4]
-            B:1 -> e   [ id=5]
-            C:2 -> e   [ id=6]
+            e -> A:0 [id=4 sink="{ufo_order:0}"]
+            B:1 -> e [id=5 source="{ufo_order:0}"]
+            C:2 -> e [id=6 source="{ufo_order:0}"]
 
-            A -> B    [ id=0]
-            B -> C     [ id=1]
-            C -> A   [ id=2]
-            B -> C    [ id=3]
+            A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            B -> C [id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            C -> A [id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            B -> C [id=3 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
 
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -2471,17 +2583,19 @@ mod tests {
 
         test_initialise().unwrap();
 
-        let mut spectacles: Graph = dot!(
+        let mut spectacles: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v1 -> v2;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
 
-                v3 -> v4;
-                v3 -> v4;
+                v3 -> v4 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v3 -> v4 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
 
-                v2 -> v3;
-                v1 -> v4;
+                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v4 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
@@ -2493,7 +2607,7 @@ mod tests {
             .first()
             .expect("empty cut structure has one cut")
             .clone();
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(cut_structure, &spectacles, &scalar_model(), &settings);
         println!("{}", f);
         let f = f.unfold();
         println!("{}", f);
@@ -2621,7 +2735,7 @@ mod tests {
         // The two-line component has DOD two, while the scalar triangle has DOD
         // minus two. Their disconnected union is therefore logarithmically
         // divergent even though the triangle is not a UV region on its own.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 node [num = "1"];
                 edge [particle = "scalar_1"];
@@ -2639,7 +2753,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings);
         let collective = wood
             .graph
             .iter_nodes()
@@ -2692,7 +2806,7 @@ mod tests {
             .expect("the collective region has a compatible source chart"),
             topo_order: 1,
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let input = Full4dCts::from_factorized_local(&Local4dCts::root());
         let prefix = local_4d::uv_limit(&input, &ctx, &divergent, &root, &divergent, &root)?;
         // The two physical forests containing U are {U} and {A,U}:
@@ -2716,7 +2830,7 @@ mod tests {
         )?;
         let expected = atomic.atom() + nested.atom();
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -2737,14 +2851,27 @@ mod tests {
             &graph.loop_momentum_basis,
             &[Atom::var(W_.x___)],
         );
-        let [actual, expected] = [actual, expected].map(|expression| {
-            GS.erase_uv_momentum_provenance(&expression)
+        let [actual, expected] = [actual, expected].map(|expression| -> Result<Atom> {
+            let expression = GS
+                .erase_uv_momentum_provenance(&expression)
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
-                .collect_factors()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
+            Ok(cooking
+                .uncook(expression.expression().as_view())
+                .collect_factors())
         });
+        let (actual, expected) = (actual?, expected?);
         assert!(
             !atomic.atom().is_zero(),
             "the atomic Taylor term must be nonzero"
@@ -2793,7 +2920,7 @@ mod tests {
         // other two components have non-negative combined DOD. The triangle itself
         // supplies no independent counterterm: complete complement coverage alone
         // cannot replace the collective Taylor operation by a factorized product.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 node [num = "1"];
                 edge [particle = "scalar_1"];
@@ -2814,7 +2941,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings);
         let collective = wood
             .graph
             .iter_nodes()
@@ -2861,7 +2988,7 @@ mod tests {
         };
         let root_local = Local4dCts::root();
         let input = Full4dCts::from_factorized_local(&root_local);
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let convergent = components
             .iter()
             .find(|component| graph.compute_dod(*component) < 0)
@@ -2922,8 +3049,21 @@ mod tests {
                 .erase_uv_momentum_provenance(&(atomic.atom() + nested.atom()))
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let mixed_remainder = SymbolicTensor::infer(
+                cooking.try_cook(mixed_remainder.as_view())?,
+            )?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+            let mixed_remainder = cooking
+                .uncook(mixed_remainder.expression().as_view())
                 .collect_factors();
             assert!(
                 mixed_remainder.is_zero(),
@@ -2987,7 +3127,7 @@ mod tests {
             expected += term.atom();
         }
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -3000,15 +3140,33 @@ mod tests {
                         .local_4d(operation)?
                         .atom())
             })?;
-        let [actual, expected] = [actual, expected].map(|expression| {
-            GS.erase_uv_momentum_provenance(&expression)
+        let [actual, expected] = [actual, expected].map(|expression| -> Result<Atom> {
+            let expression = GS
+                .erase_uv_momentum_provenance(&expression)
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
+            Ok(cooking.uncook(expression.expression().as_view()))
         });
-        assert!(
-            (actual - expected).expand().is_zero(),
+        let (actual, expected) = (actual?, expected?);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let actual = SymbolicTensor::infer(cooking.try_cook(actual.as_view())?)?;
+        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?;
+        assert_eq!(
+            actual.coefficients_equal(&expected, TensorCollectFilter::<0>::Tensors)?,
+            ConditionResult::True,
             "the complete collective Taylor value must equal -T_U(1-T_A)(1-T_B)I"
         );
 
@@ -3019,7 +3177,7 @@ mod tests {
     fn spectacles_typed_4d_local_construction_matches_uv_limit() -> Result<()> {
         test_initialise().unwrap();
 
-        let spectacles: Graph = dot!(
+        let spectacles: Graph = finalized_runtime_dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -3040,7 +3198,7 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(cut_structure, &spectacles, &spectacles.model, &settings);
         println!("{}", f);
         let mut f = f.unfold();
         println!("{}", f);
@@ -3054,13 +3212,18 @@ mod tests {
                     .then_some((parent, child, edge))
             })
             .expect("spectacles has a connected child above its disconnected union");
-        f.integrate(&spectacles, crate::utils::vakint()?, &settings)?;
+        f.integrate(
+            &spectacles,
+            &spectacles.model,
+            crate::utils::vakint()?,
+            &settings,
+        )?;
 
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);
         let expected = local_4d::uv_limit(
             &f.recursion_input_4d(union)?,
-            &UVCtx::new(&spectacles, &settings),
+            &UVCtx::new(&spectacles, &spectacles.model, &settings),
             &current,
             &given,
             &current,
@@ -3077,19 +3240,22 @@ mod tests {
     fn basketball() -> Result<()> {
         test_initialise().unwrap();
 
-        let basketball: Graph = dot!(
+        let basketball: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v1 -> v2;
-                v1 -> v2;
-                v1 -> v2;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v2 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
             },"scalars"
         )?;
 
         let f = Wood::new(
             CutStructure::empty(&basketball),
             &basketball,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -3109,18 +3275,20 @@ mod tests {
     fn fourloop_b() -> Result<()> {
         test_initialise().unwrap();
 
-        let fourloop_b: Graph = dot!(
+        let fourloop_b: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v1 -> v2;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
 
-                v3 -> v4;
-                v3 -> v4;
+                v3 -> v4 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v3 -> v4 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
 
-                v2 -> v3;
-                v1 -> v3;
-                v1 -> v4;
+                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v3 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:3}"];
+                v1 -> v4 [lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
@@ -3128,6 +3296,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&fourloop_b),
             &fourloop_b,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -3149,22 +3318,25 @@ mod tests {
     fn four_loop_a() -> Result<()> {
         test_initialise().unwrap();
 
-        let four_loop_a: Graph = dot!(
+        let four_loop_a: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v1 -> v2;
-                v2 -> v3;
-                v3 -> v1;
-                v1 -> v4;
-                v2 -> v4;
-                v3 -> v4;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:0}"];
+                v3 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v4 [source="{ufo_order:3}" sink="{ufo_order:0}"];
+                v2 -> v4 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:1}"];
+                v3 -> v4 [lmb_id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
             },"scalars"
         )?;
 
         let f = Wood::new(
             CutStructure::empty(&four_loop_a),
             &four_loop_a,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
         println!("{}", f);
@@ -3185,20 +3357,26 @@ mod tests {
     #[test]
     fn triple_double_tadpole() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = dot!(
+        let dumbell: Graph = finalized_runtime_dot!(
             digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v3;
-                v3 -> v3;v3 -> v3;
-                v2 -> v2; v2 -> v2;
-                v1 -> v1;v1 -> v1;
+                graph [projector=1]
+                node [num=1]
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
+                v3 -> v3 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v3 -> v3 [lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                v2 -> v2 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:3}"];
+                v2 -> v2 [lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:5}"];
+                v1 -> v1 [lmb_id=4 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v1 [lmb_id=5 source="{ufo_order:3}" sink="{ufo_order:4}"];
             },"scalars"
         )?;
 
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
+            &scalar_model(),
             &UVgenerationSettings::default(),
         );
 
@@ -3220,12 +3398,15 @@ mod tests {
         #[test]
         fn lobsided_double_dumbell() -> Result<()> {
             test_initialise().unwrap();
-            let dumbell: Graph = dot!(
+            let dumbell: Graph = finalized_runtime_dot!(
                 digraph G{
-                    edge [particle="scalar_1"];
-                    v1 -> v2;
-                    v2 -> v2; //v2 -> v2;
-                    v1 -> v1;v1 -> v1;
+                    graph [projector=1]
+                    node [num=1]
+                    edge [particle="scalar_1" num=1];
+                    v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                    v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                    v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                    v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
                 },"scalars"
             )?;
 
@@ -3237,6 +3418,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
+                &scalar_model(),
                 &UVgenerationSettings::default(),
             );
 
@@ -3265,9 +3447,9 @@ mod tests {
             insta::assert_snapshot!(
                 f.normalized_node_labels_with_cover("3L").join("\n"),
                 @r###"
-{36,F}: T(S_36(_))*T(S_F(_))
-{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
-{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+{36,F}: Approx(S_36(_))*Approx(S_F(_))
+{3} · {36,F}: Approx((-1*S_3+S_F(_))*Approx(S_3(_)))*Approx(S_36(_))
+{C} · {36,F}: Approx((-1*S_C+S_F(_))*Approx(S_C(_)))*Approx(S_36(_))
 "###
             );
             insta::assert_snapshot!(
@@ -3277,6 +3459,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
+                &scalar_model(),
                 &UVgenerationSettings::default(),
             )
             .unfold_uncached();
@@ -3284,9 +3467,9 @@ mod tests {
             insta::assert_snapshot!(
                 f.normalized_node_labels_with_cover("3L").join("\n"),
                 @r###"
-{36,F}: T(S_36(_))*T(S_F(_))
-{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
-{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+{36,F}: Approx(S_36(_))*Approx(S_F(_))
+{3} · {36,F}: Approx((-1*S_3+S_F(_))*Approx(S_3(_)))*Approx(S_36(_))
+{C} · {36,F}: Approx((-1*S_C+S_F(_))*Approx(S_C(_)))*Approx(S_36(_))
 "###
             );
 
@@ -3296,12 +3479,16 @@ mod tests {
         #[test]
         fn double_double_dumbell() -> Result<()> {
             test_initialise().unwrap();
-            let dumbell: Graph = dot!(
+            let dumbell: Graph = finalized_runtime_dot!(
                 digraph G{
-                    edge [particle="scalar_1"];
-                    v1 -> v2;
-                    v2 -> v2;v2 -> v2; //v2 -> v2;
-                    v1 -> v1;v1 -> v1;
+                    graph [projector=1]
+                    node [num=1]
+                    edge [particle="scalar_1" num=1];
+                    v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                    v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                    v2 -> v2 [lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                    v1 -> v1 [lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                    v1 -> v1 [lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:4}"];
                 },"scalars"
             )?;
 
@@ -3313,6 +3500,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
+                &scalar_model(),
                 &UVgenerationSettings::default(),
             );
 
@@ -3333,6 +3521,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
+                &scalar_model(),
                 &UVgenerationSettings::default(),
             )
             .unfold_uncached();

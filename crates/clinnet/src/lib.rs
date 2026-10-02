@@ -33,6 +33,9 @@ struct EmbeddedTemplates;
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
+#[include = "ec-layout.wasm"]
+#[include = "LICENSE.ec-layout"]
+#[include = "LICENSE.clarabel"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -910,6 +913,9 @@ mod tests {
     fn embedded_packages_include_nested_sources() {
         assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
         assert!(EmbeddedLinnestPackage::get("src/impl/subgraph.typ").is_some());
+        for module in ["linnest.wasm", "ec-layout.wasm"] {
+            assert!(!EmbeddedLinnestPackage::get(module).unwrap().data.is_empty());
+        }
         assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
     }
 
@@ -1287,12 +1293,42 @@ mod tests {
 
         let gamma_assertions =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[],
+                &[&repository],
             )
+            .unwrap();
+
+        let preparation_assertions =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        renderer
+            .compile_template(
+                &preparation_assertions,
+                base.join("preparation-assertions.pdf"),
+                &[&repository],
+            )
+            .unwrap();
+
+        // Drawing supplied geometry must not load the unused EC seed plugin.
+        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
+        let precomputed = templates.join("precomputed-without-ec.typ");
+        fs::write(
+            &precomputed,
+            r#"#import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/render/layout.typ": layout-graph
+#let g = graph.build({
+  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
+})
+#context layout-graph((layouts: none, draw: (title: none)), g)
+"#,
+        )
+        .unwrap();
+        renderer
+            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();

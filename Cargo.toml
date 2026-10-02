@@ -20,6 +20,16 @@ colored = "3.1.1"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
+feynkit = { version = "0.1.0", path = "crates/feynkit/" }
+feynkit-amplitude = { version = "0.1.0", path = "crates/feynkit-amplitude/" }
+feynkit-cff = { version = "0.1.0", path = "crates/feynkit-cff/" }
+feynkit-generator = { version = "0.1.0", path = "crates/feynkit-generator/" }
+feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }
+feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
+feynkit-model = { version = "0.1.0", path = "crates/feynkit-model/" }
+feynkit-py = { version = "0.1.0", path = "crates/feynkit-py/" }
+feynkit-tensor = { version = "0.1.0", path = "crates/feynkit-tensor/" }
+feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
@@ -36,6 +46,7 @@ linnet = { path = "crates/linnet/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
 notify = "8.2.0"
+numerica = { version = "3.0.1", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"
@@ -58,7 +69,7 @@ spenso = { path = "crates/spenso/", default-features = false }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/", default-features = false }
 spenso-macros = { path = "crates/spenso-macros/", default-features = false }
 symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
-symbolica = { version = "3.0.0", default-features = false }
+symbolica = { version = "3.0.1", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.22.0"
 three-dimensional-reps = { path = "crates/three-dimensional-reps/" }
@@ -69,12 +80,24 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
-symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "18e0491628f9eac5c788659cabfcdb7575f6986d", default-features = false }
+symbolica-typst-plugin = { version = "0.1.0", default-features = false }
 typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
 
 which = "8.0.0"
+
+# Consuming workspaces select the Typst payload through their own root patch.
+[patch.crates-io]
+# Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
+clarabel = { path = "vendor/clarabel" }
+# Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
+
+# Reuse optimized Symbolica while keeping workspace debug builds inexpensive.
+[profile.dev.package.symbolica]
+opt-level = 2
 
 [profile.bench]
 opt-level = 3
@@ -89,6 +112,9 @@ opt-level = 2
 # lto=true
 
 [profile.dev-optim.package."*"]
+opt-level = 3
+
+[profile.dev-optim.package.symbolica]
 opt-level = 3
 
 [profile.dev-optim.package.gammaloop-workspace-hack]

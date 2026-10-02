@@ -1,3 +1,4 @@
+use crate::tensor::inference::InterfaceInference;
 use spenso::network::tags::SPENSO_TAG;
 use std::sync::{Arc, Mutex};
 use symbolica::{
@@ -6,18 +7,33 @@ use symbolica::{
         UserData, representation::FunView,
     },
     coefficient::CoefficientView,
+    parser::{ParseSettings, Token},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum CookingError {
+    #[error("cannot flatten a sum into a cooked symbol")]
     Add,
+    #[error("cannot flatten a product into a cooked symbol")]
     Mul,
+    #[error("cannot flatten a power into a cooked symbol")]
     Pow,
+    #[error("cannot flatten this rational coefficient into a cooked symbol")]
     RatCoeff,
+    #[error("cannot flatten a finite-field coefficient into a cooked symbol")]
     FiniteField,
+    #[error("cannot flatten a floating-point coefficient into a cooked symbol")]
     Float,
+    #[error("expected a function to cook")]
     Symbol,
+    #[error("cannot create cooked symbol: {0}")]
     Symbolica(String),
+    #[error("cooking dimensions requires reversible encoding")]
+    DimensionRequiresReversibleEncoding,
+    #[error("cannot cook a dimension with a normalization callback")]
+    DimensionCallback,
+    #[error("unsupported dimension payload for reversible cooking")]
+    UnsupportedDimensionPayload,
 }
 
 impl CookingError {
@@ -84,8 +100,13 @@ pub enum CookSourceFilter {
     AnyFunction,
     /// Cook only functions whose head symbol passes this tag filter.
     FunctionTags(CookTagFilter),
-    /// Cook function payloads only inside representation index slots.
-    RepresentationIndexPayload { filter: Option<CookTagFilter> },
+    /// Cook selected payloads of representation declarations and explicit slots.
+    /// The tag filter selects index function heads; dimension selection is explicit.
+    RepresentationPayload {
+        indices: bool,
+        dimensions: bool,
+        filter: Option<CookTagFilter>,
+    },
 }
 
 impl CookSourceFilter {
@@ -93,7 +114,7 @@ impl CookSourceFilter {
         match self {
             CookSourceFilter::AnyFunction => Some(None),
             CookSourceFilter::FunctionTags(filter) => Some(Some(filter)),
-            CookSourceFilter::RepresentationIndexPayload { .. } => None,
+            CookSourceFilter::RepresentationPayload { .. } => None,
         }
     }
 
@@ -101,14 +122,15 @@ impl CookSourceFilter {
         match self {
             CookSourceFilter::AnyFunction => None,
             CookSourceFilter::FunctionTags(filter) => Some(filter),
-            CookSourceFilter::RepresentationIndexPayload { filter } => filter.as_ref(),
+            CookSourceFilter::RepresentationPayload { filter, .. } => filter.as_ref(),
         }
     }
 
     fn with_tag_filter(&mut self, filter: CookTagFilter) {
         match self {
-            CookSourceFilter::RepresentationIndexPayload {
+            CookSourceFilter::RepresentationPayload {
                 filter: index_filter,
+                ..
             } => {
                 *index_filter = Some(filter);
             }
@@ -293,7 +315,11 @@ impl CookSettings {
     pub fn indices() -> Self {
         Self {
             mode: CookMode::FlattenedSymbol,
-            source: CookSourceFilter::RepresentationIndexPayload { filter: None },
+            source: CookSourceFilter::RepresentationPayload {
+                indices: true,
+                dimensions: false,
+                filter: None,
+            },
             output_tags: CookOutputTags::PreserveTags,
         }
     }
@@ -364,7 +390,26 @@ impl CookSettings {
 
     /// Cook only representation index payloads, with an optional tag filter.
     pub fn with_index_payload_filter(mut self, filter: Option<CookTagFilter>) -> Self {
-        self.source = CookSourceFilter::RepresentationIndexPayload { filter };
+        self.source = CookSourceFilter::RepresentationPayload {
+            indices: true,
+            dimensions: false,
+            filter,
+        };
+        self
+    }
+
+    /// Select representation payloads without changing the cooking mode or index tag filter.
+    ///
+    /// Dimension cooking leaves atomic dimensions unchanged and requires reversible mode
+    /// for compound dimensions. It supports exact rational arithmetic in ordinary symbols;
+    /// functions, callbacks, and symbol metadata are rejected rather than hidden from inference.
+    pub fn with_representation_payloads(mut self, indices: bool, dimensions: bool) -> Self {
+        let filter = self.source.index_payload_filter().cloned();
+        self.source = CookSourceFilter::RepresentationPayload {
+            indices,
+            dimensions,
+            filter,
+        };
         self
     }
 
@@ -400,8 +445,15 @@ impl CookSettings {
     /// Try to cook function-like subexpressions according to these settings.
     pub fn try_cook(&self, view: AtomView<'_>) -> Result<Atom, CookingError> {
         let Some(filter) = self.source.regular_filter() else {
-            return self
-                .cook_representation_index_payloads(view, self.source.index_payload_filter());
+            let CookSourceFilter::RepresentationPayload {
+                indices,
+                dimensions,
+                filter,
+            } = &self.source
+            else {
+                unreachable!();
+            };
+            return self.cook_representation_payloads(view, *indices, *dimensions, filter.as_ref());
         };
 
         let error = ArcMutexOption::empty();
@@ -425,7 +477,11 @@ impl CookSettings {
         view.replace_map(|a, _, out| {
             if let AtomView::Var(s) = a {
                 let symbol = s.get_symbol();
-                if self.should_uncook_symbol(symbol)
+                if self.mode == CookMode::ReversibleEncoding
+                    && let Some(payload) = Self::dimension_payload(symbol)
+                {
+                    **out = payload;
+                } else if self.should_uncook_symbol(symbol)
                     && let UserData::Atom(a) = symbol.get_data()
                 {
                     **out = a.clone();
@@ -442,7 +498,7 @@ impl CookSettings {
 
     /// Try to cook only the abstract-index payloads of recognized representation slots.
     pub fn try_cook_indices(&self, view: AtomView<'_>) -> Result<Atom, CookingError> {
-        self.cook_representation_index_payloads(view, self.source.index_payload_filter())
+        self.cook_representation_payloads(view, true, false, self.source.index_payload_filter())
     }
 
     /// Cook one function call into an atom, or return it unchanged if skipped.
@@ -451,9 +507,11 @@ impl CookSettings {
             .map(|symbol| symbol.map_or_else(|| fun.as_view().to_owned(), Atom::var))
     }
 
-    fn cook_representation_index_payloads(
+    fn cook_representation_payloads(
         &self,
         view: AtomView<'_>,
+        indices: bool,
+        dimensions: bool,
         filter: Option<&CookTagFilter>,
     ) -> Result<Atom, CookingError> {
         let error = ArcMutexOption::empty();
@@ -461,32 +519,134 @@ impl CookSettings {
             let AtomView::Fun(rep) = a else {
                 return;
             };
-
-            if !rep.get_symbol().has_tag(&SPENSO_TAG.representation) || rep.get_nargs() != 2 {
+            if !rep.get_symbol().has_tag(&SPENSO_TAG.representation)
+                || !(1..=2).contains(&rep.get_nargs())
+            {
                 return;
             }
-
             let mut args = rep.iter();
-            let Some(dim) = args.next() else {
-                return;
-            };
-            let Some(AtomView::Fun(index)) = args.next() else {
-                return;
-            };
-
-            match self.cook_function_symbol(index, filter) {
-                Ok(Some(cooked)) => {
-                    **out = FunctionBuilder::new(rep.get_symbol())
-                        .add_arg(dim)
-                        .add_arg(Atom::var(cooked))
-                        .finish();
+            let dim = args.next().unwrap();
+            let index = args.next();
+            let cooked_dim = if dimensions {
+                match self.cook_dimension(dim) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        error.set_once(e);
+                        return;
+                    }
                 }
-                Ok(None) => {}
-                Err(e) => error.set_once(e),
+            } else {
+                None
+            };
+            let cooked_index = if indices && let Some(AtomView::Fun(index)) = index {
+                match self.cook_function_symbol(index, filter) {
+                    Ok(value) => value.map(Atom::var),
+                    Err(e) => {
+                        error.set_once(e);
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+            if cooked_dim.is_some() || cooked_index.is_some() {
+                let mut builder = FunctionBuilder::new(rep.get_symbol())
+                    .add_arg(cooked_dim.as_ref().map_or(dim, Atom::as_view));
+                if let Some(index) = index {
+                    builder = builder.add_arg(cooked_index.as_ref().map_or(index, Atom::as_view));
+                }
+                **out = builder.finish();
             }
         });
-
         error.into_result(cooked)
+    }
+
+    fn cook_dimension(&self, dimension: AtomView<'_>) -> Result<Option<Atom>, CookingError> {
+        if matches!(dimension, AtomView::Var(_) | AtomView::Num(_)) {
+            return Ok(None);
+        }
+        if self.mode != CookMode::ReversibleEncoding {
+            return Err(CookingError::DimensionRequiresReversibleEncoding);
+        }
+        if !InterfaceInference::normalization_is_intrinsic(dimension) {
+            return Err(CookingError::DimensionCallback);
+        }
+        if !Self::portable_dimension(dimension) {
+            return Err(CookingError::UnsupportedDimensionPayload);
+        }
+        // Unlike the existing hash/UserData function encoding, this identity survives
+        // plain-text export and a fresh process with no previously registered payload.
+        let text = dimension.to_canonical_string();
+        let mut name = String::from("idenso::cooked_dimension_v1_");
+        for byte in text.bytes() {
+            use std::fmt::Write;
+            write!(&mut name, "{byte:02x}").unwrap();
+        }
+        self.build_symbol(name, None, self.output_tags.explicit_tags())
+            .map(Atom::var)
+            .map(Some)
+    }
+
+    fn portable_dimension(value: AtomView<'_>) -> bool {
+        let mut supported = true;
+        value.visitor(&mut |node| {
+            supported &= match node {
+                AtomView::Var(var) => {
+                    let symbol = var.get_symbol();
+                    matches!(symbol.get_data(), UserData::None)
+                        && symbol.get_tags().is_empty()
+                        // Nc is the existing symbolic color parameter. Its registered
+                        // numerical value is not evaluated by this algebraic boundary.
+                        && (symbol.get_evaluation_info().is_none() || symbol == crate::color::CS.nc)
+                }
+                AtomView::Num(number) => match number.get_coeff_view() {
+                    CoefficientView::Natural(_, _, imaginary, _) => imaginary == 0,
+                    CoefficientView::Large(_, imaginary) => imaginary.is_zero(),
+                    _ => false,
+                },
+                AtomView::Fun(_) => false,
+                AtomView::Pow(power) => matches!(power.get_exp(), AtomView::Num(exponent)
+                    if exponent.get_coeff_view().is_integer()),
+                _ => true,
+            };
+            supported
+        });
+        supported
+    }
+
+    /// Read a portable dimension encoded by this owner, without a process-local registry.
+    pub(crate) fn dimension_payload(symbol: Symbol) -> Option<Atom> {
+        let hex = symbol
+            .get_name()
+            .strip_prefix("idenso::cooked_dimension_v1_")?;
+        if !hex.len().is_multiple_of(2) {
+            return None;
+        }
+        let bytes = hex
+            .as_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| {
+                let text = std::str::from_utf8(pair).ok()?;
+                u8::from_str_radix(text, 16).ok()
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let text = String::from_utf8(bytes).ok()?;
+        // Tokenize without constructing products. Reject function calls before any
+        // normalization can invoke a callback on a forged or unsupported payload.
+        let token =
+            Token::parse(&text, ParseSettings::default().convert_mul_to_atom(false)).ok()?;
+        let mut pending = vec![&token];
+        while let Some(token) = pending.pop() {
+            match token {
+                Token::Number(_, false) | Token::ID(_) => {}
+                Token::Op(_, _, _, children) => pending.extend(children),
+                _ => return None,
+            }
+        }
+        let atom = Atom::parse(&text, "idenso", ParseSettings::default()).ok()?;
+        Self::portable_dimension(atom.as_view()).then_some(atom)
     }
 
     fn cook_function_symbol(
@@ -928,5 +1088,168 @@ mod tests {
         let settings = CookSettings::indices().with_input_tags(["idenso::index_payload"]);
 
         assert_eq!(expr.cook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn representation_dimensions_are_explicit_reversible_and_atomic_identity() {
+        use crate::{CookMode, CookingError, tensor::SymbolicTensor};
+        use symbolica::parse;
+        test_initialize();
+        let tensor = spenso::tensor_symbol!("dimension_cooking_tensor");
+        let _ = symbol!("idenso::metadata"; Scalar);
+        let source = FunctionBuilder::new(tensor)
+            .add_arg(parse!("idenso::metadata(spenso::Nc^2-1)"))
+            .add_arg(parse!("spenso::coad(spenso::Nc^2-1,idenso::leg(0))"))
+            .finish();
+        let indices = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let dimensions = indices.clone().with_representation_payloads(true, true);
+        let cooked = dimensions.try_cook(source.as_view()).unwrap();
+        assert!(SymbolicTensor::infer(indices.cook(source.as_view())).is_err());
+        SymbolicTensor::infer(cooked.clone())
+            .expect("cooked dimensions with declared scalar metadata");
+        assert_eq!(dimensions.uncook(cooked.as_view()), source);
+        assert_eq!(dimensions.cook(cooked.as_view()), cooked);
+        assert!(cooked.to_string().contains("metadata"));
+        let atomic = parse!("idenso::dimension_cooking_tensor(spenso::coad(8,a))");
+        assert_eq!(dimensions.cook(atomic.as_view()), atomic);
+        assert_eq!(CookSettings::default().mode(), CookMode::FlattenedSymbol);
+        assert_eq!(CookSettings::indices().mode(), CookMode::FlattenedSymbol);
+        assert_eq!(
+            CookSettings::indices()
+                .with_representation_payloads(true, true)
+                .try_cook(source.as_view()),
+            Err(CookingError::DimensionRequiresReversibleEncoding)
+        );
+    }
+
+    #[test]
+    fn dimension_cooking_refuses_callbacks_and_metadata_without_invoking_them() {
+        use crate::{CookMode, CookingError};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        use symbolica::atom::AtomCore;
+        test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let hook = symbol!(
+            "dimension_cooking_hook",
+            norm = move |_, _| {
+                seen.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let settings = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(false, true);
+        let callback = FunctionBuilder::new(hook).add_arg(1).finish();
+        let source = FunctionBuilder::new(crate::color::CS.adjoint_rep)
+            .add_arg(&callback)
+            .finish();
+        calls.store(0, Ordering::Relaxed);
+        assert_eq!(
+            settings.try_cook(source.as_view()),
+            Err(CookingError::DimensionCallback)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        let metadata = symbol!("dimension_metadata", data = UserData::Integer(17));
+        let source = FunctionBuilder::new(crate::color::CS.adjoint_rep)
+            .add_arg(Atom::var(metadata) + Atom::num(1))
+            .finish();
+        assert_eq!(
+            settings.try_cook(source.as_view()),
+            Err(CookingError::UnsupportedDimensionPayload)
+        );
+        let evaluated = symbol!(
+            "dimension_evaluated_parameter",
+            eval = symbolica::atom::EvaluationInfo::constant(|_tags, prec| {
+                Ok(symbolica::domains::rational::Rational::new(7, 1)
+                    .to_multi_prec_float(prec)
+                    .into())
+            })
+        );
+        let source = FunctionBuilder::new(crate::color::CS.adjoint_rep)
+            .add_arg(Atom::var(evaluated) + Atom::num(1))
+            .finish();
+        assert_eq!(
+            settings.try_cook(source.as_view()),
+            Err(CookingError::UnsupportedDimensionPayload)
+        );
+        for exponent in [
+            Atom::num(1) / Atom::num(2),
+            Atom::var(symbol!("dimension_exponent")),
+        ] {
+            let dimension = Atom::var(symbol!("dimension_base")).pow(exponent);
+            let source = FunctionBuilder::new(crate::color::CS.adjoint_rep)
+                .add_arg(dimension)
+                .finish();
+            assert_eq!(
+                settings.try_cook(source.as_view()),
+                Err(CookingError::UnsupportedDimensionPayload)
+            );
+        }
+        let function = parse_lit!(opaque(n));
+        let source = FunctionBuilder::new(crate::color::CS.adjoint_rep)
+            .add_arg(function)
+            .finish();
+        assert_eq!(
+            settings.try_cook(source.as_view()),
+            Err(CookingError::UnsupportedDimensionPayload)
+        );
+        // A forged payload must be rejected before a function can be normalized.
+        let text = callback.to_canonical_string();
+        let name = format!(
+            "idenso::cooked_dimension_v1_{}",
+            text.bytes().map(|x| format!("{x:02x}")).collect::<String>()
+        );
+        let forged = Atom::var(
+            SymbolBuilder::new(NamespacedSymbol::parse(&name))
+                .build()
+                .unwrap(),
+        );
+        calls.store(0, Ordering::Relaxed);
+        assert_eq!(settings.uncook(forged.as_view()), forged);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn portable_dimension_plain_text_round_trips_in_a_fresh_process() {
+        use crate::CookMode;
+        use symbolica::parse;
+        const KEY: &str = "IDENSO_DIMENSION_PLAIN_TEST";
+        test_initialize();
+        let settings = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(false, true);
+        let expected = parse!("spenso::coad(spenso::Nc^2-1)");
+        if let Ok(text) = std::env::var(KEY) {
+            let parsed = Atom::parse(text, "idenso", Default::default()).unwrap();
+            let AtomView::Fun(rep) = parsed.as_view() else {
+                panic!("representation");
+            };
+            let AtomView::Var(dim) = rep.iter().next().unwrap() else {
+                panic!("atomic dimension");
+            };
+            assert_eq!(dim.get_symbol().get_data(), &UserData::None);
+            assert_eq!(settings.uncook(parsed.as_view()), expected);
+            return;
+        }
+        let cooked = settings.cook(expected.as_view());
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "cook::tests::portable_dimension_plain_text_round_trips_in_a_fresh_process",
+                "--nocapture",
+            ])
+            .env(KEY, cooked.as_view().to_plain_string())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
     }
 }

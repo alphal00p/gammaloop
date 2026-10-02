@@ -1,378 +1,12 @@
-use std::sync::LazyLock;
+use spenso::network::parsing::AtomStructureExt;
+use symbolica::atom::{Atom, AtomView};
 
-use spenso::{
-    chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    shadowing, trace, trace_sym,
+use crate::shorthands::bracket::BracketNormalizer;
+
+use super::{
+    DotNormalizer, SimplificationCandidates, settings::SchoonschipSettings,
+    slot_contraction::SlotContraction,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView},
-    function,
-    id::Replacement,
-};
-use symbolica_utils::PatternReplacement;
-
-use crate::{W_, shorthands::metric::not_slot};
-
-use super::{api::Schoonschip, settings::SchoonschipSettings};
-
-static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
-
-    // Ordered antisymmetric matching preserves orientation in these direct slot replacements.
-    [
-        // g(i,j)*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * function!(W_.a_, W_.a___, &self_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,j)*T(...,d(j),...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * function!(W_.a_, W_.a___, &dualizable, W_.b___))
-            .to_pattern(),
-            function_with_replacement,
-        ),
-    ]
-});
-
-static METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    fn chain_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        chain!(W_.x_, W_.y_, W_.x___, a.into(), W_.y___)
-    }
-    let function_with_replacement = chain_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-
-    [
-        // g(i,j)*chain(x,y,...,T(...,j,...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * chain_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,j)*chain(x,y,...,T(...,d(j),...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * chain_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*chain(x,y,...,T(...,j,...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * chain_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-    ]
-});
-static METRIC_FUNCTION_CONTRACTIONS_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    fn trace_cyclic_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace!(W_.y_, a.into(), W_.x___)
-    }
-    fn trace_sym_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace_sym!(W_.y_, a.into(), W_.x___)
-    }
-    let cyclic_function_with_replacement = trace_cyclic_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-    let sym_function_with_replacement = trace_sym_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-
-    [
-        // g(i,j)*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,...,T(...,d(j),...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * trace_sym_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,sym(...,T(...,d(j),...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * trace_sym_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement,
-        ),
-    ]
-});
-/// f(...,i)*g(...,i)->g(f(...,rep)*g(...,rep)) but only when ... is not a slot.
-/// This is more costly than just using the rank1 tag on f and g, so should be an optional setting.
-static _DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-
-    [Replacement::new(
-        (function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual))
-            .to_pattern(),
-        ETS.metric(
-            function!(W_.f_, W_.a___, &self_dual_stripped),
-            function!(W_.g_, W_.b___, &self_dual_stripped),
-        ),
-    )
-    .when(not_slot(W_.a___) & not_slot(W_.b___))]
-});
-
-static VECTOR_DOT_PRODUCTS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    [
-        // f(...,i)*g(...,i)->g(f(...,rep)*g(...,rep)) for tagged rank1 f,g
-        Replacement::new(
-            (T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
-                * T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual]))
-            .to_pattern(),
-            ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual_stripped]),
-            ),
-        ),
-        // f(...,i)*g(...,d(i))->g(f(...,rep)*g(...,rep)) for tagged rank1 f,g
-        Replacement::new(
-            (T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable])
-                * T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_dual]))
-            .to_pattern(),
-            ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_stripped]),
-            ),
-        ),
-    ]
-});
-
-static SCHOONSCHIP_VECTOR: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    [
-        // a(...,i,...)*p(...,i)->a(....,p(...,rep),...) for p a rank1 tagged function
-        Replacement::new(
-            (function!(W_.a_, W_.a___, &self_dual, W_.b___)
-                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual.clone()]))
-            .to_pattern(),
-            function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                W_.b___
-            ),
-        ),
-        // a(...,i,...)*p(...,d(i))->a(....,p(...,rep),...) for p a rank1 tagged function
-        Replacement::new(
-            (function!(W_.a_, W_.a___, &dualizable, W_.b___)
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
-            .to_pattern(),
-            function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                W_.b___
-            ),
-        ),
-        // a(...,d(i),...)*p(...,i)->a(....,p(...,rep),...) for p a rank1 tagged function
-        Replacement::new(
-            (function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
-            .to_pattern(),
-            function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
-                W_.b___
-            ),
-        ),
-    ]
-});
-
-static SCHOONSCHIP_VECTOR_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    fn chain_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        chain!(W_.x_, W_.y_, W_.x___, a.into(), W_.y___)
-    }
-
-    [
-        // chain(x,y,...,a(...,i,...),...)*p(...,i)->chain(x,y,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (chain_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
-                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual.clone()]))
-            .to_pattern(),
-            chain_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                W_.b___
-            )),
-        ),
-        // chain(x,y,...,a(...,i,...),...)*p(...,d(i))->chain(x,y,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (chain_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
-            .to_pattern(),
-            chain_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                W_.b___
-            )),
-        ),
-        // chain(x,y,...,a(...,d(i),...),...)*p(...,i)->chain(x,y,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (chain_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
-            .to_pattern(),
-            chain_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
-                W_.b___
-            )),
-        ),
-    ]
-});
-
-static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    fn trace_cyclic_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace!(W_.x_, a.into(), W_.z___)
-    }
-    fn trace_sym_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace_sym!(W_.x_, a.into(), W_.z___)
-    }
-    [
-        // trace(rep1,...,a(...,i,...),...)*p(...,i)->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (trace_cyclic_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
-                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual.clone()]))
-            .to_pattern(),
-            trace_cyclic_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                W_.b___
-            )),
-        ),
-        // trace(rep1,...,a(...,i,...),...)*p(...,d(i))->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
-            .to_pattern(),
-            trace_cyclic_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                W_.b___
-            )),
-        ),
-        // trace(rep1,...,a(...,d(i),...),...)*p(...,i)->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
-        Replacement::new(
-            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
-            .to_pattern(),
-            trace_cyclic_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped.clone()]),
-                W_.b___
-            )),
-        ),
-        // trace(rep1,sym(...,a(...,i,...),...))*p(...,i)->trace(rep1,sym(...,a(....,p(...,rep),...),...))
-        Replacement::new(
-            (trace_sym_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
-                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]))
-            .to_pattern(),
-            trace_sym_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                W_.b___
-            )),
-        ),
-        // trace(rep1,sym(...,a(...,i,...),...))*p(...,d(i))->trace(rep1,sym(...,a(....,p(...,rep),...),...))
-        Replacement::new(
-            (trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
-            .to_pattern(),
-            trace_sym_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                W_.b___
-            )),
-        ),
-        // trace(rep1,sym(...,a(...,d(i),...),...))*p(...,i)->trace(rep1,sym(...,a(....,p(...,rep),...),...))
-        Replacement::new(
-            (trace_sym_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
-            .to_pattern(),
-            trace_sym_(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
-                W_.b___
-            )),
-        ),
-    ]
-});
 
 pub(crate) struct SchoonschipWithSettings<'a> {
     pub(crate) settings: &'a SchoonschipSettings,
@@ -380,78 +14,388 @@ pub(crate) struct SchoonschipWithSettings<'a> {
 
 impl SchoonschipWithSettings<'_> {
     pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
+        let contractor = SlotContraction::configured(
+            self.settings.metrics,
+            self.settings.representations.as_deref(),
+        );
+        self.run_observed::<0>(view, None, &contractor)
+    }
+
+    pub(crate) fn run_observed<const N: usize>(
+        &self,
+        view: AtomView<'_>,
+        observed: Option<&SimplificationCandidates<N>>,
+        contractor: &SlotContraction,
+    ) -> Atom {
         let mut current = view.to_owned();
+        let mut pending_candidates = observed.map(|observed| SimplificationCandidates::<0> {
+            repeated_indices: observed.repeated_indices,
+            brackets: observed.brackets,
+            dots: observed.dots,
+            symbols: [],
+            counts: [],
+            complete: observed.complete,
+            traversal_complete: observed.traversal_complete,
+            intrinsic: observed.intrinsic,
+        });
         loop {
-            let next = self.apply_once(current.as_view());
-            if next == current {
-                return next;
+            let mut candidates = pending_candidates
+                .take()
+                .unwrap_or_else(|| SimplificationCandidates::scan(current.as_view(), [], || true));
+            if candidates.normalized() {
+                return current;
             }
-            current = next;
-        }
-    }
-
-    fn apply_once(&self, view: AtomView<'_>) -> Atom {
-        let metric_simplified = view
-            .normalize_dots()
-            .to_owned()
-            .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);
-
-        let simplified = if self.settings.schoonschip_rank1_tensors {
-            metric_simplified
-                .replace_multiple(&*VECTOR_DOT_PRODUCTS)
-                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR)
-        } else {
-            metric_simplified
-        };
-
-        let simplified = if self.settings.simplify_chain_like_functions {
-            self.apply_chain_like_rules(simplified)
-        } else {
-            simplified
-        };
-
-        simplified.normalize_dots()
-    }
-
-    fn apply_chain_like_rules(&self, expression: Atom) -> Atom {
-        let (metric_trace_rules, metric_trace_sym_rules) =
-            METRIC_FUNCTION_CONTRACTIONS_ON_TRACE.split_at(3);
-        let (vector_trace_rules, vector_trace_sym_rules) = SCHOONSCHIP_VECTOR_ON_TRACE.split_at(3);
-
-        let simplified = expression
-            .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN)
-            .replace_multiple_repeat(metric_trace_rules);
-
-        let simplified = if self.settings.schoonschip_rank1_tensors {
-            simplified
-                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
-                .replace_multiple_repeat(vector_trace_rules)
-        } else {
-            simplified
-        };
-
-        if Self::contains_symmetric_projector(simplified.as_view()) {
-            let simplified = simplified.replace_multiple_repeat(metric_trace_sym_rules);
-            if self.settings.schoonschip_rank1_tensors {
-                simplified.replace_multiple_repeat(vector_trace_sym_rules)
+            // Without callbacks or bracket scopes, dots only remove indices.
+            // Carry the input's contraction candidate through normalization;
+            // no new repeated-index or head scan is needed on its larger result.
+            let reusable = candidates.intrinsic && !candidates.brackets;
+            let bracketed = if candidates.brackets {
+                BracketNormalizer::normalize(current.as_view())
             } else {
-                simplified
+                current.clone()
+            };
+            let normalized = if candidates.dots || bracketed != current {
+                DotNormalizer::with_settings(
+                    bracketed.as_view(),
+                    crate::tensor::ContractSettings {
+                        metrics: self.settings.metrics,
+                        rank_one: self.settings.schoonschip_rank1_tensors,
+                        representations: self.settings.representations.as_deref(),
+                        ..Default::default()
+                    },
+                )
+            } else {
+                bracketed
+            };
+            // Dot normalization stays outside this guard: compact vector
+            // rewrites can require no repeated explicit index at all.
+            let repeated = if reusable || normalized == current {
+                candidates.repeated_indices
+            } else {
+                normalized.has_repeated_explicit_indices()
+            };
+            if repeated {
+                // A component fallback retains the domain owner's reserved
+                // indices and fresh allocations, including unrelated spectators.
+                let contracted = contractor.run(
+                    normalized.as_view(),
+                    self.settings.simplify_chain_like_functions,
+                    self.settings.schoonschip_rank1_tensors,
+                );
+                if contracted != normalized {
+                    let dotted = DotNormalizer::normalize_with_settings(
+                        contracted.as_view(),
+                        crate::tensor::ContractSettings {
+                            metrics: self.settings.metrics,
+                            rank_one: self.settings.schoonschip_rank1_tensors,
+                            representations: self.settings.representations.as_deref(),
+                            ..Default::default()
+                        },
+                    );
+                    let next = if reusable {
+                        dotted.expression
+                    } else {
+                        BracketNormalizer::normalize(dotted.expression.as_view())
+                    };
+                    // The contractor reached its fixed point. Only an odd
+                    // power can expose a new tensor factor during intrinsic
+                    // cleanup; keep that work pending instead of rescanning.
+                    if reusable && !dotted.exposes_product {
+                        return next;
+                    }
+                    // The contractor already reaches its fixed point. If
+                    // cleanup changes nothing, no new contraction or
+                    // normalization can be exposed by another full pass.
+                    if next == contracted || next == current {
+                        return next;
+                    }
+                    current = next;
+                    if reusable {
+                        candidates.dots = false;
+                        candidates.repeated_indices = dotted.exposes_product;
+                        pending_candidates = Some(candidates);
+                    }
+                    continue;
+                }
             }
-        } else {
-            simplified
+            // Initial normalization can expose another bracket identity even
+            // without a contraction, such as bracket(p(mu)^2) becoming scalar.
+            if reusable || normalized == current {
+                return normalized;
+            }
+            current = normalized;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shorthands::schoonschip::Schoonschip;
+    use symbolica::{atom::AtomCore, parser::ParseSettings};
+
+    #[test]
+    fn ordered_fallback_preserves_fixedpoints_across_settings_and_scopes() {
+        crate::test_support::test_initialize();
+        let _ = spenso::p!(spenso::mink!(4));
+        let _ = spenso::q!(spenso::mink!(4));
+        let sources = [
+            "g(mink(4,a),mink(4,b))*T(mink(4,b))+g(mink(4,a),mink(4,c))*U(mink(4,c))",
+            "p(mink(4,a))*(T(mink(4,a))+U(mink(4,a)))",
+            "(p(mink(4,a))+q(mink(4,a)))^2",
+            "(x+y)^3*p(mink(4,a))*(T(mink(4,a))+U(mink(4,a)))",
+            "scope(mink(4,a),mink(4,a),bracket(p(mink(4,b))^2))+x",
+            "scope(mink(4,a),mink(4,a),p(mink(4,b))^3)+x",
+            "scope(mink(4,a),mink(4,a),T(mink(4,hidden(b))))+x",
+            "p(mink(4,a))*(T(mink(4,a))+U(mink(4,b)))",
+            "(p(mink(4,a))^(-2)+q(mink(4,a))^(-3))*p(mink(4,a))",
+            "x+y",
+        ];
+        for rank_one in [false, true] {
+            for chain_like in [false, true] {
+                let settings = SchoonschipSettings {
+                    schoonschip_rank1_tensors: rank_one,
+                    simplify_chain_like_functions: chain_like,
+                    ..Default::default()
+                };
+                let owner = SchoonschipWithSettings {
+                    settings: &settings,
+                };
+                for source in sources {
+                    let expression =
+                        Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+                    let result = owner.run(expression.as_view());
+                    assert_eq!(
+                        owner.run(result.as_view()),
+                        result,
+                        "{source}; rank_one={rank_one}, chain_like={chain_like}"
+                    );
+                }
+            }
         }
     }
 
-    fn contains_symmetric_projector(expr: AtomView<'_>) -> bool {
-        match expr {
-            AtomView::Fun(f) => {
-                f.get_symbol() == *shadowing::SYM
-                    || f.iter().any(Self::contains_symmetric_projector)
-            }
-            AtomView::Add(add) => add.iter().any(Self::contains_symmetric_projector),
-            AtomView::Mul(mul) => mul.iter().any(Self::contains_symmetric_projector),
-            AtomView::Pow(pow) => pow.iter().any(Self::contains_symmetric_projector),
-            AtomView::Num(_) | AtomView::Var(_) => false,
+    #[test]
+    fn scalar_and_local_contraction_need_only_one_observation() {
+        use super::super::analysis::SCAN_COUNTS;
+        crate::test_support::test_initialize();
+        for head in ["spenso::early_scan_tensor_t", "spenso::early_scan_tensor_u"] {
+            spenso::network::tags::SPENSO_TAG.tensor_symbol(head);
         }
+        let settings = SchoonschipSettings::default();
+        let owner = SchoonschipWithSettings {
+            settings: &settings,
+        };
+        for source in [
+            "x+y",
+            "g(mink(4,a),mink(4,b))*early_scan_tensor_t(mink(4,b))+g(mink(4,a),mink(4,c))*early_scan_tensor_u(mink(4,c))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            SCAN_COUNTS.with(|count| count.set(0));
+            let result = owner.run(expression.as_view());
+            assert_eq!(SCAN_COUNTS.with(|count| count.get()), 1, "{source}");
+            if expression.has_repeated_explicit_indices() {
+                assert_ne!(result, expression, "the tensor fixture must contract");
+            } else {
+                assert_eq!(result, expression);
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_opaque_power_is_unchanged_after_one_observation() {
+        use super::super::analysis::SCAN_COUNTS;
+        crate::test_support::test_initialize();
+        spenso::network::tags::SPENSO_TAG.tensor_symbol("spenso::retry_tensor");
+        let expression = Atom::parse(
+            "x+g(mink(4,a),mink(4,b))*retry_tensor(mink(4,b))^2",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        SCAN_COUNTS.with(|count| count.set(0));
+        let actual = expression.schoonschip();
+        assert_eq!(actual, expression);
+        assert_eq!(SCAN_COUNTS.with(|count| count.get()), 1);
+        assert_eq!(
+            SlotContraction::new().run(expression.as_view(), false, true),
+            actual
+        );
+    }
+
+    #[test]
+    fn repeated_indices_do_not_hide_callback_and_dot_tails() {
+        use std::sync::{Arc, Mutex};
+        use symbolica::atom::FunctionBuilder;
+        crate::test_support::test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let callback = spenso::tensor_symbol!(
+            "early_tail_callback",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let vector = spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("early_tail_vector");
+        let a = spenso::mink!(4, 83801);
+        let b = spenso::mink!(4, 83803);
+        let vector = FunctionBuilder::new(vector).add_arg(&b).finish();
+        let tail = FunctionBuilder::new(callback)
+            .add_arg(vector.pow(2))
+            .finish();
+        let scope_head = symbolica::symbol!("early_tail_scope");
+        let scalar = Atom::var(symbolica::symbol!("early_tail_scalar"));
+        let expression = FunctionBuilder::new(scope_head)
+            .add_arg(&a)
+            .add_arg(&a)
+            .add_arg(tail)
+            .finish()
+            + &scalar;
+        let expected_tail = FunctionBuilder::new(callback)
+            .add_arg(vector.pow(2).normalize_dots())
+            .finish();
+        let expected = FunctionBuilder::new(scope_head)
+            .add_arg(&a)
+            .add_arg(&a)
+            .add_arg(&expected_tail)
+            .finish()
+            + scalar;
+        calls.lock().unwrap().clear();
+        let result = expression.schoonschip();
+        assert_eq!(result, expected);
+        assert!(calls.lock().unwrap().contains(&expected_tail));
+        calls.lock().unwrap().clear();
+        assert_eq!(result.schoonschip(), result);
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn unchanged_contractions_preserve_normalization_fixed_points() {
+        crate::test_support::test_initialize();
+        let _ = spenso::p!(spenso::mink!(4));
+        let _ = spenso::q!(spenso::mink!(4));
+        let sources = [
+            "g(mink(4,a),mink(4,b))*epsilon(mink(4,c),mink(4,d),mink(4,e),mink(4,f))",
+            "bracket(p(mink(4,a))^2)",
+            "bracket(g(mink(4,a),mink(4,b))^2)",
+            "bracket(p(mink(4,a)),p(mink(4,a)))",
+            "bracket(bracket(g(mink(4,a),mink(4,b))^2),p(mink(4,c)))",
+            "bracket(p(mink(4,a))^2+q(mink(4,a))^2)^2",
+            "g(mink(4,a),mink(4,b))*unknown(mink(4,b))",
+            "p(mink(4,a))*q(mink(4,a))",
+            "unknown(mink(4,a))*another(mink(4,a))",
+            "bracket(g(mink(4,a),mink(4,b)),unknown(mink(4,b)))",
+            "(x+y)^6*g(mink(4,a),mink(4,b))*(unknown(mink(4,b))+another(mink(4,b)))",
+            "(g(mink(4,a),mink(4,b))+g(mink(4,a),mink(4,c)))*epsilon(mink(4,a),mink(4,d),mink(4,e),mink(4,f))",
+            "p(mink(4,a))*(p(mink(4,a))+q(mink(4,a)))",
+            "bracket(g(mink(4,a),mink(4,b))*p(mink(4,a))*q(mink(4,b)))",
+            "p(mink(4,a))^3*q(mink(4,a))",
+            "g(mink(4,a),mink(4,b))^3*p(mink(4,a))*q(mink(4,b))",
+            "(p(mink(4,a))^3+q(mink(4,a))^3)*p(mink(4,a))",
+            "x*(p(mink(4,a))*q(mink(4,a))+g(mink(4,b),mink(4,c))^4)",
+            "(p(mink(4,a))^(-2)+q(mink(4,a))^(-3))*p(mink(4,a))",
+        ];
+        for (mode, settings) in [
+            SchoonschipSettings::default(),
+            SchoonschipSettings::default().with_chain_like_functions(),
+            SchoonschipSettings::default().without_rank1_tensors(),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for source in sources {
+                let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+                let mut expected = expression.clone();
+                loop {
+                    // Preserve the previous eager cleanup schedule as an oracle
+                    // for scalar powers and unresolved indexed bracket scopes.
+                    let policy = crate::tensor::ContractSettings {
+                        metrics: settings.metrics,
+                        rank_one: settings.schoonschip_rank1_tensors,
+                        ..Default::default()
+                    };
+                    let normalized = DotNormalizer::with_settings(
+                        BracketNormalizer::normalize(expected.as_view()).as_view(),
+                        policy,
+                    );
+                    let contracted = if normalized.has_repeated_explicit_indices() {
+                        SlotContraction::new().run(
+                            normalized.as_view(),
+                            settings.simplify_chain_like_functions,
+                            settings.schoonschip_rank1_tensors,
+                        )
+                    } else {
+                        normalized
+                    };
+                    let next = BracketNormalizer::normalize(
+                        DotNormalizer::with_settings(contracted.as_view(), policy).as_view(),
+                    );
+                    if next == expected {
+                        break;
+                    }
+                    expected = next;
+                }
+                let actual = expression.schoonschip_with_settings(&settings);
+                assert_eq!(actual, expected, "{source}, mode {mode}");
+                assert_eq!(
+                    actual.schoonschip_with_settings(&settings),
+                    actual,
+                    "{source}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shared_state_keeps_callback_discovery_and_rechecks_introduced_syntax() {
+        use spenso::network::library::symbolic::ETS;
+        use std::sync::{Arc, Mutex};
+        use symbolica::atom::FunctionBuilder;
+
+        crate::test_support::test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let leaf = spenso::tensor_symbol!(
+            "state_callback_leaf",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let observed = Arc::clone(&calls);
+        let wrapper = spenso::tensor_symbol!(
+            "state_callback_wrapper",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let a = spenso::mink!(4, 73231);
+        let b = spenso::mink!(4, 73237);
+        let input = ETS.metric(&a, &b) * FunctionBuilder::new(leaf).add_arg(&a).finish();
+        let output = FunctionBuilder::new(leaf).add_arg(&b).finish();
+        let nested_input = FunctionBuilder::new(wrapper).add_arg(input).finish();
+        let nested_output = FunctionBuilder::new(wrapper).add_arg(&output).finish();
+        calls.lock().unwrap().clear();
+        assert_eq!(nested_input.schoonschip(), nested_output);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            [output.clone(), output, nested_output]
+        );
+
+        // A callback can introduce a bracket and a contraction after a power
+        // rewrite. These flags must be rediscovered from the actual result.
+        let emitted =
+            spenso::bracket!(ETS.metric(&a, &b) * FunctionBuilder::new(leaf).add_arg(&a).finish());
+        let expected = emitted.schoonschip();
+        let trigger = spenso::tensor_symbol!(
+            "state_callback_rewrite",
+            norm = move |value, out| {
+                if let AtomView::Fun(function) = value
+                    && matches!(function.iter().next(), Some(AtomView::Fun(inner))
+                    if inner.get_symbol() == ETS.metric)
+                {
+                    **out = emitted.clone();
+                }
+            }
+        );
+        let vector =
+            spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("state_callback_vector");
+        let input = FunctionBuilder::new(trigger)
+            .add_arg(FunctionBuilder::new(vector).add_arg(&a).finish().pow(2))
+            .finish();
+        assert_eq!(input.schoonschip(), expected);
     }
 }

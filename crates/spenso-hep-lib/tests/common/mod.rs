@@ -49,6 +49,7 @@ impl NetExt for HepNet<AbstractIndex> {
         }
     }
 }
+#[allow(unused)]
 pub trait HepAtomExt {
     #[allow(clippy::result_large_err)]
     fn parse_to_hep_net(

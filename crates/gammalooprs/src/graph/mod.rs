@@ -1,3 +1,4 @@
+use feynkit_graph::expressions::evaluate_overall_factor;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Index,
@@ -12,8 +13,7 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps,
+            HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
         },
     },
     parser::DotGraph,
@@ -30,8 +30,8 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::surface::SurfaceCache,
     define_index,
-    feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
+    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
@@ -50,9 +50,31 @@ pub struct VertexOrder(pub u8);
 
 define_index! {pub struct GroupId;}
 
+/// Canonical physical cut metadata translated mechanically from FeynKit.
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct FinalizedCut {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
+
+/// Topology-only threshold candidate translated from finalized FeynKit metadata.
+///
+/// This is deliberately distinct from [`FinalizedCut`]: it is the complete
+/// s-channel topology inventory and is not a process-selected physical cut.
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct FinalizedTopologyThresholdCandidate {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
+
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Graph {
+    /// Canonical model records bound to the graph's stable particle IDs. Numerical
+    /// evaluation still uses the current runtime parameter card.
+    pub model: std::sync::Arc<Model>,
     pub overall_factor: Atom,
     pub name: String,
     pub group_id: Option<GroupId>,
@@ -67,6 +89,10 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+    /// Physical cuts selected and filtered by canonical FeynKit generation.
+    pub finalized_cuts: Vec<FinalizedCut>,
+    /// Complete topology-only threshold inventory finalized by FeynKit.
+    pub finalized_topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
 }
 
 impl LogMessage for Graph {
@@ -126,8 +152,8 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
-    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
-        self.to_dot_graph_with_settings(settings).debug_dot()
+    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> eyre::Result<String> {
+        Ok(self.to_dot_graph_with_settings(settings)?.debug_dot())
     }
 
     pub fn pretty_dot(&self) -> String {
@@ -188,7 +214,7 @@ impl Graph {
         externals
     }
 
-    pub(crate) fn random_externals(&self, seed: u64) -> Externals {
+    pub(crate) fn random_externals(&self, model: &Model, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;
 
@@ -197,7 +223,7 @@ impl Graph {
         let ext: SuBitGraph = self.external_filter();
 
         for (_, _, d) in self.iter_edges_of(&ext) {
-            let hel = d.data.random_helicity(seed);
+            let hel = d.data.random_helicity(model, seed);
             helicities.push(hel);
             if helicities.len() == 2 {
                 continue;
@@ -290,7 +316,7 @@ impl Graph {
                 .loop_edges
                 .iter()
                 .copied()
-                .filter(|edge_id| self.underlying[*edge_id].particle.is_massless())
+                .filter(|edge_id| matches!(self.underlying[*edge_id].mass, edge::EdgeMass::Zero))
                 .collect_vec();
 
             for mut combination in massless_loop_edges.into_iter().combinations(num_loops) {
@@ -527,41 +553,6 @@ impl Graph {
         None
     }
 
-    pub(crate) fn get_initial_state_tree(&self) -> SuBitGraph {
-        let full_is_cut = self.initial_state_cut.as_subgraph();
-        let full_graph_without_initial_state_cut =
-            self.underlying.full_filter().subtract(&full_is_cut);
-        let mut result: SuBitGraph = self.underlying.empty_subgraph();
-
-        for (pair, edge_id, _) in self
-            .underlying
-            .iter_edges_of(&full_graph_without_initial_state_cut)
-        {
-            if let HedgePair::Paired { source, sink } = pair {
-                let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                if loop_signature.internal.iter().all(|sign| sign.is_zero()) {
-                    // A fixed-momentum bridge can also join two internal loop components.
-                    // Amputate only an endpoint attached to the initial-state cut.
-                    let initial_state_node = [source, sink]
-                        .into_iter()
-                        .map(|hedge| self.underlying.node_id(hedge))
-                        .find(|node| {
-                            self.underlying
-                                .iter_crown(*node)
-                                .any(|hedge| full_is_cut.includes(&hedge))
-                        });
-                    if let Some(node) = initial_state_node {
-                        for hedge in self.underlying.iter_crown(node) {
-                            result.add(hedge);
-                        }
-                    }
-                }
-            }
-        }
-
-        result
-    }
-
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
         let mut result = Vec::<Vec<EdgeIndex>>::new();
 
@@ -569,7 +560,8 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
+                        && self[edge_index].particle.mass_atom(&self.model)
+                            == self[*e].particle.mass_atom(&self.model)
                 })
             });
 
@@ -593,6 +585,7 @@ impl Graph {
     }
     pub(crate) fn classify_threshold_pinch(
         &self,
+        model: &Model,
         cut_boundary_edges: &[EdgeIndex],
         threshold_boundary_edges: &[EdgeIndex],
     ) -> ThresholdPinchStatus {
@@ -604,7 +597,7 @@ impl Graph {
         let boundary_mass_sum = |edges: &[EdgeIndex]| {
             edges
                 .iter()
-                .map(|edge_id| self[*edge_id].mass_atom())
+                .map(|edge_id| self[*edge_id].mass_atom(model))
                 .fold(Atom::new(), |sum, mass| sum + mass)
         };
 
@@ -711,29 +704,20 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
     subgraph: &S,
     contract_edges: &[EdgeIndex],
 ) -> Atom {
-    Atom::num(1)
-        / graph
-            .iter_edges_of(subgraph)
-            .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    if contract_edges.contains(&edge_index) {
-                        None
-                    } else {
-                        Some(-Atom::num(2) * ose_atom_from_index(edge_index))
-                    }
-                }
-                _ => None,
-            })
-            .reduce(|acc, x| acc * x)
-            .unwrap_or_else(|| Atom::num(1))
+    feynkit_cff::CffExpression::inverse_energy_product(graph.iter_edges_of(subgraph).filter_map(
+        |(pair, edge, _)| {
+            (matches!(pair, HedgePair::Paired { .. }) && !contract_edges.contains(&edge))
+                .then(|| ose_atom_from_index(edge))
+        },
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
-        momentum::signature::LoopExtSignature,
+        finalized_runtime_dot, graph::parse::from_dot::IntoFinalizedRuntimeGraph,
+        initialisation::test_initialise, momentum::signature::LoopExtSignature,
     };
     use std::sync::OnceLock;
 
@@ -753,15 +737,16 @@ mod tests {
         GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                dot!(
+                finalized_runtime_dot!(
                     digraph lmb_selector {
+                        graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0]
-                        A -> B [id=1]
-                        A -> B [id=2]
-                        A -> B [id=3]
-                        A -> B [id=4 mass=1]
+                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                        A -> B [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        A -> B [id=3 lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                        A -> B [id=4 mass=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
                     }
                 )
                 .unwrap()
@@ -862,20 +847,22 @@ mod tests {
     #[test]
     fn threshold_pinch_classification_distinguishes_fixed_and_multiparticle_boundaries() {
         let graph = selector_test_graph();
+        let model = crate::utils::load_generic_model("sm");
 
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
             ThresholdPinchStatus::Always,
         );
         assert_eq!(
             graph.classify_threshold_pinch(
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(1)],
                 &[EdgeIndex::from(2), EdgeIndex::from(3)],
             ),
             ThresholdPinchStatus::CanBecome,
         );
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
             ThresholdPinchStatus::NotProven,
         );
     }

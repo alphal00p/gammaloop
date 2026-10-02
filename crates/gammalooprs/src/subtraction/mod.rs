@@ -1,3 +1,4 @@
+use crate::cff::Esurface;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use itertools::Itertools;
@@ -16,7 +17,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::esurface::Esurface,
     graph::{LmbIndex, LoopMomentumBasis},
     integrands::process::GenericEvaluator,
     momentum::{

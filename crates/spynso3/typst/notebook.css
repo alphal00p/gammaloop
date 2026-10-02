@@ -1,0 +1,47 @@
+/* Full math font: do not replace with a Latin-only webfont subset. */
+@font-face{font-family:"STIX Two Math";src:local("STIX Two Math"),url("https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/fonts/static_otf_woff2/STIXTwoMath-Regular.woff2") format("woff2");font-display:swap}
+[data-spenso-math] {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.6em 0.3em;
+}
+
+[data-spenso-math] math {
+  font-family: "Spenso Offline Math", "STIX Two Math", math;
+  font-size: var(--spenso-math-font-size, 21px);
+  font-synthesis: none;
+}
+
+/* Center short equations without putting wide fractions or products outside
+   the scrollable area on the left. Wrapped sums size their individual terms. */
+[data-spenso-math] math[display="block"]:not([data-spenso-wrap]) {
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Keep slash notation visible in native MathML, including scripted labels.
+   The stroke scales with the surrounding math and follows light/dark colors. */
+[data-spenso-math] [data-spenso-cancel] {
+  background-image: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 0.025em),
+    currentColor calc(50% - 0.025em),
+    currentColor calc(50% + 0.025em),
+    transparent calc(50% + 0.025em)
+  );
+}
+
+/* MathML Core cannot break a math row. Wrap whole additive terms with CSS;
+   each term still uses native math layout for fractions, fences and scripts. */
+[data-spenso-math] math[data-spenso-wrap] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: safe center;
+  row-gap: 0.6em;
+}
+
+[data-spenso-wrap] > [data-spenso-term] {
+  flex: 0 0 auto;
+}

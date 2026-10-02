@@ -7,7 +7,7 @@ use std::{
 use bincode::{Decode, Encode};
 
 use color_eyre::Result;
-use idenso::color::CS;
+use idenso::{coad, cof, color::CS, color_cas, color_idx};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -35,7 +35,7 @@ use crate::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
-    model::Model,
+    model::{Model, ModelGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
@@ -103,9 +103,9 @@ pub trait ParamBuilderGraph {
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom;
     // fn explicit_meduium_numerato(&self,edge)
-    fn get_ose_replacements(&self) -> Vec<Replacement>;
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement>;
 }
 
 macro_rules! define_gamma_loop_pairs {
@@ -1187,12 +1187,12 @@ impl<T: FloatLike> ParamBuilder<T> {
             .map(|edge_id| {
                 Replacement::new(
                     GS.ose(edge_id).to_pattern(),
-                    graph.explicit_ose_atom(edge_id).to_pattern(),
+                    graph.explicit_ose_atom(edge_id, model).to_pattern(),
                 )
             });
 
         for replacement in graph
-            .get_ose_replacements()
+            .get_ose_replacements(model)
             .into_iter()
             .chain(lmb_ose_replacements)
             .unique_by(|replacement| replacement.pat.to_atom())
@@ -1262,10 +1262,10 @@ impl<T: FloatLike> ParamBuilder<T> {
         )
         .unwrap();
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
-        new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
+        new.add_constant(color_cas!(2, cof!(3)), Rational::new(4, 3).into());
+        new.add_constant(color_cas!(2, coad!(8)), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
-        new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
+        new.add_constant(color_idx!(2, cof!(3)), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);
@@ -1340,16 +1340,21 @@ impl<T: FloatLike> ParamBuilder<T> {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
             let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
+            for cpl in model.couplings().iter().filter(|c| c.value.is_some()) {
                 if let Some(value) = cpl.value {
-                    values[pos] = value.map(F::from_f64);
+                    values[pos] = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
                     pos += multiplicative_offset;
                 }
             }
-            for param in model.parameters.values().filter(|p| p.value.is_some()) {
+            for param in model.parameters().iter().filter(|p| p.value.is_some()) {
                 if let Some(value) = param.value {
-                    let value =
-                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                    let value = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
                     values[pos] = value.clone();
                     pos += multiplicative_offset;
                 }
@@ -1725,8 +1730,8 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 mod tests {
     use super::*;
     use crate::{
-        dot,
-        graph::parse::from_dot::IntoGraph,
+        finalized_runtime_dot,
+        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
     };
@@ -1767,7 +1772,7 @@ mod tests {
     #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
         test_initialise().unwrap();
-        let graph = dot!(
+        let graph = finalized_runtime_dot!(
             digraph arb_parameter_baseline {
                 edge [num=1 mass=0]
                 node [num=1]

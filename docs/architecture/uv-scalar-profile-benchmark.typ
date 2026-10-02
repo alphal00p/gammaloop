@@ -80,7 +80,7 @@ That single gap was about:
 The sampled stack during that gap was dominated by symbolic simplification:
 
 - `Approximation::final_integrand`
-- `simplify_color`
+- `simplify_algebra`
 - `idenso::color::color_simplify_impl`
 - `collect_chains`
 - Symbolica `collect_symbol` / polynomial conversion / zero testing
@@ -93,7 +93,7 @@ Conclusion: the main cost is symbolic final-integrand construction and simplific
 
 == Historical color-simplification extraction
 
-`Approximation::final_integrand` now supports a focused dump mode for the exact expressions passed to the hot `simplify_color()` call. Set `GAMMALOOP_DUMP_UV_COLOR_SIMPLIFY_INPUTS` to an output directory and rerun the scalar profile test. Use an absolute path when you want the files in a predictable location, because test runners may use a package-local working directory.
+`Approximation::final_integrand` now supports a focused dump mode for the exact expressions passed to the hot `simplify_algebra(AlgebraSettings(color=ColorSimplifySettings()))` call. Set `GAMMALOOP_DUMP_UV_COLOR_SIMPLIFY_INPUTS` to an output directory and rerun the scalar profile test. Use an absolute path when you want the files in a predictable location, because test runners may use a package-local working directory.
 
 For example:
 
@@ -101,7 +101,7 @@ For example:
 
 For each final-integrand term, this writes:
 
-- `*.sym`: the parser-oriented `Atom::to_plain_string()` expression after `GS.dim -> 4` and immediately before `simplify_color()`.
+- `*.sym`: the parser-oriented `Atom::to_plain_string()` expression after `GS.dim -> 4` and immediately before `simplify_algebra(AlgebraSettings(color=ColorSimplifySettings()))`.
 - `*.meta.txt`: graph name, UV topological order, `dod`, term index, approximation label, and the expression file path.
 
 The target hotspot should be identifiable in the metadata as `dod = 4` with an approximation containing `S_GV⊛GS*Top(S_GS⊛44*Top(S_44⊛0))`. In the extraction run from this note, the matching expression files were:
@@ -119,7 +119,7 @@ The largest hotspot expression is also checked in as `crates/gammalooprs/tests/r
 
 - `cargo test --profile dev-optim -p gammalooprs --test test_uv_color_simplify_dump -- --ignored --exact loads_uv_scalar_profile_hotspot_dump_and_simplifies_color --nocapture`
 
-That test initializes GammaLoop/Symbolica, loads the fixture from disk, parses it, and calls `simplify_color()`.
+That test initializes GammaLoop/Symbolica, loads the fixture from disk, parses it, and calls `simplify_algebra(AlgebraSettings(color=ColorSimplifySettings()))`.
 
 == Evaluator-build hotspot
 
@@ -153,6 +153,6 @@ The slow scalar tests are slow because they all call `build_uv_scalars_amplitude
 
 For `spinney_partial_cmp_is_equal_for_identical_subgraphs`, the actual comparison is not the expensive part; almost all runtime is setup.
 
-The primary bottleneck is `Approximation::final_integrand` symbolic simplification, especially `simplify_color` / chain collection / Symbolica polynomial and zero-test recursion.
+The primary bottleneck is `Approximation::final_integrand` symbolic simplification, especially `simplify_algebra` / chain collection / Symbolica polynomial and zero-test recursion.
 
 The secondary bottleneck is evaluator construction in `EvaluatorStack::new_with_timings`, mostly Symbolica `to_evaluator`, Horner optimization, and common-subexpression/common-pair processing.

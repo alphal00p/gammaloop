@@ -24,8 +24,29 @@ use super::{SiteBuilder, absolute_from, copy_tree, server::LiveServer};
 
 const QUIET_PERIOD: Duration = Duration::from_millis(100);
 const MAX_BATCH: Duration = Duration::from_millis(500);
+const FEYNKIT_PYTHON_CRATES: &[&str] = &[
+    "feynkit-py",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-tensor",
+    "feynkit-ufo",
+    "idenso",
+    "linnet",
+    "spenso",
+    "spenso-hep-lib",
+    "spenso-macros",
+];
 const LINNET_PYTHON_CRATES: &[&str] = &["linnet-py", "linnet"];
-const SPENSO_PYTHON_CRATES: &[&str] = &["spynso3", "spenso", "spenso-macros", "spenso-hep-lib"];
+const SPENSO_PYTHON_CRATES: &[&str] = &[
+    "spynso3",
+    "spenso",
+    "spenso-macros",
+    "spenso-hep-lib",
+    "idenso",
+];
 
 #[derive(Clone, Debug)]
 pub struct WatchRequest {
@@ -608,14 +629,20 @@ impl SiteBuilder {
         }
         for (owner, feature, component, crates) in [
             (
+                "feynkit",
+                "feynkit",
+                "feynkit-community",
+                FEYNKIT_PYTHON_CRATES,
+            ),
+            (
                 "gammaloop",
                 "gammaloop",
                 "gammaloop-python",
                 &["gammaloop-api", "gammalooprs"][..],
             ),
-            ("linnet", "linnet", "linnet-py", LINNET_PYTHON_CRATES),
+            ("linnet", "linnet", "linnet-python", LINNET_PYTHON_CRATES),
             ("spenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
-            ("idenso", "idenso", "idenso-community", &["idenso"][..]),
+            ("idenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
             ("vakint", "vakint", "vakint-community", &["vakint"][..]),
         ] {
             if exporter_matches_change(product, owner, crates, global, changed) {

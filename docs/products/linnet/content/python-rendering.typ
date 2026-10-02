@@ -21,7 +21,7 @@ selectors and run the affected cell with its play button.
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "rendering_api",
+    "data-notebook": "rendering_api",
     "aria-label": "Linnet Python rendering notebook",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[
@@ -47,10 +47,40 @@ selectors and run the affected cell with its play button.
 - Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
   instances remain attached by identity, including their shared runtime object.
 
+== Default layout and controls
+
+`Graph.to_svg()`, `Graph.render()` and Feynman diagram rendering use the shared
+EC-planarization and ImPrEd pipeline by default. The same implementation runs
+in direct Typst and in CLI drawings. Layout controls remain explicit:
+
+```python
+config = linnet.RenderConfig(
+    layouts=linnet.LayoutOptions(
+        algorithm=linnet.LayoutAlgorithm.Impred,
+        impred_parallel_balance=1.0,
+        impred_pull=0.45,
+        impred_external_max_points=2,
+    )
+)
+svg = graph.to_svg(config=config)
+```
+
+The #link("reference/typst/layout/")[layout guide] describes every ImPrEd control.
+Python uses underscores where the Typst names use hyphens. Explicit layouts
+such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
+
 == The rendering boundary
 
-Returning a `Graph` from a cell invokes its SVG representation. `graph.to_svg()` explicitly
-produces the same kind of drawing; the notebook shows both forms. The graph's `RenderConfig`
+Returning a `Graph` from a cell invokes its interactive HTML representation. `graph.to_svg()`
+explicitly produces the same native drawing with hover labels, pinned click details, and local
+selection using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
+selections automatically. In Marimo, direct rich display enables the embedded script; when
+embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
+Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
+With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the drawing. Hover previews details beside the graph when space permits,
+and below it in narrow outputs. The preview disappears when the pointer leaves the element;
+keyboard focus also previews details. Clicking pins the details until the panel is closed.
+The graph's `RenderConfig`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
 typed drawing results pass to Typst; application payloads stay in Python.
 

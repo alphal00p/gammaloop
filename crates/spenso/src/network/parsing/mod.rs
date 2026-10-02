@@ -8,27 +8,27 @@ use crate::network::library::panicing::ErroringLibrary;
 use crate::network::profile::{self, Counter, Timer};
 use crate::network::tags::SPENSO_TAG;
 
-use crate::shadowing::Concretize;
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::representation::Representation;
-use crate::structure::slot::{DummyAind, ParseableAind, Slot};
-use crate::structure::{
-    Canonicalized, NamedStructure, ScalarStructure, StructureError, TensorShell,
-};
+use crate::structure::slot::{DummyAind, ParseableAind, Slot, SlotMatch, SlotMatcher};
+use crate::structure::{Canonicalized, NamedStructure, ScalarStructure, StructureError};
 use crate::tensors::parametric::ParamTensor;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Display,
     marker::PhantomData,
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use store::TensorScalarStore;
 // use log::trace;
 
-use symbolica::atom::{AddView, Atom, AtomView, MulView, PowView, representation::FunView};
+use symbolica::atom::{
+    AddView, Atom, AtomOrView, AtomView, MulView, PowView, representation::FunView,
+};
 
 use crate::structure::{HasStructure, TensorStructure};
 
@@ -36,10 +36,12 @@ use crate::structure::representation::LibraryRep;
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
+mod construction;
+use construction::Construction;
+use linnet::half_edge::NodeIndex;
+mod indices;
 pub(crate) mod structure_inference;
-pub use structure_inference::{
-    AtomStructureExt, ChainNestingError, StructureFromAtom, StructureInferenceMode,
-};
+pub use structure_inference::{AtomStructureExt, ChainNestingError, StructureFromAtom};
 mod materialization;
 mod tensor_from_expression;
 pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
@@ -56,7 +58,8 @@ pub enum ShorthandParsing {
         chain: bool,
     },
     /// Keep shorthand notation as a leaf and infer its exposed structure.
-    Opaque { inference: StructureInferenceMode },
+    /// Scalar markers retain their literal wrapper around opaque metadata.
+    Opaque,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -161,7 +164,7 @@ impl ShorthandParsing {
     pub(super) fn schoonschip_expansion(self) -> Option<SchoonschipExpansionMode> {
         match self {
             Self::Expand { schoonschip, .. } => Some(schoonschip),
-            Self::Opaque { .. } => None,
+            Self::Opaque => None,
         }
     }
 
@@ -172,14 +175,7 @@ impl ShorthandParsing {
                 trace,
                 chain,
             },
-            Self::Opaque { inference } => Self::Opaque { inference },
-        }
-    }
-
-    fn opaque_inference(self) -> Option<StructureInferenceMode> {
-        match self {
-            Self::Expand { .. } => None,
-            Self::Opaque { inference } => Some(inference),
+            Self::Opaque => Self::Opaque,
         }
     }
 }
@@ -212,18 +208,12 @@ pub struct ParseSettings {
     /// dangling indices without building a full sum network.
     pub take_first_term_from_sum: bool,
 
-    /// Stop recursive parsing once the current parse depth reaches this value.
+    /// Stop recursive parsing once arithmetic nesting reaches this depth.
+    /// Products, sums, and powers each consume one level.
     ///
     /// At the limit, the current expression is handed to the opaque tensor
     /// expression boundary as a leaf. `None` means there is no depth limit.
     pub depth_limit: Option<usize>,
-
-    /// Selects what contributes to `depth_limit`.
-    ///
-    /// When true, only product nesting increments parse depth. When false,
-    /// additions and powers also increment depth before their children are
-    /// parsed.
-    pub depth_is_product_depth: bool,
 
     /// Selects how shorthand notation is represented in the parsed network.
     ///
@@ -231,9 +221,8 @@ pub struct ParseSettings {
     /// structure. Fresh dummies created by this lowering are local to the
     /// expansion.
     ///
-    /// `Opaque` keeps shorthand as a leaf tensor or scalar. Its inference mode
-    /// controls whether the exposed structure comes from a fast syntactic walk
-    /// or from expanding the shorthand and reading the resulting dangling slots.
+    /// `Opaque` keeps shorthand as a leaf tensor or scalar with its exposed
+    /// structure determined by syntactic observation.
     pub shorthand_parsing: ShorthandParsing,
 
     /// Allow parser implementations to treat composite scalar expressions as
@@ -261,7 +250,6 @@ impl Default for ParseSettings {
             precontract_scalars: true,
             take_first_term_from_sum: false,
             depth_limit: None,
-            depth_is_product_depth: true,
             shorthand_parsing: ShorthandParsing::default(),
             parse_composite_scalars_as_tensors: false,
             strict_tensor_filter: StrictTensorFilter::Tagged,
@@ -282,19 +270,47 @@ impl ParseSettings {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ParseState<Aind = AbstractIndex> {
+/// Exact opaque-boundary observations shared across admitted graph versions.
+/// Each entry records tensorial syntax and logical slot atoms; an empty slot
+/// list can still describe a tensor leaf with internal contractions. Reuse a
+/// cache only while admission facts and the parsing policy remain valid,
+/// including `strict_tensor_filter` and `parse_composite_scalars_as_tensors`.
+pub type LeafInterfaceCache = Arc<Mutex<HashMap<Atom, (bool, Vec<Atom>)>>>;
+
+#[derive(Clone)]
+pub struct ParseState<Aind = AbstractIndex, View = ()> {
+    view: View,
+    chain_scope_validated: bool,
+    leaf_interfaces: Option<LeafInterfaceCache>,
     depth: usize,
+    matcher: Rc<RefCell<SlotMatcher>>,
+    metric: Symbol,
     next_dummy: Rc<Cell<usize>>,
     reserved_indices: Rc<RefCell<HashSet<Atom>>>,
     _aind: PhantomData<fn() -> Aind>,
+}
+
+impl<Aind, View> Debug for ParseState<Aind, View> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ParseState")
+            .field("depth", &self.depth)
+            .field("next_dummy", &self.next_dummy)
+            .field("reserved_indices", &self.reserved_indices)
+            .finish_non_exhaustive()
+    }
 }
 
 #[allow(clippy::derivable_impls)]
 impl<Aind> Default for ParseState<Aind> {
     fn default() -> Self {
         Self {
+            view: (),
+            chain_scope_validated: false,
+            leaf_interfaces: None,
             depth: 0,
+            matcher: Rc::new(RefCell::new(SlotMatcher::default())),
+            metric: crate::network::library::symbolic::ETS.metric,
             next_dummy: Rc::new(Cell::new(1_000_000)),
             reserved_indices: Rc::default(),
             _aind: PhantomData,
@@ -302,7 +318,79 @@ impl<Aind> Default for ParseState<Aind> {
     }
 }
 
-impl<Aind: DummyAind + ParseableAind> ParseState<Aind> {
+impl<Aind, View> ParseState<Aind, View> {
+    // Rebinding an original subtree moves the operation owners, without adding
+    // per-leaf reference-count traffic. Only the dispatcher sets the view.
+    fn with_view<NextView>(self, view: NextView) -> ParseState<Aind, NextView> {
+        ParseState {
+            view,
+            chain_scope_validated: self.chain_scope_validated,
+            leaf_interfaces: self.leaf_interfaces,
+            depth: self.depth,
+            matcher: self.matcher,
+            metric: self.metric,
+            next_dummy: self.next_dummy,
+            reserved_indices: self.reserved_indices,
+            _aind: self._aind,
+        }
+    }
+
+    // Callback normalization and shorthand lowering produce new syntax. Its
+    // leaf admission must retain the ordinary checked scope boundary.
+    fn materialized(self) -> ParseState<Aind> {
+        let mut state = self.with_view(());
+        state.chain_scope_validated = false;
+        state.leaf_interfaces = None;
+        state
+    }
+}
+
+impl<'src, Aind> ParseState<Aind, AtomView<'src>> {
+    /// The exact subtree currently undergoing parser leaf inference.
+    pub fn current_view(&self) -> AtomView<'src> {
+        self.view
+    }
+}
+
+impl<Aind: DummyAind + ParseableAind, View> ParseState<Aind, View> {
+    /// Reserve written index names once at an operation's input boundary.
+    /// Cloned parser states share both these names and subsequent allocations.
+    pub fn reserve_indices(&self, value: AtomView<'_>) {
+        let mut matcher = self.matcher.borrow_mut();
+        value.visitor(&mut |atom| {
+            if matcher.parse::<LibraryRep, Aind>(atom).is_ok()
+                && let SlotMatch::Explicit(slot) = matcher.classify(atom)
+            {
+                // Reserve the admitted spelling itself. Serializing a typed
+                // label could run its normalizer again and change its identity.
+                self.reserved_indices
+                    .borrow_mut()
+                    .insert(slot.index().to_owned());
+                return false;
+            }
+            true
+        });
+    }
+
+    /// Reserve the serialized identity, including explicit names resembling dummies.
+    pub fn reserve_index(&self, index: Aind) {
+        self.reserved_indices.borrow_mut().insert(index.to_atom());
+    }
+
+    /// Allocate an operation-wide collision-free name that also remains fresh
+    /// across independently constructed tensors. Parser-local deterministic
+    /// materialization continues to use `next` and the same reservation set.
+    pub fn fresh_index(&self) -> Aind {
+        loop {
+            let atom = Aind::new_dummy().to_atom();
+            if self.reserved_indices.borrow_mut().insert(atom.clone()) {
+                return Aind::from_view(atom.as_view()).unwrap_or_else(|_| {
+                    panic!("fresh dummy atoms must remain valid abstract indices")
+                });
+            }
+        }
+    }
+
     fn next(&self) -> Aind {
         loop {
             let index = self.next_dummy.get();
@@ -320,7 +408,7 @@ impl<Aind: DummyAind + ParseableAind> ParseState<Aind> {
 }
 
 impl<
-    'a,
+    'src,
     Sc,
     T: HasStructure + TensorStructure,
     K: Clone + Display + Debug,
@@ -329,21 +417,21 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind,
 > Network<Str, K, Symbol, Aind>
 where
-    Sc: for<'r> TryFrom<AtomView<'r>> + Clone,
-    TensorNetworkError<K, Symbol>: for<'r> From<<Sc as TryFrom<AtomView<'r>>>::Error>,
+    Sc: TryFrom<AtomView<'src>> + TryFrom<Atom> + Clone,
+    TensorNetworkError<K, Symbol>:
+        From<<Sc as TryFrom<AtomView<'src>>>::Error> + From<<Sc as TryFrom<Atom>>::Error>,
 {
     #[allow(clippy::result_large_err)]
     pub fn try_from_view<S, Lib: TensorLibraryFor<S, T, Key = K>>(
-        value: AtomView<'a>,
+        value: AtomView<'src>,
         library: &Lib,
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
     {
         Self::try_from_view_with_function_library(
             value,
@@ -353,129 +441,311 @@ where
         )
     }
 
+    /// Build a depth-one opaque graph from already admitted tensor syntax.
+    ///
+    /// The caller must have established well-formed tensor syntax, compatible
+    /// sums, index scopes, and chain nesting. This entry reuses exact boundary
+    /// interfaces and skips the admission and dummy-reservation walks. It accepts
+    /// only opaque depth-one parsing, which does not allocate shorthand dummies.
+    /// Reuse requires unchanged `strict_tensor_filter` and
+    /// `parse_composite_scalars_as_tensors`. Discard the cache after callbacks or
+    /// rewrites that invalidate those admission or classification facts.
+    #[allow(clippy::result_large_err)]
+    pub fn try_from_admitted_view<S, Lib: TensorLibraryFor<S, T, Key = K>>(
+        value: AtomView<'src>,
+        library: &Lib,
+        settings: &ParseSettings,
+        leaf_interfaces: LeafInterfaceCache,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
+    {
+        if settings.shorthand_parsing != ShorthandParsing::Opaque || settings.depth_limit != Some(1)
+        {
+            return Err(TensorNetworkError::Other(eyre::eyre!(
+                "admitted parsing requires opaque shorthand and depth_limit=Some(1)"
+            )));
+        }
+        let mut construction = Construction::new();
+        let state = ParseState::<Aind> {
+            chain_scope_validated: true,
+            leaf_interfaces: Some(leaf_interfaces),
+            ..Default::default()
+        };
+        let root = Self::try_from_view_impl(
+            &mut construction,
+            value,
+            state,
+            library,
+            &ErroringLibrary::<Symbol>::new(),
+            settings,
+            AtomOrView::View,
+        )?;
+        Ok(construction.finish(root))
+    }
+
+    /// Return the exposed ports using the same parser and materialization policy,
+    /// without constructing or finalizing a network graph.
+    #[allow(clippy::result_large_err)]
+    pub fn try_external_slots<S, Lib>(
+        value: AtomView<'src>,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<
+        Vec<crate::structure::representation::LibrarySlot<Aind>>,
+        TensorNetworkError<K, Symbol>,
+    >
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+    {
+        let (construction, root) = Self::parse_root::<S, _, _>(
+            value,
+            library,
+            &ErroringLibrary::<Symbol>::new(),
+            settings,
+            false,
+        )?;
+        Ok(construction.slots(root))
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_from_view_with_function_library<S, Lib, FunLib>(
-        value: AtomView<'a>,
+        value: AtomView<'src>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    {
+        let (construction, root) =
+            Self::parse_root::<S, _, _>(value, library, function_library, settings, true)?;
+        Ok(construction.finish(root))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn parse_root<S, Lib, FunLib>(
+        value: AtomView<'src>,
+        library: &Lib,
+        function_library: &FunLib,
+        settings: &ParseSettings,
+        emit_graph: bool,
+    ) -> Result<(Construction<Str, K, Aind>, NodeIndex), TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         value.validate_chain_like_nesting()?;
-        let state = ParseState::<Aind>::default();
-        // Parsed indices can serialize like fresh dummies even when their Rust
-        // variants differ. Reserve written names once across all parser clones.
-        {
-            let mut reserved = state.reserved_indices.borrow_mut();
-            value.visitor(&mut |atom| {
-                if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(atom) {
-                    reserved.insert(slot.aind().to_atom());
-                }
-                true
-            });
-        }
-        Self::try_from_view_impl(value, state, library, function_library, settings)
+        let mut construction = if emit_graph {
+            Construction::new()
+        } else {
+            Construction::structure_only()
+        };
+        let state = ParseState::<Aind> {
+            chain_scope_validated: true,
+            ..Default::default()
+        };
+        // Reserve names before any shorthand allocates a dummy.
+        state.reserve_indices(value);
+        let root = Self::try_from_view_impl(
+            &mut construction,
+            value,
+            state,
+            library,
+            function_library,
+            settings,
+            AtomOrView::View,
+        )?;
+        Ok((construction, root))
     }
 
     #[allow(clippy::result_large_err)]
-    fn try_from_view_impl<S, Lib, FunLib>(
-        value: AtomView<'a>,
-        state: ParseState<Aind>,
+    fn scalar_from_expression(
+        value: AtomOrView<'src>,
+    ) -> Result<Sc, TensorNetworkError<K, Symbol>> {
+        Ok(match value {
+            AtomOrView::View(view) => view.try_into()?,
+            owned => owned.into_owned().try_into()?,
+        })
+    }
+
+    fn try_from_view_impl<'node, S, Lib, FunLib, View>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: AtomView<'node>,
+        state: ParseState<Aind, View>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        let state = state.with_view(value);
         profile::bump(Counter::ParseView, 1);
         match value {
             AtomView::Mul(m) => {
                 profile::bump(Counter::ParseMul, 1);
-                Self::try_from_mul(m, state, library, function_library, settings)
+                Self::try_from_mul(
+                    construction,
+                    m,
+                    state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                )
             }
             AtomView::Fun(f) => {
                 profile::bump(Counter::ParseFun, 1);
-                Self::try_from_fun(f, state, library, function_library, settings)
+                Self::try_from_fun(
+                    construction,
+                    f,
+                    state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                )
             }
             AtomView::Add(a) => {
                 profile::bump(Counter::ParseAdd, 1);
-                Self::try_from_add(a, state, library, function_library, settings)
+                Self::try_from_add(
+                    construction,
+                    a,
+                    state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                )
             }
             AtomView::Pow(p) => {
                 profile::bump(Counter::ParsePow, 1);
-                Self::try_from_pow(p, state, library, function_library, settings)
+                Self::try_from_pow(
+                    construction,
+                    p,
+                    state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                )
             }
-            a => Ok(Network::from_scalar(a.try_into()?)),
+            a => Ok(construction.scalar(Self::scalar_from_expression(retain(a))?)),
         }
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    fn as_leaf<S, Lib, FunLib>(
-        value: AtomView<'a>,
+    fn as_leaf<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: AtomView<'node>,
+        state: &ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let scalar_composite = settings.parse_composite_scalars_as_tensors
             && matches!(value, AtomView::Add(_) | AtomView::Mul(_));
-        if !value.is_tensorial(settings.strict_tensor_filter) && !scalar_composite {
-            return Ok(Self::from_scalar(value.try_into()?));
+        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
+            cache
+                .lock()
+                .unwrap()
+                .get(value.get_data())
+                .map(|entry| entry.0)
+        });
+        if !scalar_composite
+            && !cached_tensorial.unwrap_or_else(|| {
+                structure_inference::TensorialSyntax::is_tensorial(
+                    value,
+                    settings.strict_tensor_filter,
+                    &state.matcher.borrow(),
+                )
+            })
+        {
+            if let Some(cache) = &state.leaf_interfaces {
+                if cached_tensorial.is_some() {
+                    profile::bump(Counter::ParseStructureCacheHit, 1);
+                } else {
+                    profile::bump(Counter::ParseStructureCacheMiss, 1);
+                    cache
+                        .lock()
+                        .unwrap()
+                        .insert(value.to_owned(), (false, Vec::new()));
+                }
+            }
+            return Ok(construction.scalar(Self::scalar_from_expression(retain(value))?));
         }
 
         Self::as_inferred_leaf::<S, Lib, FunLib>(
+            construction,
             value,
-            StructureInferenceMode::Fast,
+            state,
             library,
             function_library,
             settings,
+            retain,
         )
     }
 
-    #[allow(clippy::type_complexity, clippy::result_large_err)]
-    fn as_inferred_leaf<S, Lib, FunLib>(
-        value: AtomView<'a>,
-        mode: StructureInferenceMode,
+    #[allow(
+        clippy::type_complexity,
+        clippy::result_large_err,
+        clippy::too_many_arguments
+    )]
+    fn as_inferred_leaf<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: AtomView<'node>,
+        state: &ParseState<Aind, AtomView<'node>>,
+
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        debug_assert_eq!(state.current_view(), value);
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
-            S::structure_from_atom(value, mode)
+            S::structure_from_parser(state)
         };
 
         let structure = match structure {
@@ -493,29 +763,34 @@ where
             }
         };
 
-        Ok(Self::from_tensor(T::tensor_from_expression(
-            value,
-            structure,
-            library,
-            function_library,
-            settings,
-        )?))
+        let layout = structure.layout().clone();
+        Ok(construction.tensor(
+            T::tensor_from_expression(
+                retain(value),
+                structure,
+                library,
+                function_library,
+                settings,
+            )?,
+            layout,
+        )?)
     }
 
     #[allow(clippy::result_large_err)]
-    fn try_from_mul<S, Lib, FunLib>(
-        value: MulView<'a>,
-        mut state: ParseState<Aind>,
+    fn try_from_mul<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: MulView<'node>,
+        mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -526,10 +801,13 @@ where
         {
             // println!("Mul leaf");
             return Self::as_leaf::<S, Lib, FunLib>(
+                construction,
                 value.as_view(),
+                &state,
                 library,
                 function_library,
                 settings,
+                retain,
             );
         }
 
@@ -539,36 +817,38 @@ where
         let first_atom = iter.next().unwrap();
         profile::bump(Counter::MulFactor, 1);
         let first = Self::try_from_view_impl(
+            construction,
             first_atom,
             state.clone(),
             library,
             function_library,
             settings,
+            retain,
         )?;
 
         // state
 
         if settings.precontract_scalars {
-            let mut scalars = Atom::num(1);
+            let mut scalar_terms = Vec::new();
 
             let rest: Result<Vec<_>, _> = iter
                 .filter_map(|a| {
                     match Self::try_from_view_impl(
+                        construction,
                         a,
                         state.clone(),
                         library,
                         function_library,
                         settings,
+                        retain,
                     ) {
                         Ok(n) => {
                             profile::bump(Counter::MulFactor, 1);
-                            if let NetworkState::PureScalar = n.state {
-                                let _span = profile::span(Timer::ScalarMulAccum);
-                                profile::bump(Counter::ScalarMulAccum, 1);
-                                scalars *= a;
+                            if let NetworkState::PureScalar = construction.state(n) {
+                                scalar_terms.push(a);
                                 None
                             } else {
-                                Some(Ok((a.to_owned(), n)))
+                                Some(Ok(n))
                             }
                         }
                         Err(e) => Some(Err(e)),
@@ -578,51 +858,67 @@ where
 
             let mut res = rest?;
 
-            if let NetworkState::PureScalar = first.state {
-                let _span = profile::span(Timer::ScalarMulAccum);
-                profile::bump(Counter::ScalarMulAccum, 1);
-                scalars *= first_atom;
+            if let NetworkState::PureScalar = construction.state(first) {
+                scalar_terms.push(first_atom);
             } else {
-                res.push((first_atom.to_owned(), first));
+                res.push(first);
             }
 
             if res.is_empty() {
-                Ok(Self::from_scalar(value.as_view().try_into()?))
+                Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
             } else {
+                // Fold only the coefficient that survives in a mixed network.
+                // Keep the previous rest-then-first order, including inexact
+                // arithmetic; an all-scalar source is retained unchanged above.
+                let mut scalars = Atom::num(1);
+                for term in scalar_terms {
+                    let _span = profile::span(Timer::ScalarMulAccum);
+                    profile::bump(Counter::ScalarMulAccum, 1);
+                    scalars *= term;
+                }
                 let s = if scalars != Atom::num(1) {
-                    Self::from_scalar(scalars.as_view().try_into()?)
+                    construction.scalar(Self::scalar_from_expression(AtomOrView::Atom(scalars))?)
                 } else {
-                    res.pop().unwrap().1
+                    res.pop().unwrap()
                 };
 
-                Ok(s.n_mul(res.into_iter().map(|(_, net)| net)))
+                Ok(construction.product(std::iter::once(s).chain(res).collect()))
             }
         } else {
             let rest: Result<Vec<_>, _> = iter
                 .map(|a| {
                     profile::bump(Counter::MulFactor, 1);
-                    Self::try_from_view_impl(a, state.clone(), library, function_library, settings)
+                    Self::try_from_view_impl(
+                        construction,
+                        a,
+                        state.clone(),
+                        library,
+                        function_library,
+                        settings,
+                        retain,
+                    )
                 })
                 .collect();
 
-            Ok(first.n_mul(rest?))
+            Ok(construction.product(std::iter::once(first).chain(rest?).collect()))
         }
     }
 
     #[allow(clippy::result_large_err)]
-    fn try_from_fun<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
+    fn try_from_fun<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
         // <Canonicalized<S>>::Error: Debug,
@@ -630,43 +926,112 @@ where
         let _span = profile::span(Timer::ParseFun);
         let symbol = value.get_symbol();
 
-        if symbol == SPENSO_TAG.dot && value.get_nargs() != 2 {
+        let dot = state.matcher.borrow().tags().dot;
+        if symbol == dot
+            && state
+                .matcher
+                .borrow_mut()
+                .compact_inner_product_parts::<Aind>(value)
+                .is_none()
+        {
             return Err(TensorNetworkError::InvalidDotFunction(
                 value.as_view().to_plain_string(),
             ));
         }
 
-        if symbol.has_tag(&SPENSO_TAG.broadcast) {
-            return Self::parse_broadcast_function::<S, Lib, FunLib>(
+        if symbol == state.matcher.borrow().tags().bracket
+            || symbol.has_tag(&state.matcher.borrow().tags().broadcast)
+        {
+            if settings
+                .depth_limit
+                .is_some_and(|limit| state.depth >= limit)
+            {
+                return Self::as_leaf::<S, Lib, FunLib>(
+                    construction,
+                    value.as_view(),
+                    &state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                );
+            }
+            return Self::parse_expanded_function::<S, Lib, FunLib>(
+                construction,
                 value,
                 state,
                 library,
                 function_library,
                 settings,
+                retain,
             );
         }
 
-        if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
-            return Self::parse_scalar_function(value);
+        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
+            cache
+                .lock()
+                .unwrap()
+                .get(value.as_view().get_data())
+                .map(|entry| entry.0)
+        });
+        if !cached_tensorial.unwrap_or_else(|| {
+            structure_inference::TensorialSyntax::is_tensorial(
+                value.as_view(),
+                settings.strict_tensor_filter,
+                &state.matcher.borrow(),
+            )
+        }) {
+            if let Some(cache) = &state.leaf_interfaces {
+                if cached_tensorial.is_some() {
+                    profile::bump(Counter::ParseStructureCacheHit, 1);
+                } else {
+                    profile::bump(Counter::ParseStructureCacheMiss, 1);
+                    cache
+                        .lock()
+                        .unwrap()
+                        .insert(value.as_view().to_owned(), (false, Vec::new()));
+                }
+            }
+            return Self::parse_scalar_function(
+                construction,
+                value,
+                settings.shorthand_parsing,
+                retain,
+            );
         }
 
-        if let Some(inference) = settings.shorthand_parsing.opaque_inference()
-            && Self::is_shorthand_function(value)
+        if settings.shorthand_parsing == ShorthandParsing::Opaque
+            && Self::is_shorthand_function(value, &state)
         {
             return Self::as_inferred_leaf::<S, _, _>(
+                construction,
                 value.as_view(),
-                inference,
+                &state,
                 library,
                 function_library,
                 settings,
+                retain,
             );
         }
 
-        Self::parse_expanded_function(value, state, library, function_library, settings)
+        Self::parse_expanded_function(
+            construction,
+            value,
+            state,
+            library,
+            function_library,
+            settings,
+            retain,
+        )
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_scalar_function(value: FunView<'a>) -> Result<Self, TensorNetworkError<K, Symbol>> {
+    fn parse_scalar_function<'node>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        shorthand_parsing: ShorthandParsing,
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>> {
         if value.get_symbol() == SPENSO_TAG.pure_scalar {
             if value.get_nargs() != 1 {
                 return Err(TensorNetworkError::TooManyArgsFunction(
@@ -674,26 +1039,33 @@ where
                 ));
             }
 
-            return Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?));
+            // Opaque intake retains the literal for domain rewriting; explicit
+            // network materialization consumes the scalar marker.
+            if shorthand_parsing.expands() {
+                return Ok(construction.scalar(Self::scalar_from_expression(retain(
+                    value.iter().next().unwrap(),
+                ))?));
+            }
         }
 
-        Ok(Self::from_scalar(value.as_view().try_into()?))
+        Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_broadcast_function<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
+    fn parse_broadcast_function<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -704,37 +1076,58 @@ where
         }
 
         let symbol = value.get_symbol();
+        let mut state = state;
+        if symbol.is_scalar() {
+            state.chain_scope_validated = false;
+            state.leaf_interfaces = None;
+        }
         let inner = value.iter().next().unwrap();
-        let inner_tensor =
-            Self::try_from_view_impl(inner, state, library, function_library, settings)?;
+        let inner_tensor = Self::try_from_view_impl(
+            construction,
+            inner,
+            state,
+            library,
+            function_library,
+            settings,
+            retain,
+        )?;
 
-        Ok(inner_tensor.fun(symbol))
+        Ok(construction.function(inner_tensor, symbol))
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_expanded_function<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
+    fn parse_expanded_function<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let symbol = value.get_symbol();
 
-        if symbol == SPENSO_TAG.bracket {
+        if symbol == state.matcher.borrow().tags().bracket {
             let mut n_muls = value
                 .iter()
                 .map(|a| {
-                    Self::try_from_view_impl(a, state.clone(), library, function_library, settings)
+                    Self::try_from_view_impl(
+                        construction,
+                        a,
+                        state.clone(),
+                        library,
+                        function_library,
+                        settings,
+                        retain,
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let Some(first) = n_muls.pop() else {
@@ -743,42 +1136,50 @@ where
                     value.as_view()
                 )));
             };
-            Ok(first.n_mul(n_muls))
-        } else if symbol.has_tag(&SPENSO_TAG.broadcast) {
+            Ok(construction.product(std::iter::once(first).chain(n_muls).collect()))
+        } else if symbol.has_tag(&state.matcher.borrow().tags().broadcast) {
             Self::parse_broadcast_function::<S, Lib, FunLib>(
+                construction,
                 value,
                 state,
                 library,
                 function_library,
                 settings,
+                retain,
             )
         } else {
             Self::materialize_shorthand::<S, Lib, FunLib>(
+                construction,
                 value,
                 state,
                 library,
                 function_library,
                 settings,
+                retain,
             )
         }
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_regular_function_leaf<S, Lib>(
-        value: FunView<'a>,
+    fn parse_regular_function_leaf<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        state: &ParseState<Aind, AtomView<'node>>,
         library: &Lib,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
         Lib: TensorLibraryFor<S, T, Key = K>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
-            S::parse(value.as_view())
+            S::structure_from_parser(state)
         };
 
         let structure = match structure {
@@ -788,7 +1189,9 @@ where
             }
             Err(StructureError::EmptyStructure(_)) => {
                 profile::bump(Counter::ParseStructureErr, 1);
-                return Ok(Self::from_scalar(value.as_view().try_into()?));
+                return Ok(
+                    construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?)
+                );
             }
             Err(err) => {
                 profile::bump(Counter::ParseStructureErr, 1);
@@ -799,40 +1202,42 @@ where
         match library.key_for_structure(&structure) {
             Ok(key) => {
                 let tensor_structure = structure.canonical().clone();
-                Ok(Self::library_tensor(
-                    &tensor_structure,
-                    structure.map_canonical(|_| key),
-                ))
+                Ok(
+                    construction
+                        .library_tensor(&tensor_structure, structure.map_canonical(|_| key)),
+                )
             }
             Err(_) if structure.canonical().is_scalar() => {
-                Ok(Self::from_scalar(value.as_view().try_into()?))
+                Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
             }
             Err(_) => {
                 // Tensor dimensions may remain symbolic during analytic normalization;
                 // opaque scalars and library tensors need no eager shadow here.
                 // The target decides whether missing leaves need finite components.
-                let (canonical, layout) = structure.into_parts();
-                Ok(Self::from_tensor(
-                    canonical.to_shell().concretize_logical(&layout)?,
-                ))
+                let layout = structure.layout().clone();
+                Ok(construction.tensor(
+                    T::tensor_from_leaf(retain(value.as_view()), structure)?,
+                    layout,
+                )?)
             }
         }
     }
 
     #[allow(clippy::result_large_err)]
-    fn try_from_pow<S, Lib, FunLib>(
-        value: PowView<'a>,
-        mut state: ParseState<Aind>,
+    fn try_from_pow<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: PowView<'node>,
+        mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> std::result::Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> std::result::Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -841,95 +1246,116 @@ where
             && a <= state.depth
         {
             return Self::as_leaf::<S, Lib, FunLib>(
+                construction,
                 value.as_view(),
+                &state,
                 library,
                 function_library,
                 settings,
+                retain,
             );
         }
 
-        if !settings.depth_is_product_depth {
-            state.depth += 1;
-        }
+        state.depth += 1;
         let (base_expression, exp) = value.get_base_exp();
 
         if let Ok(n) = i8::try_from(exp) {
             // println!("base:{base_expression}");
             let next_dummy = state.next_dummy.get();
             let base = Self::try_from_view_impl(
+                construction,
                 base_expression,
                 state.clone(),
                 library,
                 function_library,
                 settings,
+                retain,
             )?;
 
-            // println!("base state {:?}", base.state);
+            // println!("base state {:?}", construction.state(base));
             if settings.precontract_scalars
-                && let NetworkState::PureScalar = base.state
+                && let NetworkState::PureScalar = construction.state(base)
+                && !matches!(base_expression, AtomView::Fun(fun) if fun.get_symbol() == state.matcher.borrow().tags().bracket)
             {
                 // println!("Pure");
-                return Ok(Self::from_scalar(value.as_view().try_into()?));
+                return Ok(
+                    construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?)
+                );
             }
 
-            if let NetworkState::Tensor = base.state {
-                Err(TensorNetworkError::NonSelfDualTensorPower(
+            if let NetworkState::Tensor = construction.state(base) {
+                return Err(TensorNetworkError::NonSelfDualTensorPower(
                     value.as_view().to_plain_string(),
-                ))
-            } else if n < 0 {
-                // An even power of a self_dual tensor, or scalar is a scalar
-                if n % 2 == 0 || base.state.is_scalar() {
-                    let out = base.pow(n);
-                    // println!("{:?}", out.state);
-                    Ok(out)
-                } else {
-                    Err(TensorNetworkError::NegativeExponentNonScalar(format!(
+                ));
+            }
+            // An even power of a self_dual tensor, or scalar is a scalar
+            if n < 0 && n % 2 != 0 && !construction.state(base).is_scalar() {
+                let reason = if construction.emits_graph() {
+                    let base = std::mem::replace(construction, Construction::new()).finish(base);
+                    format!(
                         "Atom:{},graph of base: {}, dangling indices: {:?}",
                         value.as_view().to_plain_string(),
                         base.dot(),
                         base.graph.dangling_indices()
-                    )))
-                }
-            } else {
-                let out = if n > 1 && state.next_dummy.get() != next_dummy {
-                    // Each lowered shorthand copy needs independent internal indices.
-                    let rest = (1..n)
-                        .map(|_| {
-                            Self::try_from_view_impl(
-                                base_expression,
-                                state.clone(),
-                                library,
-                                function_library,
-                                settings,
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    base.n_mul(rest)
+                    )
                 } else {
-                    base.pow(n)
+                    format!(
+                        "Atom:{}, dangling indices: {:?}",
+                        value.as_view().to_plain_string(),
+                        construction.slots(base)
+                    )
                 };
-                // println!("{:?}", out.state);
-                Ok(out)
+                return Err(TensorNetworkError::NegativeExponentNonScalar(reason));
             }
+
+            let out = if n > 1
+                && (state.next_dummy.get() != next_dummy
+                    || (n == 2 && construction.state(base) == NetworkState::SelfDualTensor))
+            {
+                // Each lowered shorthand copy needs independent internal indices.
+                // A tensor square also needs the selected product-contraction
+                // strategy: scalar power execution uses the tensor's default
+                // contraction, which can leave symbolic sums uncontracted.
+                let rest = (1..n)
+                    .map(|_| {
+                        Self::try_from_view_impl(
+                            construction,
+                            base_expression,
+                            state.clone(),
+                            library,
+                            function_library,
+                            settings,
+                            retain,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                construction.product(std::iter::once(base).chain(rest).collect())
+            } else {
+                // println!("{:?}", construction.state(base));
+                construction.power(base, n)
+            };
+            // println!("{:?}", out.state);
+            Ok(out)
         } else {
-            Ok(Self::from_scalar(value.as_view().try_into()?))
+            Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
         }
     }
 
     #[allow(clippy::result_large_err)]
-    fn try_from_add<S, Lib, FunLib>(
-        value: AddView<'a>,
-        mut state: ParseState<Aind>,
+    fn try_from_add<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: AddView<'node>,
+        mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -938,50 +1364,55 @@ where
             && a <= state.depth
         {
             return Self::as_leaf::<S, Lib, FunLib>(
+                construction,
                 value.as_view(),
+                &state,
                 library,
                 function_library,
                 settings,
+                retain,
             );
         }
 
-        if !settings.depth_is_product_depth {
-            state.depth += 1;
-        }
-
+        state.depth += 1;
         let mut iter = value.iter();
 
         let first_atom = iter.next().unwrap();
         profile::bump(Counter::AddTerm, 1);
 
         let first = Self::try_from_view_impl(
+            construction,
             first_atom,
             state.clone(),
             library,
             function_library,
             settings,
+            retain,
         )?;
         if settings.take_first_term_from_sum {
             Ok(first)
         } else if settings.precontract_scalars {
-            let mut scalars = Atom::Zero;
+            let mut scalar_terms = Vec::new();
 
             let rest: Result<Vec<_>, _> = iter
                 .filter_map(|a| {
                     match Self::try_from_view_impl(
+                        construction,
                         a,
                         state.clone(),
                         library,
                         function_library,
                         settings,
+                        retain,
                     ) {
                         Ok(n) => {
                             profile::bump(Counter::AddTerm, 1);
-                            if n.state.is_compatible(&first.state) {
-                                if let NetworkState::PureScalar = n.state {
-                                    let _span = profile::span(Timer::ScalarAddAccum);
-                                    profile::bump(Counter::ScalarAddAccum, 1);
-                                    scalars += a;
+                            if construction
+                                .state(n)
+                                .is_compatible(&construction.state(first))
+                            {
+                                if let NetworkState::PureScalar = construction.state(n) {
+                                    scalar_terms.push(a);
                                     None
                                 } else {
                                     Some(Ok(n))
@@ -989,7 +1420,10 @@ where
                             } else {
                                 Some(Err(TensorNetworkError::IncompatibleSummand(format!(
                                     "{} is {:?} vs {} is {:?}",
-                                    a, n.state, first_atom, first.state
+                                    a,
+                                    construction.state(n),
+                                    first_atom,
+                                    construction.state(first)
                                 ))))
                             }
                         }
@@ -1000,42 +1434,57 @@ where
 
             let mut res = rest?;
 
-            if let NetworkState::PureScalar = first.state {
-                let _span = profile::span(Timer::ScalarAddAccum);
-                profile::bump(Counter::ScalarAddAccum, 1);
-                scalars += first_atom;
+            if let NetworkState::PureScalar = construction.state(first) {
+                scalar_terms.push(first_atom);
             } else {
                 res.push(first);
             }
 
             if res.is_empty() {
-                Ok(Self::from_scalar(value.as_view().try_into()?))
+                Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
             } else {
+                // Fold only the coefficient that survives in a mixed network.
+                // Keep the previous rest-then-first order, including inexact
+                // arithmetic; an all-scalar source is retained unchanged above.
+                let mut scalars = Atom::Zero;
+                for term in scalar_terms {
+                    let _span = profile::span(Timer::ScalarAddAccum);
+                    profile::bump(Counter::ScalarAddAccum, 1);
+                    scalars += term;
+                }
                 let s = if scalars != Atom::Zero {
-                    Self::from_scalar(scalars.as_view().try_into()?)
+                    construction.scalar(Self::scalar_from_expression(AtomOrView::Atom(scalars))?)
                 } else {
                     res.pop().unwrap()
                 };
-                Ok(s.n_add(res))
+                construction.sum(std::iter::once(s).chain(res).collect())
             }
         } else {
             let rest: Result<Vec<_>, _> = iter
                 .map(|a| {
                     match Self::try_from_view_impl(
+                        construction,
                         a,
                         state.clone(),
                         library,
                         function_library,
                         settings,
+                        retain,
                     ) {
                         Ok(n) => {
                             profile::bump(Counter::AddTerm, 1);
-                            if n.state.is_compatible(&first.state) {
+                            if construction
+                                .state(n)
+                                .is_compatible(&construction.state(first))
+                            {
                                 Ok(n)
                             } else {
                                 Err(TensorNetworkError::IncompatibleSummand(format!(
                                     "{} is {:?} vs {} is {:?}",
-                                    a, n.state, first_atom, first.state
+                                    a,
+                                    construction.state(n),
+                                    first_atom,
+                                    construction.state(first)
                                 )))
                             }
                         }
@@ -1044,7 +1493,7 @@ where
                 })
                 .collect();
 
-            Ok(first.n_add(rest?))
+            construction.sum(std::iter::once(first).chain(rest?).collect())
         }
     }
 }
@@ -1052,10 +1501,149 @@ pub type ParamNet<Aind> =
     Network<NetworkStore<ParamTensor<ShadowedStructure<Aind>>, Atom>, DummyKey, Symbol, Aind>;
 
 impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
+    /// Realize independent scalar expressions with the existing component parser
+    /// and MinIntermediateCost executor. Each input keeps its own dummy namespace
+    /// and admission error.
+    ///
+    /// Parsing precedes execution for a batch. Callers whose inputs can run user
+    /// code must submit one input at its original evaluation position instead;
+    /// the same implementation then preserves parse/execute interleaving. No
+    /// unrelated expression or tensor is materialized by this operation.
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
+    pub fn evaluate_scalar_batch(
+        values: &[AtomView<'_>],
+        settings: &ParseSettings,
+    ) -> Result<
+        Vec<Result<Atom, TensorNetworkError<DummyKey, Symbol>>>,
+        TensorNetworkError<DummyKey, Symbol>,
+    > {
+        use crate::network::library::function_lib::SymbolLib;
+        use std::{
+            collections::HashMap,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+        use symbolica::{atom::SymbolBuilder, function, wrap_symbol};
+
+        let library = DummyLibrary::<_>::new();
+        let missing = ErroringLibrary::<Symbol>::new();
+        let mut construction = Construction::new();
+        let mut results = HashMap::new();
+        let mut roots = Vec::new();
+        let mut functions = SymbolLib {
+            functions: HashMap::new(),
+            scalar_functions: HashMap::new(),
+            _missing: ErroringLibrary::<Symbol>::new(),
+        };
+        let mut result_heads = HashMap::new();
+        // SymbolBuilder::build_group reserves all names under Symbolica's state
+        // lock and rejects existing symbols, including ones with user hooks.
+        // Plain symbol! lookup cannot provide that guarantee.
+        static NEXT_BATCH: AtomicU64 = AtomicU64::new(0);
+        let heads = if values.len() > 1 {
+            loop {
+                let batch = NEXT_BATCH.fetch_add(1, Ordering::Relaxed);
+                let builders = (0..values.len())
+                    .map(|position| {
+                        SymbolBuilder::new(wrap_symbol!(format!(
+                            "spenso::internal_component_result_{batch}_{position}"
+                        )))
+                    })
+                    .collect();
+                if let Ok(heads) = SymbolBuilder::build_group(builders) {
+                    break heads;
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        for (position, &value) in values.iter().enumerate() {
+            let parsed = value
+                .validate_chain_like_nesting()
+                .map_err(Into::into)
+                .and_then(|()| {
+                    let state = ParseState::<Aind> {
+                        chain_scope_validated: true,
+                        ..Default::default()
+                    };
+                    state.reserve_indices(value);
+                    Self::try_from_view_impl::<ShadowedStructure<Aind>, _, _, _>(
+                        &mut construction,
+                        value,
+                        state,
+                        &library,
+                        &missing,
+                        settings,
+                        AtomOrView::View,
+                    )
+                });
+            match parsed {
+                Err(error) => {
+                    results.insert(position, Err(error));
+                }
+                Ok(root) if values.len() == 1 => {
+                    // In particular, execute a callback-produced open result
+                    // before reporting NoScalar, just like ordinary execution.
+                    let mut network = construction.finish(root);
+                    network
+                        .execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &missing)?;
+                    return Ok(vec![network.result_scalar().map(Atom::from)]);
+                }
+                Ok(root) if !construction.state(root).is_scalar() => {
+                    results.insert(position, Err(TensorNetworkError::NoScalar));
+                }
+                Ok(root) => {
+                    // Private operation keys keep independent results separate;
+                    // they never enter input syntax or escape this method.
+                    let head = heads[position];
+                    functions.insert_scalar_fallible(head, move |value| Ok(function!(head, value)));
+                    result_heads.insert(head, position);
+                    roots.push(construction.function(root, head));
+                }
+            }
+        }
+        if !roots.is_empty() {
+            let root = construction.sum(roots)?;
+            let mut network = construction.finish(root);
+            network.execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &functions)?;
+            let result = Atom::from(network.result_scalar()?);
+            let terms = match result.as_view() {
+                AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+                value => vec![value],
+            };
+            for term in terms {
+                let AtomView::Fun(function) = term else {
+                    return Err(eyre::eyre!("component result lost its argument boundary").into());
+                };
+                let Some(position) = result_heads.remove(&function.get_symbol()) else {
+                    return Err(eyre::eyre!("unrecognized component result boundary").into());
+                };
+                let mut arguments = function.iter();
+                let Some(value) = arguments.next() else {
+                    return Err(eyre::eyre!("empty component result boundary").into());
+                };
+                if arguments.next().is_some() {
+                    return Err(eyre::eyre!("component result has multiple values").into());
+                }
+                results.insert(position, Ok(value.to_owned()));
+            }
+            if !result_heads.is_empty() {
+                return Err(eyre::eyre!("component execution lost an independent result").into());
+            }
+        }
+        Ok((0..values.len())
+            .map(|position| {
+                results
+                    .remove(&position)
+                    .expect("every input has an admission or component result")
+            })
+            .collect())
+    }
+
+    /// Materialize all components using the MinIntermediateCost policy.
     pub fn simple_execute(&mut self) {
         let lib = DummyLibrary::<_>::new();
 
-        self.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &ErroringLibrary::new())
+        self.execute::<Sequential, MinIntermediateCost, _, _, _>(&lib, &ErroringLibrary::new())
             .unwrap();
     }
 }
@@ -1085,6 +1673,219 @@ impl NetworkParse for AtomView<'_> {
         let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>>::new();
 
         ParamNet::<Aind>::try_from_view::<ShadowedStructure<Aind>, _>(*self, &lib, settings)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod scalar_batch_tests {
+    use super::*;
+    use crate::{network::library::symbolic::ETS, structure::representation};
+    use std::sync::{Arc, Mutex};
+    use symbolica::{function, parse_lit};
+
+    #[test]
+    fn scalar_batch_preserves_independent_admission_and_zero_results() {
+        representation::initialize();
+        let p = crate::tensor_symbol!("scalar_batch_test::p");
+        let q = crate::tensor_symbol!("scalar_batch_test::q");
+        let dot = |rep: Atom| function!(ETS.metric, function!(p, &rep), function!(q, &rep));
+        let finite = dot(parse_lit!(spenso::mink(2)));
+        let symbolic = dot(parse_lit!(spenso::mink(scalar_batch_test::D)));
+        let zero = Atom::Zero;
+        let values = [&finite, &symbolic, &zero];
+        let inputs = values
+            .iter()
+            .map(|value| value.as_view())
+            .collect::<Vec<_>>();
+        let settings = ParseSettings::default();
+        let mut actual =
+            ParamNet::<AbstractIndex>::evaluate_scalar_batch(&inputs, &settings).unwrap();
+        let mut reference = finite
+            .parse_to_atom_net::<AbstractIndex>(&settings)
+            .unwrap();
+        reference.simple_execute();
+        assert_eq!(
+            actual.remove(0).unwrap(),
+            Atom::from(reference.result_scalar().unwrap())
+        );
+        assert!(actual.remove(0).is_err());
+        assert_eq!(actual.remove(0).unwrap(), Atom::Zero);
+        assert!(
+            ParamNet::<AbstractIndex>::evaluate_scalar_batch(&[], &settings)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn scalar_batch_keeps_callback_created_contractions_and_fresh_input_scopes() {
+        representation::initialize();
+        let matrix = crate::tensor_symbol!("scalar_batch_callback::M");
+        let vector = crate::tensor_symbol!("scalar_batch_callback::V");
+        let other = crate::tensor_symbol!("scalar_batch_callback::B");
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let p = crate::tensor_symbol!(
+            "scalar_batch_callback::P",
+            norm = move |view, output| {
+                let AtomView::Fun(function) = view else {
+                    return;
+                };
+                let argument = function.iter().next().unwrap();
+                if SlotMatcher::default()
+                    .parse::<LibraryRep, AbstractIndex>(argument)
+                    .is_ok()
+                {
+                    observed.lock().unwrap().push(argument.to_owned());
+                    let internal = parse_lit!(spenso::mink(2, 77));
+                    **output =
+                        function!(matrix, argument, &internal) * function!(vector, &internal);
+                }
+            }
+        );
+        let rep = parse_lit!(spenso::mink(2));
+        let first = function!(ETS.metric, function!(p, &rep), function!(other, 1, &rep));
+        let second = function!(ETS.metric, function!(p, &rep), function!(other, 2, &rep));
+        let inputs = [first.as_view(), second.as_view()];
+        let settings = ParseSettings::default();
+        let reference = inputs
+            .iter()
+            .map(|value| {
+                let mut net = value.parse_to_atom_net::<AbstractIndex>(&settings).unwrap();
+                net.simple_execute();
+                Atom::from(net.result_scalar().unwrap())
+            })
+            .collect::<Vec<_>>();
+        let reference_calls = std::mem::take(&mut *calls.lock().unwrap());
+        let actual = ParamNet::<AbstractIndex>::evaluate_scalar_batch(&inputs, &settings)
+            .unwrap()
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(actual, reference);
+        assert_eq!(*calls.lock().unwrap(), reference_calls);
+        assert_eq!(reference_calls.len(), 2);
+        assert_eq!(reference_calls[0], reference_calls[1]);
+        assert!(
+            actual
+                .iter()
+                .all(|value| !value.to_string().contains("mink"))
+        );
+    }
+
+    static OCCUPIED_RESULT_CALLS: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+
+    // Occupy the first proposed key before parallel tests can allocate batches.
+    // This preserves the collision fixture independently of test execution order.
+    pub(crate) fn initialize_occupied_result_head() {
+        let _occupied = symbolica::symbol!(
+            "spenso::internal_component_result_0_0",
+            norm = |_value, output| {
+                OCCUPIED_RESULT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                **output = Atom::Zero;
+            }
+        );
+    }
+
+    #[test]
+    fn scalar_batch_result_keys_cannot_reuse_user_callbacks() {
+        let first = Atom::num(3);
+        let second = Atom::num(5);
+        let actual = ParamNet::<AbstractIndex>::evaluate_scalar_batch(
+            &[first.as_view(), second.as_view()],
+            &ParseSettings::default(),
+        )
+        .unwrap()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+        assert_eq!(actual, vec![first, second]);
+        assert_eq!(
+            OCCUPIED_RESULT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+    }
+
+    #[test]
+    fn scalar_singletons_preserve_custom_metric_execution_order() {
+        static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        fn sign(index: usize) -> bool {
+            EVENTS.lock().unwrap().push(format!("metric:{index}"));
+            index == 1
+        }
+        representation::initialize();
+        let rep = representation::REPS
+            .write()
+            .unwrap()
+            .new_inline_metric("scalar_batch_custom::metric", sign)
+            .unwrap();
+        let p = crate::tensor_symbol!(
+            "scalar_batch_custom::p",
+            norm = |value, _output| {
+                EVENTS.lock().unwrap().push(format!("vector:{value}"));
+            }
+        );
+        let q = crate::tensor_symbol!("scalar_batch_custom::q");
+        let compact = function!(rep.symbol(), 2);
+        let inputs = [1, 2].map(|label| {
+            function!(
+                ETS.metric,
+                function!(p, &compact),
+                function!(q, label, &compact)
+            )
+        });
+        let settings = ParseSettings::default();
+        EVENTS.lock().unwrap().clear();
+        let expected = inputs
+            .iter()
+            .map(|value| {
+                let mut network = value.parse_to_atom_net::<AbstractIndex>(&settings).unwrap();
+                network.simple_execute();
+                Atom::from(network.result_scalar().unwrap())
+            })
+            .collect::<Vec<_>>();
+        let expected_events = std::mem::take(&mut *EVENTS.lock().unwrap());
+        let actual = inputs
+            .iter()
+            .map(|value| {
+                ParamNet::<AbstractIndex>::evaluate_scalar_batch(&[value.as_view()], &settings)
+                    .unwrap()
+                    .pop()
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+        assert_eq!(*EVENTS.lock().unwrap(), expected_events);
+        assert!(
+            expected_events
+                .iter()
+                .any(|event| event.starts_with("metric:"))
+        );
+        assert!(
+            expected_events
+                .iter()
+                .any(|event| event.starts_with("vector:"))
+        );
+    }
+
+    #[test]
+    fn scalar_batch_does_not_enable_unknown_broadcast_execution() {
+        representation::initialize();
+        let p = crate::tensor_symbol!("scalar_batch_strict::p");
+        let q = crate::tensor_symbol!("scalar_batch_strict::q");
+        let broadcast = crate::broadcast_symbol!("scalar_batch_strict::f");
+        let rep = parse_lit!(spenso::mink(2));
+        let dot = function!(ETS.metric, function!(p, &rep), function!(q, &rep));
+        let wrapped = function!(broadcast, &dot);
+        let settings = ParseSettings::default();
+        for inputs in [
+            vec![wrapped.as_view()],
+            vec![dot.as_view(), wrapped.as_view()],
+        ] {
+            assert!(ParamNet::<AbstractIndex>::evaluate_scalar_batch(&inputs, &settings).is_err());
+        }
     }
 }
 

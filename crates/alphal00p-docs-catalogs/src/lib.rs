@@ -1,4 +1,4 @@
-//! Explicit, ordered supported-API catalogs for the five documentation sites.
+//! Explicit, ordered supported-API catalogs for the documentation sites.
 //!
 //! These adapters intentionally do not use a process-global inventory. Each
 //! component exporter constructs its own scope, which keeps registration
@@ -86,6 +86,83 @@ mod annotated_scopes {
     #[alphal00p_docs::scope(id = "vakint", title = "vakint supported API", format = "typst")]
     mod vakint {}
 
+    /// Loads validated particle content and parameters through the feature-gated FeynKit facade.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(id = "feynkit", title = "feynkit supported API", format = "typst")]
+    mod feynkit {}
+
+    /// Owns validated particles, interactions, parameters, and indexed model lookups.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-model",
+        title = "feynkit-model supported API",
+        format = "typst"
+    )]
+    mod feynkit_model {}
+
+    /// Imports a UFO model through a caller-owned Python interpreter.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-ufo",
+        title = "feynkit-ufo supported API",
+        format = "typst"
+    )]
+    mod feynkit_ufo {}
+
+    /// Represents contravariant four-momenta with the mostly-minus metric.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-kinematics",
+        title = "feynkit-kinematics supported API",
+        format = "typst"
+    )]
+    mod feynkit_kinematics {}
+
+    /// Carries model-aware diagrams, momentum routing, and symbolic numerators.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-graph",
+        title = "feynkit-graph supported API",
+        format = "typst"
+    )]
+    mod feynkit_graph {}
+
+    /// Builds coherent amputated amplitudes from compatible diagram operators.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-amplitude",
+        title = "feynkit-amplitude supported API",
+        format = "typst"
+    )]
+    mod feynkit_amplitude {}
+
+    /// Generates Feynman diagrams from a validated model and process specification.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-generator",
+        title = "feynkit-generator supported API",
+        format = "typst"
+    )]
+    mod feynkit_generator {}
+
+    /// Builds cross-free families with explicit ownership of the surface cache.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-cff",
+        title = "feynkit-cff supported API",
+        format = "typst"
+    )]
+    mod feynkit_cff {}
+
+    /// Reduces selected integrated vectors using native Spenso tensor projectors.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-tensor",
+        title = "feynkit-tensor supported API",
+        format = "typst"
+    )]
+    mod feynkit_tensor {}
+
     pub(super) fn for_component(component: &str) -> Option<alphal00p_docs_schema::DocScope> {
         match component {
             "gammalooprs" => Some(__alphal00p_docs_scope_gammalooprs()),
@@ -96,6 +173,15 @@ mod annotated_scopes {
             "spenso-hep-lib" => Some(__alphal00p_docs_scope_spenso_hep_lib()),
             "idenso" => Some(__alphal00p_docs_scope_idenso()),
             "vakint" => Some(__alphal00p_docs_scope_vakint()),
+            "feynkit" => Some(__alphal00p_docs_scope_feynkit()),
+            "feynkit-model" => Some(__alphal00p_docs_scope_feynkit_model()),
+            "feynkit-ufo" => Some(__alphal00p_docs_scope_feynkit_ufo()),
+            "feynkit-kinematics" => Some(__alphal00p_docs_scope_feynkit_kinematics()),
+            "feynkit-graph" => Some(__alphal00p_docs_scope_feynkit_graph()),
+            "feynkit-amplitude" => Some(__alphal00p_docs_scope_feynkit_amplitude()),
+            "feynkit-generator" => Some(__alphal00p_docs_scope_feynkit_generator()),
+            "feynkit-cff" => Some(__alphal00p_docs_scope_feynkit_cff()),
+            "feynkit-tensor" => Some(__alphal00p_docs_scope_feynkit_tensor()),
             _ => None,
         }
     }
@@ -282,6 +368,7 @@ fn rust_scope(component: &str, workspace_root: &Path) -> Result<DocScope> {
 
 fn rust_item_required_features(component: &str, item: &str) -> &'static [&'static str] {
     match (component, item) {
+        ("feynkit", "Model") => &["model"],
         // The entire parametric module is behind Spenso's Symbolica-backed
         // `shadowing` feature, not merely extra implementations on the type.
         ("spenso", "NetworkParse" | "ParamTensor" | "ParseSettings" | "SymbolicParallelism") => {
@@ -301,9 +388,72 @@ fn rust_examples(component: &str) -> Result<&'static [RustExampleSpec]> {
         "spenso-hep-lib" => Ok(SPENSO_HEP_LIB),
         "idenso" => Ok(IDENSO),
         "vakint" => Ok(VAKINT),
+        "feynkit" => Ok(FEYNKIT),
+        "feynkit-model" => Ok(FEYNKIT_MODEL),
+        "feynkit-ufo" => Ok(FEYNKIT_UFO),
+        "feynkit-kinematics" => Ok(FEYNKIT_KINEMATICS),
+        "feynkit-graph" => Ok(FEYNKIT_GRAPH),
+        "feynkit-amplitude" => Ok(FEYNKIT_AMPLITUDE),
+        "feynkit-generator" => Ok(FEYNKIT_GENERATOR),
+        "feynkit-cff" => Ok(FEYNKIT_CFF),
+        "feynkit-tensor" => Ok(FEYNKIT_TENSOR),
         _ => bail!("unknown Rust component {component}"),
     }
 }
+
+const FEYNKIT: &[RustExampleSpec] = &[example!(
+    "Model",
+    "rust",
+    "let model = feynkit::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nassert!(!model.particles().is_empty());"
+)];
+
+const FEYNKIT_MODEL: &[RustExampleSpec] = &[example!(
+    "Model",
+    "rust",
+    "let model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nassert!(!model.particles().is_empty());"
+)];
+
+const FEYNKIT_UFO: &[RustExampleSpec] = &[example!(
+    "UfoLoader",
+    "rust",
+    "let loader = feynkit_ufo::UfoLoader::new().simplify_model(true);\nassert!(loader.options().simplify_model);"
+)];
+
+const FEYNKIT_KINEMATICS: &[RustExampleSpec] = &[example!(
+    "FourMomentum",
+    "rust",
+    "let momentum = feynkit_kinematics::FourMomentum::from_args(5.0_f64, 3.0, 0.0, 4.0);\nassert_eq!(momentum.mass_squared(), 0.0);"
+)];
+
+const FEYNKIT_GRAPH: &[RustExampleSpec] = &[example!(
+    "FeynmanDiagram",
+    "rust",
+    "use feynkit_graph::FeynmanDiagram;\nfn round_trip(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram, feynkit_graph::DiagramError> {\n    FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json()?)\n}"
+)];
+
+const FEYNKIT_AMPLITUDE: &[RustExampleSpec] = &[example!(
+    "Amplitude",
+    "rust",
+    "use feynkit::{Amplitude, GenerationOptions, Model, Process};\nlet model = Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nlet amplitude = Amplitude::from_diagram(result.diagrams.into_iter().next().expect(\"generated scalar diagram\"))?;\nassert_eq!(amplitude.diagrams().len(), 1);\nassert_eq!(amplitude.terms().len(), 1);"
+)];
+
+const FEYNKIT_GENERATOR: &[RustExampleSpec] = &[example!(
+    "Process",
+    "rust",
+    "use feynkit_generator::{GenerationOptions, Process};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nassert!(!result.diagrams.is_empty());"
+)];
+
+const FEYNKIT_CFF: &[RustExampleSpec] = &[example!(
+    "CffGenerator",
+    "rust",
+    "use feynkit_cff::{CffEdge, CffGenerator, CffGraph, EdgeId, VertexId};\nlet graph = CffGraph::new(2, [CffEdge::internal(EdgeId::new(0), VertexId::new(0), VertexId::new(1))])?;\nlet result = CffGenerator::default().generate(&graph)?;\nassert_eq!(result.report.acyclic_orientations, 2);"
+)];
+
+const FEYNKIT_TENSOR: &[RustExampleSpec] = &[example!(
+    "TensorReducer",
+    "rust",
+    "use feynkit_tensor::TensorReducer;\nuse symbolica::{parse, symbol};\nlet reducer = TensorReducer::new(parse!(\"D\")).with_integrated_head(symbol!(\"k\"));\nlet reduced = reducer.reduce(parse!(\"k(spenso::mink(D,mu))*k(spenso::mink(D,nu))\").as_view())?;\nassert_eq!(reduced.terms().len(), 1);"
+)];
 
 const GAMMALOOPRS: &[RustExampleSpec] = &[
     example!(
@@ -721,11 +871,6 @@ const IDENSO: &[RustExampleSpec] = &[
         "rust",
         "fn accepts_cookable<T: idenso::Cookable>(_expression: &T) {}"
     ),
-    example!(
-        "SelectiveExpand",
-        "rust",
-        "fn accepts_expansion<T: idenso::selective_expand::SelectiveExpand>(_expression: &T) {}"
-    ),
     example!("bis", "rust", "let representation = idenso::bis!(4);"),
     example!("cof", "rust", "let representation = idenso::cof!(Nc);"),
     example!("coad", "rust", "let representation = idenso::coad!(Na);"),
@@ -911,15 +1056,25 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "StabilityResult",
             "atom_to_canonical_string",
             "evaluate_graph_overall_factor",
-            "to_dots",
+            "contract",
         ]),
         "spynso3" => Ok(&[
             "BroadcastFunction",
+            "CanonicalizationError",
             "CompiledTensorEvaluator",
+            "CookingError",
+            "DiracAdjointError",
             "DisplaySettings",
+            "ExecutionMode",
+            "ExecutionStatus",
+            "FactorProjector",
+            "NetworkToolingError",
             "PortPattern",
             "Representation",
+            "RepresentationName",
+            "ReductionStatus",
             "Slot",
+            "SymbolicParallelism",
             "Tensor",
             "TensorEvaluator",
             "TensorExpression",
@@ -928,8 +1083,8 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "TensorName",
             "TensorNetwork",
             "TensorPattern",
-            "ExecutionMode",
-            "SymbolicParallelism",
+            "TensorRule",
+            "TensorStructure",
             "as_tensor",
             "chain",
             "dot",
@@ -941,14 +1096,14 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
+        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
     }
 }
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
+        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => bail!("unknown Python component {component}"),
     }
@@ -1002,6 +1157,14 @@ mod tests {
             "spenso-hep-lib",
             "idenso",
             "vakint",
+            "feynkit",
+            "feynkit-model",
+            "feynkit-ufo",
+            "feynkit-kinematics",
+            "feynkit-graph",
+            "feynkit-generator",
+            "feynkit-cff",
+            "feynkit-tensor",
         ] {
             let request = CatalogRequest {
                 product_id: "test".to_owned(),
@@ -1313,8 +1476,9 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 26);
         for entry in [
+            "FactorProjector",
+            "ReductionStatus",
             "CompiledTensorEvaluator",
             "TensorExpression",
             "TensorEvaluator",
@@ -1334,6 +1498,27 @@ mod tests {
         let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
             .expect("checked-in spynso3 Python stub");
         let declarations = python_declarations(&source).unwrap();
+        for entry in required {
+            let declaration = declarations
+                .iter()
+                .find(|declaration| declaration.name == *entry)
+                .unwrap_or_else(|| panic!("missing supported Python declaration {entry}"));
+            assert!(
+                !declaration.docs.trim().is_empty(),
+                "supported Python declaration {entry} has no docs"
+            );
+        }
+        for retired in [
+            "SimplifySettings",
+            "AlgebraSettings",
+            "ContractSettings",
+            "ColorSimplifySettings",
+            "GammaSimplifySettings",
+            "GammaChainOrdering",
+        ] {
+            assert!(!required.contains(&retired));
+            assert!(!declarations.iter().any(|item| item.name == retired));
+        }
         let promoted = declarations
             .iter()
             .filter(|declaration| {
@@ -1353,43 +1538,157 @@ mod tests {
                 .iter()
                 .all(|declaration| !declaration.docs.trim().is_empty())
         );
-        let members = promoted
-            .iter()
-            .flat_map(|declaration| &declaration.members)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len(), 111);
-        let overload_groups = members
-            .iter()
-            .filter(|member| {
-                member
+        for declaration in &promoted {
+            for member in declaration.members.iter().filter(|member| {
+                !matches!(
+                    member.name.as_str(),
+                    "_repr_pretty_" | "_repr_html_" | "_repr_latex_"
+                )
+            }) {
+                let overloads = member
                     .members
                     .iter()
-                    .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            })
-            .count();
-        let overloads = members
+                    .filter(|overload| {
+                        overload.kind == alphal00p_docs_schema::DocMemberKind::Overload
+                    })
+                    .collect::<Vec<_>>();
+                let documented = if overloads.is_empty() {
+                    vec![member]
+                } else {
+                    overloads
+                };
+                for overload in documented {
+                    assert!(
+                        overload
+                            .docs
+                            .as_ref()
+                            .is_some_and(|docs| !docs.body.trim().is_empty()),
+                        "undocumented public member {}.{}",
+                        declaration.name,
+                        member.name,
+                    );
+                }
+            }
+        }
+        let tensor = declarations
             .iter()
-            .flat_map(|member| &member.members)
-            .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 113);
-        assert_eq!(
-            members
+            .find(|item| item.name == "TensorExpression")
+            .unwrap();
+        for method in [
+            "contract",
+            "contract_ports",
+            "simplify_algebra",
+            "to_expression",
+            "to_dots",
+            "undo_dots",
+            "undo_chain",
+            "undo_trace",
+            "reduction_status",
+            "contraction_complete",
+        ] {
+            assert!(
+                tensor.members.iter().any(|member| member.name == method),
+                "missing typed tensor method {method}"
+            );
+        }
+        for method in [
+            "simplify",
+            "reduce_algebra",
+            "simplify_gamma",
+            "simplify_color",
+            "simplify_epsilon",
+            "undo_all",
+        ] {
+            assert!(
+                !tensor.members.iter().any(|member| member.name == method),
+                "retired tensor method {method}"
+            );
+        }
+        for method in [
+            "expand_num",
+            "factor",
+            "collect",
+            "collect_num",
+            "collect_factors",
+            "collect_by_coefficient",
+            "collect_symbol",
+            "collect_horner",
+            "together",
+            "cancel",
+            "apart",
+        ] {
+            let member = tensor
+                .members
                 .iter()
-                .filter(|member| {
-                    !member
-                        .members
-                        .iter()
-                        .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-                        && member.docs.is_some()
-                })
-                .count()
-                + overloads
+                .find(|member| member.name == method)
+                .unwrap_or_else(|| panic!("missing tensor algebra method {method}"));
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:"),
+                "{method} must preserve the tensor type"
+            );
+        }
+        for (method, defaults) in [
+            (
+                "contract",
+                &[
+                    ("expand", "True"),
+                    ("representations", "None"),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+            (
+                "simplify_algebra",
+                &[
+                    ("gamma", "True"),
+                    ("color", "True"),
+                    ("epsilon", "False"),
+                    ("contract", "\"fully\""),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+        ] {
+            let member = tensor
+                .members
+                .iter()
+                .find(|member| member.name == method)
+                .unwrap();
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:")
+            );
+            assert!(
+                !member
+                    .members
                     .iter()
-                    .filter(|member| member.docs.is_some())
-                    .count(),
-            96
-        );
+                    .any(|parameter| parameter.name == "settings")
+            );
+            for &(name, expected) in defaults {
+                let parameter = member
+                    .members
+                    .iter()
+                    .find(|parameter| parameter.name == name)
+                    .unwrap();
+                assert_eq!(
+                    parameter.default.as_deref(),
+                    Some(expected),
+                    "{method}.{name}"
+                );
+                assert!(
+                    parameter
+                        .docs
+                        .as_ref()
+                        .is_some_and(|docs| !docs.body.trim().is_empty()),
+                    "undocumented parameter {method}.{name}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -1433,18 +1732,18 @@ def run(value: int) -> int:
         let request = CatalogRequest {
             product_id: "test".to_owned(),
             product_title: "Test".to_owned(),
-            component_id: "idenso-community".to_owned(),
-            package: "idenso".to_owned(),
-            component_title: "Idenso Python".to_owned(),
+            component_id: "spynso3".to_owned(),
+            package: "spynso3".to_owned(),
+            component_title: "Spenso and Idenso Python".to_owned(),
             version: "0.1.0".to_owned(),
             language: ApiLanguage::Python,
-            module: Some("symbolica.community.idenso".to_owned()),
+            module: Some("symbolica.community.tensor".to_owned()),
             features: vec![],
         };
         let catalog = export_catalog(
             &request,
             root,
-            Some(&root.join("docs/api/python/idenso-community.pyi")),
+            Some(&root.join("docs/api/python/spynso3.pyi")),
         )
         .unwrap();
         let items = catalog.root.scopes["exports"]

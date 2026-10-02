@@ -26,6 +26,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -33,7 +34,6 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -45,7 +45,6 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
@@ -68,6 +67,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -75,7 +75,6 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -87,7 +86,6 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
@@ -101,12 +99,12 @@ zerocopy = { version = "0.8", default-features = false, features = ["derive", "s
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 ### END HAKARI SECTION
@@ -134,3 +132,21 @@ features = ["std"]
 [build-dependencies.indenter]
 version = "0.3"
 features = ["std"]
+
+# Preserve native feature unification with the workspace Symbolica and
+# Numerica versions.
+[dependencies.symbolica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
+
+[build-dependencies.symbolica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
+
+[dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]
+
+[build-dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]
