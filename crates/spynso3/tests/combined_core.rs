@@ -39,7 +39,9 @@ fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyMo
 
 fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyModule>> {
     let py = core.py();
-    let native = PyModule::new(py, "spenso_native")?;
+    assert_eq!(SpensoModule::get_name(), "tensor");
+    let native_name = format!("{}_native", SpensoModule::get_name());
+    let native = PyModule::new(py, &native_name)?;
     let initialize_module =
         PyCFunction::new_closure(py, Some(c"initialize_module"), None, |args, _kwargs| {
             SpensoModule::initialize(args.py())
@@ -49,7 +51,7 @@ fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyMo
     core.add_submodule(&native)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("symbolica.community.spenso_native", &native)?;
+        .set_item(format!("symbolica.community.{native_name}"), &native)?;
     Ok(native)
 }
 

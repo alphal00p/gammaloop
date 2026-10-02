@@ -6100,15 +6100,23 @@ dependencies = [
  "ahash 0.8.12",
  "eyre",
  "idenso",
+ "itertools 0.14.0",
+ "linnest",
+ "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "roxmltree 0.21.1",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
+ "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
+ "xpct",
 ]
 
 [[package]]
@@ -6320,16 +6328,6 @@ dependencies = [
  "roxmltree 0.21.1",
  "symbolica",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "symbolica-typst-atom-payload"
-version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=7f869adc14dcf2758bab16aaa25e06eb10ffbfad#7f869adc14dcf2758bab16aaa25e06eb10ffbfad"
-dependencies = [
- "blake3",
- "ciborium",
- "symbolica",
 ]
 
 [[package]]
