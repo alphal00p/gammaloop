@@ -1,7 +1,7 @@
 use super::*;
 use crate::shorthands::{UndoShorthands, chain::Chain};
 use insta::assert_snapshot;
-use spenso::{g, p, q, trace};
+use spenso::{g, network::tags::SPENSO_TAG as T, p, q, trace};
 
 #[test]
 fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
@@ -400,4 +400,300 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
         expr.undo_chain::<AbstractIndex>().unwrap()
     );
     assert_snapshot!(crate::tensor::SymbolicTensor::infer(chainified).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
+}
+
+#[test]
+fn chiral_projector_traces() {
+    let r = test_initialize();
+    let rep = r.bis4.to_symbolic([]);
+    let mu = slot!(r.mink4, mu);
+    let nu = slot!(r.mink4, nu);
+    let rho = slot!(r.mink4, rho);
+    let sigma = slot!(r.mink4, sigma);
+    for (symbol, sign) in [(AGS.projp, 1), (AGS.projm, -1)] {
+        let projector = function!(symbol, T.chain_in, T.chain_out);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer(
+                (trace!(rep.clone(), projector.clone()))
+                    .as_atom_view()
+                    .to_owned()
+            )
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression(),
+            Atom::num(2)
+        );
+        let expr = trace!(rep.clone(), projector.clone(), gamma!(mu), gamma!(nu));
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            2 * g!(mu, nu)
+        );
+
+        let ordinary = trace!(
+            rep.clone(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let axial = trace!(
+            rep.clone(),
+            gamma5!(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let expr = trace!(
+            rep.clone(),
+            projector.clone(),
+            gamma!(mu),
+            gamma!(nu),
+            gamma!(rho),
+            gamma!(sigma)
+        );
+        let reduced = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression();
+        assert_eq!(
+            (reduced.clone()
+                - (crate::tensor::SymbolicTensor::infer((ordinary).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .into_expression()
+                    + Atom::num(sign)
+                        * crate::tensor::SymbolicTensor::infer((axial).as_atom_view().to_owned())
+                            .unwrap()
+                            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                            .unwrap()
+                            .contract(crate::tensor::ContractSettings {
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            })
+                            .unwrap()
+                            .into_expression())
+                    / 2)
+            .expand(),
+            Atom::Zero
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            reduced
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            expr
+        );
+
+        // A gamma flips chirality, so equal projectors separated by one gamma vanish.
+        let expr = trace!(
+            rep.clone(),
+            projector.clone(),
+            gamma!(mu),
+            projector.clone(),
+            gamma!(nu)
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            Atom::Zero
+        );
+        let expr = trace!(rep.clone(), projector.clone(), projector.clone());
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            Atom::num(2)
+        );
+        let mixed = trace!(rep.clone(), projector.clone(), gamma!(slot!(r.mink_d, mu)));
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            mixed
+        );
+        let dimensional = trace!(r.bis_d.to_symbolic([]), projector);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((dimensional).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression(),
+            dimensional
+        );
+    }
+    let plus = function!(AGS.projp, T.chain_in, T.chain_out);
+    let minus = function!(AGS.projm, T.chain_in, T.chain_out);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer(
+            (trace!(rep.clone(), plus.clone(), minus.clone()))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression(),
+        Atom::Zero
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer(
+            (trace!(rep, plus, gamma!(mu), minus, gamma!(nu)))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression(),
+        2 * g!(mu, nu)
+    );
 }
