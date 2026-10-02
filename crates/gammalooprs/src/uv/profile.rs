@@ -14,9 +14,11 @@ use crate::cff::expression::{OrientationData, OrientationID};
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
-use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::evaluation::{
+    EvaluationMetaData, GenericEvaluationResult, PreciseEvaluationResult,
+};
 use crate::integrands::process::{
-    OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point,
+    OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point_precise,
     orientation_labels_for_graph,
 };
 use crate::model::Model;
@@ -24,7 +26,7 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{LoopIndex, LoopMomenta, MomentumSample};
 use crate::processes::{Amplitude, AmplitudeGraph, CrossSection, CutId};
 use crate::settings::RuntimeSettings;
-use crate::utils::F;
+use crate::utils::{ArbPrec, F, FloatLike};
 use crate::uv::UltravioletGraph;
 use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
@@ -372,13 +374,14 @@ mod tests {
     use crate::graph::parse::from_dot::IntoGraph;
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
-    use crate::integrands::evaluation::EvaluationResult;
+    use crate::integrands::evaluation::{EvaluationMetaData, GenericEvaluationResult};
     use crate::momentum::ThreeMomentum;
     use crate::momentum::sample::{
         BareMomentumSample, ExternalThreeMomenta, LoopIndex, LoopMomenta, MomentumSample,
     };
-    use crate::observables::events::{AdditionalWeightKey, Event};
-    use crate::utils::F;
+    use crate::observables::events::{AdditionalWeightKey, GenericEvent, GenericEventGroupList};
+    use crate::processes::CutId;
+    use crate::utils::{ArbPrec, F};
     use crate::uv::UltravioletGraph;
     use spenso::algebra::complex::Complex;
     use symbolica::atom::{Atom, AtomCore};
@@ -386,11 +389,12 @@ mod tests {
 
     use super::{
         Analysis, FitResult, InspectAnalysis, InspectFitStatus, InspectResult,
-        OrientationInspectAnalysis, SubsetOrientationInput, UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED,
-        UV_PROFILE_RETRY_MIN_R_SQUARED, UVLimitSelection, UVProfile, UVProfileAnalysis,
-        UVProfileFailure, UVProfileFixedRay, UVProfileGraphAnalysis, UVProfileLmbAnalysis,
-        UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult,
+        OrientationInspectAnalysis, OrientationInspectSamples, SubsetOrientationInput,
+        UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED, UV_PROFILE_RETRY_MIN_R_SQUARED, UVLimitSelection,
+        UVProfile, UVProfileAnalysis, UVProfileFailure, UVProfileFixedRay, UVProfileGraphAnalysis,
+        UVProfileLmbAnalysis, UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult,
         analytic_integrand_for_orientation, inspect_results_need_arbprec_retry, log_log_slope,
+        sum_orientation_inspect_samples,
     };
 
     static THETA_GRAPH: OnceLock<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)> = OnceLock::new();
@@ -780,13 +784,9 @@ mod tests {
             Some((None, Some("missing_fit")))
         );
         for invalid in [f64::NAN, f64::INFINITY] {
-            let samples = [0.0, invalid, invalid, invalid, invalid].map(|value| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(value));
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+            let samples = [0.0, invalid, invalid, invalid, invalid].map(|value| InspectResult {
+                result: Complex::new_re(F::<ArbPrec>::from_f64(value)),
+                evaluation_metadata: EvaluationMetaData::new_empty(),
             });
             let mut invalid_analysis = analysis.clone();
             let subset = &mut invalid_analysis.graphs[0].lmbs[0].subsets[0].analysis;
@@ -861,13 +861,9 @@ mod tests {
             let scales: Vec<_> = (1..=5).map(|power| 10.0_f64.powi(power)).collect();
             let samples: Vec<_> = scales
                 .iter()
-                .map(|scale| {
-                    let mut result = EvaluationResult::zero();
-                    result.integrand_result = Complex::new_re(F(normalization / scale));
-                    InspectResult {
-                        result,
-                        prefactor: 1.0,
-                    }
+                .map(|scale| InspectResult {
+                    result: Complex::new_re(F::<ArbPrec>::from_f64(normalization / scale)),
+                    evaluation_metadata: EvaluationMetaData::new_empty(),
                 })
                 .collect();
             let fit = log_log_slope(&samples, &scales).unwrap();
@@ -881,16 +877,14 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, scale)| {
-                let mut result = EvaluationResult::zero();
                 let magnitude = if i == 7 {
                     scale.recip() * 1.0e10
                 } else {
                     scale.recip()
                 };
-                result.integrand_result = Complex::new_re(F(magnitude));
                 InspectResult {
-                    result,
-                    prefactor: 1.0,
+                    result: Complex::new_re(F::<ArbPrec>::from_f64(magnitude)),
+                    evaluation_metadata: EvaluationMetaData::new_empty(),
                 }
             })
             .collect_vec();
@@ -910,13 +904,12 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, scale)| {
-                let mut result = EvaluationResult::zero();
                 let log_noise = if i % 2 == 0 { 0.2 } else { -0.2 };
-                result.integrand_result =
-                    Complex::new_re(F(scale.recip() * 10.0_f64.powf(log_noise)));
                 InspectResult {
-                    result,
-                    prefactor: 1.0,
+                    result: Complex::new_re(F::<ArbPrec>::from_f64(
+                        scale.recip() * 10.0_f64.powf(log_noise),
+                    )),
+                    evaluation_metadata: EvaluationMetaData::new_empty(),
                 }
             })
             .collect_vec();
@@ -952,13 +945,9 @@ mod tests {
         ];
         let arb_transient = arb_log_magnitudes
             .into_iter()
-            .map(|log_magnitude| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(10.0_f64.powf(log_magnitude)));
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+            .map(|log_magnitude| InspectResult {
+                result: Complex::new_re(F::<ArbPrec>::from_f64(10.0_f64.powf(log_magnitude))),
+                evaluation_metadata: EvaluationMetaData::new_empty(),
             })
             .collect_vec();
         let fit = log_log_slope(&arb_transient, &scales).unwrap();
@@ -968,23 +957,145 @@ mod tests {
     }
 
     #[test]
+    fn uv_fit_preserves_native_range_through_weighting_and_logarithms() {
+        let one = F::<ArbPrec>::default().one();
+        let ten = one.from_usize(10);
+        // Cover a raw underflow promoted into f64's normal range, magnitudes
+        // outside f64 even after weighting, and a weight exceeding f64's range.
+        for (normalization_power, first_scale_power, slope) in [
+            (-280, 8, -1),
+            (-400, 8, -1),
+            (400, 8, -1),
+            (-280, 60, -1),
+            (-400, 8, 3),
+        ] {
+            let scales = (first_scale_power..first_scale_power + 5)
+                .map(|power| 10.0_f64.powi(power))
+                .collect_vec();
+            for select_cut in [false, true] {
+                let samples = scales
+                    .iter()
+                    .map(|scale| {
+                        let scale = F(*scale).to_arb_exact().unwrap();
+                        let raw = ten.powi(normalization_power) * scale.powi(slope - 6);
+                        let weight = scale.powi(6);
+                        let weighted = &raw * &weight;
+                        let mut events = GenericEventGroupList::default();
+                        // Cut projection must retain raw values until the measure is
+                        // applied, exactly once, as for the unprojected total.
+                        for (cut_id, value) in [(0, raw.clone()), (1, ten.powi(500))] {
+                            let mut event = GenericEvent::default();
+                            event.cut_info.cut_id = cut_id;
+                            event.weight = Complex::new_im(value);
+                            events.push_singleton(event);
+                        }
+                        let result = GenericEvaluationResult {
+                            reference_moments: None,
+                            integrand_result: Complex::new_im(raw),
+                            absolute_integrand_result: None,
+                            parameterization_jacobian: None,
+                            integrator_weight: one.clone(),
+                            event_groups: events,
+                            evaluation_metadata: EvaluationMetaData::new_empty(),
+                        };
+                        let selected = [CutId(0)];
+                        let sample = InspectResult::from_evaluation(
+                            result,
+                            &weight,
+                            select_cut.then_some(selected.as_slice()),
+                        )
+                        .unwrap();
+                        assert_eq!(sample.result.im, weighted);
+                        sample
+                    })
+                    .collect_vec();
+                let fit = log_log_slope(&samples, &scales).unwrap();
+                assert!((fit.slope - f64::from(slope)).abs() < 1.0e-10);
+                assert!(fit.r_squared > 0.999);
+                assert_eq!(fit.points.len(), scales.len());
+                assert_eq!(
+                    InspectFitStatus::from_results(&samples).positive_finite_samples,
+                    scales.len()
+                );
+                assert!(!InspectFitStatus::from_results(&samples).missing_fit_is_vanishing());
+                assert_eq!(
+                    inspect_results_need_arbprec_retry(&samples, &scales),
+                    slope > 0
+                );
+                let json = serde_json::to_value(&fit).unwrap();
+                for (encoded, point) in json["points"].as_array().unwrap().iter().zip(&fit.points) {
+                    let decoded: ArbPrec = encoded.as_str().unwrap().parse().unwrap();
+                    assert_eq!(F(decoded), *point);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uv_orientation_sum_keeps_cancellation_before_taking_magnitudes() {
+        let one = F::<ArbPrec>::default().one();
+        let ten = one.from_usize(10);
+        let large = ten.powi(-100);
+        let small = ten.powi(-280);
+        // f64 can represent each orientation but cannot retain the small
+        // remainder in the second one. The complex sum must precede the norm.
+        let mut orientations = [
+            Complex::new(large.clone(), -large.clone()),
+            Complex::new(-&large + &small, &large + &small),
+        ]
+        .into_iter()
+        .map(|result| OrientationInspectSamples {
+            label: String::new(),
+            inspect: vec![InspectResult {
+                result,
+                evaluation_metadata: EvaluationMetaData::new_empty(),
+            }],
+            used_arb_prec_retry: false,
+        })
+        .collect_vec();
+        let summed = sum_orientation_inspect_samples(&orientations);
+        let tolerance = ten.powi(-100);
+        for value in [&summed[0].result.re, &summed[0].result.im] {
+            assert!((value / &small - &one).abs() < tolerance);
+        }
+        let expected = &small * one.from_usize(2).sqrt();
+        assert!((summed[0].magnitude().unwrap() / expected - &one).abs() < tolerance);
+        orientations[1].inspect[0].evaluation_metadata.is_nan = true;
+        assert!(
+            sum_orientation_inspect_samples(&orientations)[0]
+                .magnitude()
+                .is_none()
+        );
+        assert!(
+            !InspectFitStatus::from_results(&sum_orientation_inspect_samples(&orientations))
+                .missing_fit_is_vanishing()
+        );
+    }
+
+    #[test]
     fn uv_fit_json_excludes_raw_lu_evaluation_results() {
         let scales = [1.0e3, 1.0e4, 1.0e5, 1.0e6, 1.0e7];
         let inspect = scales
             .iter()
             .map(|scale| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(1.0 / scale));
-                let mut event = Event::default();
+                let one = F::<ArbPrec>::default().one();
+                let mut result = GenericEvaluationResult {
+                    reference_moments: None,
+                    integrand_result: Complex::new_re(F::<ArbPrec>::from_f64(1.0 / scale)),
+                    absolute_integrand_result: None,
+                    parameterization_jacobian: None,
+                    integrator_weight: one.clone(),
+                    event_groups: GenericEventGroupList::default(),
+                    evaluation_metadata: EvaluationMetaData::new_empty(),
+                };
+                let mut event = GenericEvent::default();
                 event.additional_weights.weights.insert(
                     AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
-                    Complex::new_re(F(1.0)),
+                    Complex::new_re(one),
                 );
                 result.event_groups.push_singleton(event);
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+                InspectResult::from_evaluation(result, &F::<ArbPrec>::default().one(), None)
+                    .unwrap()
             })
             .collect_vec();
 
@@ -1744,7 +1855,8 @@ struct UVProfileOrientationSubsetRow {
 #[derive(Debug, Clone, Serialize)]
 struct FitResult {
     slope: f64,
-    points: Vec<f64>,
+    // Magnitudes remain precise in output too; only logarithms cross the fit boundary.
+    points: Vec<F<ArbPrec>>,
     scales: Vec<f64>,
     fit_start: usize,
     intercept: f64,
@@ -2684,7 +2796,7 @@ impl<'a> UVProfileRunner<'a> {
         self.scales
             .iter()
             .map(|s| {
-                let prefactor = s.powi(3 * n_included);
+                let prefactor = F(*s).to_arb_exact()?.powi(3 * n_included);
                 let mut scaled_sample = input.sample.clone();
                 for l in input.subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
@@ -2706,20 +2818,47 @@ impl<'a> UVProfileRunner<'a> {
                 )?;
                 let loop_momenta = input.generation_loop_momenta(&sample_in_lmb);
 
-                let inspect_res_eval = evaluate_momentum_space_point(
-                    integrand,
-                    self.model,
-                    loop_momenta,
-                    input.graph_id,
-                    input.orientation,
-                    use_arb_prec,
-                    input.compatible_event_cut_ids,
-                )?;
-
-                Ok(InspectResult {
-                    result: inspect_res_eval,
-                    prefactor,
-                })
+                let result = match integrand {
+                    ProcessIntegrand::Amplitude(amplitude) => {
+                        evaluate_profile_momentum_point_precise(
+                            amplitude,
+                            self.model,
+                            input.graph_id,
+                            input.orientation,
+                            loop_momenta,
+                            use_arb_prec,
+                            &prefactor,
+                        )
+                    }
+                    ProcessIntegrand::CrossSection(cross_section) => {
+                        evaluate_profile_momentum_point_precise(
+                            cross_section,
+                            self.model,
+                            input.graph_id,
+                            input.orientation,
+                            loop_momenta,
+                            use_arb_prec,
+                            &prefactor,
+                        )
+                    }
+                }?;
+                match result {
+                    PreciseEvaluationResult::Double(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
+                    PreciseEvaluationResult::Quad(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
+                    PreciseEvaluationResult::Arb(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
+                }
             })
             .collect()
     }
@@ -2844,15 +2983,17 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     let mut valid_scales = vec![];
 
     for (x, s) in inspect.iter().zip(scales) {
-        let norm = x.magnitude();
-        if norm <= 0.0 {
-            debug!("{s}:\t{}", x.result.evaluation_metadata);
+        let Some(norm) = x.magnitude() else {
+            continue;
+        };
+        if norm <= norm.zero() {
+            debug!("{s}:\t{}", x.evaluation_metadata);
             continue;
         }
-        if !norm.is_finite() {
+        if norm.is_nan() || norm.is_infinite() {
             continue;
         }
-        let y = (norm).log10();
+        let y = norm.log10().into_ff64().0;
         let x = s.log10();
         if !y.is_finite() || !x.is_finite() {
             continue;
@@ -2942,8 +3083,9 @@ fn sum_orientation_inspect_samples(
         .map(|point_index| {
             let mut summed = first.inspect[point_index].clone();
             for orientation in rest {
-                summed.result.integrand_result +=
-                    orientation.inspect[point_index].result.integrand_result;
+                summed.result += &orientation.inspect[point_index].result;
+                summed.evaluation_metadata.is_nan |=
+                    orientation.inspect[point_index].evaluation_metadata.is_nan;
             }
             summed
         })
@@ -2958,60 +3100,54 @@ fn inspect_retry_label(analysis: Option<&InspectAnalysis>) -> String {
     }
 }
 
-fn evaluate_momentum_space_point(
-    integrand: &mut ProcessIntegrand,
-    model: &Model,
-    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
-    graph_id: usize,
-    orientation: Option<usize>,
-    use_arb_prec: bool,
-    compatible_event_cut_ids: Option<&[CutId]>,
-) -> Result<EvaluationResult> {
-    let mut result = match integrand {
-        ProcessIntegrand::Amplitude(amplitude) => evaluate_profile_momentum_point(
-            amplitude,
-            model,
-            graph_id,
-            orientation,
-            loop_momenta,
-            use_arb_prec,
-        ),
-        ProcessIntegrand::CrossSection(cross_section) => evaluate_profile_momentum_point(
-            cross_section,
-            model,
-            graph_id,
-            orientation,
-            loop_momenta,
-            use_arb_prec,
-        ),
-    }?;
-
-    if let Some(compatible_event_cut_ids) = compatible_event_cut_ids {
-        result.integrand_result = result
-            .event_groups
-            .iter()
-            .flat_map(|event_group| event_group.iter())
-            .filter(|event| compatible_event_cut_ids.contains(&CutId(event.cut_info.cut_id)))
-            .fold(Complex::new_re(F(0.0)), |sum, event| sum + event.weight);
-    }
-
-    Ok(result)
-}
-
 #[derive(Debug, Clone)]
 pub struct InspectResult {
-    pub(crate) result: EvaluationResult,
-    pub(crate) prefactor: f64,
+    pub(crate) result: Complex<F<ArbPrec>>,
+    pub(crate) evaluation_metadata: EvaluationMetaData,
 }
 
 impl InspectResult {
-    fn magnitude(&self) -> f64 {
-        self.result
-            .integrand_result
-            .re
-            .0
-            .hypot(self.result.integrand_result.im.0)
-            * self.prefactor
+    fn from_evaluation<T: FloatLike>(
+        result: GenericEvaluationResult<T>,
+        prefactor: &F<ArbPrec>,
+        compatible_event_cut_ids: Option<&[CutId]>,
+    ) -> Result<Self> {
+        // Retain the native value before weighting or adding orientations. Embedding
+        // Double/Quad here preserves their represented values without an f64 bridge.
+        let value = if let Some(compatible_event_cut_ids) = compatible_event_cut_ids {
+            let zero = F::<ArbPrec>::default().zero();
+            result
+                .event_groups
+                .iter()
+                .flat_map(|event_group| event_group.iter())
+                .filter(|event| compatible_event_cut_ids.contains(&CutId(event.cut_info.cut_id)))
+                .try_fold(Complex::new_re(zero), |sum, event| {
+                    // Project native event weights before applying the profile measure.
+                    Ok::<_, eyre::Report>(
+                        sum + Complex::new(
+                            event.weight.re.to_arb_exact()?,
+                            event.weight.im.to_arb_exact()?,
+                        ),
+                    )
+                })?
+        } else {
+            let value = Complex::new(
+                result.integrand_result.re.to_arb_exact()?,
+                result.integrand_result.im.to_arb_exact()?,
+            );
+            let weight = result.integrator_weight.to_arb_exact()?;
+            value * weight
+        };
+        Ok(Self {
+            result: value * prefactor,
+            evaluation_metadata: result.evaluation_metadata,
+        })
+    }
+
+    fn magnitude(&self) -> Option<F<ArbPrec>> {
+        // The evaluator sanitizes nonfinite components for reporting. Such zeros
+        // must never certify a vanishing profile.
+        (!self.evaluation_metadata.is_nan).then(|| self.result.re.hypot(&self.result.im))
     }
 }
 
@@ -3025,13 +3161,15 @@ impl InspectFitStatus {
     fn from_results(inspect: &[InspectResult]) -> Self {
         let mut status = Self::default();
         for result in inspect {
-            let norm = result.magnitude();
-            if !norm.is_finite() {
+            let Some(norm) = result.magnitude() else {
+                return Self::default();
+            };
+            if norm.is_nan() || norm.is_infinite() {
                 // An invalid sample cannot certify an inactive, vanishing LU ray.
                 return Self::default();
             }
             status.finite_samples += 1;
-            if norm > 0.0 {
+            if norm > norm.zero() {
                 status.positive_finite_samples += 1;
             }
         }

@@ -17,7 +17,7 @@ use crate::{
     initialisation::test_initialise,
     integrands::process::{
         ProcessIntegrand, ProcessIntegrandImpl, cross_section::CrossSectionIntegrand,
-        evaluate_profile_momentum_point,
+        evaluate_profile_momentum_point_precise,
     },
     model::Model,
     momentum::ThreeMomentum,
@@ -31,7 +31,7 @@ use crate::{
         global::{GenerationSettings, OrientationPattern},
     },
     utils::{
-        F,
+        ArbPrec, F,
         fitting::{constant_dropped_fit_points, log_log_slope_constant_dropped},
         load_generic_model,
     },
@@ -532,14 +532,17 @@ fn gl297_profiles(
             let magnitudes = lambdas
                 .iter()
                 .map(|lambda| {
-                    let result = evaluate_profile_momentum_point(
+                    let result = evaluate_profile_momentum_point_precise(
                         integrand,
                         model,
                         0,
                         Some(0),
                         momentum_path(direction, lambda.0, top_mass),
                         true,
+                        &F::<ArbPrec>::default().one(),
                     )
+                    .unwrap()
+                    .try_into_f64()
                     .unwrap();
                     assert!(
                         !result.evaluation_metadata.is_nan,
@@ -676,14 +679,17 @@ fn gl638_correlated_approach_fits(
                     .abs(),
                 );
 
-                let result = evaluate_profile_momentum_point(
+                let result = evaluate_profile_momentum_point_precise(
                     integrand,
                     model,
                     0,
                     Some(0),
                     loop_momenta,
                     true,
+                    &F::<ArbPrec>::default().one(),
                 )
+                .unwrap()
+                .try_into_f64()
                 .unwrap();
                 assert!(
                     !result.evaluation_metadata.is_nan
