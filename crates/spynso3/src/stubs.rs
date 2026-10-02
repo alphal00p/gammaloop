@@ -65,6 +65,16 @@ pub(crate) fn refine(module: &mut Module) {
         _ => None,
     };
     for class in module.class.values_mut() {
+        if class.name == "TensorExpression" {
+            let overloads = class.methods.get_mut("__mul__").expect("tensor product");
+            let mut extension = overloads[0].clone();
+            extension.parameters.positional_or_keyword[0].type_info = TypeInfo {
+                name: "symbolica.core._ExpressionProduct[_ProductT]".into(),
+                import: ["symbolica.core".into()].into(),
+            };
+            extension.r#return = named("_ProductT");
+            overloads.insert(0, extension);
+        }
         if class.name == "FactorProjector" {
             class.bases = vec![named("typing.Generic[_Projected]")];
             for name in ["symmetric", "antisymmetric", "cyclic"] {
@@ -160,6 +170,9 @@ pub(crate) fn refine(module: &mut Module) {
                 }
                 ("TensorExpression", "__rsub__") => {
                     method.doc = python_doc!("TensorExpression.__rsub__")
+                }
+                ("TensorExpression", "__mul__") if method.r#return.name == "_ProductT" => {
+                    method.doc = python_doc!("TensorExpression.__mul_extension__")
                 }
                 ("TensorExpression", "__mul__") => {
                     method.doc = python_doc!("TensorExpression.__mul__")
@@ -297,6 +310,14 @@ pub(crate) fn refine(module: &mut Module) {
     }
     // Module variables are emitted after actual imports by the upstream generator.
     // Quoted aliases support forward references without scanning Python docstrings.
+    module.variables.insert(
+        "_ProductT",
+        VariableDef {
+            name: "_ProductT",
+            type_: named("typing.TypeVar"),
+            default: Some("typing.TypeVar(\"_ProductT\")".to_owned()),
+        },
+    );
     module.variables.insert(
         "_Projected",
         VariableDef {
