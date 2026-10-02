@@ -18,11 +18,11 @@ python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install "symbolica==2.2.0"
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 There is no separate `spenso` Python wheel. The installed `symbolica` distribution owns the
-native `symbolica.community.spenso` module. Symbolica's
+native `symbolica.community.tensor` module. Symbolica's
 #link("https://symbolica.io/docs/get_started.html")[installation and license terms] apply; its
 free restricted mode is enough for this single-process example.
 
@@ -32,7 +32,7 @@ Save this as `spenso_quickstart.py`:
 
 // docs-example: compile spenso-community-quickstart
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorIndices
+from symbolica.community.tensor import Representation, Tensor, TensorIndices
 
 rep = Representation.euc(2)
 matrix = Tensor.dense(
