@@ -43,7 +43,7 @@ its required feature and your `Cargo.toml` before using it.
 #boundary("Rendering runs through Typst", [
   Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
   backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
-  `linnet-py` uses the `typst` Python package to compile the same Linnest render contract
+  `linnet` uses the `typst` Python package to compile the same Linnest render contract
   in-process from its own native graph-spec preparation.
   Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
   #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
@@ -52,7 +52,7 @@ its required feature and your `Cargo.toml` before using it.
 == Standalone Python distribution
 
 #boundary("Distribution and import have different names", [
-  Install the Python distribution `linnet-py`, then import `linnet_py`. It requires Python 3.10
+  Install the Python distribution `linnet`, then import `linnet`. It requires Python 3.10
   or newer. It is a standalone extension and is not a `symbolica.community` module.
   Its package version is independent of the Rust `linnet` version. Record both versions when
   diagnosing compatibility between Rust and Python code.
@@ -73,7 +73,7 @@ Linnet types:
 ```python
 from dataclasses import dataclass
 
-from linnet_py import build, edge, node, sink, source
+from linnet import build, edge, node, sink, source
 
 
 @dataclass
@@ -136,7 +136,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet_py import Compass, Graph, edge, node, sink, source
+from linnet import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -177,7 +177,7 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
-from linnet_py import DirectionBasis
+from linnet import DirectionBasis
 
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
@@ -281,7 +281,7 @@ surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawin
 time. Layout passes retain their order:
 
 ```python
-from linnet_py import (
+from linnet import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
@@ -319,9 +319,44 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
+SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
+Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+Meta-click toggles the element in that displayed selection. Enter and Space perform the same
+actions on a focused element; Escape dismisses the details while retaining the selection.
+The first and last quarters of arc length pick the source and sink half-edges; the middle
+half picks the whole edge. Both end quarters of a dangling edge pick its sole half-edge,
+which selects the same subgraph as the whole edge. Half-edge highlighting covers its half
+of a paired edge, or the entire dangling edge. Copy the panel's construction into
+`graph.subgraph(nodes=[...], edges=[...], half_edges=[...])` to create a Python selection.
+Figure selections are browser state and do not mutate the Python graph.
+Ctrl/Meta-scroll gently zooms the graph around the pointer; drag to pan. With the graph
+focused, `+` and `-` zoom in five-percent steps, arrow keys pan, and `0` fits the complete drawing.
+Details appear beside the graph in wide outputs and below it in narrow outputs. Zooming
+preserves the selection and pinned details, whose text stays at its original size.
+Embedding applications can read the SVG element's `linnetSelection` property or listen for
+`linnet-selection-change`; its event detail contains sorted `nodes`, `edges`, and `half_edges` arrays.
+Use the Python selection API explicitly when applying graph algorithms to those IDs.
+
+A `Subgraph` also renders directly as the final expression of a notebook cell:
+
+```python
+region = graph.subgraph(edges=["propagator"])
+region
+```
+
+Its `_repr_html_()` and `_repr_svg_()` show the full owning graph, highlight the selected
+half-edges, and draw the complement dotted and muted through Linnest's subgraph drawing mode.
+Selecting one half of a paired edge highlights only that half; selected isolated nodes are
+highlighted too. The display uses the owner's layout, drawing values, and render configuration
+without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
+same SVG explicitly, and `region.prepare_render(config=None)` prepares it for inspection or
+export through `PreparedRender`. Like other selection operations, rendering checks the topology
+revision and raises `ReferenceError` for a stale selection.
+
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
 per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
-suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are
+suffix. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
+display, while `_repr_svg_()` supplies the SVG representation. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
 escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
@@ -381,7 +416,7 @@ payload; custom particle styling works the same way and is not a special Linnet 
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from linnet import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
@@ -414,14 +449,16 @@ particle_style_example = RenderConfig(
 
 This is ordinary userland settings composition: Linnet neither defines `ParticleStyle` nor
 inspects it. GammaLoop's richer particle decorations, momentum annotations, and diagram modes
-belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet_py`.
+belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet`.
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
-) parses ordinary DOT with an explicit application codec, then composes particle,
-momentum, edge-index, and node-index layers using the same generic API.
-Run it from a checkout with
-`nix develop -c uvx --from marimo==0.24.0 --with-editable crates/linnet-py marimo edit crates/linnet-py/examples/physics_render_settings.py`.
+) loads a model and parses compact or annotated DOT with `FeynmanDiagram.from_dot(model, dot)`.
+FeynKit renders the parsed diagram with a shared `RenderConfig`, including momentum labels
+from its stored loop momentum basis and interactive SVG hover and selection.
+Run it from a checkout using a Python environment with Marimo, Linnet, and the Symbolica host
+containing `symbolica.community.feynkit`:
+`python -m marimo edit crates/linnet-py/examples/physics_render_settings.py`.
 The #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook")
 previews the force solver as it runs. Its DOT editor and collapsible sliders restart the
 simulation; pause/resume preserves the current state. The viewer creates SVG topology
@@ -429,7 +466,7 @@ once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also
 in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
 
 ```python
-from linnet_py import LayoutStream
+from linnet import LayoutStream
 
 stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
 node_names, endpoints = stream.node_names, stream.endpoints
@@ -451,7 +488,7 @@ existing Python `Graph` or its payloads.
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
-from linnet_py import TypstModule
+from linnet import TypstModule
 
 styles = TypstModule.file("styles.typ")
 graph.node("in").drawing.label = styles.content("incoming_label")
@@ -500,7 +537,7 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from linnet import (
     DotCodec,
     DotEdgeData,
     DotHalfEdgeData,

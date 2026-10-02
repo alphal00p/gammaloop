@@ -38,6 +38,7 @@ pub(crate) const HEDGE_FIELDS: &[&str] = &[
     "statement",
     "port_label",
     "compass",
+    "route_points",
     "anchor",
     "routing",
     "style",
@@ -74,6 +75,7 @@ impl DrawingKind {
             (Self::Edge, "style") => "edge-style",
             (Self::Edge, "label_style") => "edge-label-style",
             (Self::HalfEdge, "port_label") => "port-label",
+            (Self::HalfEdge, "route_points") => "route-points",
             _ => key,
         }
     }
@@ -189,8 +191,8 @@ macro_rules! drawing_class {
         [$($getter:ident, $setter:ident, $property:ident, $name:literal, $stub_type:literal);+ $(;)?]
     ) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[pyclass(module = "linnet", unsendable, name = $python)]
         pub struct $rust {
             values: Option<Py<PyDict>>,
             guard: Option<DrawingGuard>,
@@ -258,8 +260,8 @@ macro_rules! drawing_class {
             }
         }
 
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
         impl $rust {
             #[new]
@@ -382,19 +384,20 @@ drawing_class!(
     PyHalfEdgeDrawing,
     "HalfEdgeDrawing",
     HEDGE_FIELDS,
-    "(*, label=..., statement=..., port_label=..., compass=..., anchor=..., routing=..., style=..., extensions=...)",
+    "(*, label=..., statement=..., port_label=..., compass=..., route_points=..., anchor=..., routing=..., style=..., extensions=...)",
     [
         label, set_label, label, "label", "_OptionalStaticContent";
         statement, set_statement, statement, "statement", "_DrawingString";
         port_label, set_port_label, port_label, "port_label", "_DrawingString";
         compass, set_compass, compass, "compass", "_CompassValue";
+        route_points, set_route_points, route_points, "route_points", "_DrawingPoints";
         get_anchor, set_anchor, anchor, "anchor", "_AnchorValue";
         routing, set_routing, routing, "routing", "_RoutingValue";
         style, set_style, style, "style", "_OptionalStyleLayers";
     ]
 );
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -404,7 +407,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -414,13 +417,13 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
 
         class PyHalfEdgeDrawing:
-            def __new__(cls, *, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeDrawing: ...
+            def __new__(cls, *, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., route_points: _DrawingPoints = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeDrawing: ...
     "# }
 }
 
