@@ -19,6 +19,7 @@ use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
+use feynkit_generator::GenerationType;
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
@@ -35,12 +36,11 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
     clear_interrupt_request,
-    feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::process::ProcessIntegrand,
     is_interrupt_requested,
-    model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
+    model::{InputParamCard, Model, ModelGammaLoopExt, SerializableInputParamCard, UFOSymbol},
     processes::{
         begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
@@ -798,7 +798,7 @@ impl<'de> Deserialize<'de> for ProcessRef {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ProcessRef {
     type Error = pyo3::PyErr;
 
@@ -2117,7 +2117,7 @@ impl State {
     }
 
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        self.model = Model::from_file(path)?;
+        self.model = Model::from_path(path)?;
         Ok(())
     }
 
@@ -2381,7 +2381,7 @@ impl State {
                             process_name
                         )
                     })?;
-                    let plan = amplitude.plan_graph_group_selection(selection)?;
+                    let plan = amplitude.plan_graph_group_selection(selection, &self.model)?;
                     amplitude.validate_graph_group_selection_plan(&plan)?;
                     (process_name, plan, amplitude.integrand.is_some())
                 }
@@ -2812,8 +2812,9 @@ impl State {
 
     pub fn resolve_model_for_settings(&self, settings: &RuntimeSettings) -> Result<Model> {
         let mut model = self.model.clone();
-        self.resolve_effective_model_parameter_card_for_settings(settings)?
-            .apply_to_model(&mut model)?;
+        model.apply_param_card(
+            &self.resolve_effective_model_parameter_card_for_settings(settings)?,
+        )?;
         Ok(model)
     }
 
@@ -3272,7 +3273,6 @@ impl State {
                         .add_cross_section(CrossSection::from_graph_list(
                             integrand_name.clone(),
                             graphs,
-                            &self.model,
                         )?)
                 }
             }
@@ -3298,7 +3298,7 @@ impl State {
         let _ = initialise();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3309,7 +3309,7 @@ impl State {
         init_test_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3320,7 +3320,7 @@ impl State {
         init_bench_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3379,17 +3379,17 @@ impl State {
         // callbacks; the import then remaps serialized symbol ids onto those definitions.
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
-            Model::from_file(model_path)?
+            Model::from_path(model_path)?
         } else {
             let model_dir = save_path.join("model.json");
             info!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
-            Model::from_file(model_dir)?
+            Model::from_path(model_dir)?
         };
 
-        debug!("Loaded model: {}", model.name);
+        debug!("Loaded model: {}", model.name());
 
         let input_param_card = if save_path.join("model_parameters.json").exists() {
             let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
@@ -3397,7 +3397,7 @@ impl State {
             let _ = model.apply_param_card(&a);
             a
         } else {
-            InputParamCard::default_from_model(&model)
+            model.default_param_card()
         };
 
         let symbolica_state = symbolica::state::State::import(
@@ -3547,8 +3547,7 @@ impl State {
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
         self.model
-            .to_serializable()
-            .to_file(selected_root_folder.join("model.json"), override_state_file)?;
+            .write_json(selected_root_folder.join("model.json"))?;
         self.model_parameters.to_file(
             selected_root_folder.join("model_parameters.json"),
             override_state_file,
@@ -3566,7 +3565,7 @@ mod tests {
         graph::Graph,
         initialisation::test_initialise,
         integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
-        model::InputParamCard,
+        model::ModelGammaLoopExt,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
             process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -3796,11 +3795,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         state
@@ -3837,23 +3836,27 @@ mod tests {
         };
 
         test_initialise()?;
-        for (folder, source) in [
+        for (folder, source, model) in [
             (
                 "amplitudes",
                 include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+                load_generic_model("scalars"),
             ),
             (
                 "cross_sections",
                 include_str!(
                     "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 ),
+                Model::from_json(include_str!(
+                    "../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             let temp = tempdir()?;
             let mut state = State::new_test();
-            state.model = load_generic_model("scalars");
-            state.model_parameters = InputParamCard::default_from_model(&state.model);
-            let mut graphs = Graph::from_string(source, &state.model)?;
+            state.model = model;
+            state.model_parameters = state.model.default_param_card();
+            let mut graphs = Graph::import_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -3969,6 +3972,7 @@ mod tests {
                 for computed in [false, true] {
                     let output = temp.path().join(format!("export-{loaded}-{computed}"));
                     state.process_list.export_uv_forests(
+                        &state.model,
                         &output,
                         0,
                         "first",
@@ -3989,7 +3993,9 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in Graph::from_string(&dot, &state.model)? {
+                                for graph in
+                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
+                                {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }
@@ -4314,11 +4320,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
         state
             .import_graphs(
@@ -6041,7 +6047,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_overlays_runtime_model_settings() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let mut settings = RuntimeSettings::default();
         settings
@@ -6067,7 +6073,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_rejects_non_overridable_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         state
             .model_parameters
             .remove(&UFOSymbol::from("mass_scalar_2"));

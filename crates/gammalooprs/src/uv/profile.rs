@@ -2953,7 +2953,13 @@ impl<'a> UVProfileRunner<'a> {
                     .par_iter()
                     .map(|(orientation, integrand)| {
                         g.graph
-                            .all_limits(&g.graph.full_filter(), integrand, symbol!("lambd"), lmb)
+                            .all_limits(
+                                self.model,
+                                &g.graph.full_filter(),
+                                integrand,
+                                symbol!("lambd"),
+                                lmb,
+                            )
                             .into_iter()
                             .map(|(limit, value)| (limit, orientation.clone(), value))
                             .collect::<Vec<_>>()

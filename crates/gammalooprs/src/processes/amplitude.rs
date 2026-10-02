@@ -116,8 +116,9 @@ impl Amplitude {
     pub fn plan_graph_group_selection(
         &self,
         spec: &GraphGroupSelectionSpec,
+        model: &Model,
     ) -> Result<GraphGroupSelectionPlan> {
-        spec.plan(&self.graph_group_structure, |graph_id| {
+        spec.plan(model, &self.graph_group_structure, |graph_id| {
             self.graphs.get(graph_id).map(|graph| &graph.graph)
         })
     }
@@ -533,7 +534,7 @@ impl Amplitude {
                 }
             }
         }
-        self.generate_grouped_derived_data()?;
+        self.generate_grouped_derived_data(model)?;
 
         Ok(preprocess_reports)
     }
@@ -564,6 +565,12 @@ impl Amplitude {
         );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
+        }
+        if self.graphs.is_empty() {
+            return Err(eyre!(
+                "Cannot build amplitude '{}' without any diagrams",
+                self.name
+            ));
         }
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
@@ -664,7 +671,13 @@ impl Amplitude {
             let master_external_pdgs = master_graph
                 .get_external_partcles()
                 .into_iter()
-                .map(|particle| particle.pdg_code)
+                .map(|particle| {
+                    particle
+                        .resolve(model)
+                        .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
+                })
                 .collect_vec();
 
             for graph_id in group.into_iter() {
@@ -787,7 +800,7 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn generate_grouped_derived_data(&mut self) -> Result<()> {
+    pub fn generate_grouped_derived_data(&mut self, model: &Model) -> Result<()> {
         // for each group we must collect all inequivalent esurfaces.
 
         let group_derived_data = self
@@ -817,7 +830,8 @@ impl Amplitude {
                         .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
                         let esurface = &esurfaces[raised_group.esurface_ids[0]];
-                        let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
+                        let esurface_atom =
+                            esurface.lmb_atom(&amplitude_graph.graph, model, &lmb_reps);
 
                         group_esurface_structure
                             .entry(esurface_atom)
@@ -921,10 +935,7 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 resolved_threshold_counterterms: None,
-                raised_data: RaisedEsurfaceData {
-                    raised_groups: TiVec::new(),
-                    pass_two_evaluator: None,
-                },
+                raised_data: RaisedEsurfaceData::default(),
                 raised_esurface_ids: TiVec::new(),
             },
         }
@@ -934,6 +945,7 @@ impl AmplitudeGraph {
 impl AmplitudeGraph {
     pub fn renormalization_part(
         &mut self,
+        model: &Model,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.representations.is_empty() {
@@ -948,6 +960,7 @@ impl AmplitudeGraph {
         }
         settings.orchestrator.renormalization_part(
             &mut self.graph,
+            model,
             // RenormalizationPart forces a 4D forest: it never builds a CFF
             // or attaches 3D numerator factors and needs no stored source.
             OrientationProjection::four_d(&OrientationPattern::default()),
@@ -1095,10 +1108,10 @@ impl AmplitudeGraph {
             )
         });
 
-        self.build_integrands(settings, vk, &mut stats)?;
+        self.build_integrands(model, settings, vk, &mut stats)?;
 
         if self.graph.is_group_master {
-            self.build_tropical_sampler(settings)?;
+            self.build_tropical_sampler(model, settings)?;
         }
 
         self.build_lmbs();
@@ -2285,8 +2298,8 @@ impl AmplitudeGraph {
                 .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
             })
             .collect::<Vec<_>>();
-        let expressions = settings.uv.orchestrator.parametric_integrands(
-            &mut self.graph,
+        let expressions = self.graph.parametric_integrands(
+            model,
             cut_structure,
             vakint,
             &projections,
@@ -2394,7 +2407,11 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+    fn build_tropical_sampler(
+        &mut self,
+        model: &Model,
+        process_settings: &GenerationSettings,
+    ) -> Result<()> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
         if process_settings
@@ -2425,7 +2442,7 @@ impl AmplitudeGraph {
             .graph
             .iter_loop_edges()
             .map(|(pair, _edge_id, edge)| {
-                let is_massive = edge.data.particle.is_massive();
+                let is_massive = edge.data.particle.is_massive(model);
 
                 let vertices = match pair {
                     HedgePair::Paired { source, sink } => (
@@ -2591,8 +2608,12 @@ impl AmplitudeState for Processed {}
 // impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
-    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
-        let graphs = Graph::from_string(s, model)?;
+    pub fn from_finalized_runtime_dot_string<Str: AsRef<str>>(
+        s: Str,
+        name: String,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = Graph::from_finalized_runtime_string(s, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {
@@ -2601,11 +2622,11 @@ impl Amplitude {
         Ok(amp)
     }
 
-    pub fn from_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub fn from_finalized_runtime_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let graphs = Graph::from_file(p, model)?;
+        let graphs = Graph::from_finalized_runtime_file(p, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {

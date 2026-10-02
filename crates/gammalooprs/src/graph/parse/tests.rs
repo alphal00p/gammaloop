@@ -1,654 +1,466 @@
-use idenso::tensor::SymbolicTensor;
-use insta::assert_snapshot;
+use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
+use linnet::half_edge::NodeIndex;
 use linnet::half_edge::{
-    NodeIndex,
-    involution::{EdgeIndex, Hedge, HedgePair},
+    involution::{EdgeIndex, HedgePair},
+    subgraph::SubSetLike,
 };
 use spenso::{
-    network::{
-        Network,
-        library::DummyLibrary,
-        parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
-        store::NetworkStore,
-        tags::SPENSO_TAG,
-    },
+    network::tags::SPENSO_TAG,
     structure::{
-        HasName,
         abstract_index::AIND_SYMBOLS,
         representation::{Minkowski, RepName},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, FunctionBuilder},
     symbol,
 };
-use symbolica_utils::AtomPrintExt;
-use tracing::info;
 use typed_index_collections::ti_vec;
 
 use super::Graph;
 use crate::{
-    dot,
+    finalized_runtime_dot,
     graph::{
-        GraphGroup, LMBext,
-        parse::{IntoGraph, complete_group_parsing},
+        FeynmanGraph, GraphGroup,
+        parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
-    model::InputParamCard,
     momentum::sample::LoopIndex,
-    numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
-    utils::{GS, load_generic_model},
-    uv::uv_graph::UVE,
+    utils::GS,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 
-// Preserve the parser fixtures' massless light-quark propagators and full CKM sector.
-const LIGHT_QUARKS_MASSLESS_RESTRICTION: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../assets/models/json/sm/restrict_light_quarks_massless.json"
-));
+fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
+    let mass = loop_edge_mass.map_or_else(String::new, |mass| format!(" mass={mass}"));
+    let loop_attribute = |edge| {
+        if edge == loop_edge { " lmb_id=0" } else { "" }
+    };
+    format!(
+        r#"digraph triangle {{
+            graph [projector="1"]
+            node [num="1"]
+            edge [pdg=1000 num="1" dir=none]
+            ext [style=invis]
+            ext -> v4 [id=0 sink="{{ufo_order:0}}"]
+            v5 -> ext [id=1 source="{{ufo_order:0}}"]
+            v6 -> ext [id=2 source="{{ufo_order:0}}"]
+            v4 -> v5 [id=3{}{} source="{{ufo_order:1}}" sink="{{ufo_order:1}}"]
+            v5 -> v6 [id=4{} source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
+            v6 -> v4 [id=5{} source="{{ufo_order:2}}" sink="{{ufo_order:2}}"]
+        }}"#,
+        loop_attribute(3),
+        if loop_edge == 3 { mass.as_str() } else { "" },
+        loop_attribute(4),
+        loop_attribute(5),
+    )
+}
+
+fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Graph {
+    triangle_fixture(loop_edge, loop_edge_mass)
+        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .unwrap()
+}
 
 #[test]
-fn test_load() {
+fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
+    use super::NumeratorInterface;
+    use idenso::tensor::SymbolicTensor;
+    use spenso::structure::partial::{
+        OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
+    };
     test_initialise().unwrap();
-    info!("Loading graph");
-    let graph: Vec<Graph> = dot!(digraph triangle {
-        graph [
-            overall_factor = 1;
-            multiplicity_factor = 1;
-        ]
-        edge [
-            pdg=1000
-        ]
-        ext [style=invis]
-        ext -> v4
-        ext -> v5
-        v6 -> ext
-        v5 -> v4 [lmb_index=0];
-        v6 -> v5;
-        v4 -> v6 ;
-    }
-
-    digraph triangle2 {
-        graph [
-            overall_factor = 1;
-            multiplicity_factor = 1;
-        ]
-        edge [
-            pdg=1000
-        ]
-        ext [style=invis]
-        ext -> v4
-        ext -> v5
-        v6 -> ext [id = 2]
-        v5 -> v4 [lmb_index=0];
-        v6 -> v5;
-        v4 -> v6 ;
-    }
-    ,"scalars")
+    let representation = Minkowski {}.new_rep(4).to_lib();
+    let interface = PartialStructure::from_logical_slots([
+        representation.slot(PartialIndex::Open(OpenPortId(0))),
+        representation.slot(PartialIndex::Open(OpenPortId(1))),
+    ]);
+    let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface).unwrap();
+    let (expression, metadata) = NumeratorInterface::export(&zero);
+    let metadata = metadata.expect("a ranked zero requires interface metadata");
+    let restored = NumeratorInterface::admit(
+        expression,
+        Some(NumeratorInterface::parse(&metadata.to_json()).unwrap()),
+    )
     .unwrap();
-
-    println!("{}", graph[0].dot_serialize(&DotExportSettings::default()));
-
-    println!(
-        "{}",
-        graph[0].dot_lmb_of(&graph[0].underlying.full(), &graph[0].loop_momentum_basis)
+    assert!(restored.same_value(&zero));
+    let slots = restored.structure().logical_slots();
+    assert_eq!(slots.len(), 2);
+    assert_eq!(slots[0].aind, PartialIndex::Open(OpenPortId(0)));
+    assert_eq!(slots[1].aind, PartialIndex::Open(OpenPortId(1)));
+    assert!(
+        NumeratorInterface::admit(Atom::one(), None)
+            .unwrap()
+            .is_scalar()
     );
-
-    println!("{}", graph[0].loop_momentum_basis);
-
-    println!(
-        "{}",
-        graph[1].dot_lmb_of(&graph[1].underlying.full(), &graph[1].loop_momentum_basis)
+    assert!(
+        NumeratorInterface::admit(Atom::Zero, None)
+            .unwrap()
+            .is_scalar()
     );
-    println!("{}", graph[1].loop_momentum_basis);
+    assert!(NumeratorInterface::admit(Atom::one(), Some(metadata)).is_err());
+}
+
+#[test]
+fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
+    use super::NumeratorInterface;
+    use spenso::structure::{abstract_index::AbstractIndex, slot::IsAbstractSlot};
+
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let rep = Minkowski {}.new_rep(4).to_lib();
+    let anonymous = AbstractIndex::Open {
+        owner: 801,
+        axis: 0,
+    };
+    for port in [
+        rep.to_symbolic([]),
+        rep.slot::<AbstractIndex, _>(anonymous).to_atom(),
+        rep.slot::<AbstractIndex, _>(anonymous.scoped(symbol!("runtime_open_scope")))
+            .to_atom(),
+    ] {
+        let interface = NumeratorInterface(vec![port]);
+        let metadata = serde_json::to_string(&interface.to_json()).unwrap();
+        // A portable ranked zero is valid source data. GammaLoop requires an
+        // explicit graph interface even when its expression vanishes.
+        assert_eq!(
+            NumeratorInterface::admit(Atom::Zero, Some(interface))
+                .unwrap()
+                .rank(),
+            1
+        );
+        for source in [
+            triangle_fixture(3, None).replace(
+                "graph [projector=\"1\"]",
+                &format!(
+                    "graph [projector=\"1\" num=\"0\" numerator_prefactor_interface={metadata}]"
+                ),
+            ),
+            triangle_fixture(3, None).replace(
+                "node [num=\"1\"]",
+                &format!("node [num=\"0\" num_interface={metadata}]"),
+            ),
+            triangle_fixture(3, None).replace(
+                "edge [pdg=1000 num=\"1\" dir=none]",
+                &format!("edge [pdg=1000 num=\"0\" num_interface={metadata} dir=none]"),
+            ),
+        ] {
+            let result: color_eyre::Result<Graph> = source.into_finalized_runtime_graph(&model);
+            let error = result
+                .err()
+                .expect("anonymous runtime ports must be rejected");
+            assert!(
+                format!("{error:#}").contains("requires an explicit index"),
+                "{error:?}"
+            );
+        }
+    }
+    // Compact internal contractions are scalar; fully indexed interfaces do
+    // not require expanding tensor shorthand or changing the source expression.
+    let vector = GS.emr_vec(EdgeIndex(3), rep.to_symbolic([]));
+    let scalar = SPENSO_TAG.dot.call_args([vector.clone(), vector]);
+    let source = triangle_fixture(3, None).replace(
+        "graph [projector=\"1\"]",
+        &format!(
+            "graph [projector=\"1\" num={}]",
+            serde_json::to_string(&scalar.to_canonical_string()).unwrap()
+        ),
+    );
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
+    assert!(graph.global_prefactor.num.is_scalar());
+    assert_eq!(
+        NumeratorInterface::export(&graph.global_prefactor.num).0,
+        scalar
+    );
+}
+
+#[test]
+fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
+    use super::NumeratorInterface;
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let canonical = Graph::import_dot(
+        include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
+        &model,
+    ).unwrap().remove(0);
+    let metric = symbolica::function!(
+        spenso::network::library::symbolic::ETS.metric,
+        Minkowski {}.new_rep(4).to_symbolic([Atom::num(37)]),
+        Minkowski {}.new_rep(4).to_symbolic([Atom::num(41)])
+    );
+    let metric = NumeratorInterface::admit(metric, None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
+    let zero = metric.with_algebra_result(Atom::Zero).unwrap();
+    for (mut graph, edge) in [
+        (parse_triangle_fixture(3, None), EdgeIndex(3)),
+        (canonical, EdgeIndex(2)),
+    ] {
+        assert!(
+            !graph
+                .dot_serialize(&DotExportSettings::default())
+                .contains("num_interface")
+        );
+        let vertex = graph.underlying.iter_nodes().next().unwrap().0;
+        graph.underlying[vertex].num.value = zero.clone();
+        graph.underlying[edge].num.value = metric.clone();
+        let serialized = graph.dot_serialize(&DotExportSettings::default());
+        assert!(serialized.contains("num_interface"));
+        let restored = Graph::import_dot(&serialized, &model).unwrap().remove(0);
+        assert!(restored.underlying[vertex].num.value.same_value(&zero));
+        assert!(restored.underlying[edge].num.value.same_value(&metric));
+        assert_eq!(restored.finalized_cuts.len(), graph.finalized_cuts.len());
+        assert_eq!(restored.overall_factor, graph.overall_factor);
+        let numerator = restored
+            .numerator(&restored.full_filter(), &restored.empty_subgraph())
+            .unwrap()
+            .state
+            .expr;
+        assert!(numerator.is_zero());
+        assert!(
+            numerator.is_scalar(),
+            "the zero fragment must still close its paired ports"
+        );
+    }
+}
+
+#[test]
+fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order() {
+    use super::NumeratorInterface;
+    use crate::numerator::GlobalPrefactor;
+    use crate::uv::UltravioletGraph;
+    use idenso::tensor::SymbolicTensor;
+    use spenso::structure::{IndexedStructure, abstract_index::AbstractIndex};
+    test_initialise().unwrap();
+    let representation = Minkowski {}.new_rep(4).to_lib();
+    let interface: IndexedStructure = [41, 37]
+        .map(|index| representation.slot(AbstractIndex::Normal(index)))
+        .into_iter()
+        .collect();
+    let zero = SymbolicTensor::from_indexed_parts(Atom::Zero, interface.clone()).unwrap();
+    let metric = NumeratorInterface::admit(
+        symbolica::function!(
+            spenso::network::library::symbolic::ETS.metric,
+            representation.to_symbolic([Atom::num(37)]),
+            representation.to_symbolic([Atom::num(41)])
+        ),
+        None,
+    )
+    .unwrap();
+    let metric =
+        SymbolicTensor::from_indexed_parts(metric.expression().clone(), interface.clone()).unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let canonical = Graph::import_dot(
+        include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
+        &model,
+    ).unwrap().remove(0);
+    for mut graph in [parse_triangle_fixture(3, None), canonical] {
+        graph.global_prefactor.num = zero.clone();
+        graph.global_prefactor.projector = metric.clone();
+        let json = serde_json::to_value(&graph.global_prefactor).unwrap();
+        assert!(json.get("num_interface").is_some());
+        assert_eq!(
+            symbolica::try_parse!(json["projector"].as_str().unwrap()).unwrap(),
+            NumeratorInterface::export(&metric).0,
+            "serialized tensor payloads must retain source syntax independently of display printers"
+        );
+        assert_eq!(
+            symbolica::try_parse!(json["num"].as_str().unwrap()).unwrap(),
+            Atom::Zero
+        );
+        let restored_global: GlobalPrefactor = serde_json::from_value(json).unwrap();
+        assert!(restored_global.num.same_value(&zero));
+        assert!(restored_global.projector.same_value(&metric));
+        let product = restored_global
+            .num
+            .multiply(restored_global.projector)
+            .unwrap();
+        assert!(product.is_zero() && product.is_scalar());
+
+        let dot = graph.dot_serialize(&DotExportSettings::default());
+        assert!(dot.contains("numerator_prefactor_interface"));
+        let restored = Graph::import_dot(&dot, &model).unwrap().remove(0);
+        assert!(restored.global_prefactor.num.same_value(&zero));
+        assert!(restored.global_prefactor.projector.same_value(&metric));
+        assert_eq!(restored.global_prefactor.num.rank(), 2);
+        assert_eq!(
+            restored.global_prefactor.num.structure().logical_slots(),
+            interface.logical_slots()
+        );
+        assert_eq!(
+            restored
+                .global_prefactor
+                .projector
+                .structure()
+                .logical_slots(),
+            interface.logical_slots()
+        );
+        assert_eq!(restored.finalized_cuts.len(), graph.finalized_cuts.len());
+        let full = restored
+            .numerator(&restored.full_filter(), &restored.empty_subgraph())
+            .unwrap()
+            .state
+            .expr
+            .multiply(restored.global_numerator().unwrap())
+            .unwrap();
+        assert!(full.is_zero() && full.is_scalar());
+        restored.validate_full_numerator_tensor_network().unwrap();
+    }
+}
+
+#[test]
+fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
+    let model = crate::utils::load_generic_model("sm");
+    let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
+    let reversed = DiagramEdge::new(model.particle_id("u~").unwrap(), true);
+
+    let forward_key = forward
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(2)),
+                target: Some(VertexId(5)),
+            },
+        )
+        .unwrap();
+    let reversed_key = reversed
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(5)),
+                target: Some(VertexId(2)),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(reversed_key, forward_key);
+    assert_eq!(forward_key.2, 2);
+}
+
+fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> String {
+    let connection = if explicit_connection {
+        r#" is_cut="0" initial_state_connection="true""#
+    } else {
+        ""
+    };
+    format!(
+        r#"digraph split_forward {{
+            graph [projector="1"]
+            node [num="1"]
+            edge [pdg=1000 num="1" dir=none]
+            ext_in [style=invis]
+            ext_out [style=invis]
+            ext_in -> A [id=0 lmb_rep="P(0,a___)" sink="{{ufo_order:0}}"{connection}]
+            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)" source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
+            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)" source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
+            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}" source="{{ufo_order:2}}"{connection}]
+        }}"#
+    )
+}
+
+fn two_split_forward_connections_fixture() -> &'static str {
+    r#"digraph two_split_forward_connections {
+        graph [projector="1"]
+        node [num="1"]
+        edge [pdg=1000 num="1" dir=none]
+        in0 [style=invis]
+        out0 [style=invis]
+        in1 [style=invis]
+        out1 [style=invis]
+        in0 -> A [id=0 lmb_rep="P(0,a___)" sink="{ufo_order:0}" is_cut="0" initial_state_connection="true"]
+        in1 -> A [id=1 lmb_rep="P(1,a___)" sink="{ufo_order:1}" is_cut="1" initial_state_connection="true"]
+        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)" source="{ufo_order:2}" sink="{ufo_order:0}"]
+        B -> out0 [id=3 lmb_rep="P(0,a___)" source="{ufo_order:1}" is_cut="0" initial_state_connection="true"]
+        B -> out1 [id=4 lmb_rep="P(1,a___)" source="{ufo_order:2}" is_cut="1" initial_state_connection="true"]
+    }"#
+}
+
+#[test]
+fn explicitly_marked_split_forward_endpoints_are_one_connection() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let graph: Graph = split_forward_fixture("P(0,a___)", true)
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+
+    assert!(graph.get_external_signature().is_empty());
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 1);
+    assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
+
+    let serialized = graph.dot_serialize(&DotExportSettings {
+        split_xs_by_initial_states: true,
+        ..DotExportSettings::default()
+    });
+    assert_eq!(serialized.matches("is_cut=").count(), 2, "{serialized}");
+
+    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    assert!(round_trip.get_external_signature().is_empty());
+    assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 1);
+}
+
+#[test]
+fn equal_external_momenta_without_explicit_markers_remain_distinct_legs() {
+    test_initialise().unwrap();
+    let graph: Graph = split_forward_fixture("P(0,a___)", false)
+        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .unwrap();
+
+    assert_eq!(graph.get_external_signature().len(), 2);
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
+    assert!(graph.initial_state_cut.is_empty());
+}
+
+#[test]
+fn multiple_undirected_forward_connections_survive_split_round_trip() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let graph: Graph = two_split_forward_connections_fixture()
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+    assert!(graph.get_external_signature().is_empty());
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
+
+    let serialized = graph.dot_serialize(&DotExportSettings {
+        split_xs_by_initial_states: true,
+        ..DotExportSettings::default()
+    });
+    assert_eq!(serialized.matches("is_cut=").count(), 4, "{serialized}");
+
+    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    assert!(round_trip.get_external_signature().is_empty());
+    assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 2);
 }
 
 #[test]
 fn test_loop_momentum_basis() {
     test_initialise().unwrap();
-    let g: Graph = dot!(
-        digraph triangle {
-        graph [
-        overall_factor = 1;
-        multiplicity_factor = 1;
-        ]
-        edge [
-        pdg=1000
-        ]
-        v4 [num=1]
-        ext [style=invis]
-        ext -> v4:0 [id=1 is_dummy=true]
-        ext -> v5:1 [id=0]
-        v6:2 -> ext [id=2]
-        v5 -> v4 [lmb_index=0];
-        v6 -> v5;
-        v4 -> v6 ;
-        },"scalars"
-    )
-    .unwrap();
-    // println!("{}", g.loop_momentum_basis);
+    let g = parse_triangle_fixture(3, None);
 
-    insta::assert_ron_snapshot!(g.loop_momentum_basis);
-
-    println!(
-        "{}",
-        g.dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
-    );
-}
-
-#[test]
-fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
-    use linnet::half_edge::subgraph::SubSetLike;
-
-    test_initialise().unwrap();
-    let graphs: Vec<Graph> = dot!(
-        digraph automatic_vacuum {
-            edge [num=1 mass=2]
-            node [num=1]
-            a -> a [id=0]
-            a -> a [id=1]
-        }
-        digraph specified_vacuum {
-            edge [num=1 mass=2]
-            node [num=1]
-            a -> a [id=0 lmb_id=1]
-            a -> a [id=1 lmb_id=0]
-        }
-        digraph disconnected_vacuum {
-            edge [num=1 mass=2]
-            node [num=1]
-            a -> a [id=0 lmb_id=1]
-            b -> b [id=1 lmb_id=0]
-        }
-    )
-    .unwrap();
-
-    for (graph, expected_edges) in graphs.iter().zip([[0, 1], [1, 0], [1, 0]]) {
-        let lmb = &graph.loop_momentum_basis;
-        assert!(graph.initial_state_cut.is_empty());
-        assert!(lmb.tree.is_empty());
-        assert!(lmb.ext_edges.is_empty());
-        assert_eq!(lmb.loop_edges.raw, expected_edges.map(EdgeIndex));
-        for (loop_id, edge) in lmb.loop_edges.iter().enumerate() {
-            let signature = &lmb.edge_signatures[*edge];
-            assert!(signature.external.is_empty());
-            assert_eq!(
-                signature
-                    .internal
-                    .iter()
-                    .map(|sign| *sign * 1_i32)
-                    .collect::<Vec<_>>(),
-                (0..2)
-                    .map(|index| i32::from(index == loop_id))
-                    .collect::<Vec<_>>()
-            );
-        }
-        let exported = graph.dot_serialize(&DotExportSettings::default());
-        let reparsed: Graph = exported
-            .into_graph(&crate::utils::load_generic_model("sm"))
-            .unwrap();
-        assert_eq!(reparsed.loop_momentum_basis, *lmb);
-    }
-}
-
-#[test]
-fn vacuum_loop_edges_must_leave_a_spanning_forest() {
-    test_initialise().unwrap();
-    let graph: eyre::Result<Graph> = dot!(digraph invalid_vacuum_basis {
-        edge [num=1 mass=2]
-        node [num=1]
-        a -> b [id=0 lmb_id=0]
-        b -> a [id=1 lmb_id=1]
-    });
-    let error = graph
-        .err()
-        .expect("an overcomplete loop basis must be rejected");
-    assert!(format!("{error:?}").contains("loop edges specified are not actual loop edges"));
-}
-
-#[test]
-fn initial_state_cut_permutation_preserves_specified_loop_edges() {
-    test_initialise().unwrap();
-    let graph: Graph = dot!(digraph cut_lmb_permutation {
-        edge [num=1 mass=2]
-        node [num=1]
-        a -> b [id=0 name=first_loop lmb_id=0]
-        a -> b [id=1 name=second_loop lmb_id=1]
-        a -> b [id=2]
-        b -> a [id=3 is_cut=0]
-        b -> a [id=4 is_cut=1]
-    })
-    .unwrap();
-
+    assert_eq!(g.loop_momentum_basis.loop_edges.len(), 1);
     assert_eq!(
-        graph.loop_momentum_basis.ext_edges.raw,
-        [EdgeIndex(0), EdgeIndex(1)]
+        g.loop_momentum_basis.loop_edges[LoopIndex::from(0)],
+        EdgeIndex::from(3)
     );
-    for (loop_id, name) in ["first_loop", "second_loop"].into_iter().enumerate() {
-        assert_eq!(
-            graph.loop_momentum_basis.loop_edges[LoopIndex(loop_id)],
-            graph.edge_name_to_index(name).unwrap()
-        );
-    }
-}
-
-#[test]
-fn scalar_without_model() {
-    test_initialise().unwrap();
-    let g: Graph = dot!(
-        digraph G{
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            C -> A
-            A -> D
-            D -> B
-            B -> C
-            C -> D
-            B -> ext
-        }
-    )
-    .unwrap();
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()))
-}
-
-#[test]
-fn full_numerator_requires_one_q3_structure_argument() {
-    test_initialise().unwrap();
-    let mut graph: Graph = dot!(
-        digraph q3_validation {
-            edge [pdg=1000]
-            ext [style=invis]
-            ext -> v4
-            ext -> v5
-            v6 -> ext
-            v5 -> v4 [lmb_id=0]
-            v6 -> v5
-            v4 -> v6
-        },
-        "scalars"
-    )
-    .unwrap();
-
-    graph.overall_factor = GS.emr_vec.call_args([Atom::num(3)]);
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Q3 in graph 'q3_validation' must have exactly two arguments"),
-        "unexpected Q3 arity error: {error:?}"
-    );
-
-    graph.overall_factor = GS
-        .emr_vec
-        .call_args([Atom::var(symbol!("invalid_q3_edge")), GS.cind(1)]);
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("found non-canonical edge argument invalid_q3_edge"),
-        "unexpected Q3 edge error: {error:?}"
-    );
-
-    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Atom::var(symbol!("invalid_q3_structure")));
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("found non-canonical second argument invalid_q3_structure"),
-        "unexpected Q3 structure error: {error:?}"
-    );
-
-    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Minkowski {}.new_rep(3).to_symbolic([]));
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("found non-canonical second argument"),
-        "unexpected Q3 dimension error: {error:?}"
-    );
-
-    let out_of_range_edge = EdgeIndex(graph.underlying.n_edges());
-    graph.overall_factor = GS.emr_vec(out_of_range_edge, Minkowski {}.new_rep(4).to_symbolic([]));
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error.to_string().contains(&format!(
-            "found edge ID {} outside the valid range 0..{}",
-            out_of_range_edge.0,
-            graph.underlying.n_edges(),
-        )),
-        "unexpected out-of-range Q3 edge error: {error:?}"
-    );
-
-    graph.overall_factor = GS.emr_mom(out_of_range_edge, GS.cind(1));
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error.to_string().contains(&format!(
-            "found edge ID {} outside the valid range 0..{}",
-            out_of_range_edge.0,
-            graph.underlying.n_edges(),
-        )),
-        "unexpected out-of-range Q edge error: {error:?}"
-    );
-
-    let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
-    let represented = GS.emr_vec(EdgeIndex(3), minkowski);
-    graph.overall_factor = SPENSO_TAG.dot.call_args([represented.clone(), represented]);
-    graph.validate_full_numerator_tensor_network().unwrap();
-
-    let indexed_minkowski = Minkowski {}
-        .new_rep(4)
-        .to_symbolic([Atom::var(symbol!("q3_validator_mu"))]);
-    let indexed = GS.emr_vec(EdgeIndex(3), indexed_minkowski);
-    graph.overall_factor = &indexed * &indexed;
-    graph.validate_full_numerator_tensor_network().unwrap();
-
-    graph.overall_factor = GS.emr_vec(EdgeIndex(3), GS.cind(1));
-    assert_eq!(
-        graph.overall_factor,
-        GS.emr_mom(EdgeIndex(3), GS.cind(1)),
-        "a transient tensor-network Q3 component must normalize immediately",
-    );
-
-    let abstract_slot = Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]);
-    graph.overall_factor = GS.emr_vec(EdgeIndex(3), abstract_slot);
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Full numerator still has dangling tensor indices"),
-        "a numeric Minkowski index must be validated as an abstract index: {error:?}",
-    );
-    assert!(
-        graph.overall_factor.contains_symbol(GS.emr_vec)
-            && !graph.overall_factor.contains_symbol(GS.emr_mom),
-        "a numeric Minkowski index must remain an abstract Q3 label, not normalize to a Q component",
-    );
-
-    for malformed_component in [
-        AIND_SYMBOLS.cind.call_args([Atom::num(-1)]),
-        AIND_SYMBOLS.cind.call_args([Atom::num(4)]),
-        AIND_SYMBOLS.cind.call_args([Atom::num(1), Atom::num(2)]),
-    ] {
-        graph.overall_factor = GS.emr_vec(EdgeIndex(3), malformed_component);
-        let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("found non-canonical second argument"),
-            "unexpected malformed Q3 component error: {error:?}",
-        );
-    }
-
-    let wrapper = symbol!("q3_validation_wrapper");
-    let scalar = Atom::var(symbol!("q3_validation_scalar"));
-    let malformed_q3 = GS.emr_vec.call_args([Atom::num(3)]);
-    for nested in [
-        wrapper.call_args([malformed_q3.clone()]),
-        wrapper.call_args([malformed_q3.pow(2)]),
-        wrapper.call_args([&malformed_q3 + &scalar]),
-        wrapper.call_args([&malformed_q3 * &scalar]),
-    ] {
-        graph.overall_factor = nested;
-        let error = graph.validate_spatial_momentum_convention().unwrap_err();
-        assert!(
-            error.to_string().contains("Q3 in graph 'q3_validation'"),
-            "nested factorized payload must retain Q3 validation: {error:?}",
-        );
-    }
-
-    let malformed_q = FunctionBuilder::new(GS.emr_mom).finish();
-    graph.overall_factor = wrapper.call_args([&malformed_q3 + &malformed_q.pow(2)]);
-    let error = graph.validate_spatial_momentum_convention().unwrap_err();
-    assert!(
-        error.to_string().contains("Spatial momentum Q3"),
-        "the Q3 pass must retain priority over malformed Q: {error:?}",
-    );
-
-    let nested_q = wrapper.call_args([scalar.pow(malformed_q)]);
-    graph.overall_factor = nested_q.clone();
-    let error = graph.validate_spatial_momentum_convention().unwrap_err();
-    assert!(
-        error.to_string().contains("found no edge argument"),
-        "a malformed Q in a power exponent must remain visible: {error:?}",
-    );
-
-    graph.overall_factor = Atom::one();
-    let original_global = graph.global_prefactor.clone();
-    graph.global_prefactor.num = nested_q.clone();
-    assert!(graph.validate_spatial_momentum_convention().is_err());
-    graph.global_prefactor = original_global.clone();
-    graph.global_prefactor.projector = nested_q;
-    assert!(graph.validate_spatial_momentum_convention().is_err());
-    graph.global_prefactor = original_global;
-
-    // Component normalization happens before either traversal sees the atom.
-    let component = GS.emr_vec(out_of_range_edge, GS.cind(1));
-    assert_eq!(component, GS.emr_mom(out_of_range_edge, GS.cind(1)));
-    graph.overall_factor = wrapper.call_args([component]);
-    let error = graph.validate_spatial_momentum_convention().unwrap_err();
-    assert!(
-        error.to_string().contains("Momentum Q in graph"),
-        "a normalized Q3 component must be checked as Q: {error:?}",
-    );
-
-    // Validate the normalized product, including cancellation and annihilation.
-    graph.overall_factor = &malformed_q3 - &malformed_q3;
-    graph.validate_spatial_momentum_convention().unwrap();
-    graph.overall_factor = malformed_q3;
-    graph.global_prefactor.num = Atom::Zero;
-    graph.validate_spatial_momentum_convention().unwrap();
-}
-
-#[test]
-fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
-    test_initialise().unwrap();
-    for numerator in [
-        r#"num = "gammalooprs::Q3(0)""#,
-        r#"edge [num = "gammalooprs::Q3(0)"]"#,
-        r#"node [num = "gammalooprs::Q3(0)"]"#,
-    ] {
-        let malformed = format!(
-            r#"
-            digraph q3_graph_set_validation {{
-                {numerator}
-                edge [pdg=1000]
-                ext [style=invis]
-                ext -> v4
-                ext -> v5
-                v6 -> ext
-                v5 -> v4 [lmb_id=0]
-                v6 -> v5
-                v4 -> v6
-            }}
-            "#
-        );
-
-        let error = Graph::from_string(&malformed, &crate::utils::load_generic_model("scalars"))
-            .err()
-            .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
-        assert!(
-            format!("{error:#}")
-                .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
-            "unexpected graph-set Q3 validation error: {error:?}"
-        );
-    }
-}
-
-#[test]
-fn open_fundamental_color_requires_an_explicit_projector() {
-    test_initialise().unwrap();
-    let mut graph: Graph = dot!(
-        digraph open_fundamental_color {
-            num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(1)))"
-            ext [style=invis]
-
-            ext -> v1:0 [id=0 particle=d]
-            v2:1 -> ext [id=1 particle=d]
-            v1:2 -> v2:3 [id=2 particle=d lmb_id=0]
-            v1:4 -> v2:5 [id=3 particle=g]
-        }
-    )
-    .unwrap();
-
-    graph.validate_full_numerator_tensor_network().unwrap();
-    graph.global_prefactor.num = Atom::num(1);
-    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Full numerator still has dangling tensor indices"),
-        "removing delta_i^j/N_c must expose the open fundamental color string: {error:?}"
-    );
-}
-
-#[test]
-fn parse() {
-    test_initialise().unwrap();
-    let g: Graph = dot!(
-        digraph G{
-            ext    [style=invis]
-            ext -> A   [particle=a]
-            C -> A    [particle="b"]
-            A -> B
-            A -> D    [particle="b"]
-            D -> B    [particle="b"]
-            B -> C    [particle="b"]
-            C -> D    [particle="g"]
-            B -> ext   [particle=a]
-        }
-    )
-    .unwrap();
-
-    println!("{:#?}", g.loop_momentum_basis);
-
-    println!(
-        "{}",
-        g.underlying
-            .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
-    );
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()));
-    // return;
-    let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
-
-    let expr = num.state.expr.as_view();
-
-    let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net =
-        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
-            SymbolicTensor<Aind>,
-            _,
-        >(expr, &lib, &ParseSettings::default())
-        .unwrap();
-
-    println!("{}", expr);
-    println!(
-        "{}",
-        net.dot_display_impl(
-            ToString::to_string,
-            |_| None,
-            |a| {
-                if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
-                    a.name()
-                        .map(|s| {
-                            if let Some(a) = a.args() {
-                                FunctionBuilder::new(s).add_args(&a).finish().to_string()
-                            } else {
-                                s.to_string()
-                            }
-                        })
-                        .unwrap_or("".to_string())
-                } else {
-                    "".to_string()
-                }
-            },
-            ToString::to_string,
-        )
-    );
-
-    let num = num.color_simplify();
-
-    println!("{}", num.state.expr);
-    // println!("{}", num.state.expr.to_dots());
-    // let num = num.gamma_simplify();
-
-    // println!("{}", num.state.expr);
-}
-
-#[test]
-fn parse_lmbsetting_crossection() {
-    test_initialise().unwrap();
-    let g: Graph = dot!(
-        digraph G{
-            num = "1/2"
-            overall_factor = "2*x"
-            projector = "spenso::t"
-
-            edge [num="1" pdg=1000]
-            ext1 [style=invis is_cut=2]
-            ext2 [style=invis is_cut=1]
-            A [num="1" color_num="a"]
-            B [num="1"]
-            C [num="1"]
-            D [num="1"]
-            E [num="1"]
-            ext1 -> A
-            ext2 -> C
-            C -> A    [ num="P(eid,spenso::mink(4,0))"]
-            A -> D    [ num="P(eid,spenso::mink(4,0))"]
-            D -> B    [ num="1"]
-            B -> ext1
-            E -> B    [lmb_id=0]
-            E -> A    [lmb_id=1]
-            E -> C
-            C -> D    [ num="1"]
-            B -> ext2
-        },"scalars"
-    )
-    .unwrap();
-
-    assert_snapshot!(g.debug_dot(),@r#"
-    digraph G {
-      num = "1/2";
-      overall_factor = "2*x";
-      overall_factor_evaluated = "2*x";
-      projector = "spenso::t";
-      A[num="1"];
-      B[num="1"];
-      C[num="1"];
-      D[num="1"];
-      E[num="1"];
-
-      B:3	-> C:0	 [id=0 dir=none  is_cut="0" lmb_rep="P(0,a___)" num="1" particle="scalar_0"];
-      B:2	-> A:1	 [id=1 dir=none  is_cut="1" lmb_rep="P(1,a___)" num="1" particle="scalar_0"];
-      A:17	-> D:16	 [id=2 dir=none  lmb_rep="K(1,a___)+K(2,a___)+P(1,a___)" num="P(0,spenso::mink(4,0))" particle="scalar_0"];
-      C:4	-> A:5	 [id=3 dir=none  lmb_id="2" lmb_rep="K(2,a___)" num="P(3,spenso::mink(4,0))" particle="scalar_0"];
-      C:6	-> D:7	 [id=4 dir=none  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)+P(0,a___)" num="1" particle="scalar_0"];
-      D:8	-> B:9	 [id=5 dir=none  lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" num="1" particle="scalar_0"];
-      E:10	-> A:11	 [id=6 dir=none  lmb_id="1" lmb_rep="K(1,a___)" num="1" particle="scalar_0"];
-      E:12	-> B:13	 [id=7 dir=none  lmb_id="0" lmb_rep="K(0,a___)" num="1" particle="scalar_0"];
-      E:14	-> C:15	 [id=8 dir=none  lmb_rep="-1*K(0,a___)+-1*K(1,a___)" num="1" particle="scalar_0"];
-    }
-    "#);
+    assert_eq!(g.loop_momentum_basis.ext_edges.len(), 3);
 }
 
 #[test]
 fn dod_rescales_only_internal_edge_qs() {
     test_initialise().unwrap();
-    let g: Graph = dot!(
+    let g: Graph = finalized_runtime_dot!(
         digraph G {
-            edge [pdg=1000]
+            graph [projector="1"]
+            edge [pdg=1000 num="1" dir=none]
+            node [num="1"]
             ext0 [style=invis]
             ext1 [style=invis]
-            A [num="1"]
-            B [num="1"]
-            ext0 -> A [id=0]
-            B -> ext1 [id=1]
-            A -> B [id=2, num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
-            A -> B [id=3, num="1"]
+            ext0 -> A [id=0 sink="{ufo_order:0}"]
+            B -> ext1 [id=1 source="{ufo_order:0}"]
+            A -> B [id=2, lmb_id=0, source="{ufo_order:1}", sink="{ufo_order:1}", num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
+            A -> B [id=3, source="{ufo_order:2}", sink="{ufo_order:2}"]
         },
         "scalars"
     )
@@ -658,83 +470,10 @@ fn dod_rescales_only_internal_edge_qs() {
 }
 
 #[test]
-fn lmb() {
-    test_initialise().unwrap();
-
-    let _g: Vec<Graph> = dot!(
-        digraph G{
-            edge [num="1"]
-            ext    [style=invis]
-            node [num="1"]
-            ext -> A
-            ext -> A
-            ext -> A
-            A -> B
-            B -> ext
-            B -> ext
-            B -> ext
-            B -> ext
-        }
-
-        digraph G{
-            edge [num="1"]
-            ext    [style=invis]
-            node [num="1"]
-            A ->C
-            C -> D
-            D -> A
-            A -> B
-
-            B->B1
-            B1->B2
-            B2->B
-        }
-    )
-    .unwrap();
-}
-
-#[test]
 fn parse_and_build_edgevec() {
     test_initialise().unwrap();
-    let graph_1: Graph = dot!(
-                digraph triangle {
-        graph [
-            overall_factor = 1;
-            multiplicity_factor = 1;
-        ]
-        edge [
-            pdg=1000
-        ]
-        ext [style=invis]
-        ext -> v4 [id=0]
-        ext -> v5 [id=1]
-        v6 -> ext
-        v5 -> v4 [lmb_index=0];
-        v6 -> v5;
-        v4 -> v6 ;
-    }, "scalars"
-    )
-    .unwrap();
-
-    let graph_2: Graph = dot! (
-                digraph triangle {
-        graph [
-            overall_factor = 1;
-            multiplicity_factor = 1;
-        ]
-        edge [
-            pdg=1000
-        ]
-        ext [style=invis]
-        ext -> v4 [id=0]
-        ext -> v5 [id=1]
-        v6 -> ext [id=2]
-        v5 -> v4 [lmb_index=0];
-        v6 -> v5;
-        v4 -> v6 ;
-    }, "scalars"
-    )
-    .unwrap();
+    let graph_1 = parse_triangle_fixture(3, None);
+    let graph_2 = parse_triangle_fixture(3, None);
 
     let graph_1 = &graph_1.underlying;
     let graph_2 = &graph_2.underlying;
@@ -772,65 +511,43 @@ fn parse_and_build_edgevec() {
     assert_eq!(graph_2_test, graph_2_test_2);
 }
 
+fn grouped_graph_fixture(name: &str, group_id: Option<usize>, master: Option<bool>) -> String {
+    let group_id = group_id.map_or_else(String::new, |id| format!(" group_id={id}"));
+    let master = master.map_or_else(String::new, |value| format!(" is_group_master={value}"));
+    format!(
+        r#"digraph {name} {{
+            graph [projector="1"{group_id}{master}]
+            node [num="1"]
+            edge [pdg=1000 num="1" dir=none]
+            ext [style=invis]
+            ext -> A [sink="{{ufo_order:0}}"]
+            A -> B [lmb_id=0 source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
+            A -> B [source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
+            B -> ext [source="{{ufo_order:2}}"]
+        }}"#
+    )
+}
+
+fn parse_grouped_graphs(specs: &[(&str, Option<usize>, Option<bool>)]) -> Vec<Graph> {
+    let input = specs
+        .iter()
+        .map(|(name, group_id, master)| grouped_graph_fixture(name, *group_id, *master))
+        .collect::<Vec<_>>()
+        .join("\n");
+    input
+        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .unwrap()
+}
+
 #[test]
 fn test_group_parsing_1() {
     test_initialise().unwrap();
-    let mut graphs: Vec<Graph> = dot! (
-        digraph G1{
-            graph [
-                group_id=0
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G2{
-            graph [
-                group_id=0
-                is_group_master=false
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G3{
-            graph [
-                group_id=1
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G4{
-            graph [
-                group_id=1
-                is_group_master=false
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-
-    )
-    .unwrap();
+    let mut graphs = parse_grouped_graphs(&[
+        ("G1", Some(0), Some(true)),
+        ("G2", Some(0), Some(false)),
+        ("G3", Some(1), Some(true)),
+        ("G4", Some(1), Some(false)),
+    ]);
 
     let groups = complete_group_parsing(&mut graphs).unwrap();
     let expected_result = ti_vec![
@@ -850,60 +567,12 @@ fn test_group_parsing_1() {
 #[test]
 fn test_group_parsing_2() {
     test_initialise().unwrap();
-    let mut graphs: Vec<Graph> = dot! (
-        digraph G1{
-            graph [
-                group_id=0
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G2{
-            graph [
-                group_id=0
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G3{
-            graph [
-                group_id=1
-
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G4{
-            graph [
-                group_id=1
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-
-    )
-    .unwrap();
+    let mut graphs = parse_grouped_graphs(&[
+        ("G1", Some(0), Some(true)),
+        ("G2", Some(0), None),
+        ("G3", Some(1), None),
+        ("G4", Some(1), None),
+    ]);
 
     let groups = complete_group_parsing(&mut graphs).unwrap();
     let expected_result = ti_vec![
@@ -923,54 +592,12 @@ fn test_group_parsing_2() {
 #[test]
 fn test_group_parsing_3() {
     test_initialise().unwrap();
-    let mut graphs: Vec<Graph> = dot! (
-        digraph G1{
-            graph [
-                group_id=0
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G2{
-            graph [
-                group_id=0
-                is_group_master=false
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G3{
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G4{
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-
-    )
-    .unwrap();
+    let mut graphs = parse_grouped_graphs(&[
+        ("G1", Some(0), Some(true)),
+        ("G2", Some(0), Some(false)),
+        ("G3", None, None),
+        ("G4", None, None),
+    ]);
 
     let groups = complete_group_parsing(&mut graphs).unwrap();
     let expected_result = ti_vec![
@@ -994,54 +621,12 @@ fn test_group_parsing_3() {
 #[test]
 fn test_group_parsing_4() {
     test_initialise().unwrap();
-    let mut graphs: Vec<Graph> = dot! (
-        digraph G1{
-            graph [
-                group_id=0
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G2{
-            graph [
-                group_id=0
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G3{
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G4{
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-
-    )
-    .unwrap();
+    let mut graphs = parse_grouped_graphs(&[
+        ("G1", Some(0), Some(true)),
+        ("G2", Some(0), Some(true)),
+        ("G3", None, None),
+        ("G4", None, None),
+    ]);
 
     let groups = complete_group_parsing(&mut graphs);
     assert!(groups.is_err());
@@ -1050,62 +635,12 @@ fn test_group_parsing_4() {
 #[test]
 fn test_group_parsing_5() {
     test_initialise().unwrap();
-    let mut graphs: Vec<Graph> = dot! (
-        digraph G1{
-            graph [
-                group_id=1
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G2{
-            graph [
-                group_id=1
-                is_group_master=false
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G3{
-            graph [
-                group_id=2
-                is_group_master=true
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-        digraph G4{
-            graph [
-                group_id=2
-                is_group_master=false
-            ]
-            ext    [style=invis]
-            node [num=1]
-            ext -> A
-            A -> B
-            A -> B
-            B -> ext
-        }
-
-
-    )
-    .unwrap();
+    let mut graphs = parse_grouped_graphs(&[
+        ("G1", Some(1), Some(true)),
+        ("G2", Some(1), Some(false)),
+        ("G3", Some(2), Some(true)),
+        ("G4", Some(2), Some(false)),
+    ]);
 
     assert!(complete_group_parsing(&mut graphs).is_err());
 }
@@ -1114,82 +649,29 @@ fn test_group_parsing_5() {
 fn parse_triangle_lmb() {
     test_initialise().unwrap();
 
-    let g: Graph = dot!(
-        digraph massless_triangle_0 {
-            ext [style=invis]
-        ext -> v4:0 [pdg=1000, id=0 ];
-        v5:1 -> ext [pdg=1000, id=1 ];
-        v6:2 -> ext [pdg=1000, id=2 ];
-        v4 -> v5 [pdg=1000, id=3, lmb_id=0];
-        v5 -> v6 [pdg=1000, id=4];
-        v6 -> v4 [pdg=1000, id=5];
+    for edge in 3..=5 {
+        let g = parse_triangle_fixture(edge, None);
+        assert_eq!(
+            g.loop_momentum_basis.loop_edges[LoopIndex::from(0)],
+            EdgeIndex::from(edge)
+        );
     }
-    ,"scalars"
-        )
-    .unwrap();
-
-    let lmb = g.loop_momentum_basis.loop_edges;
-    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(3));
-
-    let g: Graph = dot!(
-        digraph massless_triangle_0 {
-            ext [style=invis]
-        ext -> v4:0 [pdg=1000, id=0 ];
-        v5:1 -> ext [pdg=1000, id=1 ];
-        v6:2 -> ext [pdg=1000, id=2 ];
-        v4 -> v5 [pdg=1000, id=3];
-        v5 -> v6 [pdg=1000, id=4, lmb_id=0];
-        v6 -> v4 [pdg=1000, id=5];
-    }
-    ,"scalars"
-        )
-    .unwrap();
-
-    let lmb = g.loop_momentum_basis.loop_edges;
-    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(4));
-
-    let g: Graph = dot!(
-        digraph massless_triangle_0 {
-            ext [style=invis]
-        ext -> v4:0 [pdg=1000, id=0 ];
-        v5:1 -> ext [pdg=1000, id=1 ];
-        v6:2 -> ext [pdg=1000, id=2 ];
-        v4 -> v5 [pdg=1000, id=3];
-        v5 -> v6 [pdg=1000, id=4];
-        v6 -> v4 [pdg=1000, id=5, lmb_id=0];
-    }
-    ,"scalars"
-        )
-    .unwrap();
-
-    let lmb = g.loop_momentum_basis.loop_edges;
-    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(5));
 }
 
 #[test]
 fn edge_mass_attribute_drives_evaluated_edge_mass() {
     test_initialise().unwrap();
 
-    let g: Graph = dot!(
-        digraph mass_override_triangle {
-            ext [style=invis]
-        ext -> v4:0 [pdg=1000, id=0 ];
-        v5:1 -> ext [pdg=1000, id=1 ];
-        v6:2 -> ext [pdg=1000, id=2 ];
-        v4 -> v5 [pdg=1000, id=3, lmb_id=0, mass=7];
-        v5 -> v6 [pdg=1000, id=4];
-        v6 -> v4 [pdg=1000, id=5];
-    }
-    ,"scalars"
-        )
-    .unwrap();
+    let g = parse_triangle_fixture(3, Some(7));
 
+    let model = crate::utils::load_generic_model("scalars");
     assert_eq!(
-        g.underlying[EdgeIndex::from(3)].mass_atom().to_string(),
+        g.underlying[EdgeIndex::from(3)]
+            .mass_atom(&model)
+            .to_string(),
         "7"
     );
 
-    let model = crate::utils::load_generic_model("scalars");
     let evaluated_mass = g.underlying[EdgeIndex::from(3)]
         .mass_value::<f64>(&model, &g.param_builder)
         .unwrap();
@@ -1198,50 +680,182 @@ fn edge_mass_attribute_drives_evaluated_edge_mass() {
 }
 
 #[test]
-fn propagators() {
+fn explicit_hedge_payload_round_trips_in_dot_export() {
     test_initialise().unwrap();
-    let mut model = load_generic_model("sm");
-    let mut restriction =
-        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
-    model.simplify(&mut restriction).unwrap();
-    let gs: Vec<Graph> = dot!(
-        digraph g1{
-            node [num=1]
-            a -> b[particle="g"];
+    let g: Graph = finalized_runtime_dot!(
+        digraph payload_graph{
+            graph [projector="1"]
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [num=1 dod=0]
+            ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
+            A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
         }
-
-        digraph g2{
-            node [num=1]
-            a -> b [particle="d"];
-        }
-
-        digraph g3{
-            node [num=1]
-            a -> b [particle="Z"];
-        }, &model
-
     )
     .unwrap();
 
-    // These are the embedded SM Feynman-gauge propagator numerators;
-    // masses enter their denominators, and every propagator carries i.
-    let expected = [
-        symbolica::parse!(
-            "-1i*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
-        ),
-        symbolica::parse!(
-            "1i*gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))*spenso::g(spenso::cof(3,gammalooprs::hedge(0)),spenso::dind(spenso::cof(3,gammalooprs::hedge(1))))*spenso::gamma(spenso::bis(4,gammalooprs::hedge(1)),spenso::bis(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::edge(0,1)))"
-        ),
-        symbolica::parse!(
-            "-1i*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
-        ),
-    ];
-    for (graph, expected) in gs.iter().zip(expected) {
+    let serialized = g.dot_serialize(&DotExportSettings::default());
+    assert!(serialized.contains("ufo_order"));
+    assert!(serialized.contains("dod"));
+    assert!(serialized.contains("source=") || serialized.contains("sink="));
+}
+
+fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
+    use crate::uv::UltravioletGraph;
+    use linnet::half_edge::{
+        EdgeAccessors,
+        involution::{Flow, Hedge},
+    };
+    use symbolica::atom::AtomCore;
+
+    let runtime = Graph::from_feynkit(diagram, None, true).unwrap();
+    let source = diagram.underlying();
+    assert_eq!(runtime.underlying.n_nodes(), source.n_nodes());
+    assert_eq!(runtime.underlying.n_edges(), source.n_edges());
+    assert_eq!(runtime.underlying.n_hedges(), source.n_hedges());
+    for (pair, edge, data) in source.iter_edges() {
+        let (runtime_data, runtime_pair) = &runtime.underlying[&edge];
+        assert_eq!(*runtime_pair, pair);
+        assert_eq!(runtime.underlying.orientation(edge), data.orientation);
         assert_eq!(
-            graph.underlying[EdgeIndex(0)].num.as_view(),
-            expected.as_view(),
-            "{} must retain the UFO propagator phase and tensor indices",
-            graph.name,
+            runtime_data.num.value,
+            data.data.numerator.clone().try_into_indexed().unwrap()
+        );
+        assert_eq!(runtime_data.is_dummy, data.data.is_dummy);
+    }
+    for index in 0..source.n_hedges() {
+        let hedge = Hedge(index);
+        assert_eq!(runtime.underlying.node_id(hedge), source.node_id(hedge));
+        assert_eq!(runtime.underlying.flow(hedge), source.flow(hedge));
+        assert_eq!(runtime.underlying[&hedge], source[&hedge]);
+    }
+    assert_eq!(runtime.overall_factor, *diagram.overall_factor());
+    assert_eq!(
+        runtime.global_prefactor.num,
+        diagram
+            .numerator_prefactor()
+            .clone()
+            .try_into_indexed()
+            .unwrap()
+    );
+    assert_eq!(
+        runtime.global_prefactor.projector,
+        diagram.projector().clone().try_into_indexed().unwrap()
+    );
+    let transported: feynkit_graph::routing::MomentumBasis = (&runtime.loop_momentum_basis).into();
+    assert_eq!(
+        transported,
+        diagram.loop_momentum_basis().to_routing(source)
+    );
+    let full = source.full_filter();
+    let empty = source.empty_subgraph();
+    assert_eq!(
+        runtime
+            .numerator(&full, &empty)
+            .unwrap()
+            .get_single_atom()
+            .unwrap()
+            .expand(),
+        super::NumeratorInterface::export(diagram.numerator())
+            .0
+            .expand()
+    );
+    for (_, edge, _) in source.iter_edges() {
+        let mut selected: linnet::half_edge::subgraph::SuBitGraph = source.empty_subgraph();
+        use linnet::half_edge::subgraph::ModifySubSet;
+        selected.add(source[&edge].1);
+        assert_eq!(
+            runtime
+                .numerator(&selected, &empty)
+                .unwrap()
+                .get_single_atom()
+                .unwrap(),
+            super::NumeratorInterface::export(&diagram.numerator_of(&selected, &empty).unwrap()).0
+        );
+        assert_eq!(
+            runtime.denominator(&selected, diagram.model(), |_| -2),
+            diagram
+                .denominator_of(
+                    &selected,
+                    &std::collections::BTreeMap::from([(EdgeId(edge.0), -2)])
+                )
+                .unwrap()
+        );
+    }
+    let half_edges = |filter: &linnet::half_edge::subgraph::SuBitGraph| {
+        filter
+            .included_iter()
+            .map(|hedge| feynkit_graph::DiagramHalfEdge {
+                edge: EdgeId(source[&hedge].0),
+                endpoint: if source.flow(hedge) == Flow::Source {
+                    feynkit_graph::DiagramEndpoint::Source
+                } else {
+                    feynkit_graph::DiagramEndpoint::Target
+                },
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    assert_eq!(runtime.finalized_cuts.len(), diagram.cuts().len());
+    for (runtime, source) in runtime.finalized_cuts.iter().zip(diagram.cuts()) {
+        assert_eq!(
+            half_edges(&runtime.left),
+            source
+                .left
+                .half_edges
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+        assert_eq!(
+            half_edges(&runtime.right),
+            source
+                .right
+                .half_edges
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+        assert_eq!(
+            half_edges(&runtime.cut.left),
+            source
+                .cut
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+    }
+    assert_eq!(
+        runtime.finalized_topology_threshold_candidates.len(),
+        diagram.topology_threshold_candidates().len()
+    );
+    for (runtime, source) in runtime
+        .finalized_topology_threshold_candidates
+        .iter()
+        .zip(diagram.topology_threshold_candidates())
+    {
+        assert_eq!(
+            half_edges(&runtime.left),
+            source
+                .left
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+        assert_eq!(
+            half_edges(&runtime.right),
+            source
+                .right
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+        assert_eq!(
+            half_edges(&runtime.cut.left),
+            source
+                .cut
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
     }
 }

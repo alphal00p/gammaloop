@@ -1,13 +1,16 @@
 use super::utils::*;
 use super::*;
+use feynkit_graph::DOD;
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
+use gammalooprs::model::VertexRuleIdGammaLoopExt;
 use gammalooprs::{
     graph::Autogen,
     integrands::evaluation::PreciseEvaluationResultOutput,
     processes::ProcessCollection,
     settings::global::RepresentationMode,
-    utils::{ArbPrec, FloatLike, symbolica_ext::DOD},
+    utils::{ArbPrec, FloatLike},
 };
+use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use std::time::Instant;

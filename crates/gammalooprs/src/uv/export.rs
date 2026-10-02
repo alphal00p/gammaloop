@@ -15,6 +15,7 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::ProcessIntegrand,
+    model::Model,
     processes::{DotExportSettings, ProcessCollection, process::Process},
     settings::global::GenerationSettings,
     uv::{
@@ -122,6 +123,7 @@ pub(crate) struct UVForestNodeExpression {
 impl Process {
     pub fn export_uv_forest_graph(
         &self,
+        model: &Model,
         integrand_name: &str,
         graph_id: usize,
         settings: &UVForestExportSettings,
@@ -215,6 +217,7 @@ impl Process {
                 let cut_structure = CutStructure::empty(&term.graph);
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -261,6 +264,7 @@ impl Process {
 
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -274,6 +278,7 @@ impl Process {
 
 fn export_graph(
     graph: &Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -301,6 +306,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -313,6 +319,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -337,6 +344,7 @@ fn export_legacy_forest(
     forest_index: usize,
     forest_name: &str,
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -345,7 +353,7 @@ fn export_legacy_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let cut_woods = CutWoods::new(cut_structure, graph, generation_settings)?;
+    let cut_woods = CutWoods::new(cut_structure, graph, model, generation_settings)?;
     let mut cut_forests = cut_woods.unfold(graph);
     let Some(forest) = cut_forests.forests.first_mut() else {
         return Err(eyre!("Legacy UV exporter produced no forest"));
@@ -369,7 +377,13 @@ fn export_legacy_forest(
     let orientation = orientation.ok_or_else(|| {
         eyre!("Computed UV forest export requires its stored production CFF expression")
     })?;
-    compute_legacy_forest(graph, &mut cut_forests, orientation, generation_settings)?;
+    compute_legacy_forest(
+        graph,
+        model,
+        &mut cut_forests,
+        orientation,
+        generation_settings,
+    )?;
     let forest = cut_forests
         .forests
         .first()
@@ -566,6 +580,8 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::{graph::FeynmanGraph, model::ModelGammaLoopExt};
+    use feynkit_generator::GenerationType;
     use std::sync::{Arc, Once, OnceLock};
 
     use linnet::parser::DotGraph;
@@ -581,8 +597,8 @@ mod tests {
     };
     use crate::{
         cff::CutCFFIndex,
-        dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::Graph,
         initialisation::test_initialise,
         settings::global::GenerationSettings,
         utils::GS,

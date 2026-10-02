@@ -270,10 +270,8 @@ impl ImportModel {
                         format!("{model_name}-full").green(),
                     );
                 }
-                state.model = Model::from_str(json_model, "json")?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = Model::from_json(&json_model)?;
+                state.model = state.model.with_restriction(restriction_name.clone())?;
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
                     let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
                     if self.simplify_model {
@@ -283,7 +281,7 @@ impl ImportModel {
                     }
                     param_card
                 } else {
-                    InputParamCard::default_from_model(&state.model)
+                    state.model.default_param_card()
                 };
             }
             ModelSpecification::UFOModelSpecification {
@@ -310,9 +308,7 @@ impl ImportModel {
                 }
                 (state.model, state.model_parameters) =
                     load_ufo_model(&ufo_path, restriction_name.clone(), self.simplify_model)?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = state.model.with_restriction(restriction_name.clone())?;
             }
         }
 

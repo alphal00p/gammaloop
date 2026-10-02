@@ -31,6 +31,11 @@ dot-parser = { workspace = true }
 dyn-clone = "1.0.17"
 enum_dispatch = "*"
 eyre = { workspace = true }
+feynkit-cff = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
+feynkit-kinematics = { workspace = true }
+feynkit-model = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }
@@ -144,8 +149,10 @@ insta = { workspace = true, features = ["json", "ron", "serde"] }
 default = []
 fail-on-warnings = []
 higher_loops = []
-python = ["dep:pyo3", "three-dimensional-reps/python"]
+pyo3-extension-module = ["pyo3/extension-module"]
+python_abi = ["pyo3?/abi3", "pyo3?/abi3-py37"]
+python_api = ["pyo3", "three-dimensional-reps/python"]
 # insta.opt-level = 3
-python-stubs = ["dep:pyo3-stub-gen", "python"]
+python_stubgen = ["dep:pyo3-stub-gen", "python_api"]
 
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]

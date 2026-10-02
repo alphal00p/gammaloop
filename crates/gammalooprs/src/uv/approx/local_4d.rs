@@ -7,8 +7,9 @@ use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
+    CookMode, CookSettings,
     dirac::AGS,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 
 #[cfg(test)]
@@ -18,6 +19,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -215,55 +217,71 @@ impl CanonicalUvDenominatorClass {
         // This invertible coordinate change acts only on the denominator
         // polynomial. It recovers one formal H even when D(H) was expanded in
         // physical loop coordinates, without splitting a numerator factor.
-        let polynomial = self
-            .full_expr
-            .replace_map(|view, _, output| {
-                let AtomView::Fun(momentum) = view else {
-                    return;
-                };
-                if momentum.get_symbol() != GS.emr_mom
-                    || momentum.get_nargs() == 0
-                    || usize::try_from(momentum.get(0)).ok() != Some(carrier)
-                {
-                    return;
-                }
-                let indices = momentum
-                    .iter()
-                    .skip(1)
-                    .map(|index| index.to_owned())
-                    .collect::<Vec<_>>();
-                let mut reference =
-                    FunctionBuilder::new(GS.emr_mom).add_arg(GS.uv_class_ref(self.id));
-                for index in &indices {
-                    reference = reference.add_arg(index);
-                }
-                **output = (reference.finish() - GS.indexed_momentum(&remainder, &indices))
-                    / Atom::num(*coefficient);
-            })
-            .normalize_dots()
-            .expand();
+        let polynomial = self.full_expr.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom
+                || momentum.get_nargs() == 0
+                || usize::try_from(momentum.get(0)).ok() != Some(carrier)
+            {
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            let mut reference = FunctionBuilder::new(GS.emr_mom).add_arg(GS.uv_class_ref(self.id));
+            for index in &indices {
+                reference = reference.add_arg(index);
+            }
+            **output = (reference.finish() - GS.indexed_momentum(&remainder, &indices))
+                / Atom::num(*coefficient);
+        });
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let polynomial = SymbolicTensor::infer_indexed(cooking.try_cook(polynomial.as_view())?)?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let polynomial = cooking.uncook(polynomial.expression().as_view());
+        let polynomial = polynomial.expand();
         let mut residual = false;
-        let collapsed = polynomial
-            .replace_map(|view, _, output| {
-                let AtomView::Fun(momentum) = view else {
-                    return;
-                };
-                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
-                    return;
-                }
-                if GS.uv_class_data(momentum.get(0)) != Some(self.id) {
-                    residual = true;
-                    return;
-                }
-                let indices = momentum
-                    .iter()
-                    .skip(1)
-                    .map(|index| index.to_owned())
-                    .collect::<Vec<_>>();
-                **output = self.momentum_with_indices(&indices);
-            })
-            .normalize_dots()
-            .expand();
+        let collapsed = polynomial.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
+                return;
+            }
+            if GS.uv_class_data(momentum.get(0)) != Some(self.id) {
+                residual = true;
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            **output = self.momentum_with_indices(&indices);
+        });
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let collapsed = SymbolicTensor::infer_indexed(cooking.try_cook(collapsed.as_view())?)?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let collapsed = cooking.uncook(collapsed.expression().as_view());
+        let collapsed = collapsed.expand();
         if residual || collapsed != self.full_expr {
             return Err(eyre!(
                 "positive denominator for UV class {} is not a polynomial solely in its certified momentum channel",
@@ -1394,7 +1412,18 @@ impl FourDDenominator {
         }
         // Only the small denominator polynomial is expanded. Graph numerator
         // sums and products never pass through this denominator certificate.
-        Ok(normalized.normalize_dots().expand())
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(normalized.as_view())?)?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let normalized = cooking.uncook(normalized.expression().as_view());
+        Ok(normalized.expand())
     }
 
     fn from_view(view: AtomView<'_>) -> Result<Option<Self>> {

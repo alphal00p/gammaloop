@@ -9,13 +9,13 @@ use std::{
 };
 
 use color_eyre::Result;
+use feynkit_generator::GenerationType;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{
-    feyngen::GenerationType,
     graph::Graph,
     processes::{CrossSection, ProcessCollection, ProcessDefinition},
     settings::{RuntimeSettings, global::GenerationSettings},

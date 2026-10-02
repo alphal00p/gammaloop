@@ -2,11 +2,7 @@ use std::{collections::BTreeMap, time::Instant};
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
-use idenso::{
-    IndexTooling,
-    color::ColorSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
-};
+use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::RepresentationMode;
@@ -14,6 +10,7 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
+    model::Model,
     numerator::aind::Aind,
     processes::GraphGenerationStats,
     settings::global::GenerationSettings,
@@ -31,16 +28,17 @@ use crate::{
     },
 };
 
-impl UVOrchestrator {
+impl Graph {
     pub(crate) fn parametric_integrands(
-        self,
-        graph: &mut Graph,
+        &mut self,
+        model: &Model,
         cut_structure: CutStructure,
         vakint: &Vakint,
         orientations: &[OrientationProjection<'_>],
         settings: &GenerationSettings,
         stats: &mut GraphGenerationStats,
     ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
+        let graph = self;
         if !matches!(settings.uv.final_integrand, FinalIntegrandDimension::ThreeD) {
             return Err(eyre!(
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
@@ -50,25 +48,28 @@ impl UVOrchestrator {
 
         settings.validate_medium_uv_compatibility()?;
 
-        let result = match self {
-            Self::LegacyDagForest => legacy_parametric_integrands(
+        let result = match settings.uv.orchestrator {
+            UVOrchestrator::LegacyDagForest => legacy_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
                 settings,
                 stats,
             ),
-            Self::HedgePoset => hedge_poset_parametric_integrands(
+            UVOrchestrator::HedgePoset => hedge_poset_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
                 settings,
                 stats,
             ),
-            Self::Compare => compare_parametric_integrands(
+            UVOrchestrator::Compare => compare_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
@@ -90,10 +91,13 @@ impl UVOrchestrator {
             })
             .collect()
     }
+}
 
+impl UVOrchestrator {
     pub(crate) fn renormalization_part(
         self,
         graph: &mut Graph,
+        model: &Model,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
@@ -103,9 +107,11 @@ impl UVOrchestrator {
         };
         validate_local_counterterm_schemes(graph, &CutStructure::empty(graph), &settings)?;
         let mut result = match self {
-            Self::LegacyDagForest => legacy_renormalization_part(graph, orientation, &settings),
-            Self::HedgePoset => hedge_poset_renormalization_part(graph, &settings),
-            Self::Compare => compare_renormalization_part(graph, orientation, &settings),
+            Self::LegacyDagForest => {
+                legacy_renormalization_part(graph, model, orientation, &settings)
+            }
+            Self::HedgePoset => hedge_poset_renormalization_part(graph, model, &settings),
+            Self::Compare => compare_renormalization_part(graph, model, orientation, &settings),
         }?;
         result.expression = UvMarker::new(&settings).finish(&result.expression);
         Ok(result)
@@ -345,6 +351,7 @@ fn legacy_renormalization_part(
 
 fn hedge_poset_renormalization_part(
     graph: &mut Graph,
+    model: &Model,
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let cuts = CutStructure::empty(graph);
@@ -352,20 +359,21 @@ fn hedge_poset_renormalization_part(
         uv: settings.clone(),
         ..GenerationSettings::default()
     };
-    let wood = HedgePosetWood::new(cuts, graph, &generation_settings)?;
+    let wood = HedgePosetWood::new(cuts, graph, model, &generation_settings)?;
     let mut forest = wood.unfold();
-    forest.integrate(graph, crate::utils::vakint()?, settings)?;
+    forest.integrate(graph, model, crate::utils::vakint()?, settings)?;
     forest.renormalization_part_of_ends(graph, settings)
 }
 
 fn compare_renormalization_part(
     graph: &mut Graph,
+    model: &Model,
     orientation: OrientationProjection<'_>,
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let mut hedge_graph = graph.clone();
-    let legacy = legacy_renormalization_part(graph, orientation, settings)?;
-    let hedge = hedge_poset_renormalization_part(&mut hedge_graph, settings)?;
+    let legacy = legacy_renormalization_part(graph, model, orientation, settings)?;
+    let hedge = hedge_poset_renormalization_part(&mut hedge_graph, model, settings)?;
 
     RenormalizationComparison {
         legacy: &legacy,
@@ -478,8 +486,8 @@ impl<'a> ComparableExpr<'a> {
     }
 
     fn equivalent_to(&self, other: &Self) -> Result<bool> {
-        let left = self.normalized();
-        let right = other.normalized();
+        let left = self.normalized()?;
+        let right = other.normalized()?;
 
         // Backend-local topology labels may differ on contracted indices.
         if left.collect_factors() == right.collect_factors() {

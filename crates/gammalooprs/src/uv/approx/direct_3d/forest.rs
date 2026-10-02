@@ -136,7 +136,8 @@ impl Direct3dCts {
             .orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         let tree_edges = graph.tree_edges.subtract(&graph.initial_state_cut);
-        let four_d_denominators = GS.wrap_tree_denoms(graph.denominator(&tree_edges, |_| -1));
+        let four_d_denominators =
+            GS.wrap_tree_denoms(graph.denominator(&tree_edges, &graph.model, |_| -1));
         if production.representation == three_dimensional_reps::RepresentationMode::Ltd {
             // Physical residue localization changes LTD's affine numerator
             // arguments. Use the same source-owned map projection as UV

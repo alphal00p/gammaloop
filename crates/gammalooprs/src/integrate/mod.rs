@@ -5195,7 +5195,7 @@ mod tests {
             0,
             8,
         );
-        let model = Model::default();
+        let model = Model::empty("unit-volume-test");
         let slot_settings = [&settings_a, &settings_b];
         let slot_targets = [EvaluationTarget::Physical(&model); 2];
         let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];

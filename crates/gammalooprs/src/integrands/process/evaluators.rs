@@ -2,10 +2,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    IndexTooling,
+    CookMode, CookSettings, IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::SymbolicTensor,
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -22,13 +22,15 @@ use spenso::{
     },
     iterators::IteratableTensor,
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MAX_EAGER_TENSOR_SUM_BYTES, MinIntermediateCost,
-        MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+        MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
         PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SequentialExtract, SequentialRef,
         SmallestDegree,
-        graph::{NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::{AtomStructureExt, ShadowedStructure, StrictTensorFilter},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
+        parsing::{
+            AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShadowedStructure,
+            ShorthandParsing, StrictTensorFilter,
+        },
+        store::TensorScalarStoreMapping,
         tags::SPENSO_TAG,
     },
     shadowing::{
@@ -36,11 +38,11 @@ use spenso::{
         symbolica_utils::{LogPrint, SpensoPrintSettings},
     },
     structure::{
-        HasStructure, TensorStructure, ToSymbolic,
+        CanonicalLayout, Canonicalized, IndexedStructure, TensorStructure,
         abstract_index::AIND_SYMBOLS,
-        concrete_index::DualConciousIndex,
+        concrete_index::{DualConciousExpandedIndex, DualConciousIndex},
         representation::{LibraryRep, RepName},
-        slot::{DualSlotTo, IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot},
     },
     tensors::{
         data::{SparseOrDense, StorageTensor},
@@ -71,7 +73,7 @@ use crate::{
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
-        process::param_builder::{FnMapEntry, LUParams},
+        process::param_builder::{FnMapEntry, LUParams, NumeratorDefinition},
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::{ParsingNet, aind::Aind, symbolica_ext::NumeratorAtomExt},
@@ -268,7 +270,10 @@ impl SymjitComplexEvaluatorGL {
         }
     }
 }
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum EvaluatorMethod {
     SingleParametric,
@@ -3586,6 +3591,7 @@ mod hyperbolic_tests;
 
 #[cfg(test)]
 mod tests {
+    use crate::numerator::symbolica_ext::NumeratorAtomExt;
     use std::io::Cursor;
     use typed_index_collections::TiVec;
 
@@ -6149,7 +6155,7 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (GenericEvaluator, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
@@ -6972,7 +6978,7 @@ mod tests {
         let mut state = Vec::new();
         State::export(&mut state).unwrap();
         let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-        let model = Model::default();
+        let model = Model::empty("test");
         let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),

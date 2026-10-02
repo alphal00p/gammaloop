@@ -1144,6 +1144,10 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    // The type parameter fixes the working precision.
+    #[inline]
+    fn set_precision(&mut self, _precision: u32) {}
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.float.assign(&other.float);
@@ -2626,6 +2630,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 
 impl<T: FloatLike> SymFloatLike for F<T> {
     #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
+    #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
     }
@@ -3469,28 +3478,6 @@ where
     I: ExactSizeIterator,
     J: ExactSizeIterator,
 {
-}
-
-pub(crate) fn parse_python_expression(expression: &str) -> Atom {
-    initialize();
-    let _ = UFO.metric;
-    let processed_string = String::from(expression)
-        .replace("**", "^")
-        .replace("cmath.sqrt", "sqrt")
-        .replace("cmath.pi", "pi")
-        .replace("math.sqrt", "sqrt")
-        .replace("math.pi", "pi");
-
-    parse!(processed_string)
-}
-
-#[test]
-fn python_expression_imaginary_unit_is_numeric() {
-    // The pinned Symbolica parser accepts both UFO export spellings directly.
-    for expression in ["𝑖", "1𝑖", "(𝑖)^5", "1+𝑖-1"] {
-        assert_eq!(parse_python_expression(expression), Atom::i());
-    }
-    assert_eq!(parse_python_expression("-𝑖/3"), -Atom::i() / 3);
 }
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
@@ -5114,10 +5101,6 @@ pub(crate) fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
-pub(crate) fn format_wdhms_from_duration(duration: Duration) -> String {
-    format_wdhms(duration.as_secs() as usize)
-}
-
 #[allow(unused)]
 pub(crate) fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
     let denom = -mat[0][2] * mat[1][1] * mat[2][0]
@@ -5737,7 +5720,7 @@ impl<T> Length for Vec<T> {
     }
 }
 
-pub(crate) fn ose_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
         GS.ose,
         usize::from(index) as i64 // Atom::from(FlatIndex::from(0))
@@ -5748,7 +5731,7 @@ pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
     function!(GS.energy, usize::from(index) as i64)
 }
 
-pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
+pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }
 
@@ -5758,7 +5741,7 @@ static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/mode
 
 pub fn load_generic_model(name: &str) -> Model {
     if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
-        Model::from_str(file.contents_utf8().unwrap().into(), "json").unwrap()
+        Model::from_json(file.contents_utf8().unwrap()).unwrap()
     } else {
         panic!("Model {} not found in built-in models.", name);
     }
@@ -5767,7 +5750,7 @@ pub fn load_generic_model(name: &str) -> Model {
 #[cfg(test)]
 pub mod test_utils;
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'py> pyo3::IntoPyObject<'py> for F<f64> {
     type Target = pyo3::types::PyFloat;
     type Output = pyo3::Bound<'py, Self::Target>;

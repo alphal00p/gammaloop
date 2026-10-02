@@ -2778,7 +2778,12 @@ impl<'a> GraphThreeDSource<'a> {
                     tail: node_to_internal[&self.graph.node_id(source)],
                     head: node_to_internal[&self.graph.node_id(sink)],
                     label: edge.data.name.value.clone(),
-                    mass_key: Some(edge.data.particle.mass_atom().to_canonical_string()),
+                    mass_key: Some(
+                        edge.data
+                            .particle
+                            .mass_atom(&self.graph.model)
+                            .to_canonical_string(),
+                    ),
                     signature: MomentumSignature {
                         loop_signature: self.outer_loop_signature(edge_index)?,
                         external_signature: (&signature.external)
@@ -2837,11 +2842,15 @@ impl<'a> GraphThreeDSource<'a> {
             // momentum wrapper of this owner.  Momentum spelling still
             // controls occurrence provenance below; it cannot split repeated
             // denominators into different CFF mass classes.
-            let mass_key = if representative.mass_squared == edge.data.mass_atom().pow(2) {
-                edge.data.particle.mass_atom().to_canonical_string()
-            } else {
-                mass
-            };
+            let mass_key =
+                if representative.mass_squared == edge.data.mass_atom(&self.graph.model).pow(2) {
+                    edge.data
+                        .particle
+                        .mass_atom(&self.graph.model)
+                        .to_canonical_string()
+                } else {
+                    mass
+                };
             for (position, (occurrence, (tail, head))) in
                 members.into_iter().zip(incidences).enumerate()
             {
@@ -3131,7 +3140,10 @@ impl FourDDenominator {
             .add_arg(usize::from(self.source_edge))
             .finish();
         (self.momentum == source_momentum || self.momentum == -source_momentum)
-            && self.mass_squared == graph.underlying[self.source_edge].mass_atom().pow(2)
+            && self.mass_squared
+                == graph.underlying[self.source_edge]
+                    .mass_atom(&graph.model)
+                    .pow(2)
     }
 
     fn on_shell_energy(&self) -> Atom {
@@ -3329,7 +3341,13 @@ impl ThreeDGraphSource for GraphThreeDSource<'_> {
                         tail,
                         head,
                         label,
-                        mass_key: Some(edge_data.data.particle.mass_atom().to_canonical_string()),
+                        mass_key: Some(
+                            edge_data
+                                .data
+                                .particle
+                                .mass_atom(&self.graph.model)
+                                .to_canonical_string(),
+                        ),
                         signature: momentum_signature,
                         had_pow: false,
                     });

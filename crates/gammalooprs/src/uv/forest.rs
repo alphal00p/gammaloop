@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
+    model::Model,
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
@@ -16,7 +17,13 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    tensor::SymbolicTensor,
+};
+use spenso::shadowing::TensorCollectFilter;
 use spenso::shadowing::symbolica_utils::LogPrint;
 
 use symbolica::atom::{Atom, AtomCore};
@@ -286,9 +293,13 @@ impl Forest {
                     current.data.topo_order = i;
                     if compute_four_d {
                         let started = std::time::Instant::now();
-                        current
-                            .data
-                            .compute_4d(graph, vakint, &parent.data, settings)?;
+                        current.data.compute_4d(
+                            graph,
+                            &graph.model,
+                            vakint,
+                            &parent.data,
+                            settings,
+                        )?;
                         projection_context.shared_preparation_time += started.elapsed();
                     }
 

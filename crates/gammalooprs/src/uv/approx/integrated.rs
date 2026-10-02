@@ -1,19 +1,15 @@
-use std::collections::BTreeMap;
-
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::{AGS, GammaSimplifier, GammaSimplifySettings},
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    dirac::{AGS, GammaSimplifySettings},
     representations::Bispinor,
-    shorthands::{
-        UndoShorthands,
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
+    tensor::{
+        ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
+        inference::InterfaceInference,
     },
-    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 use linnet::half_edge::{
@@ -24,27 +20,24 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{
-        graph::NetworkEdge,
         library::symbolic::ETS,
-        parsing::{
-            ParseSettings, SchoonschipExpansionMode, ShorthandParsing, StructureInferenceMode,
-        },
+        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         tags::SPENSO_TAG,
     },
-    shadowing::TensorCollectExt,
     structure::{
+        IndexedStructure,
+        abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot},
+        slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
-    atom::{AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomView},
     domains::{atom::AtomField, integer::Z, rational::Q},
     function,
     id::Replacement,
     parse, parse_lit,
     poly::{PolyVariable, series::Series},
-    symbol,
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -68,11 +61,12 @@ use crate::{
 
 /// Laurent projections of an integrated counterterm.
 ///
-/// Connected values store their canonical expansion. Factorized values encode
-/// componentwise pole and signed nonnegative-power products under the same accessors.
+/// The native series engine computes the Laurent projections transiently. Both
+/// retained projections keep the completed tensor's logical interface, including zero.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct IntegratedCts {
-    expansion: Series<AtomField>,
+    pole: SymbolicTensor<IndexedStructure>,
+    finite_counterterm: SymbolicTensor<IndexedStructure>,
     scale_power: i64,
 }
 

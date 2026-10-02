@@ -1,10 +1,16 @@
 use crate::commands::evaluate_samples;
+use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::observables::{EventProcessingRuntime, ObservableSnapshotBundle};
 use gammalooprs::utils::F;
 use gammalooprs::{
-    feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{FeynmanGraph, Graph, LMBext},
+    graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{BatchSampleEvaluationResult, SampleEvaluationResult},
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
@@ -19,10 +25,15 @@ use gammalooprs::{
         ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin,
         ThresholdCountertermSide, ThresholdCountertermVariantMetadata,
     },
-    settings::RuntimeSettings,
+    settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
+use idenso::tensor::{ContractSettings, SymbolicTensor};
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::{ModifySubSet, SuBitGraph},
+};
+use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use std::fmt::Display;
 
@@ -108,7 +119,7 @@ use pyo3::{
 ///     "AutG(2)^-1*InternalFermionLoopSign(-1)"
 /// )
 /// ```
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
 pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<String> {
@@ -141,14 +152,14 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
 /// ```python
 /// atom_to_canonical_string("x + x")
 /// ```
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-/// Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+/// Contract repeated tensor indices using Idenso's structural contraction.
 ///
 /// Parameters
 /// ----------
@@ -158,7 +169,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Returns
 /// -------
 /// str
-///     The equivalent expression using Idenso dot-product notation.
+///     The contracted expression, with compatible vector pairs written as dots.
 ///
 /// Raises
 /// ------
@@ -170,17 +181,20 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Rewrite a contraction before passing it to an Idenso workflow:
 ///
 /// ```python
-/// to_dots("p(mu) * q(mu)")
+/// contract("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
 /// ```
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(name = "to_dots")]
-pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = to_dots_impl(
-        parse!(atom_str, default_namespace = "python")
-            .to_dots()
-            .as_view(),
-    );
+#[pyo3(name = "contract")]
+pub(crate) fn atom_contract(atom_str: &str) -> Result<String> {
+    let dotted = SymbolicTensor::infer(parse!(atom_str, default_namespace = "python"))?
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
+        .to_dots()?
+        .into_expression();
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {
@@ -485,7 +499,7 @@ impl PySettingsValue {
     }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! {
         r#"
@@ -914,14 +928,14 @@ pub struct PyComplexValue {
 // `ComplexValue` is returned inside other records but is intentionally not
 // registered as a module-level constructor. Keep its generated annotations
 // honest by treating that opaque value as `Any` without adding a fake export.
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 impl pyo3_stub_gen::PyStubType for PyComplexValue {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         pyo3_stub_gen::TypeInfo::any()
     }
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 impl pyo3_stub_gen::PyStubType for ProcessRef {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         <i64 as pyo3_stub_gen::PyStubType>::type_output()
@@ -935,7 +949,7 @@ impl pyo3_stub_gen::PyStubType for ProcessRef {
 }
 
 /// One energy-momentum four-vector returned with a generated event.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "FourMomentum", get_all)]
 #[derive(Clone)]
 pub struct PyFourMomentum {
@@ -950,7 +964,7 @@ pub struct PyFourMomentum {
 }
 
 /// Named auxiliary complex weight attached to a generated event.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "AdditionalWeight", get_all)]
 #[derive(Clone)]
 pub struct PyAdditionalWeight {
@@ -961,7 +975,7 @@ pub struct PyAdditionalWeight {
 }
 
 /// Process, graph, orientation, and loop-basis identifiers for one cut event.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "CutInfo", get_all)]
 #[derive(Clone)]
 pub struct PyCutInfo {
@@ -984,7 +998,7 @@ pub struct PyCutInfo {
 }
 
 /// Identity and master-graph status of one graph in an integrand.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraph", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphInfo {
@@ -1003,7 +1017,7 @@ pub struct PyIntegrandGraphInfo {
 }
 
 /// Requested threshold variant, selected edges, and optional multiplier before generation.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermDirective", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermDirectiveInfo {
@@ -1018,7 +1032,7 @@ pub struct PyThresholdCountertermDirectiveInfo {
 }
 
 /// Association of a threshold surface with an eligible physical cut and its origin.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermAssociationMetadata",
@@ -1035,7 +1049,7 @@ pub struct PyThresholdCountertermAssociationMetadata {
 }
 
 /// Symbolic multiplier expression and its function definitions and derivative policy.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermMultiplierMetadata",
@@ -1050,7 +1064,7 @@ pub struct PyThresholdCountertermMultiplierMetadata {
 }
 
 /// Requested and resolved subspaces, associations, and activation of one threshold variant.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermVariantMetadata", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermVariantMetadata {
@@ -1072,7 +1086,7 @@ pub struct PyThresholdCountertermVariantMetadata {
 }
 
 /// Compiled threshold expression and the variants sharing its graph-local evaluator.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermEvaluatorMetadata",
@@ -1088,7 +1102,7 @@ pub struct PyThresholdCountertermEvaluatorMetadata {
 }
 
 /// Signed threshold component with its contributing variants and evaluator references.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermComponentMetadata",
@@ -1105,7 +1119,7 @@ pub struct PyThresholdCountertermComponentMetadata {
 }
 
 /// Graph-local threshold variants, compiled evaluators, and addable components.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermMetadataRegistry", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermMetadataRegistry {
@@ -1116,7 +1130,7 @@ pub struct PyThresholdCountertermMetadataRegistry {
 }
 
 /// Edge-direction signature for one causal-flow orientation.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandOrientation", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandOrientationInfo {
@@ -1127,7 +1141,7 @@ pub struct PyIntegrandOrientationInfo {
 }
 
 /// Loop-momentum basis and optional multichannel identifier for a graph group.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandLoopMomentumBasis", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandLoopMomentumBasisInfo {
@@ -1142,7 +1156,7 @@ pub struct PyIntegrandLoopMomentumBasisInfo {
 }
 
 /// Cut edges, raising power, and threshold associations for one cross-section cut.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutInfo {
@@ -1159,7 +1173,7 @@ pub struct PyIntegrandCutInfo {
 }
 
 /// Classification and boundary edges of one threshold associated with a cut.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCutThreshold", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutThresholdInfo {
@@ -1176,7 +1190,7 @@ pub struct PyIntegrandCutThresholdInfo {
 }
 
 /// Viable cut associated with a threshold E-surface.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandActiveThresholdCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandActiveThresholdCutInfo {
@@ -1187,7 +1201,7 @@ pub struct PyIntegrandActiveThresholdCutInfo {
 }
 
 /// Threshold E-surface metadata and the cuts on which it remains active.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandThresholdEsurfaceInfo {
@@ -1204,7 +1218,7 @@ pub struct PyIntegrandThresholdEsurfaceInfo {
 }
 
 /// Graphs and shared orientation, loop-basis, threshold, and cut data in one group.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphGroupInfo {
@@ -1229,7 +1243,7 @@ pub struct PyIntegrandGraphGroupInfo {
 }
 
 /// Structured description of a generated integrand and its evaluation backend.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandInfo", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandInfo {
@@ -1260,7 +1274,7 @@ pub struct PyIntegrandInfo {
 }
 
 /// Accepted cut event with momenta, its primary weight, and auxiliary weights.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "Event", get_all)]
 #[derive(Clone)]
 pub struct PyEvent {
@@ -1279,7 +1293,7 @@ pub struct PyEvent {
 }
 
 /// Physical amplitude or local-unitarity occurrence of a threshold component.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermComponentOccurrence",
@@ -1296,7 +1310,7 @@ pub struct PyThresholdCountertermComponentOccurrence {
 }
 
 /// Fully normalized threshold weight and its optional evaluation before the user multiplier.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermComponentWeight", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermComponentWeight {
@@ -1310,7 +1324,7 @@ pub struct PyThresholdCountertermComponentWeight {
 }
 
 /// Original event contribution and the addable threshold-component decomposition.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermEventInfo", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermEventInfo {
@@ -1319,7 +1333,7 @@ pub struct PyThresholdCountertermEventInfo {
 }
 
 /// Correlated accepted events produced by one graph group for one sample.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EventGroup", get_all)]
 #[derive(Clone)]
 pub struct PyEventGroup {
@@ -1342,13 +1356,13 @@ pub struct PyEventGroup {
 ///     accumulator.add_sample(sample, sample.integrator_weight)
 /// histograms = accumulator.snapshot()
 /// ```
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ObservableAccumulator", skip_from_py_object)]
 pub struct PyObservableAccumulator {
     inner: EventProcessingRuntime,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyObservableAccumulator {
     /// Commit one sample with an explicit outer weight, including zero-weight misses.
@@ -1420,15 +1434,15 @@ impl PyObservableAccumulator {
 /// assert right.snapshot().sample_count == 0
 /// assert len(left.rebin(2).snapshot().bins) == 2
 /// ```
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "HistogramAccumulator", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyHistogramAccumulator {
     inner: HistogramAccumulatorState,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHistogramAccumulator {
     /// Create an evenly binned continuous histogram accumulator.
@@ -1667,7 +1681,7 @@ impl PyHistogramAccumulator {
 }
 
 /// Raw statistics and optional coordinate metadata for one histogram bin.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramBin", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramBinSnapshot {
@@ -1690,7 +1704,7 @@ pub struct PyHistogramBinSnapshot {
 }
 
 /// Aggregate entry, NaN, and misbinning-mitigation counts for a histogram.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramStats", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramStatisticsSnapshot {
@@ -1703,7 +1717,7 @@ pub struct PyHistogramStatisticsSnapshot {
 }
 
 /// Immutable, mergeable histogram snapshot containing raw per-bin statistics.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramSnapshot {
@@ -1744,7 +1758,7 @@ pub struct PyHistogramSnapshot {
 }
 
 /// Completed integration result, observable snapshots, and workspace location.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "IntegrationOutput", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyIntegrationOutput {
@@ -1752,7 +1766,7 @@ pub struct PyIntegrationOutput {
 }
 
 /// Complex integral estimate with errors, chi-squared values, and evaluation counts.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegralEstimate", get_all)]
 #[derive(Clone)]
 pub struct PyIntegralEstimate {
@@ -1766,7 +1780,7 @@ pub struct PyIntegralEstimate {
 }
 
 /// One real or imaginary component row from an integration result table.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationTableComponentResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationTableComponentResult {
@@ -1781,7 +1795,7 @@ pub struct PyIntegrationTableComponentResult {
 }
 
 /// Timing, precision, stability, and event-selection statistics for an integration slot.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationStatisticsSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationStatisticsSnapshot {
@@ -1803,7 +1817,7 @@ pub struct PyIntegrationStatisticsSnapshot {
 }
 
 /// Largest observed contribution for one signed integration component.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "MaxWeightInfoEntry", get_all)]
 #[derive(Clone)]
 pub struct PyMaxWeightInfoEntry {
@@ -1814,7 +1828,7 @@ pub struct PyMaxWeightInfoEntry {
 }
 
 /// One labeled coordinate on a discrete integration axis.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteCoordinate", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteCoordinate {
@@ -1824,7 +1838,7 @@ pub struct PyDiscreteCoordinate {
 }
 
 /// Estimate and sampling metadata for one bin of a discrete-axis breakdown.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdownEntry", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdownEntry {
@@ -1838,7 +1852,7 @@ pub struct PyDiscreteBreakdownEntry {
 }
 
 /// Per-bin integration estimates along one discrete axis at fixed other coordinates.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdown {
@@ -1848,7 +1862,7 @@ pub struct PyDiscreteBreakdown {
 }
 
 /// Optional real and imaginary discrete-axis breakdowns for an integration slot.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ComponentDiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyComponentDiscreteBreakdown {
@@ -1857,7 +1871,7 @@ pub struct PyComponentDiscreteBreakdown {
 }
 
 /// Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "AbsoluteIntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PyAbsoluteIntegrationResult {
@@ -1868,7 +1882,7 @@ pub struct PyAbsoluteIntegrationResult {
 }
 
 /// Result, diagnostics, and discrete breakdown for one named integration slot.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PySlotIntegrationResult {
@@ -1886,14 +1900,14 @@ pub struct PySlotIntegrationResult {
 }
 
 /// Collection of independently addressable integration-slot results.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationResult {
     pub slots: Vec<PySlotIntegrationResult>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyHistogramBinSnapshot {
     /// Compute this bin's Monte Carlo mean from its raw weight sum.
@@ -1941,7 +1955,7 @@ impl PyHistogramBinSnapshot {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationOutput {
     #[getter]
@@ -1972,7 +1986,7 @@ impl PyIntegrationOutput {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationResult {
     fn slot(&self, key: &str) -> Option<PySlotIntegrationResult> {
@@ -1985,7 +1999,7 @@ impl PyIntegrationResult {
 }
 
 /// Outcome and cost of one stability attempt, including precision and representation.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
@@ -2005,14 +2019,14 @@ pub struct PyStabilityResult {
 }
 
 /// Numerical value, metadata, stability records, and generated events for one sample.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EvaluationResult")]
 #[derive(Clone)]
 pub struct PyEvaluationResult {
     inner: SampleEvaluationResult,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvaluationResult {
     /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
@@ -2141,14 +2155,14 @@ impl PyEvaluationResult {
 }
 
 /// One evaluation record per input sample, plus optional batch stability diagnostics.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "BatchEvaluationResult")]
 #[derive(Clone)]
 pub struct PyBatchEvaluationResult {
     inner: BatchSampleEvaluationResult,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyBatchEvaluationResult {
     /// Evaluation records in the same order as the requested samples.
@@ -2184,7 +2198,7 @@ impl PyBatchEvaluationResult {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvent {
     /// Return a human-readable event summary.
@@ -2198,7 +2212,7 @@ impl PyEvent {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEventGroup {
     /// Return a human-readable summary of the grouped events.
@@ -3600,8 +3614,11 @@ impl PyNumeratorAwareGroupingOption {
 /// does not make this Python object immutable. Commands may still change in-memory
 /// settings, processes, or run history. Create separate instances when independent
 /// sessions are required.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[cfg_attr(feature = "python", pyo3::pyclass(unsendable, name = "GammaLoopAPI"))]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(unsendable, name = "GammaLoopAPI")
+)]
 struct GammaLoopAPI {
     gammaloop_state: State,
     cli_settings: CLISettings,
@@ -3610,9 +3627,178 @@ struct GammaLoopAPI {
     session_state: CliSessionState,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum CffDotInputError {
+    #[error("could not parse CFF DOT input: {message}")]
+    Parse { message: String },
+    #[error("CFF DOT input does not contain a graph")]
+    EmptyGraph,
+    #[error("edge {edge} has invalid `{attribute}` value `{value}`: {message}")]
+    InvalidEdgeAttribute {
+        edge: EdgeIndex,
+        attribute: &'static str,
+        value: String,
+        message: String,
+    },
+    #[error("could not generate CFF expression: {0}")]
+    Generation(#[from] CffError),
+}
+
+fn parse_cff_dot_graph(dot: &str) -> Result<DotGraph, CffDotInputError> {
+    DotGraphSet::from_string(dot)
+        .map_err(|error| CffDotInputError::Parse {
+            message: error.to_string(),
+        })?
+        .into_iter()
+        .next_back()
+        .ok_or(CffDotInputError::EmptyGraph)
+}
+
+fn select_cff_dot_subgraph(graph: &DotGraph, subgraph_nodes: &[String]) -> SuBitGraph {
+    if subgraph_nodes.is_empty() {
+        return graph.full_filter();
+    }
+
+    let mut selected: SuBitGraph = graph.empty_subgraph();
+    for (node, neighbors, vertex) in graph.iter_nodes() {
+        let name = vertex
+            .name()
+            .map(str::to_owned)
+            .unwrap_or_else(|| node.to_string());
+        if subgraph_nodes.contains(&name) {
+            neighbors.for_each(|hedge| selected.add(hedge));
+        }
+    }
+    selected
+}
+
+fn cff_dot_options(graph: &DotGraph) -> Result<CffOptions, CffDotInputError> {
+    let mut options = CffOptions::default();
+    for (_, edge, data) in graph.iter_edges() {
+        let Some(value) = data.data.statements.get("is_cut") else {
+            continue;
+        };
+        value
+            .parse::<usize>()
+            .map_err(|error| CffDotInputError::InvalidEdgeAttribute {
+                edge,
+                attribute: "is_cut",
+                value: value.clone(),
+                message: error.to_string(),
+            })?;
+        options = options.with_initial_state_edge(edge);
+    }
+    Ok(options)
+}
+
+fn build_cff_dot_topology(
+    dot: &str,
+    subgraph_nodes: &[String],
+    reversed_dangling: &[usize],
+) -> Result<(DotGraph, SuBitGraph, CffResult), CffDotInputError> {
+    let graph = parse_cff_dot_graph(dot)?;
+    let subgraph = select_cff_dot_subgraph(&graph, subgraph_nodes);
+    let reversed_dangling = reversed_dangling
+        .iter()
+        .copied()
+        .map(EdgeIndex::from)
+        .collect_vec();
+    let mut surface_cache = SurfaceCache::default();
+    let cff = graph.build_cff_from_subgraph(
+        &subgraph,
+        cff_dot_options(&graph)?,
+        &reversed_dangling,
+        &mut surface_cache,
+    )?;
+    Ok((graph, subgraph, cff))
+}
+
+#[cfg(test)]
+mod cff_dot_topology_tests {
+    use super::*;
+    use linnet::half_edge::subgraph::SubGraphLike;
+
+    const RAW_TOPOLOGY: &str = r#"
+        digraph raw_triangle {
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [id=0]
+            B [id=1]
+            C [id=2]
+            A -> C [id=0]
+            B -> C [id=1 is_cut=0]
+            A -> B [id=2]
+            C -> ext_out [id=3]
+            ext_in -> A [id=4]
+        }
+    "#;
+
+    #[test]
+    fn raw_dot_cff_needs_only_topology() {
+        let (graph, selected, cff) =
+            build_cff_dot_topology(RAW_TOPOLOGY, &["B".to_owned(), "C".to_owned()], &[2]).unwrap();
+
+        assert_eq!(graph.global_data.name, "raw_triangle");
+        // Linnet counts only the fully selected paired edge here; the three
+        // boundary/external edges are verified through the padded orientation.
+        assert_eq!(selected.nedges(&graph.graph), 1);
+        assert!(!cff.orientations().is_empty());
+        for orientation in cff.orientations() {
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(2)],
+                Orientation::Reversed
+            );
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(4)],
+                Orientation::Undirected
+            );
+            assert_ne!(
+                orientation.data.orientation[EdgeIndex(1)],
+                Orientation::Undirected
+            );
+        }
+        assert!(cff.surfaces.energy_surfaces().iter().all(|surface| {
+            !surface.energies.contains(&EdgeIndex(1))
+                && surface
+                    .vertex_set
+                    .iter()
+                    .all(|vertex| [1, 2].contains(&vertex.0))
+        }));
+        assert!(
+            cff.surfaces
+                .energy_surfaces()
+                .iter()
+                .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+                || cff
+                    .surfaces
+                    .h_surfaces()
+                    .iter()
+                    .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+        );
+    }
+
+    #[test]
+    fn malformed_dot_and_cut_attributes_are_structured_errors() {
+        assert!(matches!(
+            parse_cff_dot_graph("digraph broken { A ->"),
+            Err(CffDotInputError::Parse { .. })
+        ));
+
+        let invalid_cut = RAW_TOPOLOGY.replace("is_cut=0", "is_cut=left");
+        assert!(matches!(
+            build_cff_dot_topology(&invalid_cut, &[], &[]),
+            Err(CffDotInputError::InvalidEdgeAttribute {
+                edge: EdgeIndex(1),
+                attribute: "is_cut",
+                ..
+            })
+        ));
+    }
+}
+
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl GammaLoopAPI {
     /// Load or create a GammaLoop state and initialize its CLI session.
@@ -4104,8 +4290,11 @@ impl GammaLoopAPI {
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -4115,8 +4304,11 @@ impl GammaLoopAPI {
                     ));
                 }
 
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 (graphs, process_name)
             }
             other => {
@@ -4176,13 +4368,19 @@ impl GammaLoopAPI {
                     return Err(eyre!("Path does not exist: {}", dot_path.display()));
                 }
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 graphs
             }
             "string" => {
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 graphs
             }
             other => {
@@ -4345,8 +4543,7 @@ impl GammaLoopAPI {
     ///     JSON representation of the model currently owned by this session.
     #[pyo3(name = "get_model")]
     pub(crate) fn get_model(&self) -> PyResult<String> {
-        let serializable_model = self.gammaloop_state.model.to_serializable();
-        serde_json::to_string(&serializable_model).map_err(|e| {
+        serde_json::to_string(&self.gammaloop_state.model).map_err(|e| {
             exceptions::PyException::new_err(format!("Could not serialize model: {}", e))
         })
     }
@@ -4841,6 +5038,122 @@ impl GammaLoopAPI {
                 ))
             })
             .map(|_| ())
+    }
+
+    /// Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// list[tuple[dict[int, int], str]]
+    ///     Edge-direction maps paired with their energy-denominator expressions.
+    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
+    pub(crate) fn generate_cff(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
+        let (graph, subgraph, cff) =
+            build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let or_pattern = orientation_pattern
+            .as_deref()
+            .map(OrientationPattern::from_user_pattern)
+            .transpose()
+            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
+            .unwrap_or_default();
+
+        let atoms = cff.orientations().iter().map(|orientation| {
+            let atom = if or_pattern.filter(&orientation.data.orientation) {
+                orientation.expression.to_atom_inverse()
+            } else {
+                symbolica::atom::Atom::Zero
+            };
+            (atom, orientation.data.clone())
+        });
+        let replacements = cff.surfaces.replacements_with(
+            gammalooprs::utils::ose_atom_from_index,
+            gammalooprs::utils::external_energy_atom_from_index,
+        );
+        let inverse_energies =
+            graph::get_cff_inverse_energy_product_impl(&graph.graph, &subgraph, &[]);
+
+        let result = atoms
+            .into_iter()
+            .map(|(atom, orientation_data)| {
+                let energy_sub = atom.replace_multiple(&replacements) * &inverse_energies;
+                let string_atom = energy_sub.to_string();
+
+                let mut orientation_as_hashmap = HashMap::new();
+                for (edge_id, direction) in orientation_data.orientation.into_iter() {
+                    let direction = match direction {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => 0,
+                    };
+                    orientation_as_hashmap.insert(edge_id.0, direction);
+                }
+                (orientation_as_hashmap, string_atom)
+            })
+            .collect_vec();
+
+        Ok(result)
+    }
+
+    /// Serialize a causal-flow expression and its surfaces as JSON.
+    ///
+    /// This accepts the same graph, subgraph, and dangling-edge inputs as
+    /// ``generate_cff``. The current JSON representation is intended for GammaLoop
+    /// tooling and may contain internal structural details.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     JSON representation of the causal-flow expression and E-surfaces.
+    #[pyo3(
+        name = "generate_cff_as_json_string",
+        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
+    )]
+    pub(crate) fn generate_cff_as_json_string(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<String> {
+        let _ = orientation_pattern;
+        let (_, _, cff) = build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let json_string = serde_json::to_string(&cff).map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
+        })?;
+
+        Ok(json_string)
     }
 
     /*

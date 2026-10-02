@@ -1,9 +1,8 @@
 use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_api::state::SyncSettings;
-use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
-use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
 use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
@@ -15,9 +14,11 @@ use gammalooprs::processes::{
 
 use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     domains::float::Complex,
+    function,
     printer::CanonicalOrderingSettings,
+    symbol,
 };
 use tracing::debug;
 
@@ -34,6 +35,47 @@ const DDX_AMPLITUDE_SELECTION_OPTIONS: &str =
 const DDXG_RAISED_CUT_PROCESS_NAME: &str = "epem_ddxg_raised_cuts";
 const DDXG_RAISED_CUT_INTEGRAND_NAME: &str = "LO";
 const DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign -p epem_ddxg_raised_cuts -i LO --only-diagrams";
+
+fn evaluate_sign_origin(factor: AtomView<'_>) -> Atom {
+    let mut result = factor.to_owned();
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        for symbol in [
+            symbol!(head),
+            symbol!(&format!("feynkit_generator_factor::{head}")),
+        ] {
+            result = result
+                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
+        }
+    }
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(function!(
+                head,
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ))
+            .with(function!(
+                symbol!("Group"),
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ));
+    }
+    result.expand()
+}
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
@@ -457,10 +499,14 @@ fn tth_master_vertex_signature_specs(
                 .underlying
                 .iter_nodes()
                 .filter_map(|(_, _, vertex)| {
-                    vertex
-                        .vertex_rule
-                        .as_ref()
-                        .map(|vertex_rule| vertex_rule.name.to_string())
+                    vertex.vertex_rule.as_ref().map(|vertex_rule| {
+                        cli.state
+                            .model
+                            .vertex_rule_by_id(*vertex_rule)
+                            .expect("runtime graph vertex rule must belong to its model")
+                            .name
+                            .clone()
+                    })
                 })
                 .collect::<Vec<_>>();
             vertex_rule_names.sort();
@@ -477,6 +523,7 @@ fn tth_master_vertex_signature_specs(
 fn tth_signature_inventory(cli: &CLIState) -> GraphSelectionSignatureInventory {
     let cross_section = tth_cross_section(cli);
     GraphSelectionSignatureInventory::from_master_graphs(
+        &cli.state.model,
         cross_section.graph_group_structure.iter().map(|group| {
             let master_graph_id = group
                 .into_iter()
@@ -1664,7 +1711,7 @@ mod failing {
 
         // A first process
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");//good
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true",false)?,@"1 | 1 = 1");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false",false)?,@"3 | 3 = 3");//good

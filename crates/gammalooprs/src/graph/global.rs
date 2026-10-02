@@ -214,6 +214,16 @@ impl ParseGraph {
 
         g.statements
             .insert("num".to_string(), self.global_data.num.to_quoted());
+        if let Some(interface) = &self.global_data.num_interface {
+            g.statements.insert(
+                "numerator_prefactor_interface".to_owned(),
+                interface.to_json(),
+            );
+        }
+        if let Some(interface) = &self.global_data.projector_interface {
+            g.statements
+                .insert("projector_interface".to_owned(), interface.to_json());
+        }
         if let Some(proj) = &self.global_data.projectors {
             g.statements
                 .insert("projector".to_string(), proj.to_quoted());
@@ -259,31 +269,50 @@ mod tests {
         half_edge::nodestore::NodeStorageVec,
         parser::{DotGraph, DotVertexData},
     };
+    use symbolica::{atom::Atom, parser::ParseSettings};
+
+    use super::evaluate_overall_factor;
 
     use crate::{
-        dot,
-        graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
+        finalized_runtime_dot, graph::Graph, initialisation::test_initialise,
         processes::DotExportSettings,
     };
 
     #[test]
+    fn evaluates_canonical_feynkit_factor_namespace() {
+        test_initialise().unwrap();
+        let factor = Atom::parse(
+            "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4)\
+             +NumeratorDependentGrouping(7,2,3)",
+            "feynkit_generator_factor",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            evaluate_overall_factor(factor.as_view()),
+            Atom::parse("11/2", "factor_expected", ParseSettings::default()).unwrap()
+        );
+    }
+
+    #[test]
     fn params_roundtrip_in_global_data() {
         test_initialise().unwrap();
-        match dot!(digraph params_roundtrip {
+        match finalized_runtime_dot!(digraph params_roundtrip {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
                 params = "a;b;c";
+                projector = 1;
             ]
-            edge [pdg=1000]
+            edge [pdg=1000 num=1]
+            node [num=1]
             ext [style=invis]
-            ext -> v4
-            ext -> v5
-            v6 -> ext
-            v5 -> v4 [lmb_index=0];
-            v6 -> v5;
-            v4 -> v6;
+            ext -> v4 [sink="{ufo_order:0}"]
+            ext -> v5 [sink="{ufo_order:0}"]
+            v6 -> ext [source="{ufo_order:0}"]
+            v5 -> v4 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            v6 -> v5 [source="{ufo_order:1}" sink="{ufo_order:2}"];
+            v4 -> v6 [source="{ufo_order:2}" sink="{ufo_order:2}"];
         },"scalars")
         {
             Ok(g) => {

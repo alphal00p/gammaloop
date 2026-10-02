@@ -1,13 +1,11 @@
+use crate::model::{ModelGammaLoopExt, ParticleIdGammaLoopExt, PropagatorIdGammaLoopExt};
 use std::{borrow::Borrow, ops::Deref};
 
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{
-        HedgeNode, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike,
-        SubSetLike, SubSetOps,
-    },
+    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 
 use spenso::{
@@ -29,7 +27,7 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::{generation::ShiftRewrite, surface::HsurfaceID},
     integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
-    model::{ArcParticle, Model, UFOSymbol},
+    model::{Model, ParticleId, UFOSymbol, VertexRuleIdGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
     momentum::{PolDef, SignOrZero},
@@ -76,7 +74,7 @@ pub trait FeynmanGraph {
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
     fn external_in_or_out_signature(&self) -> ExternalSignature;
 
-    fn get_external_partcles(&self) -> Vec<ArcParticle>;
+    fn get_external_partcles(&self) -> Vec<ParticleId>;
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex>;
     fn get_energy_atoms(&self) -> Vec<Atom>;
     // fn get_external_energy_atoms(&self) -> Vec<Atom>;
@@ -85,12 +83,6 @@ pub trait FeynmanGraph {
     fn expected_scale(&self, e_cm: F<f64>, model: &Model) -> F<f64>;
     fn dummy_list(&self) -> Vec<EdgeIndex>;
     fn no_dummy(&self) -> SuBitGraph;
-    fn all_st_cuts_for_cs(
-        &self,
-        source_nodes: HedgeNode,
-        target_nodes: HedgeNode,
-        initial_state_tree: &SuBitGraph,
-    ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
 }
 
 impl Graph {
@@ -436,12 +428,12 @@ where
         self.1.get_external_energy_atoms()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
-        self.1.get_ose_replacements()
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
+        self.1.get_ose_replacements(model)
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        self.1.explicit_ose_atom(edge)
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        self.1.explicit_ose_atom(edge, model)
     }
 
     fn explicit_thermal_distribution_atom(
@@ -496,8 +488,8 @@ where
             .collect()
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        let mass = self[edge].mass_atom();
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        let mass = self[edge].mass_atom(model);
         let mass2 = &mass * &mass;
 
         // println!("{}", mass2);
@@ -631,12 +623,12 @@ where
             .collect()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
         self.iter_edges()
             .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
             .map(|(_, edge_id, _)| {
                 let ose_atom = ose_atom_from_index(edge_id);
-                let explicit = self.explicit_ose_atom(edge_id);
+                let explicit = self.explicit_ose_atom(edge_id, model);
                 Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
             })
             .collect()
@@ -659,9 +651,9 @@ impl ParamBuilderGraph for Graph {
             .collect()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
         if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            self.underlying.get_ose_replacements()
+            self.underlying.get_ose_replacements(model)
         } else {
             let underlying_without_is_cut = self
                 .underlying
@@ -673,15 +665,15 @@ impl ParamBuilderGraph for Graph {
                 .iter_edges_of(&underlying_without_is_cut)
                 .map(|(_, edge_id, _)| {
                     let ose_atom = ose_atom_from_index(edge_id);
-                    let explicit = self.underlying.explicit_ose_atom(edge_id);
+                    let explicit = self.underlying.explicit_ose_atom(edge_id, model);
                     Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
                 })
                 .collect()
         }
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        self.underlying.explicit_ose_atom(edge)
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        self.underlying.explicit_ose_atom(edge, model)
     }
 
     fn explicit_thermal_distribution_atom(
@@ -789,7 +781,7 @@ impl ParamBuilderGraph for Graph {
 //     //     self.underlying.get_external_energy_atoms()
 //     // }
 
-//     fn get_external_partcles(&self) -> Vec<ArcParticle> {
+//     fn get_external_partcles(&self) -> Vec<ParticleId> {
 //         self.underlying.get_external_partcles()
 //     }
 
@@ -919,7 +911,7 @@ impl FeynmanGraph for Graph {
             } else {
                 panic!(
                     "Complex masses not yet supported in gammaLoop for {}:{}",
-                    edge.mass_atom(),
+                    edge.mass_atom(model),
                     c
                 )
             }
@@ -948,7 +940,7 @@ impl FeynmanGraph for Graph {
                 } else {
                     panic!(
                         "Complex masses not yet supported in gammaLoop for {}:{}",
-                        edge.data.mass_atom(),
+                        edge.data.mass_atom(model),
                         c
                     )
                 }
@@ -1078,7 +1070,7 @@ impl FeynmanGraph for Graph {
             .collect()
     }
 
-    fn get_external_partcles(&self) -> Vec<ArcParticle> {
+    fn get_external_partcles(&self) -> Vec<ParticleId> {
         let external_filter: SuBitGraph = self.external_filter();
 
         self.iter_edges_of(&external_filter)
@@ -1127,16 +1119,16 @@ impl FeynmanGraph for Graph {
             // include the values of all couplings
             let coupling_value = vertex
                 .vertex_rule
-                .as_ref()
-                .map(|r| {
-                    r.couplings
+                .map(|rule| {
+                    let rule = rule.resolve(model);
+                    rule.couplings
                         .iter()
                         .flat_map(|couplings| {
                             couplings.iter().map(|coupling| {
                                 coupling
                                     .as_ref()
                                     .map(|coupling| {
-                                        model.couplings[coupling]
+                                        model.couplings()[coupling.index()]
                                             .value
                                             .map(|x| Complex::new(F(x.re), F(x.im)))
                                             .unwrap_or(Complex::new_re(F(1.0)))

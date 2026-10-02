@@ -78,9 +78,11 @@ impl Vertex {}
 #[derive(Debug, Clone)]
 pub struct ParseVertex {
     pub name: Option<String>,
+
     // pub strict: bool,
-    pub vertex_rule: Option<ArcVertexRule>,
+    pub vertex_rule: Option<VertexRuleId>,
     pub num: Option<Atom>,
+    pub(crate) num_interface: Option<NumeratorInterface>,
     pub dod: Option<i32>,
 }
 
@@ -115,28 +117,25 @@ impl ParseVertex {
     }
 }
 
-impl From<ArcVertexRule> for ParseVertex {
-    fn from(vertex_rule: ArcVertexRule) -> Self {
+impl From<VertexRuleId> for ParseVertex {
+    fn from(vertex_rule: VertexRuleId) -> Self {
         ParseVertex {
             name: None,
+
             // strict: false,
             vertex_rule: Some(vertex_rule),
             dod: None,
             num: None,
+            num_interface: None,
         }
     }
 }
 
 pub trait ParticleEdge {
-    fn particle(&self) -> Option<ArcParticle>;
+    fn particle(&self) -> Option<ParticleId>;
     fn is_dummy(&self) -> bool;
 }
 
-impl From<&NodeColorWithVertexRule> for ParseVertex {
-    fn from(value: &NodeColorWithVertexRule) -> Self {
-        value.vertex_rule.clone().into()
-    }
-}
 impl ParseVertex {
     pub(crate) fn parse<'a>(
         model: &'a Model,
@@ -148,6 +147,11 @@ impl ParseVertex {
     ) -> Result<Self> {
         move |g, n, v| {
             let name = v.name().map(|id| id.to_string());
+            let num_interface = v
+                .get::<_, String>("num_interface")
+                .transpose()?
+                .map(|value| NumeratorInterface::parse(&value))
+                .transpose()?;
 
             let dod = v
                 .get::<_, String>("dod")
@@ -161,6 +165,7 @@ impl ParseVertex {
                 Ok(ParseVertex {
                     dod,
                     name,
+
                     vertex_rule: None,
                     num: Some(num.strip_parse().with_context(|| {
                         format!(
@@ -168,15 +173,33 @@ impl ParseVertex {
                             parse_data.name
                         )
                     })?),
+                    num_interface,
                 })
-            } else if let Some(n) = v.get::<_, String>("int_id") {
-                let vertex_rule = Some(model.get_vertex_rule(n.unwrap()));
+            } else if let Some(id) = v.get::<_, usize>("vertex_rule_id") {
+                let vertex_rule = Some(
+                    model
+                        .vertex_rule_id_at(id?)
+                        .with_context(|| "Error parsing vertex-rule ID".to_string())?,
+                );
 
                 Ok(ParseVertex {
                     dod,
                     name,
+
                     vertex_rule,
                     num: None,
+                    num_interface,
+                })
+            } else if let Some(n) = v.get::<_, String>("int_id") {
+                let vertex_rule = Some(model.get_vertex_rule(n?));
+
+                Ok(ParseVertex {
+                    dod,
+                    name,
+
+                    vertex_rule,
+                    num: None,
+                    num_interface,
                 })
             } else {
                 let node_id = n
@@ -185,22 +208,27 @@ impl ParseVertex {
                     .map(|h| g.node_id(h))
                     .unwrap_or(NodeIndex(0));
                 let mut particles = extract_oriented_particles_from_vertex_hedges(g, n, model);
-                particles.sort();
+                particles.sort_unstable();
 
-                let res = model.particle_set_to_vertex_rules_map.get(&particles);
-                if let Some(res) = res {
-                    if res.len() == 1 {
+                let rules = model.vertex_rules_for_particles(&particles);
+                if !rules.is_empty() {
+                    if rules.len() == 1 {
                         Ok(ParseVertex {
                             dod,
                             name,
-                            vertex_rule: Some(res[0].clone()),
+
+                            vertex_rule: Some(rules[0]),
                             num: None,
+                            num_interface,
                         })
                     } else {
                         Err(eyre!("Multiple vertex rules for {:?}", particles))
                     }
                 } else {
-                    let particles = particles.iter().map(|p| p.name.as_str()).collect_vec();
+                    let particles = particles
+                        .iter()
+                        .map(|particle| particle.resolve(model).name.as_str())
+                        .collect_vec();
                     Err(eyre!(
                         "Failed to find vertex rule for particles: {:?} for node {node_id} in graph {}",
                         particles,

@@ -1,8 +1,7 @@
 use gammalooprs::{
-    dot,
-    graph::{Graph, parse::IntoGraph},
+    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
     initialisation::test_initialise,
-    model::{InputParamCard, Model},
+    model::{Model, ModelGammaLoopExt},
     numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model},
@@ -13,16 +12,16 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, coad, cof,
-    color::{CS, ColorSimplifier},
-    color_idx,
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    CookMode, CookSettings, IndexTooling, coad, cof,
+    color::{CS, ColorSimplifier, ColorSimplifySettings},
+    color_cas, color_idx,
+    dirac::GammaSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::LogPrint,
-    structure::abstract_index::AbstractIndex,
+    structure::{abstract_index::AbstractIndex, representation::RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -58,21 +57,51 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // Their ghost-gluon momentum and color conventions differ as well, so the net
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
-        .apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
-        )
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let color = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+        .unwrap()
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
+    let color = cooking.uncook(color.expression().as_view());
+    let expression = model
+        .apply_parameter_replacement_rules(&model.expand_couplings(&color))
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
-        .collect_factors()
-        .simplify_metrics()
-        .simplify_gamma()
-        .simplify_color()
+        .collect_factors();
+    let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
+        .unwrap()
+        .contract(ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            color: Some(ColorSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
         .to_dots()
-        .replace(CS.tr)
-        .with(Atom::num((1, 2)))
+        .unwrap();
+    (cooking
+        .uncook(expression.expression().as_view())
         .replace(CS.nc)
-        .with(CS.ca)
+        .with(color_cas!(2, coad!(8)))
         // RQFT closed-quark-loop references write the flavor-summed index as
         // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))
@@ -249,13 +278,15 @@ fn rqft_alignment_normalizes_positive_uv_scale_logs() {
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
-    let sunrise: Vec<Graph> = dot!( digraph sunrise{
-        edge [particle=scalar_1]
-        A -> B    [ id=0]
-        A -> B     [ id=1]
-        A -> B   [ id=2]
-
-    },"scalars")
+    let sunrise: Vec<Graph> = Graph::import_dot(
+        stringify!(digraph sunrise {
+            edge [particle=scalar_1]
+            A -> B [id=0]
+            A -> B [id=1]
+            A -> B [id=2]
+        }),
+        &load_generic_model("scalars"),
+    )
     .unwrap();
 
     let mut results = Vec::new();
@@ -283,14 +314,31 @@ fn scalar_pole_part() {
             },
             ..Default::default()
         };
-        let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+        let a = amp.graphs[0]
+            .renormalization_part(&model, &settings)
+            .unwrap();
 
         println!("ren part: {:>}", a);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
+        let color = cooking.uncook(color.expression().as_view());
         println!(
             "ren part: {:>}",
-            model.apply_parameter_replacement_rules(
-                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-            )
+            model.apply_parameter_replacement_rules(&model.expand_couplings(&color))
         );
         assert!(
             !a.is_zero(),
@@ -298,15 +346,18 @@ fn scalar_pole_part() {
         );
         let mut pole_amp = Amplitude::from_graph_list("bub_poles", sunrise.clone()).unwrap();
         let poles = pole_amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                renormalization_prescription: RenormalizationPrescriptionSettings {
-                    log_divergent: ApproximationType::PolePart,
-                    massive_power_divergent: ApproximationType::PolePart,
-                    massless_power_divergent: ApproximationType::PolePart,
-                    ..Default::default()
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    renormalization_prescription: RenormalizationPrescriptionSettings {
+                        log_divergent: ApproximationType::PolePart,
+                        massive_power_divergent: ApproximationType::PolePart,
+                        massless_power_divergent: ApproximationType::PolePart,
+                        ..Default::default()
+                    },
+                    ..settings
                 },
-                ..settings
-            })
+            )
             .unwrap();
         assert!(!poles.is_zero());
         assert!(poles.contains_symbol(GS.dim_epsilon));
@@ -318,31 +369,10 @@ fn scalar_pole_part() {
 #[test]
 fn finite_part_quark_lo() {
     test_initialise().unwrap();
-    let mut model = load_generic_model("sm");
-    let mut restriction = InputParamCard::from_str(
-        include_str!("../../../assets/models/json/sm/restrict_light_quarks_massless.json")
-            .to_owned(),
-        "json",
-    )
-    .unwrap();
-    model.simplify(&mut restriction).unwrap();
-    let g: Vec<Graph> = dot!(digraph d1 {
-          overall_factor= "+1"
-          projector = "spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/4/3*(Q(0,spenso::mink(4,1))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(2)),spenso::mink(4,1)))"
-
-          in1 [style=invis];
-          in1 -> v1:1
-          [particle="d" pin="x:@-left"];
-
-          out1 [style=invis];
-          v2:2 -> out1
-          [particle="d" pin="x:@+right"];
-
-          v1 -> v2 [particle= "d"];
-          v2 -> v1 [particle= "g"];
-        }, &model
-    )
-    .unwrap();
+    let model = load_generic_model("sm");
+    let g: Vec<Graph> = include_str!("fixtures/renormalization/quark_lo.dot")
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
 
     let mut results = Vec::new();
     for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
@@ -366,10 +396,13 @@ fn finite_part_quark_lo() {
         };
 
         let a = amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                project_integrated_uv_cts_onto_tensor_integrals,
-                ..pole_part_uv_settings()
-            })
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    project_integrated_uv_cts_onto_tensor_integrals,
+                    ..pole_part_uv_settings()
+                },
+            )
             .unwrap();
 
         println!("ren part: {:>}", a.log_print(Some(80)));
@@ -386,11 +419,14 @@ fn finite_part_quark_lo() {
         assert!((&aligned_pole - expected).expand().is_zero());
 
         let muv = amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                softct: false,
-                project_integrated_uv_cts_onto_tensor_integrals,
-                ..Default::default()
-            })
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    softct: false,
+                    project_integrated_uv_cts_onto_tensor_integrals,
+                    ..Default::default()
+                },
+            )
             .unwrap();
         let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
         assert!(!aligned_pole.is_zero());
@@ -400,9 +436,18 @@ fn finite_part_quark_lo() {
         // also covers equivalent forms such as log(mUV²/μ_R²), without imposing
         // a particular logarithm spelling or rewriting complex branches.
         let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
-        let contracted_log_coefficient = log_coefficient
-            .normalize_dots()
-            .metric_shorthand_to_dot()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let contracted_log_coefficient =
+            SymbolicTensor::infer(cooking.try_cook(log_coefficient.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings::default())
+                .unwrap()
+                .to_dots()
+                .unwrap();
+        let contracted_log_coefficient = cooking
+            .uncook(contracted_log_coefficient.expression().as_view())
             .collect_factors();
         // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
         // contracting it and stripping the standard i/(16 pi^2) loop normalization,
@@ -425,228 +470,10 @@ fn finite_part_quark_lo() {
 #[test]
 fn finite_part_ghost_2loop() {
     test_initialise().unwrap();
-    let g: Vec<Graph> = dot!(digraph d1 {//0
-      overall_factor= "+1"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v3 [particle= "g"];
-      v1 -> v4 [particle= "ghG"];
-      v2 -> v3 [particle= "g"];
-      v4 -> v2 [particle= "ghG"];
-      v3 -> v4 [particle= "g"];
-    }
-    digraph d2 {//1
-      overall_factor= "+1"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v3 [particle= "g"];
-      v1 -> v4 [particle= "ghG"];
-      v3 -> v2 [particle= "ghG"];
-      v2 -> v4 [particle= "g"];
-      v4 -> v3 [particle= "ghG"];
-    }
-    digraph d3 {//2
-      overall_factor= "+1"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v2 [particle= "g"];
-      v1 -> v3 [particle= "ghG"];
-      v4 -> v2 [particle= "ghG"];
-      v3 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "ghG"];
-    }
-    digraph d4 {//3
-      overall_factor= "-1"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v2 [particle= "ghG"];
-      v1 -> v3 [particle= "g"];
-      v2 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "d"];
-      v4 -> v3 [particle= "d"];
-    }
-    digraph d5 {//4
-      overall_factor= "+1/2"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v2 [particle= "ghG"];
-      v1 -> v3 [particle= "g"];
-      v2 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "g"];
-    }
-    digraph d6 {//5
-      overall_factor= "-1"
-      num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-      in1 [style=invis];
-      in1 -> v1:0
-      [particle="ghG" pin="x:@-left"];
-
-      out1 [style=invis];
-      v2:1 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v1 -> v2 [particle= "ghG"];
-      v1 -> v3 [particle= "g"];
-      v2 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "ghG"];
-      v4 -> v3 [particle= "ghG"];
-    }
-
-    digraph GL00{//6
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-        exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2 particle="c"];
-        0:4	-> 1:5	 [id=3 particle="c"];
-        0:6	-> 3:7	 [id=4 particle="g"];
-        1:8	-> 2:9	 [id=5 particle="g"];
-        3:10	-> 2:11	 [id=6 particle="ghG"];
-    }
-
-    digraph GL01{//7
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-        exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2  particle="t"];
-        0:4	-> 1:5	 [id=3 particle="t"];
-        0:6	-> 3:7	 [id=4 dir=none particle="g"];
-        1:8	-> 2:9	 [id=5 dir=none particle="g"];
-        3:10	-> 2:11	 [id=6 dir=none particle="ghG"];
-    }
-
-    digraph GL02{//8
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-        exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        0:2	-> 1:3	 [id=2 dir=none particle="g"];
-        0:4	-> 1:5	 [id=3 dir=none particle="ghG"];
-        3:6	-> 0:7	 [id=4 dir=none particle="ghG"];
-        1:8	-> 2:9	 [id=5 dir=none particle="ghG"];
-        2:10-> 3:11	 [id=6 dir=none particle="g"];
-    }
-
-    digraph GL03{//9
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-           exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2 dir=none particle="ghG"];
-        0:4	-> 1:5	 [id=3 dir=none particle="ghG"];
-        0:6	-> 3:7	 [id=4 dir=none particle="g"];
-        1:8	-> 2:9	 [id=5 dir=none particle="g"];
-        3:10	-> 2:11	 [id=6 dir=none particle="ghG"];
-    }
-
-    digraph GL04{//10
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-           exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none  particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2 dir=none particle="ghG"];
-        0:4	-> 2:5	 [id=3 dir=none particle="ghG"];
-        0:6	-> 3:7	 [id=4 dir=none particle="g"];
-        1:8	-> 2:9	 [id=5 dir=none particle="g"];
-        3:10	-> 1:11	 [id=6 dir=none particle="ghG"];
-    }
-
-
-    digraph GL05{//11
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-           exte0	 [style=invis];
-        exte0	-> 2:0	 [id=0 dir=none particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        1:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        0:2	-> 1:3	 [id=2 dir=none particle="ghG"];
-        2:4	-> 0:5	 [id=3 dir=none particle="ghG"];
-        0:6	-> 3:7	 [id=4 dir=none particle="g"];
-        1:8	-> 3:9	 [id=5 dir=none particle="g"];
-        2:10	-> 3:11	 [id=6 dir=none particle="g"];
-    }
-
-    digraph GL06{//12
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-          exte0	 [style=invis];
-        exte0	-> 1:0	 [id=0 dir=none  particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        0:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2 dir=none  particle="ghG"];
-        0:4	-> 3:5	 [id=3 dir=none  particle="g"];
-        1:6	-> 2:7	 [id=4 dir=none  particle="g"];
-        3:8	-> 2:9	 [id=5 particle="u"];
-        2:10	-> 3:11	 [id=6  particle="u"];
-    }
-
-    digraph GL07{//13
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-        exte0	 [style=invis];
-        exte0	-> 1:0	 [id=0 dir=none  particle="ghG" pin="x:@-left"];
-           exte1	 [style=invis];
-        0:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2 dir=none   particle="ghG"];
-        0:4	-> 3:5	 [id=3 dir=none    particle="g"];
-        1:6	-> 2:7	 [id=4 dir=none    particle="g"];
-        2:8	-> 3:9	 [id=5 dir=none   particle="g"];
-        2:10	-> 3:11	 [id=6 dir=none  particle="g"];
-    }
-    digraph GL10{//14
-        num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-           exte0	 [style=invis];
-        exte0	-> 3:0	 [id=0 dir=none  particle="ghG" pin="x:@-left"];
-        exte1	 [style=invis];
-        2:1	-> exte1	 [id=1 dir=none particle="ghG" pin="x:@+right"];
-        1:2	-> 0:3	 [id=2  particle="b"];
-        0:4	-> 1:5	 [id=3  particle="b"];
-        0:6	-> 3:7	 [id=4 dir=none particle="g"];
-        1:8	-> 2:9	 [id=5 dir=none particle="g"];
-        3:10	-> 2:11	 [id=6 dir=none   particle="ghG"];
-    })
-    .unwrap();
+    let fixture_model = load_generic_model("sm");
+    let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_2loop.dot")
+        .into_finalized_runtime_graph(&fixture_model)
+        .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
@@ -664,19 +491,40 @@ fn finite_part_ghost_2loop() {
 
     fn assert_new_paths_match_legacy(
         amp: &mut AmplitudeGraph,
+        model: &Model,
         a: RenormalizationPart,
         new_settings: &UVgenerationSettings,
     ) {
         let normalize = |atom: &Atom| {
-            atom.replace(parse_lit!(gammalooprs::dim))
-                .with(parse_lit!(4))
-                .simplify_metrics()
+            let atom = atom
+                .replace(parse_lit!(gammalooprs::dim))
+                .with(parse_lit!(4));
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let atom = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings::default())
+                .unwrap()
                 .to_dots()
-                .simplify_color()
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+            cooking
+                .uncook(atom.expression().as_view())
                 .expand_num()
                 .collect_factors()
         };
-        let new_part = amp.renormalization_part(new_settings).unwrap();
+        let new_part = amp.renormalization_part(model, new_settings).unwrap();
         assert_eq!(
             normalize(&new_part.expression),
             normalize(&a.expression),
@@ -689,7 +537,9 @@ fn finite_part_ghost_2loop() {
 
     // Each F_i below follows the summand order in the corresponding RQFT
     // `Fill forest(0)` definition.
-    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[0]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_0_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +3/16*ep^-2 + 5/32*ep^-1.
     // F1 (140 -> DM -> 0) / H = -3/16*ep^-2.
@@ -704,9 +554,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[0], &model, a, &new_settings);
 
-    let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[1]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_1_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +1/16*ep^-2 + 1/32*ep^-1.
     // F1 (140 -> oW -> 0) / H = -1/16*ep^-2.
@@ -719,9 +571,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[1], &model, a, &new_settings);
 
-    let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[2]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_2_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +1/8*ep^-2 - 1/48*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -734,9 +588,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[2], &model, a, &new_settings);
 
-    let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[3]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_3_in.h, H = p1.p1*i_*gs^4*ca*nf:
     // F0 (140 -> 0) / H = -1/4*ep^-2 - 13/24*ep^-1.
     // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
@@ -748,9 +604,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*nf*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[3], &model, a, &new_settings);
 
-    let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[4]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_4_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +5/8*ep^-2 - 77/48*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -764,9 +622,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[4], &model, a, &new_settings);
 
-    let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[5]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_5_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +5/24*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -779,36 +639,23 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-1)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[5], &model, a, &new_settings);
 }
 
 #[test]
 fn finit_part_ghlo() {
     test_initialise().unwrap();
 
-    let g: Vec<Graph> = dot!(digraph d1 {
-
-        projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
-
-          in1 [style=invis];
-          in1 -> v1:0
-          [id=0 particle="ghG" pin="x:@-left"];
-
-          out1 [style=invis];
-          v2:1 -> out1
-          [id=1 particle="ghG" pin="x:@+right"];
-
-          v1:2 -> v2:3 [id=2 particle= "g"];
-          v2:4 -> v1:5 [id=3 particle= "ghG~"];
-        }
-    )
-    .unwrap();
+    let fixture_model = load_generic_model("sm");
+    let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_lo.dot")
+        .into_finalized_runtime_graph(&fixture_model)
+        .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
     let model = load_generic_model("sm");
     let a = amp.graphs[0]
-        .renormalization_part(&pole_part_uv_settings())
+        .renormalization_part(&model, &pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a);

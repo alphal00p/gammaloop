@@ -215,7 +215,7 @@ impl IntegrandCutThresholdInfo {
     fn from_association(
         association: &ThresholdCountertermAssociation,
         graph: &Graph,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         model: &Model,
         param_builder: &ParamBuilder,
         settings: &RuntimeSettings,
@@ -284,7 +284,7 @@ impl IntegrandCutInfo {
     fn from_cross_section_cut(
         graph_term: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         raising_power: usize,
         model: &Model,
         param_builder: &ParamBuilder,
@@ -485,7 +485,7 @@ fn orientation_edge_ids(orientation: &EdgeVec<Orientation>) -> Vec<usize> {
     orientation.iter().map(|(edge_id, _)| edge_id.0).collect()
 }
 
-fn cut_edge_ids(graph: &Graph, cut: &CrossSectionCut) -> Vec<usize> {
+fn cut_edge_ids(graph: &Graph, cut: &FinalizedCut) -> Vec<usize> {
     cut.cut
         .iter_edges(&graph.underlying)
         .map(|(_, edge)| {

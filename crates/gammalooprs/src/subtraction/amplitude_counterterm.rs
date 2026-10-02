@@ -700,10 +700,7 @@ impl AmplitudeCountertermData {
             threshold_multipliers: None,
             metadata_registry: None,
             lmbs: TiVec::new(),
-            raised_data: RaisedEsurfaceData {
-                raised_groups: TiVec::new(),
-                pass_two_evaluator: None,
-            },
+            raised_data: RaisedEsurfaceData::default(),
             esurface_map: TiVec::new(),
             local_esurface_exists: TiVec::new(),
             own_group_position,

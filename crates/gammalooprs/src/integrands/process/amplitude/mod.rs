@@ -58,7 +58,7 @@ use crate::{
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
     },
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     momentum::{
         FourMomentum, Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
         sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample},
@@ -188,7 +188,7 @@ impl AmplitudeGraphTerm {
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
-        _model: &Model,
+        model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
         let started = std::time::Instant::now();
@@ -775,7 +775,13 @@ impl AmplitudeGraphTerm {
                     .graph
                     .get_external_partcles()
                     .into_iter()
-                    .map(|particle| particle.pdg_code)
+                    .map(|particle| {
+                        particle
+                            .resolve(model)
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize")
+                    })
                     .collect(),
             },
             stats,
@@ -2453,6 +2459,7 @@ impl AmplitudeIntegrand {
             .zip(helicities.iter())
             .enumerate()
         {
+            let particle = particle.resolve(model);
             if particle.is_scalar() || !matches!(helicity, Helicity::Signed(_)) {
                 continue;
             }
@@ -2782,7 +2789,7 @@ impl AmplitudeIntegrand {
                                 &graph.loop_momentum_basis,
                                 &[W_.x___],
                             );
-                            let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
+                            let atom = esurface.lmb_atom_simplified(graph, model, &lmb_reps);
                             let raw_atom = esurface.to_atom(&[]);
                             let edge_ids = esurface
                                 .energies
@@ -3209,8 +3216,8 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             &graph.loop_momentum_basis,
                             &[W_.x___],
                         );
-                        let atom =
-                            graph_term.esurfaces[esurface_id].lmb_atom_simplified(graph, &lmb_reps);
+                        let atom = graph_term.esurfaces[esurface_id]
+                            .lmb_atom_simplified(graph, model, &lmb_reps);
                         crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
                             stage = "amplitude_threshold_existing_esurface",
                             group_id = group_id.0,
@@ -3323,7 +3330,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             );
 
                             let esurface = &graph_term.esurfaces[esurface_id];
-                            let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
+                            let atom = esurface.lmb_atom_simplified(graph, model, &lmb_reps);
                             (esurface_id, atom)
                         })
                         .collect_vec();

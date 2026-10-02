@@ -95,7 +95,8 @@ fn test_scalar_bubble_example_cli() -> Result<()> {
         "No processes were generated"
     );
     assert_eq!(
-        cli.state.model.name, "scalars",
+        cli.state.model.name(),
+        "scalars",
         "Expected scalars model to be loaded"
     );
     assert!(
@@ -163,7 +164,11 @@ fn test_epem_a_tth_nlo_example_cli() -> Result<()> {
         true,
     )?;
 
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
+    assert_eq!(
+        cli.state.model.name(),
+        "sm",
+        "Expected SM model to be loaded"
+    );
     assert!(
         !cli.state.process_list.processes.is_empty(),
         "No processes were generated"

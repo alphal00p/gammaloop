@@ -1,9 +1,9 @@
 use super::utils::*;
 use super::*;
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_api::commands::integrate::RendererOption;
 use gammalooprs::{
-    feyngen::diagram_generator::evaluate_overall_factor, graph::FeynmanGraph,
-    processes::ProcessCollection, settings::global::OrientationPattern,
+    graph::FeynmanGraph, processes::ProcessCollection, settings::global::OrientationPattern,
 };
 use std::f64::consts::PI;
 use symbolica::atom::Atom;

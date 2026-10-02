@@ -248,6 +248,29 @@ fn compare_against_fjcore(
 }
 
 #[test]
+fn malformed_input_uses_unrecombined_candidates() {
+    let momenta = [
+        massless_momentum(80.0, 0.2, 0.1),
+        massless_momentum(25.0, 0.25, 0.18),
+        FourMomentum {
+            temporal: Energy { value: F(1.0) },
+            spatial: ThreeMomentum {
+                px: F(f64::NAN),
+                py: F(0.0),
+                pz: F(0.0),
+            },
+        },
+    ];
+
+    let result =
+        JetClustering::new(JetAlgorithm::AntiKt, 0.6, 0.0, Vec::new()).cluster_momenta(&momenta);
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result.jets[0].constituent_indices(), &[0]);
+    assert_eq!(result.jets[1].constituent_indices(), &[1]);
+}
+
+#[test]
 fn fjcore_regression_fixed_cases() {
     let cases = [
         vec![

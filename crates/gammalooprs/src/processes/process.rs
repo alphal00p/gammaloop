@@ -1,4 +1,3 @@
-use ahash::HashMap;
 use ahash::HashSet;
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::involution::HedgePair;
@@ -15,32 +14,26 @@ use tracing::warn;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 use itertools::Itertools;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::debug;
 
-use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
 use crate::processes::DotExportSettings;
 
 use crate::processes::StandaloneExportSettings;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
-    feyngen::NumeratorAwareGraphGroupingOption,
     integrands::process::ProcessIntegrand,
-    numerator::GlobalPrefactor,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     uv::export::{UVForestExportSettings, sanitize_file_component},
 };
 use eyre::{Context, eyre};
-
-use crate::{
-    feyngen::{FeynGenFilters, GenerationType},
-    graph::Graph,
-    model::Model,
-    settings::global::GenerationSettings,
+use feynkit_generator::{
+    FilterScope, GenerationOptions, GenerationType, Process as GenerationProcess,
 };
+
+use crate::{graph::Graph, model::Model, settings::global::GenerationSettings};
 
 use super::{
     Amplitude, CrossSection, GeneratedGraphReport, GenerationProcessKind, GenerationProgressPhase,
@@ -48,7 +41,6 @@ use super::{
 };
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
-const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
 
 pub struct ResolvedIntegrandRef<'a> {
     pub canonical_name: String,
@@ -97,45 +89,6 @@ fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
     })
 }
 
-fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
-    let settings_history_toml = path.join(SETTINGS_HISTORY_TOML);
-    if settings_history_toml.exists() {
-        let settings_history_raw =
-            fs::read_to_string(&settings_history_toml).with_context(|| {
-                format!(
-                    "Error reading process settings history file {}",
-                    settings_history_toml.display()
-                )
-            })?;
-        let settings_history = toml::from_str(&settings_history_raw).with_context(|| {
-            format!(
-                "Error parsing process settings history file {}",
-                settings_history_toml.display()
-            )
-        })?;
-        return Ok(Some(settings_history));
-    }
-
-    let settings_history_yaml = path.join(SETTINGS_HISTORY_YAML);
-    if settings_history_yaml.exists() {
-        warn!(
-            "Using legacy process settings history file {}. Re-save state to migrate to {}.",
-            settings_history_yaml.display(),
-            SETTINGS_HISTORY_TOML
-        );
-        let settings_history = serde_yaml::from_reader(File::open(&settings_history_yaml)?)
-            .with_context(|| {
-                format!(
-                    "Error parsing legacy process settings history file {}",
-                    settings_history_yaml.display()
-                )
-            })?;
-        return Ok(Some(settings_history));
-    }
-
-    Ok(None)
-}
-
 pub(crate) fn saved_child_dirs(
     root: &Path,
     expected_binary: &str,
@@ -170,30 +123,13 @@ pub(crate) fn saved_child_dirs(
     Ok(saved_dirs)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
     pub generation_type: GenerationType,
-    pub initial_pdgs: Vec<i64>,
-    pub final_pdgs_lists: Vec<Vec<i64>>,
-    pub loop_count_range: (usize, usize),
-    pub symmetrize_initial_states: bool,
-    pub symmetrize_final_states: bool,
-    pub symmetrize_left_right_states: bool,
-    pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
-    pub max_multiplicity_for_fast_cut_filter: usize,
-    pub amplitude_filters: FeynGenFilters,
-    pub cross_section_filters: FeynGenFilters,
+    pub process: GenerationProcess,
+    pub generation_options: GenerationOptions,
     pub folder_name: String,
     pub process_id: usize,
-    pub numerator_grouping: NumeratorAwareGraphGroupingOption,
-    pub filter_self_loop: bool,
-    pub filter_zero_flow_edges: bool,
-    pub graph_prefix: String,
-    pub selected_graphs: Option<Vec<String>>,
-    pub vetoed_graphs: Option<Vec<String>>,
-    pub loop_momentum_bases: Option<HashMap<String, Vec<usize>>>,
-    pub prefactor: GlobalPrefactor,
 }
 
 impl fmt::Display for ProcessDefinition {
@@ -204,73 +140,92 @@ impl fmt::Display for ProcessDefinition {
             self.process_id,
             self.folder_name,
             self.generation_type,
-            if self.symmetrize_left_right_states {
+            if self.generation_options.symmetrizes_left_right() {
                 " (left-right symmetrized)"
             } else {
                 ""
             },
-            if self.allow_symmetrization_of_external_fermions_in_amplitudes
+            if self.generation_options.symmetrizes_external_fermions()
                 && self.generation_type == GenerationType::Amplitude
-                && (self.symmetrize_initial_states
-                    || self.symmetrize_final_states
-                    || self.symmetrize_left_right_states)
+                && (self.generation_options.symmetrizes_initial()
+                    || self.generation_options.symmetrizes_final()
+                    || self.generation_options.symmetrizes_left_right())
             {
                 " (allowing fermion symmetrization)"
             } else {
                 ""
             },
-            self.initial_pdgs,
-            if self.symmetrize_initial_states {
+            self.process.incoming(),
+            if self.generation_options.symmetrizes_initial() {
                 " (symmetrized)"
             } else {
                 ""
             },
-            if self.final_pdgs_lists.len() == 1 {
-                format!("{:?}", self.final_pdgs_lists[0])
+            if self.process.outgoing_alternatives().len() == 1 {
+                format!("{:?}", self.process.outgoing_alternatives()[0])
             } else {
                 format!(
                     "[ {} ]",
-                    self.final_pdgs_lists
+                    self.process
+                        .outgoing_alternatives()
                         .iter()
                         .map(|pdgs| format!("{:?}", pdgs))
                         .join(" | ")
                 )
             },
-            if self.symmetrize_final_states {
+            if self.generation_options.symmetrizes_final() {
                 " (symmetrized)"
             } else {
                 ""
             },
-            if self.loop_count_range.0 == self.loop_count_range.1 {
-                format!("{}", self.loop_count_range.0)
+            if self.generation_options.loop_count().start()
+                == self.generation_options.loop_count().end()
+            {
+                format!("{}", self.generation_options.loop_count().start())
             } else {
-                format!("{:?}", self.loop_count_range)
+                format!("{:?}", self.generation_options.loop_count())
             },
-            if self.amplitude_filters.0.is_empty() {
+            if self
+                .generation_options
+                .filters(FilterScope::CutAmplitude)
+                .is_empty()
+            {
                 " None"
             } else {
                 "\n"
             },
-            if self.amplitude_filters.0.is_empty() {
+            if self
+                .generation_options
+                .filters(FilterScope::CutAmplitude)
+                .is_empty()
+            {
                 "".into()
             } else {
-                self.amplitude_filters
-                    .0
+                self.generation_options
+                    .filters(FilterScope::CutAmplitude)
                     .iter()
                     .map(|f| format!(" > {}", f))
                     .collect::<Vec<String>>()
                     .join("\n")
             },
-            if self.cross_section_filters.0.is_empty() {
+            if self
+                .generation_options
+                .filters(FilterScope::Graph)
+                .is_empty()
+            {
                 " None"
             } else {
                 "\n"
             },
-            if self.cross_section_filters.0.is_empty() {
+            if self
+                .generation_options
+                .filters(FilterScope::Graph)
+                .is_empty()
+            {
                 "".into()
             } else {
-                self.cross_section_filters
-                    .0
+                self.generation_options
+                    .filters(FilterScope::Graph)
                     .iter()
                     .map(|f| format!(" > {}", f))
                     .collect::<Vec<String>>()
@@ -284,62 +239,27 @@ impl Default for ProcessDefinition {
     fn default() -> Self {
         Self {
             generation_type: GenerationType::Amplitude,
-            initial_pdgs: vec![],
-            final_pdgs_lists: vec![],
-            loop_count_range: (1, 1),
-            symmetrize_initial_states: false,
-            symmetrize_final_states: false,
-            symmetrize_left_right_states: false,
-            allow_symmetrization_of_external_fermions_in_amplitudes: false,
-            max_multiplicity_for_fast_cut_filter: 6,
-            amplitude_filters: FeynGenFilters(vec![]),
-            cross_section_filters: FeynGenFilters(vec![]),
+            process: GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new()),
+            generation_options: GenerationOptions::default()
+                .graph_prefix("GL")
+                .with_loop_count(1, 1)
+                .expect("the default loop range is valid"),
             folder_name: "undefined_process".to_string(),
             process_id: 0,
-            numerator_grouping: NumeratorAwareGraphGroupingOption::NoGrouping,
-            filter_self_loop: true,
-            graph_prefix: "GL".to_string(),
-            selected_graphs: None,
-            vetoed_graphs: None,
-            loop_momentum_bases: None,
-            prefactor: GlobalPrefactor::default(),
-            filter_zero_flow_edges: true,
         }
     }
 }
 
 impl ProcessDefinition {
     pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
-        if self.generation_type != GenerationType::CrossSection {
-            return Ok(self.final_pdgs_lists.clone());
-        }
-        let states = model.covariant_cut_states(&self.final_pdgs_lists)?;
-        let representatives = self.covariant_cut_representatives(model);
-        for &member in self.final_pdgs_lists.iter().flatten() {
-            if let Some(&physical) = representatives.get(&(member as isize))
-                && member != physical as i64
-            {
-                return Err(eyre!(
-                    "Final-state PDG {member} overlaps the covariant cut multiplet of requested physical PDG {physical}; separate physical-vector and unphysical diagnostic final-state requests so their observable labels remain unambiguous. For imported covariant partner graphs, supply the physical channel with --process-spec; raw graph states do not establish that intent"
-                ));
-            }
-        }
-        for filter in [&self.amplitude_filters, &self.cross_section_filters] {
-            if let Some(vetoes) = filter.get_particle_vetos() {
-                for (&member, &physical) in &representatives {
-                    let anti = model
-                        .get_particle_from_pdg(member)
-                        .get_anti_particle(model)
-                        .pdg_code;
-                    if vetoes.contains(&(member as i64)) || vetoes.contains(&(anti as i64)) {
-                        return Err(eyre!(
-                            "Particle veto removes PDG {member} from the covariant cut multiplet of physical PDG {physical}; retain the complete vector/Goldstone/ghost sector for a physical cross section"
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(states)
+        self.process.validate_covariant_cut_filters(
+            model,
+            &self.generation_options,
+            self.generation_type,
+        )?;
+        Ok(self
+            .process
+            .covariant_cut_states(model, self.generation_type)?)
     }
 
     pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
@@ -919,6 +839,7 @@ impl Process {
 
     pub(crate) fn export_uv_forests(
         &self,
+        model: &Model,
         path: impl AsRef<Path>,
         integrand_name: &str,
         graph_ids: &[usize],
@@ -946,7 +867,7 @@ impl Process {
         })?;
 
         for &graph_id in graph_ids {
-            let export = self.export_uv_forest_graph(integrand_name, graph_id, settings)?;
+            let export = self.export_uv_forest_graph(model, integrand_name, graph_id, settings)?;
             let graph_name = sanitize_file_component(&export.graph_name);
             let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
@@ -980,7 +901,7 @@ impl Process {
         generation_type: GenerationType,
         definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
-        model: &Model,
+        _model: &Model,
     ) -> Result<Self> {
         let mut proc_definition = definition.unwrap_or_default();
         proc_definition.folder_name = process_name;
@@ -1007,11 +928,8 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    collection.add_cross_section(CrossSection::from_graph_list(
-                        integrand_name,
-                        graphs,
-                        model,
-                    )?);
+                    collection
+                        .add_cross_section(CrossSection::from_graph_list(integrand_name, graphs)?);
                     // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
@@ -1298,6 +1216,7 @@ mod tests {
     };
 
     use crate::{GammaLoopContextContainer, utils::load_generic_model};
+    use feynkit_generator::GenerationType;
     use symbolica::atom::{Atom, AtomCore};
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
