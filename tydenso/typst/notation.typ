@@ -15,6 +15,9 @@
 
 #let _settings(value) = _merge((
   tensor-layout: "ports",
+  component-style: "superscript",
+  print-heads: (:),
+  print-calls: (),
   with-dim: false,
   parens: true,
   commas: none,
@@ -192,7 +195,13 @@
     ctx.identity,
     (1,),
   )
-  if display == none { (ctx.default)() } else { _display-node(display) }
+  if display != none { return _display-node(display) }
+  let labels = ctx.tags.filter(tag => tag.starts-with("spenso::tensor-label:"))
+  if labels.len() > 0 {
+    _display-symbol(labels.first().slice("spenso::tensor-label:".len()))
+  } else {
+    (ctx.default)()
+  }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)
@@ -300,11 +309,39 @@
   let label = _display-node(labels.at(position))
   if cycle == 0 { label } else { math.attach(label, b: $ #cycle $) }
 }
-#let _slot-index(slot, ctx) = {
+#let _index-key(node) = {
+  if _is-variable(node) { return ("var", _name(node)) }
+  if _is-function(node) { return ("fun", _name(node), node.arguments.map(_index-key)) }
+  let natural = _natural-index(node)
+  if natural != none { natural } else { node.at("text", default: "?") }
+}
+#let _slot-index(slot, ctx, settings) = {
   let index = _natural-index(slot.index)
   if index != none {
     let display = _palette-index(slot.palette, index)
     if display != none { return display }
+  }
+  // Aliases affect only the visible slot. The complete tensor call keeps its
+  // original Atom annotation, including its named graph-index identities.
+  if _is-function(slot.index) or _is-variable(slot.index) {
+    // `none` distinguishes symbolic indices from zero-argument index calls.
+    let arguments = if _is-variable(slot.index) { none } else {
+      slot.index.arguments.map(_index-key)
+    }
+    if arguments == none or none not in arguments {
+      for alias in settings.at("index-aliases", default: ()) {
+        if (
+          alias.at(0) == slot.identity
+            and alias.at(1) == _name(slot.index)
+            and alias.at(2) == arguments
+        ) {
+          let label = alias.at(3)
+          if type(label) == content { return label }
+          let display = _palette-index(slot.palette, label)
+          if display != none { return display }
+        }
+      }
+    }
   }
   // Exact document heads are resolved by the common renderer before its
   // payload-head fallback, so they beat spenso.math-display overlays.
@@ -450,6 +487,32 @@
 
 #let _render-tensor(ctx, settings) = {
   let node = ctx.node
+  for (atom, normal, power) in settings.print-calls {
+    if node.at("atom", default: none) == atom {
+      let visual = if ctx.power-base { power } else { normal }
+      if visual != none { return visual }
+    }
+  }
+  if node.arguments.len() > 0 {
+    let component = node.arguments.last()
+    if _is-function(component) and _name(component) == "spenso::cind" and (
+      component.arguments.all(index => _natural-index(index) != none)
+    ) {
+      let base = _head(ctx, node)
+      let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
+      if labels.len() > 0 {
+        // Component parameters are ordinary function arguments in every layout.
+        base = _tight((base, _parentheses(labels.join($,$))))
+      }
+      if component.arguments.len() == 0 { return base }
+      let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
+      if settings.component-style == "array" {
+        return _tight((base, math.lr($ [#coordinates] $)))
+      }
+      let body = math.attach(base, t: coordinates)
+      return if ctx.power-base { _parentheses(body) } else { body }
+    }
+  }
   if _has-tag(node, "rank1") {
     let compact = _compact-vector(node, ctx, settings)
     if compact != none { return compact.label }
@@ -465,7 +528,7 @@
     let slot = _slot(argument, ctx)
     if slot != none {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
       continue
@@ -516,7 +579,7 @@
   let visual-arguments = ctx.arguments.map(argument => {
     let slot = _slot(argument, ctx)
     if slot != none {
-      return _qualified-index(slot, _slot-index(slot, ctx), ctx, settings)
+      return _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings)
     }
     let compact = _compact-vector(argument, ctx, settings)
     if compact != none {
@@ -556,7 +619,7 @@
       columns.push((source: _visual(ctx, argument), row: "bottom"))
     } else {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
     }
@@ -601,7 +664,7 @@
     prefix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -614,7 +677,7 @@
     suffix = compact.label
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -688,6 +751,7 @@
 #let notation(
   settings: (:),
   tensor-layout: none,
+  component-style: none,
   with-dim: none,
   parens: none,
   commas: none,
@@ -702,6 +766,7 @@
   let settings = _settings(settings)
   for (key, value) in (
     tensor-layout: tensor-layout,
+    component-style: component-style,
     with-dim: with-dim,
     parens: parens,
     commas: commas,
@@ -713,6 +778,9 @@
   }
   if settings.tensor-layout not in ("ports", "schoonschip", "call") {
     panic("tensor-layout must be \"ports\", \"schoonschip\", or \"call\"")
+  }
+  if settings.component-style not in ("superscript", "array") {
+    panic("component-style must be \"superscript\" or \"array\"")
   }
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
@@ -735,14 +803,46 @@
     (ctx.default)()
   }
   let defaults = core.notation(
-    heads: _default-heads,
+    heads: _merge(_default-heads, settings.print-heads),
     calls: (
+      "spenso::bracket": ctx => {
+        if ctx.arguments.len() == 0 { return (ctx.default)() }
+        let body = ctx.arguments.map(argument => {
+          let visual = _visual(ctx, argument)
+          if _kind(argument) == "sum" { _parentheses(visual) } else { visual }
+        }).join(h(settings.factor-gap))
+        if ctx.power-base { _parentheses(body) } else { body }
+      },
       "spenso::gamma": ctx => _render-gamma(ctx, settings),
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
       "spenso::trace": ctx => _render-trace(ctx, settings),
     ),
     tags: (
+      "spenso::index": ctx => {
+        let labels = ctx.tags.filter(tag => tag.starts-with("spenso::index-label:"))
+        if ctx.kind != "function" or labels.len() != 1 {
+          (ctx.default)()
+        } else {
+          let label = labels.first().split(":").last()
+          let arguments = ctx.visual-arguments
+          // The first endpoint slot is implicit; higher-spin slots and dummy
+          // identifiers remain visible, matching the native index printer.
+          if (
+            label in ("s", "t") and ctx.arguments.len() == 2
+              and _kind(ctx.arguments.at(1)) == "number"
+              and ctx.arguments.at(1).at("source", default: none) == "1"
+          ) {
+            arguments = arguments.slice(0, 1)
+          }
+          // Use a math symbol, not italic text: text boxes scale incorrectly
+          // when this label is itself nested inside a tensor's script.
+          let head = (ctx.render-visual)((kind: "variable", source: label, symbol: (name: label)))
+          // Math's smallest script style stops shrinking at deeper levels.
+          // Keep the numeric identifier subordinate even inside a fraction.
+          math.attach(head, b: text(size: 0.75em, arguments.join([.])))
+        }
+      },
       tensor: tensor,
       "spenso::tensor": tensor,
     ),

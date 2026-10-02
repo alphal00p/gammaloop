@@ -2,13 +2,13 @@
 name = "spynso3"
 version = "0.1.2"
 edition = "2024"
-description = "Pyo3 bindings for spenso"
+description = "Python tensor and simplification bindings for Spenso and Idenso"
 license = "MIT"
 repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true, features = ["python"] }
+idenso = { workspace = true }
 spenso = { workspace = true, features = ["portable-payload", "python", "shadowing"] }
 spenso-hep-lib = { workspace = true, default-features = false }
 spenso-macros = { workspace = true }
@@ -18,11 +18,14 @@ eyre = { workspace = true }
 pyo3 = { workspace = true, features = ["eyre"] }
 
 itertools = "0.14.0"
+roxmltree = "0.21.1"
+ciborium = "0.2"
+linnet = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
 thiserror = { workspace = true }
-symbolica-typst-atom-payload = { workspace = true }
+symbolica-typst-plugin = { workspace = true }
 
 [dependencies.symbolica]
 workspace = true
@@ -36,18 +39,17 @@ native = [
   "pyo3/multiple-pymethods",
   "spenso/native-code-generation",
   "spenso-hep-lib/native",
-  "symbolica-typst-atom-payload/native",
+  "symbolica-typst-plugin/native",
 ]
 wasm = [
   "idenso/wasm",
   "spenso/wasm",
   "spenso-hep-lib/wasm",
   "symbolica/wasm",
-  "symbolica-typst-atom-payload/wasm",
+  "symbolica-typst-plugin/wasm",
 ]
 python_stubgen = [
   "dep:pyo3-stub-gen",
-  "idenso/python_stubgen",
   "spenso/python_stubgen",
   "symbolica/python_stubgen",
 ]

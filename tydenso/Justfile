@@ -66,7 +66,13 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="18e0491628f9eac5c788659cabfcdb7575f6986d"
+    tymbolica_revision="57b7455b37c30f4f87353c0073e49f5225e937ab"
+    symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' ../Cargo.lock)"
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+      exit 1
+    fi
+    symbolica_revision="${symbolica_source##*#}"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -76,12 +82,16 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_version="3.0.0"
     check_dir="$(mktemp -d)"
     trap 'rm -rf "$check_dir"' EXIT
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
+    # Atom payloads require the same storage format in all three engines. Apply
+    # the community dependency only to this copy, preserving the plugin's Wasm features.
+    sed -i \
+      "s|git = \"https://github.com/symbolica-dev/symbolica.git\", branch = \"main\"|git = \"https://github.com/symbolica-dev/symbolica\", branch = \"community\"|g" \
+      "$tymbolica_checkout/Cargo.toml"
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -90,18 +100,33 @@ check: build check-wasm-features
     (
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR
+      # Upstream builds with --locked; match the workspace's engine revision first.
+      cargo update --package symbolica --precise "$symbolica_revision"
+      cargo update --package numerica --precise 3.0.1
+      cargo update --package graphica --precise 3.0.1
       nix run --no-write-lock-file "path:$PWD#build"
     )
-    expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$symbolica_version")"
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do
+        source="registry+https://github.com/rust-lang/crates.io-index"
+        symbolica_version="3.0.1"
+        if [ "$package" = symbolica ]; then
+          source="$symbolica_source"
+        fi
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $symbolica_version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $symbolica_version from $source; found ${resolved:-none}" >&2
           exit 1
         fi
       done
     done
+    tree="$(cargo tree --locked --manifest-path "$tymbolica_checkout/Cargo.toml" --target wasm32-unknown-unknown --package symbolica-typst-plugin --no-default-features --features wasm,plugin --edges normal --prefix none -e features)"
+    if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
+      echo "Tymbolica's target graph contains native-only dependencies" >&2
+      printf '%s\n' "$tree" >&2
+      exit 1
+    fi
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 

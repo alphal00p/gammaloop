@@ -1,28 +1,29 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
+
+pub(crate) mod execution;
 
 use pyo3::{
     Borrowed,
     exceptions::{self, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::PyTuple,
+    types::{PyDict, PyTuple},
 };
 
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use spenso::{
-    algebra::complex::{Complex, RealOrComplex},
     iterators::IteratableTensor,
     network::{
-        ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree,
-        SmallestDegree, Steps,
+        ContractScalars, ExecutionResult, MinIntermediateCost, Network, Sequential,
+        SingleSmallestDegree, Steps,
         library::symbolic::{ExplicitKey, TensorLibrary},
         parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
         tags::SPENSO_TAG,
     },
     structure::{
-        HasStructure, ScalarTensor, TensorStructure,
+        TensorStructure,
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
         slot::IsAbstractSlot,
@@ -39,68 +40,52 @@ use symbolica::{
         PythonPatternRestriction,
     },
     atom::FunctionBuilder,
-    domains::float::Complex as SymComplex,
     id::{Condition, PatternRestriction},
     prelude::*,
 };
 
 use symbolica::api::python::ConvertibleToExpression;
+#[cfg(test)]
+use symbolica::domains::float::Complex as SymComplex;
 
-use crate::{
-    composition::{self, StructuredAtom},
-    display,
-    expression::TensorExpression,
-    library::SpensorFunctionLibrary,
+use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
+use idenso::tensor::{
+    SymbolicTensor,
+    composition::{self, ProductPlan},
+    inference::InterfaceInference,
 };
 
-use super::{Spensor, fresh_open_owner, library::SpensorLibrary, structure::ArithmeticStructure};
+use super::{Spensor, library::SpensorLibrary, structure::ArithmeticStructure};
 
 use super::ModuleInit;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*};
 
-/// A graph of tensor operations that can be simplified and executed.
+/// An executable tensor calculation that retains component data.
 ///
-/// Named tensor expressions are resolved through a `TensorLibrary`. Register concrete data
-/// before constructing and executing a network; an expression alone supplies structure, not
-/// component values.
-///
-/// A network retains the semantic source expression and its public tensor interface
-/// separately from the executable graph and its stored values. Value specialization
-/// and graph execution therefore do not rewrite the source expression returned by
-/// `structure()` or used by the semantic display methods.
+/// Networks combine tensor contractions, sums, products, and elementwise
+/// functions. Arithmetic creates new networks. ``execute()`` advances a network
+/// in place; ``step()`` and ``to_tensor()`` work on copies. ``expression()``
+/// returns the symbolic source, while ``status`` reports remaining work.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import (
-/// ...     ExecutionMode,
-/// ...     Representation,
-/// ...     Tensor,
-/// ...     TensorLibrary,
-/// ...     TensorName,
-/// ...     TensorNetwork,
-/// ... )
-/// >>> rep = Representation.euc(2)
-/// >>> A = TensorName("A")
-/// >>> structure = A(rep, rep)
-/// >>> library = TensorLibrary()
-/// >>> library.register(
-/// ...     Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
-/// ... )
-/// >>> network = TensorNetwork(
-/// ...     A(rep("i"), rep("j")),
-/// ...     library=library,
-/// ... )
-/// >>> network.execute(library=library, mode=ExecutionMode.All)
-/// >>> result = network.result_tensor(library=library)
-/// >>> len(result)
-/// 4
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> from symbolica.community.tensor import TensorNetwork
+/// >>> network = TensorNetwork(tensor)
+/// >>> result = network.to_tensor()
+/// >>> result[0, 1]
+/// 2.0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "TensorNetwork",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
@@ -111,9 +96,9 @@ pub struct SpensoNet {
         Symbol,
     >,
     /// Semantic source expression and public interface, including unresolved ports.
-    pub(crate) structure: StructuredAtom,
+    pub(crate) structure: SymbolicTensor<PartialStructure>,
     /// The source expression with all graph-facing ports made explicit.
-    pub(crate) materialized: StructuredAtom,
+    pub(crate) materialized: SymbolicTensor<PartialStructure>,
     /// Optional stored-data identity. Composite results deliberately remain unnamed.
     pub(crate) descriptor: Option<(Symbol, Vec<Atom>)>,
 }
@@ -166,20 +151,29 @@ fn insert_function_values<'a>(
     Ok(())
 }
 
-/// Execution modes for tensor network evaluation.
+/// Choose how network execution schedules contractions.
 ///
-/// Controls how the tensor network execution engine processes the computational graph.
+/// ``All`` uses the default contraction schedule. ``Single`` selects one
+/// contraction at a time. ``Scalar`` restricts contraction to scalar work.
+/// Use ``execute(n_steps=...)`` to bound the number of execution rounds;
+/// the mode by itself does not bound the total number of rounds.
 ///
-/// Variants
+/// Examples
 /// --------
-/// Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
-/// Scalar : Only contract scalar operations, leaving tensor structure intact
-/// All : Execute all possible contractions for complete evaluation
+/// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+/// >>> space = Representation.euc(2)
+/// >>> A = TensorName("M")(space, space)
+/// >>> from symbolica.community.tensor import Tensor
+/// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+/// >>> from symbolica.community.tensor import TensorNetwork
+/// >>> network = TensorNetwork(tensor)
+/// >>> from symbolica.community.tensor import ExecutionMode
+/// >>> network.execute(n_steps=1, mode=ExecutionMode.Single)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     from_py_object,
     name = "ExecutionMode",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub enum ExecutionMode {
@@ -202,8 +196,8 @@ pub type ParsingNet = Network<
     Symbol,
 >;
 
-/// A Symbolica pattern restriction accepted by tensor-network replacement.
-pub struct ReplacementCondition(Condition<PatternRestriction>);
+/// A Symbolica pattern restriction accepted by tensor replacement.
+pub struct ReplacementCondition(pub(crate) Condition<PatternRestriction>);
 
 impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
     type Error = PyErr;
@@ -228,25 +222,28 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::impl_stub_type!(ReplacementCondition = PythonPatternRestriction | PythonCondition);
 
-fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
-    if !value.atom.as_view().is_zero() || value.is_scalar() {
+fn non_scalar_zero_network(value: &SymbolicTensor<PartialStructure>) -> Option<ParsingNet> {
+    if !value.expression().as_view().is_zero() || value.is_scalar() {
         return None;
     }
 
+    let dummies = std::cell::OnceCell::new();
     let replacements = value
-        .interface
+        .structure()
         .logical_slots()
         .into_iter()
         .filter_map(|slot| match slot.aind {
             PartialIndex::Explicit(_) => None,
             PartialIndex::Open(id) => Some((
                 id,
-                composition::fresh_dummy_index([&value.atom], [&value.interface]),
+                dummies
+                    .get_or_init(|| SymbolicTensor::reserved_dummies([value]))
+                    .fresh_index(),
             )),
         })
         .collect();
     let structure: ShadowedStructure<AbstractIndex> = value
-        .interface
+        .structure()
         .materialize_open_ports(&replacements)
         .into_canonical()
         .into();
@@ -261,8 +258,8 @@ fn network_from_arithmetic(
     match expression {
         ArithmeticStructure::Tensor(expression) => Python::attach(|py| {
             let expression = expression.bind(py).borrow();
-            let structure = TensorExpression::structured(&expression);
-            let materialized = TensorExpression::materialized(&expression)?;
+            let structure = TensorExpression::structured(&expression).clone();
+            let materialized = structure.materialized().map_err(composition_error)?;
             let descriptor = TensorExpression::descriptor_name(&expression)
                 .map(|name| (name, TensorExpression::descriptor_args(&expression)));
             if let Some(network) = non_scalar_zero_network(&materialized) {
@@ -276,7 +273,7 @@ fn network_from_arithmetic(
 
             Ok(SpensoNet {
                 network: ParsingNet::try_from_view(
-                    materialized.atom.as_view(),
+                    materialized.expression().as_view(),
                     library,
                     &ParseSettings::default(),
                 )?,
@@ -289,7 +286,7 @@ fn network_from_arithmetic(
             let atom = expression.to_expression()?.expr;
             let network =
                 ParsingNet::try_from_view(atom.as_view(), library, &ParseSettings::default())?;
-            let value = composition::normalize_closed_root_chain(StructuredAtom::new(
+            let value = SymbolicTensor::new(
                 atom.clone(),
                 PartialStructure::from_logical_slots(
                     network
@@ -298,7 +295,8 @@ fn network_from_arithmetic(
                         .into_iter()
                         .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
                 ),
-            ))?;
+            )
+            .normalize_closed_root_chain()?;
             Ok(SpensoNet {
                 network,
                 structure: value.clone(),
@@ -318,11 +316,128 @@ impl ConvertibleToSpensoNet {
 }
 
 impl SpensoNet {
+    pub(crate) fn project_factors(
+        py: Python<'_>,
+        mut factors: Vec<Self>,
+        kind: spenso::shadowing::FactorProjector,
+    ) -> PyResult<Self> {
+        let sources = factors
+            .iter()
+            .map(|factor| factor.structure.clone())
+            .collect::<Vec<_>>();
+        let structure =
+            SymbolicTensor::project_factors(&sources, kind).map_err(composition_error)?;
+        // Give spectator ports stable identities across permutations. Aligning
+        // anonymous axes by position would exchange the spectator data as well.
+        let indices = SymbolicTensor::reserved_dummies(
+            factors
+                .iter()
+                .flat_map(|factor| [&factor.structure, &factor.materialized]),
+        );
+        for factor in &mut factors {
+            let channel = factor.structure.matrix_channel().ok_or_else(|| {
+                composition_error(composition::TensorCompositionError::NoMatrixChannel)
+            })?;
+            let replacements = factor
+                .structure
+                .structure()
+                .logical_slots()
+                .iter()
+                .enumerate()
+                .filter(|(position, slot)| {
+                    *position != channel.input
+                        && *position != channel.output
+                        && matches!(slot.aind, PartialIndex::Open(_))
+                })
+                .map(|(position, _)| (position, indices.fresh_index()))
+                .collect();
+            *factor = factor.set_port_indices(&replacements)?;
+        }
+        let terms = kind
+            .permutations(factors.len())
+            .ok_or_else(|| PyValueError::new_err("factor projector normalization is too large"))?;
+        let endpoints = HashMap::from([(0, indices.fresh_index()), (1, indices.fresh_index())]);
+        let mut result: Option<Self> = None;
+        for (coefficient, order) in terms {
+            let first = factors[order[0]].clone();
+            let channel = first.structure.matrix_channel().ok_or_else(|| {
+                composition_error(composition::TensorCompositionError::NoMatrixChannel)
+            })?;
+            let mut term = first.chain_form(channel)?;
+            for index in &order[1..] {
+                let factor = factors[*index].clone();
+                let channel = factor.structure.matrix_channel().ok_or_else(|| {
+                    composition_error(composition::TensorCompositionError::NoMatrixChannel)
+                })?;
+                term = term.compose(
+                    ConvertibleToSpensoNet(factor),
+                    (0, 1),
+                    (channel.input, channel.output),
+                )?;
+            }
+            term = term.set_port_indices(&endpoints)?;
+            let scalar = TensorExpression::from_structured(
+                py,
+                SymbolicTensor::new(coefficient, PartialStructure::from_logical_slots([])),
+            )?;
+            term = term.multiply_network(Self::from_arithmetic(
+                ArithmeticStructure::Tensor(scalar),
+                None,
+            )?)?;
+            result = Some(match result {
+                Some(sum) => {
+                    // Permuting matrix factors must not permute the public
+                    // spectator axes. Their explicit identities determine the
+                    // alignment before the component networks are added.
+                    let slots = term.structure.structure().logical_slots();
+                    let axes = sum
+                        .structure
+                        .structure()
+                        .logical_slots()
+                        .iter()
+                        .map(|slot| {
+                            slots.iter().position(|other| other == slot).ok_or_else(|| {
+                                PyValueError::new_err(
+                                    "projected factors have incompatible spectator ports",
+                                )
+                            })
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    sum.add_network(term.permute_axes(axes)?, false)?
+                }
+                None => term,
+            });
+        }
+        let mut result = result.expect("a nonempty factor group has at least one permutation");
+        // Computation is a sum of networks, while both semantic descriptions
+        // retain a single projected channel that can be composed again.
+        let replacements = result
+            .materialized
+            .structure()
+            .logical_slots()
+            .iter()
+            .enumerate()
+            .map(|(position, slot)| {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!("network-facing ports are explicit")
+                };
+                (position, index)
+            })
+            .collect();
+        result.materialized = structure
+            .reindex_interface_ports(&replacements)
+            .map_err(composition_error)?;
+        result.structure = structure;
+        result.descriptor = None;
+        result.validate_graph_interface()?;
+        Ok(result)
+    }
+
     pub(crate) fn from_tensor(value: Spensor) -> PyResult<Self> {
         let canonical = value.tensor.external_structure();
         let logical = value
             .descriptor
-            .interface
+            .structure()
             .layout()
             .canonical_to_logical(&canonical);
         let replacements = logical
@@ -330,9 +445,11 @@ impl SpensoNet {
             .enumerate()
             .map(|(position, slot)| (position, slot.aind()))
             .collect::<HashMap<_, _>>();
-        let materialized = composition::reindex_interface_ports(&value.descriptor, &replacements)
+        let materialized = value
+            .descriptor
+            .reindex_interface_ports(&replacements)
             .map_err(composition_error)?;
-        let mut network = Self {
+        let network = Self {
             network: Network::from_tensor(value.tensor),
             materialized,
             structure: value.descriptor,
@@ -340,11 +457,16 @@ impl SpensoNet {
                 .descriptor_name
                 .map(|name| (name, value.descriptor_args)),
         };
-        for (position, slot) in network.semantic_slots().into_iter().enumerate() {
-            if let PartialIndex::Explicit(index) = slot.aind {
-                network.relabel_port(position, index)?;
-            }
-        }
+        let indices = network
+            .semantic_slots()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(position, slot)| match slot.aind {
+                PartialIndex::Explicit(index) => Some((position, index)),
+                PartialIndex::Open(_) => None,
+            })
+            .collect();
+        let network = network.relabel_ports(&indices)?;
         network.validate_graph_interface()?;
         Ok(network)
     }
@@ -371,6 +493,8 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
     fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> Result<Self, Self::Error> {
         if let Ok(a) = ob.extract::<SpensoNet>() {
             Ok(ConvertibleToSpensoNet(a))
+        } else if let Ok(group) = ob.extract::<crate::projectors::PyFactorProjector>() {
+            group.to_network(ob.py()).map(ConvertibleToSpensoNet)
         } else if let Ok(num) = ob.extract::<Spensor>() {
             Ok(ConvertibleToSpensoNet(SpensoNet::from_tensor(num)?))
         } else if let Ok(a) = ob.extract::<ArithmeticStructure>() {
@@ -386,201 +510,85 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for ConvertibleToSpensoNet {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
-        ArithmeticStructure::type_output() | SpensoNet::type_output() | Spensor::type_output()
+        ArithmeticStructure::type_output()
+            | SpensoNet::type_output()
+            | Spensor::type_output()
+            | crate::projectors::PyFactorProjector::type_output()
     }
-}
-
-#[derive(Clone, Copy)]
-enum ProductPlan {
-    Scalar,
-    Outer,
-    Contract(composition::PortPair),
-    Compose(composition::MatrixChannel, composition::MatrixChannel),
 }
 
 fn composition_error(error: composition::TensorCompositionError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) -> bool {
-    // Unresolved ports remain positional; only explicit indices identify ports across terms.
-    left.logical_slots() == right.logical_slots()
-        || (left.open_positions().is_empty()
-            && right.open_positions().is_empty()
-            && left.canonical() == right.canonical())
-}
-
-fn product_plan(
-    left: &StructuredAtom,
-    right: &StructuredAtom,
-) -> Result<(StructuredAtom, ProductPlan), composition::TensorCompositionError> {
-    let result = composition::multiply(left, right)?;
-    if left.is_scalar() || right.is_scalar() {
-        return Ok((result, ProductPlan::Scalar));
-    }
-
-    let compatible = composition::compatible_pairs(&left.interface, &right.interface);
-    if let (Some(left_channel), Some(right_channel)) = (
-        composition::matrix_channel(left),
-        composition::matrix_channel(right),
-    ) {
-        let channel_pair = composition::PortPair {
-            left: left_channel.output,
-            right: right_channel.input,
-        };
-        if compatible.contains(&channel_pair) {
-            return Ok((result, ProductPlan::Compose(left_channel, right_channel)));
-        }
-    }
-
-    Ok((
-        result,
-        match compatible.as_slice() {
-            [] => ProductPlan::Outer,
-            [pair] => ProductPlan::Contract(*pair),
-            _ => unreachable!("composition::multiply rejected ambiguous compatible pairs"),
-        },
-    ))
-}
-
 impl SpensoNet {
     fn semantic_slots(&self) -> Vec<spenso::structure::partial::PartialSlot> {
-        self.structure.interface.logical_slots()
+        self.structure.structure().logical_slots()
     }
 
-    fn relabel_port(&mut self, position: usize, index: AbstractIndex) -> PyResult<()> {
-        let slots = self.materialized.interface.logical_slots();
-        let slot = slots.get(position).copied().ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "port position {position} is outside an interface of rank {}",
-                slots.len()
-            ))
-        })?;
-        let PartialIndex::Explicit(current) = slot.aind else {
-            return Err(PyRuntimeError::new_err(
-                "tensor network graph interface contains an unresolved port",
-            ));
-        };
-        if current == index {
-            return Ok(());
+    fn relabel_ports(mut self, indices: &HashMap<usize, AbstractIndex>) -> PyResult<Self> {
+        let slots = self.materialized.structure().logical_slots();
+        let mut replacements = indices
+            .iter()
+            .map(|(&position, &index)| {
+                let slot = slots.get(position).copied().ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "port position {position} is outside an interface of rank {}",
+                        slots.len()
+                    ))
+                })?;
+                let PartialIndex::Explicit(current) = slot.aind else {
+                    return Err(PyRuntimeError::new_err(
+                        "tensor network graph interface contains an unresolved port",
+                    ));
+                };
+                Ok((
+                    position,
+                    slot.rep().slot(current).to_lib(),
+                    slot.rep().slot(index).to_lib(),
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        replacements.sort_by_key(|(position, _, _)| *position);
+        if replacements.iter().all(|(_, from, to)| from == to) {
+            return Ok(self);
         }
-
-        let materialized = composition::reindex_interface_ports(
-            &self.materialized,
-            &HashMap::from([(position, index)]),
-        )
-        .map_err(composition_error)?;
-        let from = slot.rep().slot(current).to_lib();
-        let to = slot.rep().slot(index).to_lib();
-        let mut reindexed = Vec::new();
-        for (tensor_index, tensor) in self.network.store.tensors.iter().enumerate() {
-            let slots = tensor.external_structure();
-            if !slots.contains(&from) {
-                continue;
-            }
-            let indices = slots
-                .into_iter()
-                .map(|slot| if slot == from { index } else { slot.aind() })
-                .collect::<Vec<_>>();
-            let tensor = tensor
-                .clone()
-                .reindex_storage(&indices)
-                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
-                .apply();
-            reindexed.push((tensor_index, tensor));
-        }
-        if !self.network.graph.relabel_dangling_slot(from, to) {
-            return Err(PyRuntimeError::new_err(format!(
-                "could not uniquely relabel network port {position}"
-            )));
-        }
-        for (tensor_index, tensor) in reindexed {
-            self.network.store.tensors[tensor_index] = tensor;
-        }
+        let materialized = self
+            .materialized
+            .reindex_interface_ports(indices)
+            .map_err(composition_error)?;
+        self.network = self
+            .network
+            .reindex_ports(
+                &replacements
+                    .into_iter()
+                    .map(|(_, from, to)| (from, to))
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         self.materialized = materialized;
-        self.network.state = self.network.graph.state();
-        Ok(())
+        Ok(self)
     }
 
-    fn freshen_open_ports(&mut self) -> PyResult<()> {
-        let owner = fresh_open_owner();
-        for (axis, position) in self
-            .structure
-            .interface
-            .open_positions()
-            .into_iter()
-            .enumerate()
-        {
-            self.relabel_port(position, AbstractIndex::Open { owner, axis })?;
-        }
-        Ok(())
-    }
-
-    fn align_pair(left: &mut Self, right: &mut Self, pair: composition::PortPair) -> PyResult<()> {
-        let left_slot = left
-            .semantic_slots()
-            .get(pair.left)
-            .copied()
-            .ok_or_else(|| {
-                PyValueError::new_err(format!("invalid left port position {}", pair.left))
-            })?;
-        let right_slot = right
-            .semantic_slots()
-            .get(pair.right)
-            .copied()
-            .ok_or_else(|| {
-                PyValueError::new_err(format!("invalid right port position {}", pair.right))
-            })?;
-        let target = match (left_slot.aind, right_slot.aind) {
-            (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left == right => left,
-            (PartialIndex::Explicit(index), PartialIndex::Open(_))
-            | (PartialIndex::Open(_), PartialIndex::Explicit(index)) => index,
-            (PartialIndex::Open(_), PartialIndex::Open(_)) => composition::fresh_dummy_index(
-                [&left.structure.atom, &right.structure.atom],
-                [&left.structure.interface, &right.structure.interface],
-            ),
-            (PartialIndex::Explicit(_), PartialIndex::Explicit(_)) => {
-                return Err(PyValueError::new_err(format!(
-                    "explicit ports {} and {} do not carry the same abstract index",
-                    pair.left, pair.right
-                )));
-            }
-        };
-        left.relabel_port(pair.left, target)?;
-        right.relabel_port(pair.right, target)
-    }
-
-    fn align_self_pair(&mut self, pair: composition::PortPair) -> PyResult<()> {
-        let slots = self.semantic_slots();
-        let left = slots
-            .get(pair.left)
-            .copied()
-            .ok_or_else(|| PyValueError::new_err(format!("invalid port position {}", pair.left)))?;
-        let right = slots.get(pair.right).copied().ok_or_else(|| {
-            PyValueError::new_err(format!("invalid port position {}", pair.right))
-        })?;
-        let target = match (left.aind, right.aind) {
-            (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left == right => left,
-            (PartialIndex::Explicit(index), PartialIndex::Open(_))
-            | (PartialIndex::Open(_), PartialIndex::Explicit(index)) => index,
-            (PartialIndex::Open(_), PartialIndex::Open(_)) => {
-                composition::fresh_dummy_index([&self.structure.atom], [&self.structure.interface])
-            }
-            (PartialIndex::Explicit(_), PartialIndex::Explicit(_)) => {
-                return Err(PyValueError::new_err(format!(
-                    "explicit ports {} and {} do not carry the same abstract index",
-                    pair.left, pair.right
-                )));
-            }
-        };
-        self.relabel_port(pair.left, target)?;
-        self.relabel_port(pair.right, target)
+    fn apply_product(self, right: Self, plan: ProductPlan) -> PyResult<Self> {
+        let structure = plan
+            .apply(&self.structure, &right.structure)
+            .map_err(composition_error)?;
+        let (left_indices, right_indices) = plan
+            .alignment_indices(&self.structure, &right.structure)
+            .map_err(composition_error)?;
+        let left = self.relabel_ports(&left_indices)?;
+        let right = right.relabel_ports(&right_indices)?;
+        let materialized = plan
+            .apply(&left.materialized, &right.materialized)
+            .map_err(composition_error)?;
+        Self::finish(left.network * right.network, structure, materialized)
     }
 
     fn validate_graph_interface(&self) -> PyResult<()> {
         let mut expected = self
             .materialized
-            .interface
+            .structure()
             .logical_slots()
             .into_iter()
             .map(|slot| {
@@ -605,13 +613,15 @@ impl SpensoNet {
 
     fn finish(
         mut network: ParsingNet,
-        structure: StructuredAtom,
-        materialized: StructuredAtom,
+        structure: SymbolicTensor<PartialStructure>,
+        materialized: SymbolicTensor<PartialStructure>,
     ) -> PyResult<Self> {
-        let structure =
-            composition::normalize_closed_root_chain(structure).map_err(composition_error)?;
-        let materialized =
-            composition::normalize_closed_root_chain(materialized).map_err(composition_error)?;
+        let structure = structure
+            .normalize_closed_root_chain()
+            .map_err(composition_error)?;
+        let materialized = materialized
+            .normalize_closed_root_chain()
+            .map_err(composition_error)?;
         network.state = network.graph.state();
         let value = Self {
             network,
@@ -624,40 +634,47 @@ impl SpensoNet {
     }
 
     pub(crate) fn add_network(mut self, mut right: Self, subtract: bool) -> PyResult<Self> {
-        if !additive_interfaces_match(&self.structure.interface, &right.structure.interface) {
+        if !InterfaceInference::additive_interfaces_match(
+            self.structure.structure(),
+            right.structure.structure(),
+        ) {
             return Err(PyValueError::new_err(if subtract {
                 "subtraction requires compatible tensor interfaces"
             } else {
                 "addition requires compatible tensor interfaces"
             }));
         }
-        self.freshen_open_ports()?;
-        right.freshen_open_ports()?;
-        for position in self.structure.interface.open_positions() {
-            Self::align_pair(
-                &mut self,
-                &mut right,
-                composition::PortPair {
-                    left: position,
-                    right: position,
-                },
-            )?;
-        }
-        let structure = StructuredAtom::new(
+        let pairs = self
+            .structure
+            .structure()
+            .open_positions()
+            .into_iter()
+            .map(|position| composition::PortPair {
+                left: position,
+                right: position,
+            })
+            .collect::<Vec<_>>();
+        let (left_indices, right_indices) = self
+            .structure
+            .aligned_indices(&right.structure, &pairs)
+            .map_err(composition_error)?;
+        self = self.relabel_ports(&left_indices)?;
+        right = right.relabel_ports(&right_indices)?;
+        let structure = SymbolicTensor::new(
             if subtract {
-                self.structure.atom.as_ref() - right.structure.atom.as_ref()
+                self.structure.expression() - right.structure.expression()
             } else {
-                self.structure.atom.as_ref() + right.structure.atom.as_ref()
+                self.structure.expression() + right.structure.expression()
             },
-            self.structure.interface.clone(),
+            self.structure.structure().clone(),
         );
-        let materialized = StructuredAtom::new(
+        let materialized = SymbolicTensor::new(
             if subtract {
-                self.materialized.atom.as_ref() - right.materialized.atom.as_ref()
+                self.materialized.expression() - right.materialized.expression()
             } else {
-                self.materialized.atom.as_ref() + right.materialized.atom.as_ref()
+                self.materialized.expression() + right.materialized.expression()
             },
-            self.materialized.interface.clone(),
+            self.materialized.structure().clone(),
         );
         let network = if subtract {
             self.network - right.network
@@ -667,37 +684,12 @@ impl SpensoNet {
         Self::finish(network, structure, materialized)
     }
 
-    pub(crate) fn multiply_network(mut self, mut right: Self) -> PyResult<Self> {
-        let (structure, plan) =
-            product_plan(&self.structure, &right.structure).map_err(composition_error)?;
-        self.freshen_open_ports()?;
-        right.freshen_open_ports()?;
-        let materialized = match plan {
-            ProductPlan::Scalar => composition::multiply(&self.materialized, &right.materialized),
-            ProductPlan::Outer => Ok(composition::outer(&self.materialized, &right.materialized)),
-            ProductPlan::Contract(pair) => {
-                Self::align_pair(&mut self, &mut right, pair)?;
-                composition::contract(&self.materialized, &right.materialized, pair)
-            }
-            ProductPlan::Compose(left_channel, right_channel) => {
-                Self::align_pair(
-                    &mut self,
-                    &mut right,
-                    composition::PortPair {
-                        left: left_channel.output,
-                        right: right_channel.input,
-                    },
-                )?;
-                composition::compose(
-                    &self.materialized,
-                    &right.materialized,
-                    left_channel,
-                    right_channel,
-                )
-            }
-        }
-        .map_err(composition_error)?;
-        Self::finish(self.network * right.network, structure, materialized)
+    pub(crate) fn multiply_network(self, right: Self) -> PyResult<Self> {
+        let plan = self
+            .structure
+            .product_plan(&right.structure)
+            .map_err(composition_error)?;
+        self.apply_product(right, plan)
     }
 
     fn reciprocal(self) -> PyResult<Self> {
@@ -706,29 +698,29 @@ impl SpensoNet {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let structure = StructuredAtom::new(
-            Atom::num(1) / self.structure.atom.as_ref(),
-            self.structure.interface.clone(),
+        let structure = SymbolicTensor::new(
+            Atom::num(1) / self.structure.expression(),
+            self.structure.structure().clone(),
         );
-        let materialized = StructuredAtom::new(
-            Atom::num(1) / self.materialized.atom.as_ref(),
-            self.materialized.interface.clone(),
+        let materialized = SymbolicTensor::new(
+            Atom::num(1) / self.materialized.expression(),
+            self.materialized.structure().clone(),
         );
         Self::finish(self.network.pow(-1), structure, materialized)
     }
 
     pub(crate) fn broadcast_function(self, function: Symbol) -> PyResult<Self> {
-        let structure = StructuredAtom::new(
+        let structure = SymbolicTensor::new(
             FunctionBuilder::new(function)
-                .add_arg(self.structure.atom.clone())
+                .add_arg(self.structure.expression().clone())
                 .finish(),
-            self.structure.interface.clone(),
+            self.structure.structure().clone(),
         );
-        let materialized = StructuredAtom::new(
+        let materialized = SymbolicTensor::new(
             FunctionBuilder::new(function)
-                .add_arg(self.materialized.atom.clone())
+                .add_arg(self.materialized.expression().clone())
                 .finish(),
-            self.materialized.interface.clone(),
+            self.materialized.structure().clone(),
         );
         Self::finish(self.network.fun(function), structure, materialized)
     }
@@ -736,10 +728,10 @@ impl SpensoNet {
     pub(crate) fn index_network(
         &self,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
+        intern: Option<crate::simplification::Intern>,
     ) -> PyResult<Self> {
         let replacements =
-            TensorExpression::index_replacements(&self.structure.interface, indices, cook_indices)?;
+            TensorExpression::index_replacements(self.structure.structure(), indices, intern)?;
         self.set_port_indices(&replacements)
     }
 
@@ -747,67 +739,26 @@ impl SpensoNet {
         &self,
         replacements: &HashMap<usize, AbstractIndex>,
     ) -> PyResult<Self> {
-        let structure = composition::reindex_interface_ports(&self.structure, replacements)
+        let structure = self
+            .structure
+            .reindex_interface_ports(replacements)
             .map_err(composition_error)?;
-        let mut network = self.clone();
-        network.freshen_open_ports()?;
-        let owner = fresh_open_owner();
-        for (axis, &position) in replacements.keys().enumerate() {
-            network.relabel_port(position, AbstractIndex::Open { owner, axis })?;
-        }
-        for (&position, &index) in replacements {
-            network.relabel_port(position, index)?;
-        }
+        let indices = self
+            .structure
+            .graph_port_indices(replacements)
+            .map_err(composition_error)?;
+        let mut network = self.clone().relabel_ports(&indices)?;
         network.network.graph.sew_dangling_slots();
         network.network.state = network.network.graph.state();
 
-        let structure_slots = structure.interface.logical_slots();
-        let materialized_slots = network.materialized.interface.logical_slots();
-        if structure_slots.len() != materialized_slots.len() {
-            return Err(PyRuntimeError::new_err(
-                "semantic and materialized network interfaces have different ranks",
-            ));
-        }
-
-        // The graph decides which assigned ports became contractions. Match its
-        // dangling slots back to original logical positions to retain their order.
-        let mut dangling = network.network.graph.dangling_indices();
-        let mut retained = Vec::new();
-        for (position, slot) in materialized_slots.iter().enumerate() {
-            let PartialIndex::Explicit(index) = slot.aind else {
-                return Err(PyRuntimeError::new_err(
-                    "materialized network interface contains an unresolved port",
-                ));
-            };
-            let slot = slot.rep().slot(index).to_lib();
-            if let Some(found) = dangling.iter().position(|candidate| *candidate == slot) {
-                dangling.swap_remove(found);
-                retained.push(position);
-            }
-        }
-        if !dangling.is_empty() {
-            return Err(PyRuntimeError::new_err(format!(
-                "tensor-network topology has dangling slots absent from its materialized interface: {dangling:?}"
-            )));
-        }
-
-        let contracted = retained.len() < structure_slots.len();
-        network.structure = composition::normalize_closed_root_chain(StructuredAtom::new(
-            structure.atom,
-            PartialStructure::from_logical_slots(
-                retained.iter().map(|&position| structure_slots[position]),
-            ),
-        ))
-        .map_err(composition_error)?;
-        network.materialized = composition::normalize_closed_root_chain(StructuredAtom::new(
-            network.materialized.atom.clone(),
-            PartialStructure::from_logical_slots(
-                retained
-                    .iter()
-                    .map(|&position| materialized_slots[position]),
-            ),
-        ))
-        .map_err(composition_error)?;
+        let initial_rank = structure.rank();
+        (network.structure, network.materialized) = structure
+            .retain_materialized_ports(
+                network.materialized,
+                &network.network.graph.dangling_indices(),
+            )
+            .map_err(composition_error)?;
+        let contracted = network.structure.rank() < initial_rank;
         if contracted {
             network.descriptor = None;
         }
@@ -816,50 +767,14 @@ impl SpensoNet {
     }
 
     pub(crate) fn chain_form(self, channel: composition::MatrixChannel) -> PyResult<Self> {
-        fn convert(
-            value: &StructuredAtom,
-            channel: composition::MatrixChannel,
-        ) -> Result<StructuredAtom, composition::TensorCompositionError> {
-            let slots = value.interface.logical_slots();
-            let input = *slots.get(channel.input).ok_or(
-                composition::TensorCompositionError::InvalidPort {
-                    position: channel.input,
-                    rank: slots.len(),
-                },
-            )?;
-            let output = *slots.get(channel.output).ok_or(
-                composition::TensorCompositionError::InvalidPort {
-                    position: channel.output,
-                    rank: slots.len(),
-                },
-            )?;
-            let atom = if value.atom.as_view().is_zero() {
-                Atom::Zero
-            } else {
-                SPENSO_TAG.chain(
-                    composition::port_atom(input),
-                    composition::port_atom(output),
-                    composition::chain_factors(value, channel)?,
-                )
-            };
-            Ok(StructuredAtom::new(
-                atom,
-                PartialStructure::from_logical_slots(
-                    [input, output].into_iter().chain(
-                        slots
-                            .into_iter()
-                            .enumerate()
-                            .filter(|(position, _)| {
-                                *position != channel.input && *position != channel.output
-                            })
-                            .map(|(_, slot)| slot),
-                    ),
-                ),
-            ))
-        }
-
-        let structure = convert(&self.structure, channel).map_err(composition_error)?;
-        let materialized = convert(&self.materialized, channel).map_err(composition_error)?;
+        let structure = self
+            .structure
+            .chain_form(channel)
+            .map_err(composition_error)?;
+        let materialized = self
+            .materialized
+            .chain_form(channel)
+            .map_err(composition_error)?;
         Self::finish(self.network, structure, materialized)
     }
 }
@@ -868,26 +783,37 @@ impl SpensoNet {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoNet {
-    #[new]
-    /// Create a tensor network by parsing an arithmetic expression.
-    ///
-    /// Parses symbolic expressions containing tensor operations and converts them
-    /// into an optimizable computational graph representation.
+    /// Create a network from tensor components or symbolic algebra.
     ///
     /// Parameters
     /// ----------
-    /// expr : ArithmeticStructure
-    ///     The arithmetic expression or tensor structure to parse
+    /// expr : Tensor, TensorNetwork, TensorExpression, or scalar expression
+    ///     Computation to represent. A Tensor retains its data; a TensorNetwork
+    ///     is copied with its execution progress.
     /// library : TensorLibrary, optional
-    ///     Tensor library for resolving named tensor references. Defaults to the built-in
-    ///     four-dimensional HEP and SU(3) library returned by `TensorLibrary.hep_lib()`.
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the parsed expression
+    ///     A new network with the corresponding external tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.shape
+    /// (2, 2)
+    #[new]
     #[pyo3(signature = (expr, library=None))]
     pub fn from_expression(
         expr: &Bound<'_, PyAny>,
@@ -907,21 +833,27 @@ impl SpensoNet {
         SpensoNet::from_arithmetic(expr, library)
     }
 
-    #[staticmethod]
-    /// Create a tensor network representing the scalar value 1.
+    /// Construct the scalar 1 network.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> network = sp.TensorNetwork.one()
+    /// >>> value = network.to_tensor().scalar()
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A TensorNetwork containing only the scalar 1
+    ///     A rank-zero multiplicative identity.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
-    /// >>> one_net = TensorNetwork.one()
-    /// >>> result = one_net.result_scalar()
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> TensorNetwork.one().result_scalar() == 1
+    /// True
+    #[staticmethod]
     pub fn one() -> SpensoNet {
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::num(1),
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -933,36 +865,80 @@ impl SpensoNet {
         }
     }
 
+    /// Return the symbolic function used to group a tensor subexpression.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A callable Symbolica head. Its argument is kept as a grouped tensor
+    ///     subexpression when parsed as a network.
+    ///
+    /// Notes
+    /// -----
+    /// This is useful when constructing raw Symbolica tensor syntax. Tensor-aware
+    /// operations and simplifiers already understand this grouping.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> grouped = TensorNetwork.bracket()(S("x") + 1)
     #[staticmethod]
-    /// Return the symbolic head used for structured product brackets.
     pub fn bracket() -> PythonExpression {
         PythonExpression {
             expr: Atom::var(SPENSO_TAG.bracket),
         }
     }
 
+    /// Register a raw Symbolica function for elementwise tensor application.
+    ///
+    /// Parameters
+    /// ----------
+    /// str : str
+    ///     Function name to register with the broadcast tag.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     A callable Symbolica function head.
+    ///
+    /// Notes
+    /// -----
+    /// Prefer BroadcastFunction when applying the function to TensorExpression,
+    /// Tensor, or TensorNetwork objects so the return type follows the operand.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> applied = TensorNetwork.broadcast("raw_function")(S("x"))
     #[staticmethod]
-    /// Create a Symbolica function symbol tagged for elementwise tensor broadcasting.
     pub fn broadcast(str: &str) -> PythonExpression {
         PythonExpression {
             expr: Atom::var(symbol!(str, tag = SPENSO_TAG.broadcast)),
         }
     }
-    #[staticmethod]
-    /// Create a tensor network representing the scalar value 0.
+    /// Construct the scalar 0 network.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> network = sp.TensorNetwork.zero()
+    /// >>> value = network.to_tensor().scalar()
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A TensorNetwork containing only the scalar 0
+    ///     A rank-zero additive zero.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
-    /// >>> zero_net = TensorNetwork.zero()
-    /// >>> result = zero_net.result_scalar()
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> TensorNetwork.zero().result_scalar() == 0
+    /// True
+    #[staticmethod]
     pub fn zero() -> SpensoNet {
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::Zero,
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -974,40 +950,56 @@ impl SpensoNet {
         }
     }
 
-    /// Replace patterns in stored symbolic network values.
+    /// Replace scalar expressions and symbolic component values in a copy.
     ///
-    /// Rewrites scalar coefficients and symbolic elements of parametric tensors in
-    /// the execution store. Tensor identities, graph topology, the public interface,
-    /// and the semantic source expression returned by `structure()` are unchanged.
-    /// Rewrite a `TensorExpression` before constructing the network when the source
-    /// tensor expression itself should change.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> x = S("docs::x")
+    /// >>> network = sp.TensorNetwork(sp.TensorExpression(x + 1))
+    /// >>> replaced = network.replace(x, E("2"))
     ///
     /// Parameters
     /// ----------
-    /// pattern : Expression
-    ///     The symbolic pattern to match within stored values
-    /// rhs : Expression
-    ///     The replacement expression or pattern
+    /// pattern : scalar expression
+    ///     Symbolica pattern to find in scalar algebra and component expressions.
+    /// rhs : scalar expression or HeldExpression
+    ///     Replacement expression. Python replacement callbacks are not supported
+    ///     by this network method; use TensorRule with TensorExpression for
+    ///     whole-tensor replacement.
     /// cond : PatternRestriction or Condition, optional
-    ///     Additional restriction that each match must satisfy
-    /// non_greedy_wildcards : list of Expression, optional
-    ///     List of wildcard symbols to match non-greedily
-    /// level_range : tuple of int, optional
-    ///     Tuple specifying depth range for pattern matching
+    ///     Restriction applied to candidate matches.
+    /// non_greedy_wildcards : sequence of Expression, optional
+    ///     Wildcards that should prefer shorter matches.
+    /// level_range : (int, int or None), optional
+    ///     Minimum and maximum matching level; defaults to (0, None).
     /// level_is_tree_depth : bool, optional
-    ///     Whether level refers to tree depth or expression depth
+    ///     Count tree depth rather than function nesting. Defaults to False.
     /// allow_new_wildcards_on_rhs : bool, optional
-    ///     Allow new wildcards in replacement pattern
+    ///     Permit unbound wildcard symbols in the replacement. Defaults to False.
     /// rhs_cache_size : int, optional
-    ///     Size of cache for replacement pattern compilation
+    ///     Maximum cached right-hand-side substitutions. Defaults to 100.
     /// repeat : bool, optional
-    ///     Whether to repeatedly apply the replacement until no more matches
+    ///     Repeat replacements until unchanged. Defaults to False.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with matching stored values replaced and the same
-    ///     semantic source structure
+    ///     A copy with updated scalar/component expressions. Its external axes
+    ///     and symbolic source descriptor are unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(values).replace(x, 2)
+    /// >>> network.to_tensor()[0] == 2
+    /// True
     #[pyo3(signature = (pattern, rhs, cond = None, non_greedy_wildcards = None, level_range = None, level_is_tree_depth = None, allow_new_wildcards_on_rhs = None, rhs_cache_size = None, repeat = None))]
     #[allow(clippy::too_many_arguments)]
     pub fn replace(
@@ -1124,25 +1116,38 @@ impl SpensoNet {
         })
     }
 
-    /// Evaluate symbolic tensor values in the execution store.
-    ///
-    /// Substitutes symbolic constants and functions in stored parametric tensor
-    /// elements, converting them to concrete numerical tensors. Tensor identities,
-    /// graph topology, the public interface, and the semantic source expression are
-    /// retained.
+    /// Numerically evaluate symbolic component values in a network copy.
     ///
     /// Parameters
     /// ----------
-    /// constants : dict
-    ///     Dict mapping symbolic expressions to their numerical values
-    /// functions : dict
-    ///     Dict mapping function symbols to Python callable objects
+    /// constants : mapping of Expression to float
+    ///     Real values for symbolic parameters.
+    /// functions : mapping of Expression to callable
+    ///     Symbolica function heads and real-valued Python implementations.
+    ///     A callback receives one list of evaluated argument values and
+    ///     returns a float; for example, lambda args: args[0] ** 2.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with stored tensor values evaluated and the same
-    ///     semantic source structure
+    ///     Network with evaluated component values; contractions are not executed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+    /// >>> x = S("x")
+    /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(values).evaluate({x: 2.0}, {})
+    /// >>> network.to_tensor()[1]
+    /// 4.0
+    /// >>> f = S("f_network")
+    /// >>> data = Tensor.dense(values.expression(), [f(x), x])
+    /// >>> network = TensorNetwork(data).evaluate({x: 2.0}, {f: lambda args: args[0] + 1})
+    /// >>> network.to_tensor()[0]
+    /// 3.0
     pub fn evaluate(
         &self,
         constants: HashMap<PythonExpression, f64>,
@@ -1186,35 +1191,49 @@ impl SpensoNet {
         })
     }
 
-    /// Execute the tensor network to perform tensor contractions and simplifications.
-    ///
-    /// Processes the computational graph by executing tensor operations such as
-    /// contractions, additions, and multiplications. The execution can be controlled
-    /// by mode and step limits.
+    /// Advance this network's computation in place.
     ///
     /// Parameters
     /// ----------
     /// library : TensorLibrary, optional
-    ///     Optional tensor library for resolving tensor operations
-    /// function_library : TensorFunctionLibrary or None, optional
-    ///     Tensor function callbacks; None uses the built-in function library
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
+    /// function_library : TensorFunctionLibrary, optional
+    ///     Numerical implementations of broadcast functions. Defaults to the
+    ///     built-in function library.
     /// n_steps : int, optional
-    ///     Maximum number of execution steps (None for complete execution)
-    /// mode : ExecutionMode, optional
-    ///     Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per
-    ///     step; use n_steps to bound how many steps run.
+    ///     Number of execution rounds. None runs the selected strategy to completion.
+    /// mode : ExecutionMode, default ExecutionMode.All
+    ///     All uses MinIntermediateCost, which estimates sparse overlap and
+    ///     symbolic intermediate cost when choosing each contraction. Single
+    ///     selects one minimum-degree contraction at a time. Scalar restricts
+    ///     contraction to scalar work.
+    ///     Preprocessing and ready operations may also run in an execution round.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     This network's execution progress and stored intermediate values change.
+    ///
+    /// Notes
+    /// -----
+    /// Use ``to_tensor()`` to evaluate a copy, or ``step()`` for an intermediate
+    /// copy. ``result_tensor()`` extracts the result after execution.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary
-    /// >>> network = TensorNetwork(some_expression)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
     /// >>> network.execute()
-    /// >>> network.execute(n_steps=5)
-    /// >>> network.execute(mode=ExecutionMode.Scalar)
-    /// >>> lib = TensorLibrary.hep_lib()
-    /// >>> network.execute(library=lib)
+    /// >>> network.result_tensor()[1, 0]
+    /// 3.0
     #[pyo3(signature = (library=None,function_library=None, n_steps=None, mode=ExecutionMode::All))]
-    fn execute(
+    pub(crate) fn execute(
         &mut self,
         library: Option<&SpensorLibrary>,
         function_library: Option<&SpensorFunctionLibrary>,
@@ -1231,7 +1250,7 @@ impl SpensoNet {
                 match mode {
                     ExecutionMode::All => {
                         self.network
-                            .execute::<Steps<1>, SmallestDegree, _, _, _>(lib, fn_lib)
+                            .execute::<Steps<1>, MinIntermediateCost, _, _, _>(lib, fn_lib)
                             .map_err(|a| PyRuntimeError::new_err(a.to_string()))?;
                     }
                     ExecutionMode::Scalar => {
@@ -1250,7 +1269,7 @@ impl SpensoNet {
             match mode {
                 ExecutionMode::All => {
                     self.network
-                        .execute::<Sequential, SmallestDegree, _, _, _>(lib, fn_lib)
+                        .execute::<Sequential, MinIntermediateCost, _, _, _>(lib, fn_lib)
                         .map_err(|a| PyRuntimeError::new_err(a.to_string()))?;
                 }
                 ExecutionMode::Scalar => {
@@ -1267,36 +1286,45 @@ impl SpensoNet {
         }
         Ok(())
     }
-    /// Extract the final tensor result from the executed network.
-    ///
-    /// After network execution, retrieves the computed tensor result. The network
-    /// should be executed before calling this method.
+    /// Read the component tensor from a completed network.
     ///
     /// Parameters
     /// ----------
     /// library : TensorLibrary, optional
-    ///     Optional tensor library for resolving tensor structures
+    ///     Component definitions. Defaults to the built-in four-dimensional Dirac
+    ///     and SU(3) library. Unregistered tensors receive symbolic components.
     ///
     /// Returns
     /// -------
     /// Tensor
-    ///     The computed tensor result
+    ///     Result components with the source computation's logical axis order.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the network execution resulted in an error
+    ///     Work remains that prevents extracting one result tensor.
+    ///
+    /// Notes
+    /// -----
+    /// This does not run pending operations. Call execute() first, or use
+    /// to_tensor() to execute a copy and extract the result in one operation.
+    /// Existing component storage is preserved: exact Symbolica expressions
+    /// are not converted to floating-point values.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork, TensorLibrary
-    /// >>> network = TensorNetwork(tensor_expression)
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
     /// >>> network.execute()
-    /// >>> result = network.result_tensor()
-    /// >>> lib = TensorLibrary.hep_lib()
-    /// >>> result_with_lib = network.result_tensor(library=lib)
+    /// >>> network.result_tensor().shape
+    /// (2, 2)
     #[pyo3(signature = (library=None))]
-    fn result_tensor(&self, library: Option<&SpensorLibrary>) -> PyResult<Spensor> {
+    pub(crate) fn result_tensor(&self, library: Option<&SpensorLibrary>) -> PyResult<Spensor> {
         let lib = library.map(|l| &l.library).unwrap_or(HEP_LIB.deref());
         let descriptor = self.structure.clone();
         let (name, args) = self
@@ -1311,28 +1339,20 @@ impl SpensoNet {
                 .result_tensor(lib)
                 .map_err(|s| PyRuntimeError::new_err(s.to_string()))?
             {
-                ExecutionResult::One => Spensor::scalar_with_descriptor(1., descriptor, name, args),
-                ExecutionResult::Zero => {
-                    Spensor::scalar_with_descriptor(0., descriptor, name, args)
-                }
+                ExecutionResult::One => Spensor::scalar_with_descriptor(
+                    ConcreteOrParam::Param(Atom::one()),
+                    descriptor,
+                    name,
+                    args,
+                ),
+                ExecutionResult::Zero => Spensor::scalar_with_descriptor(
+                    ConcreteOrParam::Param(Atom::Zero),
+                    descriptor,
+                    name,
+                    args,
+                ),
                 ExecutionResult::Val(value) => {
                     let value = value.into_owned();
-                    let value = match value.clone().scalar() {
-                        Some(ConcreteOrParam::Param(atom)) => {
-                            match SymComplex::<f64>::try_from(&atom) {
-                                Ok(number) if number.im == 0. => ParamOrConcrete::new_scalar(
-                                    ConcreteOrParam::Concrete(RealOrComplex::Real(number.re)),
-                                ),
-                                Ok(number) => {
-                                    ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(
-                                        RealOrComplex::Complex(Complex::new(number.re, number.im)),
-                                    ))
-                                }
-                                Err(_) => value,
-                            }
-                        }
-                        _ => value,
-                    };
                     // Network tensors are already stored in canonical Spenso axis
                     // order. The descriptor permutations only record how that
                     // storage maps back to the public logical interface.
@@ -1342,27 +1362,25 @@ impl SpensoNet {
         )
     }
 
-    /// Extract the final scalar result from the executed network.
-    ///
-    /// For networks that evaluate to scalar expressions, retrieves the computed
-    /// scalar value. The network should be executed before calling this method.
+    /// Read the scalar value of a completed rank-zero network.
     ///
     /// Returns
     /// -------
     /// Expression
-    ///     The computed scalar expression
+    ///     Scalar result as Symbolica algebra.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the network execution resulted in an error
+    ///     The network has not reduced to a scalar result.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
-    /// >>> network = TensorNetwork(scalar_expression)
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(3)
     /// >>> network.execute()
-    /// >>> scalar_result = network.result_scalar()
+    /// >>> network.result_scalar() == 3
+    /// True
     fn result_scalar(&self) -> PyResult<PythonExpression> {
         Ok(
             match self
@@ -1377,20 +1395,182 @@ impl SpensoNet {
         )
     }
 
-    /// Return a DOT representation of the executable network graph.
+    /// Return a readable object description for inspection.
     ///
-    /// Generates a DOT format representation of the computational graph that can be
-    /// visualized using graphviz or similar tools.
-    fn __str__(&self) -> PyResult<String> {
-        Ok(self.network.dot_pretty())
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> network = tensor("i", "j") * tensor("j", "k")
+    /// >>> text = repr(network)
+    fn __repr__(&self) -> String {
+        format!(
+            "TensorNetwork({})",
+            display::format_structured(&self.structure, false)
+        )
     }
 
-    /// Return the computational graph in Graphviz DOT format.
+    /// Return a readable text representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> network = tensor("i", "j") * tensor("j", "k")
+    /// >>> text = str(network)
+    fn __str__(&self) -> String {
+        display::format_structured(&self.structure, false)
+    }
+
+    fn _repr_latex_(&self) -> String {
+        display::structured_to_latex(&self.structure, &Default::default(), None)
+    }
+
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1("text", (if cycle { "...".into() } else { self.__str__() },))?;
+        Ok(())
+    }
+
+    /// Export the current network graph in Graphviz DOT syntax.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Graph description containing the current tensor nodes and connections.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> source = network.to_dot()
     fn to_dot(&self) -> String {
         self.network.dot_pretty()
     }
 
-    /// Format the exact semantic structure using compact Spenso notation.
+    /// Generate Typst/Linnest source for the network graph.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst graph source produced by Linnet.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_linnest()
+    #[pyo3(signature = (*, config=None))]
+    fn to_linnest(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        self.prepare_render(py, config)?
+            .getattr("typst_source")?
+            .extract()
+    }
+
+    /// Render the current network graph to SVG.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     SVG graph, with notebook-theme styling.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.render()
+    #[pyo3(signature = (*, config=None))]
+    fn render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let svg: String = self
+            .prepare_render(py, config)?
+            .call_method0("to_svg")?
+            .extract()?;
+        Ok(display::network::svg_theme(&svg))
+    }
+
+    /// Produce compact plain-text tensor notation.
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Readable tensor text, suitable for logs or terminal output.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.format_tensor()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn format_tensor(
         &self,
@@ -1405,7 +1585,41 @@ impl SpensoNet {
         ))
     }
 
-    /// Format the semantic source structure as Typst math source.
+    /// Produce static Typst math source.
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Typst source without an enclosing document; no compilation is performed.
+    ///
+    /// Notes
+    /// -----
+    /// Only ports layout and default spacing are supported in this source
+    /// format. Use to_html() or to_svg() for other layouts and custom gaps.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Static Typst output remains available independently of the HTML explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_typst()
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn to_typst(
         &self,
@@ -1420,36 +1634,134 @@ impl SpensoNet {
         ))
     }
 
-    /// Build Symbolica's rich display wrapper for the semantic source structure.
+    /// Create a lazy rich display value for a notebook.
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    /// notation_source : str, optional
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// FormattedOutput
+    ///     Each requested backend renders the complete source expression once
+    ///     and caches it.
+    ///
+    /// Notes
+    /// -----
+    /// This formats the symbolic source expression, independent of execution
+    /// progress, retaining a snapshot of that source. Use render() or to_html()
+    /// for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.formatted()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::format_structured_output_rich(
-            py,
-            &self.structure,
-            &settings,
-            notation_source.as_deref(),
+            Arc::new(self.structure.clone()),
+            settings,
+            notation_source,
         )
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Display the current network graph and execution status.
+    ///
+    /// Parameters
+    /// ----------
+    /// config : linnet.RenderConfig, optional
+    ///     Graph layout and rendering options. Omit for the standard network view.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Interactive HTML graph with its progress summary.
+    ///
+    /// Notes
+    /// -----
+    /// This depicts the current graph, including execution progress. For the
+    /// symbolic computation in tensor notation, use formatted() or to_svg().
+    /// Graph rendering requires the Linnet/Typst rendering support.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_html()
+    #[pyo3(signature = (*, config=None))]
     fn to_html(
         &self,
         py: Python<'_>,
-        show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
-        notation_source: Option<String>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::structured_to_html(py, &self.structure, &settings, notation_source.as_deref())
+        Ok(display::network::html(
+            &self.render(py, config)?,
+            &self.status(),
+        ))
     }
 
+    /// Render static mathematical tensor notation to SVG.
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override settings.show_dimensions for this call. None retains the
+    ///     selected settings, whose default omits dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation and display choices. Defaults to DisplaySettings().
+    /// notation_source : str, optional
+    ///     Custom Typst notation source used by the rich renderer. This is
+    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     SVG markup suitable for embedding or saving to a file.
+    ///
+    /// Notes
+    /// -----
+    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// string is not automatically displayed; pass it to the notebook's HTML
+    /// or SVG display facility.
+    ///
+    /// This formats the symbolic source expression, independent of execution
+    /// progress. Use render() or to_html() for the network graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> output = network.to_svg()
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_svg(
         &self,
@@ -1462,27 +1774,38 @@ impl SpensoNet {
         display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        display::structured_to_html(
-            py,
-            &self.structure,
-            &display::DisplaySettings::default(),
-            None,
-        )
-        .ok()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None)
     }
 
-    /// Return the semantic source expression and its public tensor interface.
+    /// Return the symbolic source computation of this network.
     ///
-    /// This expression records the tensor-aware structure used for composition and
-    /// provenance. It is not reconstructed from the current execution store, so
-    /// `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
-    /// `result_scalar()` or `result_tensor()` to inspect the current computed value.
-    fn structure(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface_descriptor(
+    /// Returns
+    /// -------
+    /// TensorExpression
+    ///     A symbolic tensor with the same external axes.
+    ///
+    /// Notes
+    /// -----
+    /// Execution progress and replacement of component values do not rewrite
+    /// this source expression. Use result_tensor after execution to inspect values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.expression().rank
+    /// 2
+    fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_known_parts(
             py,
-            self.structure.atom.clone(),
-            self.structure.interface.clone(),
+            self.structure.expression().clone(),
+            self.structure.structure().clone(),
             self.descriptor.as_ref().map(|(name, _)| *name),
             self.descriptor
                 .as_ref()
@@ -1491,115 +1814,579 @@ impl SpensoNet {
         )
     }
 
-    /// Fill the unresolved external ports with `indices` in interface order.
+    #[doc = python_doc!("Tensor.axes")]
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[Slot | Representation, ...]"))]
+    fn axes(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::metadata::axis_objects(py, self.structure.structure().logical_slots())
+    }
+
+    /// Canonical external signature of the whole tensor.
     ///
-    /// Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
-    /// symbolic index payloads before insertion.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn index(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
-        self.index_network(indices, cook_indices)
+    /// Returns
+    /// -------
+    /// TensorStructure
+    ///     Free axes in canonical order, independent of names and component layout.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.structure.rank
+    /// 2
+    #[getter]
+    fn structure(&self) -> crate::metadata::SpensoTensorStructure {
+        crate::metadata::SpensoTensorStructure::from_interface(self.structure.structure())
     }
 
-    /// Fill the unresolved external ports with `indices` in interface order.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn __call__(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
-        self.index_network(indices, cook_indices)
+    /// Assign labels to the unresolved external axes.
+    ///
+    /// Parameters
+    /// ----------
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing explicit labels are left in place. Use reindex to replace them.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.index("i", "j")
+    /// >>> indexed.rank
+    /// 2
+    #[pyo3(signature = (*indices, intern = None))]
+    fn index(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        intern: Option<crate::simplification::Intern>,
+    ) -> PyResult<Self> {
+        self.index_network(indices, intern)
     }
 
+    /// Assign labels to all external axes.
+    ///
+    /// Parameters
+    /// ----------
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per external axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Existing labels are replaced as well as unresolved axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.reindex("i", "j")
+    /// >>> indexed.rank
+    /// 2
+    #[pyo3(signature = (*indices, intern=None))]
+    pub(crate) fn reindex(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        intern: Option<crate::simplification::Intern>,
+    ) -> PyResult<Self> {
+        let positions = (0..self.structure.rank()).collect::<Vec<_>>();
+        let replacements = TensorExpression::port_replacements(
+            self.structure.structure(),
+            &positions,
+            indices,
+            intern,
+        )?;
+        self.set_port_indices(&replacements)
+    }
+
+    /// Rename selected external labels without changing the tensor rank.
+    ///
+    /// Parameters
+    /// ----------
+    /// mapping : dict
+    ///     Old label to new label. A Slot key also restricts the representation.
+    ///     Keys must identify existing external axes. Each axis may be renamed
+    ///     once; renaming must preserve the external interface.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A new value with renamed axes; the original is unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network.index("i", "j")
+    /// >>> renamed = indexed.rename_indices({"i": "k"})
+    /// >>> renamed.rank
+    /// 2
+    #[pyo3(signature = (mapping, *, intern=None))]
+    pub(crate) fn rename_indices(
+        &self,
+        mapping: &Bound<'_, PyDict>,
+        intern: Option<crate::simplification::Intern>,
+    ) -> PyResult<Self> {
+        let replacements =
+            TensorExpression::named_replacements(self.structure.structure(), mapping, intern)?;
+        let result = self.set_port_indices(&replacements)?;
+        if result.structure.rank() != self.structure.rank() {
+            return Err(PyValueError::new_err(
+                "renaming would contract external ports; use reindex() to request a contraction",
+            ));
+        }
+        Ok(result)
+    }
+
+    /// Reorder the external axes in logical component order.
+    ///
+    /// Parameters
+    /// ----------
+    /// axes : sequence of int
+    ///     Each current axis position exactly once, in the desired new order.
+    ///     For a matrix, [1, 0] exchanges the two axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A new tensor view with the reordered interface and correspondingly
+    ///     reordered component access.
+    ///
+    /// Notes
+    /// -----
+    /// This permutes axes; it does not conjugate component values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> transposed = network.permute_axes([1, 0])
+    /// >>> transposed.shape
+    /// (2, 2)
+    pub(crate) fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
+        let structure = self.structure.permuted(&axes).map_err(composition_error)?;
+        let new_slots = structure.structure().logical_slots();
+        let old_slots = self.structure.structure().logical_slots();
+        let replacements = axes
+            .iter()
+            .enumerate()
+            .filter_map(|(new, &old)| {
+                if matches!(old_slots[old].aind, PartialIndex::Open(_)) {
+                    let PartialIndex::Explicit(index) = new_slots[new].aind else {
+                        unreachable!()
+                    };
+                    Some((old, index))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut result = self.set_port_indices(&replacements)?;
+        result.structure = structure;
+        result.materialized = result
+            .materialized
+            .permuted(&axes)
+            .map_err(composition_error)?;
+        result.validate_graph_interface()?;
+        Ok(result)
+    }
+
+    /// Implement ``copy.copy`` using an independent TensorNetwork copy.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     Copy of the component data and execution progress.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> import copy
+    /// >>> copied = copy.copy(network)
+    fn __copy__(&self) -> Self {
+        self.clone()
+    }
+
+    /// Assign labels to the unresolved external axes.
+    ///
+    /// Parameters
+    /// ----------
+    /// *indices : int, str, Expression, Slot, or AUTO
+    ///     One label per unresolved axis, in logical order. AUTO leaves the
+    ///     corresponding axis unchanged. A Slot must have the matching
+    ///     representation. Repeated compatible labels cause contraction.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     An indexed network retaining the component data; the original is unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Equivalent to ``index(*indices)``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> indexed = network("i", "j")
+    /// >>> indexed.rank
+    /// 2
+    #[pyo3(signature = (*indices, intern = None))]
+    fn __call__(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        intern: Option<crate::simplification::Intern>,
+    ) -> PyResult<Self> {
+        self.index_network(indices, intern)
+    }
+
+    /// Negate every tensor component.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     Negated symbolic algebra retaining component data lazily.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> negated = -network
     pub fn __neg__(&self) -> PyResult<Self> {
-        let structure = StructuredAtom::new(
-            Atom::num(-1) * self.structure.atom.as_ref(),
-            self.structure.interface.clone(),
+        let structure = SymbolicTensor::new(
+            Atom::num(-1) * self.structure.expression(),
+            self.structure.structure().clone(),
         );
-        let materialized = StructuredAtom::new(
-            Atom::num(-1) * self.materialized.atom.as_ref(),
-            self.materialized.interface.clone(),
+        let materialized = SymbolicTensor::new(
+            Atom::num(-1) * self.materialized.expression(),
+            self.materialized.structure().clone(),
         );
         Self::finish(-self.network.clone(), structure, materialized)
     }
 
-    /// Add two tensor networks element-wise.
+    /// Add tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : TensorNetwork
-    ///     The tensor network to add (right-hand side)
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the sum
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
     ///
     /// Examples
     /// --------
-    /// >>> net1 = TensorNetwork(expr1)
-    /// >>> net2 = TensorNetwork(expr2)
-    /// >>> sum_net = net1 + net2
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network + network
     pub fn __add__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().add_network(rhs.to_net(), false)
     }
 
-    /// Add two tensor networks element-wise (right-hand addition).
+    /// Implement reflected addition.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Scalar zero acts as the additive identity. Other scalars can be added
+    /// only to rank-zero tensors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network + network
     pub fn __radd__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.__add__(rhs)
     }
 
-    /// Subtract one tensor network from another element-wise.
+    /// Subtract tensors with compatible external interfaces.
     ///
     /// Parameters
     /// ----------
-    /// rhs : TensorNetwork
-    ///     The tensor network to subtract (right-hand side)
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the difference
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
     ///
     /// Examples
     /// --------
-    /// >>> net1 = TensorNetwork(expr1)
-    /// >>> net2 = TensorNetwork(expr2)
-    /// >>> diff_net = net1 - net2
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network - network
     pub fn __sub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().add_network(rhs.to_net(), true)
     }
 
-    /// Subtract one tensor network from another (right-hand subtraction).
-    pub fn __rsub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
-        rhs.to_net().add_network(self.clone(), true)
-    }
-
-    /// Multiply two tensor networks.
+    /// Implement reflected subtraction.
     ///
     /// Parameters
     /// ----------
-    /// rhs : TensorNetwork
-    ///     The tensor network to multiply with (right-hand side)
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
     ///
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork representing the product
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Subtraction requires matching tensor axes; a nonzero scalar cannot
+    /// be subtracted from a tensor with external axes.
     ///
     /// Examples
     /// --------
-    /// >>> net1 = TensorNetwork(expr1)
-    /// >>> net2 = TensorNetwork(expr2)
-    /// >>> product_net = net1 * net2
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network - network
+    pub fn __rsub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        rhs.to_net().add_network(self.clone(), true)
+    }
+
+    /// Multiply tensors, contracting unambiguous compatible axes.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract_ports(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network * 2
     pub fn __mul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().multiply_network(rhs.to_net())
     }
 
-    /// Multiply two tensor networks (right-hand multiplication).
+    /// Implement reflected multiplication.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// Matching explicit labels contract. Compatible unresolved axes are
+    /// paired only when the choice is unambiguous. Use outer(), contract_ports(),
+    /// or compose() to make the intended pairing explicit.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = 2 * network
     pub fn __rmul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         rhs.to_net().multiply_network(self.clone())
     }
 
+    /// Divide tensor components by a scalar expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = network / 2
     pub fn __truediv__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         self.clone().multiply_network(rhs.to_net().reciprocal()?)
     }
 
+    /// Implement reflected division.
+    ///
+    /// Parameters
+    /// ----------
+    /// lhs : scalar expression, TensorExpression, Tensor, or TensorNetwork
+    ///     Other operand. Component data are retained in a lazy network.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     New lazy calculation; operands are unchanged.
+    ///
+    /// Notes
+    /// -----
+    /// The denominator must be scalar. For scalar divided by tensor, the
+    /// tensor must also have rank zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> result = 2 / TensorNetwork(3)
     pub fn __rtruediv__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
         if !lhs.0.structure.is_scalar() {
             return Err(PyTypeError::new_err(
@@ -1609,54 +2396,111 @@ impl SpensoNet {
         lhs.to_net().multiply_network(self.clone().reciprocal()?)
     }
 
-    /// Form an outer tensor product without contracting compatible ports.
+    /// Form an outer product without implicit contractions between the operands.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor whose axes follow this tensor's axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy outer product retaining the operands' component data.
+    ///
+    /// Notes
+    /// -----
+    /// Use this when compatible unresolved axes should remain independent.
+    /// Choose explicit distinct labels if you need to refer to them separately.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> product = network.outer(network)
+    /// >>> product.rank
+    /// 4
     pub fn outer(&self, rhs: ConvertibleToSpensoNet) -> PyResult<Self> {
-        let mut left = self.clone();
-        let mut right = rhs.to_net();
-        let left_slots = left.semantic_slots();
-        let right_slots = right.semantic_slots();
-        let collisions =
-            composition::compatible_pairs(&left.structure.interface, &right.structure.interface)
-                .into_iter()
-                .filter(|pair| {
-                    matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
-                        && matches!(right_slots[pair.right].aind, PartialIndex::Explicit(_))
-                })
-                .collect::<Vec<_>>();
-        if !collisions.is_empty() {
-            return Err(PyValueError::new_err(format!(
-                "outer product cannot preserve equal explicit indices on compatible port pairs {collisions:?}; use distinct indices"
-            )));
-        }
-        let structure = composition::outer(&left.structure, &right.structure);
-        left.freshen_open_ports()?;
-        right.freshen_open_ports()?;
-        let materialized = composition::outer(&left.materialized, &right.materialized);
-        Self::finish(left.network * right.network, structure, materialized)
+        self.clone().apply_product(rhs.to_net(), ProductPlan::Outer)
     }
 
-    /// Contract one selected pair of public interface positions.
+    /// Contract one chosen pair of axes between two tensors.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Tensor to contract with this tensor.
+    /// left, right : int
+    ///     Zero-based axis positions in this tensor and rhs, respectively.
+    ///     The representations must be compatible under contraction.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy contraction retaining component data.
+    ///
+    /// Notes
+    /// -----
+    /// Other axes remain external. Axis numbers refer to ``axes``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> contracted = network.contract_ports(network, left=1, right=0)
+    /// >>> contracted.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
-    pub fn contract(
+    pub fn contract_ports(
         &self,
         rhs: ConvertibleToSpensoNet,
         left: usize,
         right: usize,
     ) -> PyResult<Self> {
-        let mut lhs = self.clone();
-        let mut rhs = rhs.to_net();
-        let pair = composition::PortPair { left, right };
-        let structure = composition::contract(&lhs.structure, &rhs.structure, pair)
-            .map_err(composition_error)?;
-        lhs.freshen_open_ports()?;
-        rhs.freshen_open_ports()?;
-        Self::align_pair(&mut lhs, &mut rhs, pair)?;
-        let materialized = composition::contract(&lhs.materialized, &rhs.materialized, pair)
-            .map_err(composition_error)?;
-        Self::finish(lhs.network * rhs.network, structure, materialized)
+        self.clone().apply_product(
+            rhs.to_net(),
+            ProductPlan::Contract(vec![composition::PortPair { left, right }]),
+        )
     }
 
-    /// Compose two explicitly selected matrix channels.
+    /// Multiply two tensors along explicitly selected matrix channels.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Next factor in the ordered matrix product.
+    /// left, right : tuple of int and int
+    ///     (input_axis, output_axis) in this tensor and rhs, respectively.
+    ///     The left output contracts with the right input. Other axes are
+    ///     retained as spectator axes.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy ordered matrix product retaining component data.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> product = network.compose(network, left=(0, 1), right=(0, 1))
+    /// >>> product.rank
+    /// 2
     #[pyo3(signature = (rhs, *, left, right))]
     pub fn compose(
         &self,
@@ -1664,40 +2508,39 @@ impl SpensoNet {
         left: (usize, usize),
         right: (usize, usize),
     ) -> PyResult<Self> {
-        let mut lhs = self.clone();
-        let mut rhs = rhs.to_net();
-        let left_channel = composition::MatrixChannel {
-            input: left.0,
-            output: left.1,
-        };
-        let right_channel = composition::MatrixChannel {
-            input: right.0,
-            output: right.1,
-        };
-        let structure =
-            composition::compose(&lhs.structure, &rhs.structure, left_channel, right_channel)
-                .map_err(composition_error)?;
-        lhs.freshen_open_ports()?;
-        rhs.freshen_open_ports()?;
-        Self::align_pair(
-            &mut lhs,
-            &mut rhs,
-            composition::PortPair {
-                left: left_channel.output,
-                right: right_channel.input,
-            },
-        )?;
-        let materialized = composition::compose(
-            &lhs.materialized,
-            &rhs.materialized,
-            left_channel,
-            right_channel,
+        self.clone().apply_product(
+            rhs.to_net(),
+            ProductPlan::Compose(
+                composition::MatrixChannel {
+                    input: left.0,
+                    output: left.1,
+                },
+                composition::MatrixChannel {
+                    input: right.0,
+                    output: right.1,
+                },
+            ),
         )
-        .map_err(composition_error)?;
-        Self::finish(lhs.network * rhs.network, structure, materialized)
     }
 
-    /// Contract two rank-one operands into the canonical dot form.
+    /// Contract two rank-one tensors using their representation pairing.
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression, Tensor, or TensorNetwork
+    ///     Rank-one tensor in a compatible space.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     A lazy scalar contraction, including the metric signs of the space.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorName, Tensor, TensorNetwork, Representation
+    /// >>> vector = Tensor.dense(TensorName.vector("dot_v")(Representation.euc(2)), [1.0, 2.0])
+    /// >>> TensorNetwork(vector).dot(vector).to_tensor().scalar() == 5
+    /// True
     pub fn dot(&self, rhs: ConvertibleToSpensoNet) -> PyResult<Self> {
         if self.structure.rank() != 1 || rhs.0.structure.rank() != 1 {
             return Err(PyValueError::new_err(format!(
@@ -1706,26 +2549,56 @@ impl SpensoNet {
                 rhs.0.structure.rank()
             )));
         }
-        self.contract(rhs, 0, 0)
+        self.contract_ports(rhs, 0, 0)
     }
 
-    /// Close a selected or uniquely inferred propagation channel.
+    /// Close a pair of matrix axes on this tensor.
+    ///
+    /// Parameters
+    /// ----------
+    /// channel : tuple of int and int, optional
+    ///     (input_axis, output_axis) to contract. If omitted, the matrix channel
+    ///     must be uniquely determined by the representations. Specify it when
+    ///     more than one pairing is possible.
+    ///
+    /// Returns
+    /// -------
+    /// TensorNetwork
+    ///     The traced tensor; spectator axes remain external.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+    /// >>> space = Representation.euc(2)
+    /// >>> A = TensorName("M")(space, space)
+    /// >>> from symbolica.community.tensor import Tensor
+    /// >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> from symbolica.community.tensor import TensorNetwork
+    /// >>> network = TensorNetwork(tensor)
+    /// >>> network.trace(channel=(0, 1)).is_scalar
+    /// True
     #[pyo3(signature = (*, channel = None))]
     pub fn trace(&self, channel: Option<(usize, usize)>) -> PyResult<Self> {
         let selected = match channel {
             Some((input, output)) => composition::MatrixChannel { input, output },
-            None => composition::matrix_channel(&self.structure)
+            None => self
+                .structure
+                .matrix_channel()
                 .ok_or_else(|| PyValueError::new_err("tensor has no unique matrix channel"))?,
         };
-        let structure = composition::trace(&self.structure, selected).map_err(composition_error)?;
-        let mut network = self.clone();
-        network.freshen_open_ports()?;
-        network.align_self_pair(composition::PortPair {
-            left: selected.input,
-            right: selected.output,
-        })?;
-        let materialized =
-            composition::trace(&network.materialized, selected).map_err(composition_error)?;
+        let structure = self
+            .structure
+            .trace_ports(selected)
+            .map_err(composition_error)?;
+        let indices = self
+            .structure
+            .trace_indices(selected)
+            .map_err(composition_error)?;
+        let mut network = self.clone().relabel_ports(&indices)?;
+        let materialized = network
+            .materialized
+            .trace_ports(selected)
+            .map_err(composition_error)?;
         network.network.graph.sew_dangling_slots();
         network.network.state = network.network.graph.state();
         Self::finish(network.network, structure, materialized)
@@ -1761,11 +2634,11 @@ mod tests {
 
     use super::*;
 
-    fn data_tensor(descriptor: StructuredAtom, name: Symbol) -> Spensor {
-        let owner = fresh_open_owner();
+    fn data_tensor(descriptor: SymbolicTensor<PartialStructure>, name: Symbol) -> Spensor {
+        let owner = AbstractIndex::fresh_open_owner();
         let storage = OrderedStructure::new(
             descriptor
-                .interface
+                .structure()
                 .logical_slots()
                 .into_iter()
                 .enumerate()
@@ -1785,7 +2658,7 @@ mod tests {
     fn tensor_descriptor(
         name: &str,
         slots: impl IntoIterator<Item = spenso::structure::partial::PartialSlot>,
-    ) -> (StructuredAtom, Symbol) {
+    ) -> (SymbolicTensor<PartialStructure>, Symbol) {
         let name = SPENSO_TAG.tensor_symbol(name);
         let interface = PartialStructure::from_logical_slots(slots);
         let atom = FunctionBuilder::new(name)
@@ -1796,7 +2669,7 @@ mod tests {
                     .map(composition::port_atom),
             )
             .finish();
-        (StructuredAtom::new(atom, interface), name)
+        (SymbolicTensor::new(atom, interface), name)
     }
 
     #[test]
@@ -1818,7 +2691,7 @@ mod tests {
 
             assert_eq!(network.structure.rank(), 1);
             assert_eq!(
-                network.structure.interface.logical_slots()[0].aind,
+                network.structure.structure().logical_slots()[0].aind,
                 PartialIndex::Explicit(slot.aind)
             );
             assert_eq!(network.network.graph.dangling_indices(), vec![slot]);
@@ -1843,7 +2716,15 @@ mod tests {
 
             network.execute(None, None, None, ExecutionMode::All)?;
             let result = network.result_tensor(None)?;
-            assert!(matches!(&result.tensor, ParamOrConcrete::Concrete(_)));
+            assert!(matches!(&result.tensor, ParamOrConcrete::Param(_)));
+            let result = Py::new(py, result)?;
+            for (indices, expected) in [((0, 0), -1), ((2, 2), 1), ((0, 1), 0)] {
+                let component = result
+                    .bind(py)
+                    .get_item(indices)?
+                    .extract::<PythonExpression>()?;
+                assert_eq!(component.expr, Atom::num(expected));
+            }
             Ok(())
         })
         .unwrap();
@@ -1862,17 +2743,17 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression().clone(),
+                descriptor.structure().clone(),
                 Some(name),
                 Vec::new(),
             )?;
 
             let indexed_expression = expression.bind(py).call1(("i", "i"))?;
             let indexed_expression = indexed_expression.extract::<PyRef<'_, TensorExpression>>()?;
-            assert!(indexed_expression.interface.canonical().is_scalar());
+            assert!(indexed_expression.interface().canonical().is_scalar());
             drop(indexed_expression);
 
             let tensor = Spensor::dense(
@@ -1926,7 +2807,7 @@ mod tests {
                 .finish();
             let expression = TensorExpression::from_structured(
                 py,
-                StructuredAtom::new(
+                SymbolicTensor::new(
                     SPENSO_TAG.chain(
                         representation.to_symbolic([]),
                         representation.to_symbolic([]),
@@ -1948,10 +2829,10 @@ mod tests {
             assert!(closed.structure.is_scalar());
             assert!(closed.materialized.is_scalar());
             assert!(
-                matches!(closed.structure.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(closed.structure.expression().as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             assert!(
-                matches!(closed.materialized.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(closed.materialized.expression().as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             assert!(closed.network.graph.dangling_indices().is_empty());
             assert!(closed.network.state.is_scalar());
@@ -1973,10 +2854,10 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression().clone(),
+                descriptor.structure().clone(),
                 Some(name),
                 Vec::new(),
             )?;
@@ -2025,17 +2906,17 @@ mod tests {
                 "lazy_library_vector",
                 [representation.slot(PartialIndex::open(0))],
             );
-            let matrix = TensorExpression::from_atom_interface_descriptor(
+            let matrix = TensorExpression::from_known_parts(
                 py,
-                matrix_descriptor.atom,
-                matrix_descriptor.interface,
+                matrix_descriptor.expression().clone(),
+                matrix_descriptor.structure().clone(),
                 Some(matrix_name),
                 Vec::new(),
             )?;
-            let vector = TensorExpression::from_atom_interface_descriptor(
+            let vector = TensorExpression::from_known_parts(
                 py,
-                vector_descriptor.atom,
-                vector_descriptor.interface,
+                vector_descriptor.expression().clone(),
+                vector_descriptor.structure().clone(),
                 Some(vector_name),
                 Vec::new(),
             )?;
@@ -2061,7 +2942,7 @@ mod tests {
             let vector = SpensoNet::from_expression(vector.bind(py).as_any(), Some(&library))?;
             assert!(matrix.network.store.tensors.is_empty());
             assert!(vector.network.store.tensors.is_empty());
-            let mut product = matrix.contract(ConvertibleToSpensoNet(vector), 1, 0)?;
+            let mut product = matrix.contract_ports(ConvertibleToSpensoNet(vector), 1, 0)?;
 
             product.execute(Some(&library), None, None, ExecutionMode::All)?;
             let result = Py::new(py, product.result_tensor(Some(&library))?)?;
@@ -2086,10 +2967,10 @@ mod tests {
                     representation.slot(PartialIndex::open(2)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression().clone(),
+                descriptor.structure().clone(),
                 Some(name),
                 Vec::new(),
             )?;
@@ -2128,10 +3009,10 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression().clone(),
+                descriptor.structure().clone(),
                 Some(name),
                 Vec::new(),
             )?;
@@ -2153,7 +3034,7 @@ mod tests {
                 .bind(py)
                 .call1(("j", "i"))?
                 .extract::<Py<TensorExpression>>()?;
-            let expected_interface = left.bind(py).borrow().interface.logical_slots();
+            let expected_interface = left.bind(py).borrow().interface().logical_slots();
 
             let sum = left
                 .bind(py)
@@ -2163,12 +3044,12 @@ mod tests {
                 .call_method1("__sub__", (right.clone_ref(py),))?;
             for value in [&sum, &difference] {
                 let expression = value.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(expression.interface.logical_slots(), expected_interface);
+                assert_eq!(expression.interface().logical_slots(), expected_interface);
             }
 
             let assert_result = |mut network: SpensoNet, expected: &[f64]| -> PyResult<()> {
                 assert_eq!(
-                    network.structure.interface.logical_slots(),
+                    network.structure.structure().logical_slots(),
                     expected_interface
                 );
                 network.execute(Some(&library), None, None, ExecutionMode::All)?;
@@ -2254,7 +3135,7 @@ mod tests {
         );
 
         // Use the native Rust API directly to avoid Python linking issues
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             expr.clone(),
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -2278,7 +3159,7 @@ mod tests {
         initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let explicit = AbstractIndex::Normal(37);
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::Zero,
             PartialStructure::from_logical_slots([
                 representation.slot(PartialIndex::open(0)),
@@ -2321,9 +3202,84 @@ mod tests {
         assert_eq!(product.materialized.rank(), 1);
         assert_eq!(product.network.graph.dangling_indices().len(), 1);
         assert_eq!(
-            product.structure.interface.logical_slots()[0].aind,
+            product.structure.structure().logical_slots()[0].aind,
             PartialIndex::Explicit(AbstractIndex::Normal(41))
         );
+    }
+
+    #[test]
+    fn tensor_product_contracts_permuted_explicit_indices() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let mut operands = Vec::new();
+            for (name, indices) in [
+                ("network_explicit_product_left", [71, 73, 79]),
+                ("network_explicit_product_right", [73, 79, 71]),
+            ] {
+                let (descriptor, name) = tensor_descriptor(
+                    name,
+                    indices.map(|index| {
+                        representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+                    }),
+                );
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                let tensor = Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats((1..=8).map(f64::from).collect()),
+                )?;
+                operands.push(SpensoNet::from_tensor(tensor)?);
+            }
+            let mut product = operands.remove(0).multiply_network(operands.remove(0))?;
+
+            assert!(product.structure.is_scalar());
+            assert!(product.materialized.is_scalar());
+            assert!(product.network.graph.dangling_indices().is_empty());
+            product.execute(None, None, None, ExecutionMode::All)?;
+            let result = SymComplex::<f64>::try_from(&product.result_scalar()?.expr).unwrap();
+            // Sum T[i,j,k] U[j,k,i] with both arrays containing 1 through 8.
+            assert_eq!(result.re, 190.0);
+            assert_eq!(result.im, 0.0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_product_aligns_each_unique_open_representation_pair() {
+        initialize();
+        let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
+        let (left, left_name) = tensor_descriptor(
+            "network_disjoint_open_left",
+            [
+                euclidean.slot(PartialIndex::open(0)),
+                minkowski.slot(PartialIndex::open(1)),
+            ],
+        );
+        let (right, right_name) = tensor_descriptor(
+            "network_disjoint_open_right",
+            [
+                minkowski.slot(PartialIndex::open(0)),
+                euclidean.slot(PartialIndex::open(1)),
+            ],
+        );
+
+        let product = SpensoNet::from_tensor(data_tensor(left, left_name))
+            .unwrap()
+            .multiply_network(SpensoNet::from_tensor(data_tensor(right, right_name)).unwrap())
+            .unwrap();
+
+        assert!(product.structure.is_scalar());
+        assert!(product.materialized.is_scalar());
+        assert!(product.network.graph.dangling_indices().is_empty());
     }
 
     #[test]
@@ -2374,7 +3330,7 @@ mod tests {
         assert_eq!(
             swapped
                 .structure
-                .interface
+                .structure()
                 .logical_slots()
                 .into_iter()
                 .map(|slot| slot.aind)
@@ -2441,7 +3397,7 @@ mod tests {
         assert_eq!(
             product
                 .structure
-                .interface
+                .structure()
                 .logical_slots()
                 .iter()
                 .map(|slot| slot.aind)
