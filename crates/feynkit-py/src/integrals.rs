@@ -33,7 +33,7 @@ use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
 /// examples below reuse this family and its symbols.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -47,7 +47,7 @@ use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "IntegralFamily",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -80,7 +80,7 @@ impl PyIntegralFamily {
     /// Examples
     /// --------
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     /// >>> result = process.generate_diagrams(loops=1)
@@ -127,7 +127,7 @@ impl PyIntegralFamily {
     /// Examples
     /// --------
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> D, k, p, s = S("D", "k", "p", "s")
     /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -864,7 +864,7 @@ impl PyIntegralFamily {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -881,7 +881,7 @@ impl PyIntegralFamily {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "IntegralMapping",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -968,7 +968,7 @@ impl PyIntegralMapping {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -985,7 +985,7 @@ impl PyIntegralMapping {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "PropagatorMapping",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]

@@ -21,7 +21,7 @@ pub(crate) struct LinnetCache(Mutex<Option<Py<LinnetCacheHolder>>>);
 // Each physics wrapper owns one counted Python reference to this holder. The
 // holder owns the graph reference once, so shared refreshes remain visible to
 // every view without reporting one graph reference repeatedly to Python's GC.
-#[pyclass(frozen, name = "_LinnetCache", module = "symbolica.community.feynkit")]
+#[pyclass(frozen, name = "_LinnetCache", module = "symbolica.community.hepkit")]
 #[derive(Default)]
 struct LinnetCacheHolder(Mutex<Option<LinnetExport>>);
 

@@ -7,7 +7,7 @@ The ordinary amplitudes retain both labeled diagrams and their interference.
 from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import Representation, TensorExpression
 
 index_scope = S("spenso::index_scope")

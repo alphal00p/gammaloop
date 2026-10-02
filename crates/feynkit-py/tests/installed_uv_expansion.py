@@ -1,15 +1,12 @@
 """Check diagram UV expansion in an installed FeynKit or HEP host."""
 
-import importlib
-import sys
 from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community.tensor import TensorExpression
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 bubble = (
     model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"])

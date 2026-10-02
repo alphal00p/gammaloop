@@ -31,7 +31,7 @@ class Amplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -191,7 +191,7 @@ class AmplitudeError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> try:
     ...     hep.Amplitude([])
     ... except hep.AmplitudeError as error:
@@ -207,7 +207,7 @@ class AmplitudeLeg:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -306,7 +306,7 @@ class Boost:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> momentum = hep.FourMomentum(10.0, 0.0, 0.0, 0.0)
     >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
     >>> boosted = boost.apply(momentum)
@@ -384,7 +384,7 @@ class CancellationToken:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> token = hep.CancellationToken()
     >>> token.is_cancelled
     False
@@ -431,7 +431,7 @@ class CffError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -454,7 +454,7 @@ class CffGenerator:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -565,7 +565,7 @@ class CffOrientation:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -622,7 +622,7 @@ class CffReport:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -726,7 +726,7 @@ class CffResult:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -966,7 +966,7 @@ class CffSurface:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -1079,7 +1079,7 @@ class CffSurfaceGroup:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -1123,7 +1123,7 @@ class ClusteringResult:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
     ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
     >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -1233,7 +1233,7 @@ class Coupling:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> coupling = model.couplings[0]
     >>> orders = coupling.orders
@@ -1248,7 +1248,7 @@ class Coupling:
 
         Examples
         --------
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.standard_model()
         >>> reference = model.couplings[0].symbol
         """
@@ -1350,7 +1350,7 @@ class CutPropagator:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> q0, energy = S("q0", "energy")
     >>> cut = hep.CutPropagator(q0, energy, power=2)
     >>> residue = cut.apply(q0**2, q0)
@@ -1424,7 +1424,7 @@ class DiagramCut:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_cross_section(loops=1)
@@ -1546,7 +1546,7 @@ class DiagramCutSide:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_cross_section(loops=1)
@@ -1600,7 +1600,7 @@ class DiagramEdge:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -1924,7 +1924,7 @@ class DiagramError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -1947,7 +1947,7 @@ class DiagramGroup:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -1990,7 +1990,7 @@ class DiagramThresholdCandidate:
     physical final-state cuts are available separately through ``diagram.cuts``.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_cross_section(loops=1)
@@ -2056,7 +2056,7 @@ class DiagramVertex:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -2168,7 +2168,7 @@ class EvaluatedValues:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
 
     Parameters
@@ -2234,7 +2234,7 @@ class EvaluationRequest:
     A callback must return every requested internal parameter and coupling.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> requests = []
@@ -2312,7 +2312,7 @@ class FeynkitError(builtins.Exception):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> try:
     ...     model.particle_by_pdg(999999)
@@ -2343,7 +2343,7 @@ class FeynmanDiagram:
     renders the graph. The methods below reuse this setup.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -3036,7 +3036,7 @@ class FeynmanDiagram:
         Reduce a vacuum graph after explicitly selecting its integrated momentum head:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -3067,7 +3067,7 @@ class FeynmanDiagram:
         Construct scalar numerator graphs for a vacuum diagram:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -3410,7 +3410,7 @@ class FormFactor:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> form_factors = {ff.name: ff.value for ff in model.form_factors}
     """
@@ -3498,7 +3498,7 @@ class FourMomentum:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
     >>> p = momentum
     >>> first = hep.FourMomentum(5.0, 0.0, 5.0, 0.0)
@@ -3867,7 +3867,7 @@ class GenerationError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> try:
@@ -3888,7 +3888,7 @@ class GenerationProgress:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> snapshots = []
@@ -3953,7 +3953,7 @@ class GenerationReport:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -4068,7 +4068,7 @@ class GenerationResult:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -4199,7 +4199,7 @@ class GroupMember:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -4301,7 +4301,7 @@ class Helicity:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> incoming_fermion_helicity = hep.Helicity(-1)
     >>> incoming_fermion_helicity == hep.Helicity.MINUS
     True
@@ -4449,7 +4449,7 @@ class IntegralFamily:
     examples below reuse this family and its symbols.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -4568,7 +4568,7 @@ class IntegralFamily:
         Examples
         --------
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> process = model.process(["phi", "phi"], ["phi", "phi"])
         >>> result = process.generate_diagrams(loops=1)
@@ -4594,7 +4594,7 @@ class IntegralFamily:
         Examples
         --------
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> D, k, p, s = S("D", "k", "p", "s")
         >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
         >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -4994,7 +4994,7 @@ class IntegralFamilyError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -5020,7 +5020,7 @@ class IntegralMapping:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -5100,7 +5100,7 @@ class Jet:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
     ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
     >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -5216,7 +5216,7 @@ class JetDefinition:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
     ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
     >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -5368,7 +5368,7 @@ class Kinematics:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> P = hep.Kinematics.external_momentum
     >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
     >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
@@ -5381,7 +5381,7 @@ class Kinematics:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> s = hep.Kinematics.s
     """
     t: Expression
@@ -5390,7 +5390,7 @@ class Kinematics:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> t = hep.Kinematics.t
     """
     u: Expression
@@ -5399,7 +5399,7 @@ class Kinematics:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> u = hep.Kinematics.u
     """
     external_momentum: Expression
@@ -5408,7 +5408,7 @@ class Kinematics:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Kinematics.external_momentum
     """
     loop_momentum: Expression
@@ -5417,7 +5417,7 @@ class Kinematics:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Kinematics.loop_momentum
     """
     @property
@@ -5652,7 +5652,7 @@ class KinematicsError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> try:
     ...     hep.JetDefinition.anti_kt(-0.4)
     ... except hep.KinematicsError as error:
@@ -5674,7 +5674,7 @@ class LoadedModel:
     (``particles.py``, ``vertices.py``, and related files).
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
     >>> model = loaded.model
     >>> particle_names = [particle.name for particle in model.particles]
@@ -5766,7 +5766,7 @@ class LoopMomentumBasis:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -5993,7 +5993,7 @@ class LorentzStructure:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> lorentz = model.lorentz_structures[0]
     >>> spins = lorentz.spins
@@ -6091,7 +6091,7 @@ class Model:
     or ``Model.from_json``.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> photon = model.particle("a")
     >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
@@ -6579,7 +6579,7 @@ class Model:
         ``lam=1``. See ``EvaluationRequest`` for callback inputs.
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> process = model.process(["phi", "phi"], ["phi", "phi"])
         >>> requests = []
@@ -6710,7 +6710,7 @@ class ModelError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> try:
     ...     model.particle_by_pdg(999999)
@@ -6730,7 +6730,7 @@ class ModelExpression:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> requests = []
@@ -6779,7 +6779,7 @@ class ModelFunction:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> functions = {function.name: function.arguments for function in model.functions}
     """
@@ -6792,7 +6792,7 @@ class ModelFunction:
 
         Examples
         --------
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.standard_model()
         >>> import json
         >>> definition = json.loads(model.to_json())
@@ -6884,7 +6884,7 @@ class MomentumSignature:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -6990,7 +6990,7 @@ class NumeratorGrouping:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
 
     Parameters
@@ -7051,7 +7051,7 @@ class Parameter:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> mass = model.parameter("MM")
     >>> assert mass.nature == hep.ParameterNature.EXTERNAL
@@ -7065,7 +7065,7 @@ class Parameter:
 
         Examples
         --------
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.standard_model()
         >>> reference = model.parameter("ee").symbol
         >>> mass = model.parameter("Me").symbol
@@ -7227,7 +7227,7 @@ class ParameterCard:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> card = model.default_parameter_card()
     >>> card.set("MM", 0.105658, 0.0)
@@ -7392,7 +7392,7 @@ class Particle:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> electron = model.particle_by_pdg(11)
     >>> assert electron.name == "e-"
@@ -7520,7 +7520,7 @@ class Particle:
 
         Examples
         --------
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> qed_model = hep.Model.qed()
         >>> electron = qed_model.particle("e-")
         >>> mass, charge = electron.mass, electron.electric_charge
@@ -7765,7 +7765,7 @@ class Particle:
         Using the setup in the ``Particle`` class example:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.standard_model()
         >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
         >>> electron = model.particle("e-")
@@ -7854,7 +7854,7 @@ class ParticleSelector:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> electron = hep.ParticleSelector.by_pdg(11)
     >>> positron = hep.ParticleSelector.by_name("e+")
     """
@@ -7992,7 +7992,7 @@ class Process:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
     >>> result = process.generate_diagrams(loops=0)
@@ -8383,7 +8383,7 @@ class Process:
         A two-particle tree cut has one loop after the amplitude sides are sewn:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> process = model.process(["phi", "phi"], ["phi", "phi"])
         >>> result = process.generate_cross_section(loops=1)
@@ -8491,7 +8491,7 @@ class Propagator:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> propagator = model.propagators[0]
     >>> formula = propagator.numerator / propagator.denominator
@@ -8593,7 +8593,7 @@ class PropagatorMapping:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -8646,7 +8646,7 @@ class Rotation:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
     >>> rotated = rotation.apply_three(hep.ThreeMomentum(1.0, 0.0, 0.0))
     """
@@ -8770,7 +8770,7 @@ class SelfEnergyFilterOptions:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
 
     Parameters
@@ -8810,7 +8810,7 @@ class SnailFilterOptions:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
 
     Parameters
@@ -8853,7 +8853,7 @@ class SquaredAmplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -9006,7 +9006,7 @@ class Subgraph(FeynmanDiagram):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
@@ -9183,7 +9183,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> Q = hep.Symbols.edge_momentum
     >>> edge_momentum = Q(0)
     >>> mass = hep.Model.standard_model().particle("e-").mass
@@ -9194,7 +9194,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.edge_momentum
     """
     denominator: Expression
@@ -9203,7 +9203,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.denominator
     """
     dimension: Expression
@@ -9212,7 +9212,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.dimension
     """
     half_edge: Expression
@@ -9221,7 +9221,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.half_edge
     """
     polarization: Expression
@@ -9230,7 +9230,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.polarization
     """
     polarization_conjugate: Expression
@@ -9239,7 +9239,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.polarization_conjugate
     """
     ufo_metric: Expression
@@ -9248,7 +9248,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.ufo_metric
     """
     ufo_index: Expression
@@ -9257,7 +9257,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.ufo_index
     """
     ufo_momentum: Expression
@@ -9266,7 +9266,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> reference = hep.Symbols.ufo_momentum
     """
     model_conjugate: Expression
@@ -9275,7 +9275,7 @@ class Symbols:
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
     """
@@ -9288,7 +9288,7 @@ class TadpoleFilterOptions:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
 
     Parameters
@@ -9345,7 +9345,7 @@ class TensorReducer:
     is proportional to the metric tensor times ``k.k / D``.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
     >>> D, mu, nu = S("D", "mu", "nu")
     >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
@@ -9413,7 +9413,7 @@ class TensorReducer:
         The equivalent explicit selector shows which momentum head is integrated:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
         >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -9494,7 +9494,7 @@ class TensorReducer:
         by the dimension:
 
         >>> from symbolica import S
-        >>> from symbolica.community import hep
+        >>> from symbolica.community import hepkit as hep
         >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
         >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
         >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
@@ -9551,7 +9551,7 @@ class TensorReductionError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> D, k, mu = S("D", "k", "mu")
     >>> mink = S("spenso::mink")
     >>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
@@ -9573,7 +9573,7 @@ class ThreeMomentum:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
     >>> p = momentum
     >>> first = hep.ThreeMomentum(0.0, 1.0, 0.0)
@@ -9910,7 +9910,7 @@ class UfoLoadDiagnostics:
     (``particles.py``, ``vertices.py``, and related files).
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
     >>> diagnostics = loaded.diagnostics
     >>> print(diagnostics.source, diagnostics.particle_count, diagnostics.vertex_rule_count)
@@ -10116,7 +10116,7 @@ class UfoLoadError(FeynkitError):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> try:
     ...     hep.UfoLoader().load("/path/to/missing-model")
     ... except hep.UfoLoadError as error:
@@ -10137,7 +10137,7 @@ class UfoLoader:
     Replace ``path/to/MyUFO`` with the directory containing your UFO model
     (``particles.py``, ``vertices.py``, and related files).
 
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> loader = hep.UfoLoader()
     >>> loaded = loader.load("path/to/MyUFO")
 
@@ -10233,7 +10233,7 @@ class VertexRule:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> vertex = model.vertex_rules[0]
     >>> particles = [model.particle(name) for name in vertex.particles]
@@ -10355,7 +10355,7 @@ class Axis(enum.Enum):
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> beam_axis = hep.Axis.Z
     >>> rotation = hep.Rotation.quarter_turn(beam_axis)
     """
@@ -10372,7 +10372,7 @@ class JetAlgorithm(enum.Enum):
 
     Examples
     --------
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> algorithm = hep.JetAlgorithm.AntiKt
     >>> definition = hep.JetDefinition(algorithm, radius=0.4)
     """
@@ -10388,7 +10388,7 @@ class ParameterNature(enum.Enum):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> nature = hep.ParameterNature.EXTERNAL
     >>> external = [p for p in model.parameters if p.nature == nature]
@@ -10404,7 +10404,7 @@ class ParameterType(enum.Enum):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
     >>> real_parameters = [p for p in model.parameters
     ...                    if p.parameter_type == hep.ParameterType.REAL]

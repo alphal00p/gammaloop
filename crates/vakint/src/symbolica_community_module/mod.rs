@@ -28,7 +28,7 @@ impl SymbolicaCommunityModule for VakintWrapper {
     }
 
     fn get_name() -> String {
-        "hep.vakint".to_string()
+        "hepkit_vakint".to_string()
     }
 
     fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -58,7 +58,7 @@ macro_rules! define_vakint_python_surface {
             Ok(())
         }
 
-        /// The classes registered on `symbolica.community.hep.vakint`.
+        /// The classes registered on `symbolica.community.hepkit.vakint`.
         #[cfg(feature = "python_stubgen")]
         pub const PYTHON_STUB_SURFACE: &[&str] = &[$(<$class as PyClass>::NAME,)+];
     };
@@ -76,7 +76,7 @@ fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Vakint", module = "symbolica.community.hep.vakint")]
+#[pyclass(name = "Vakint", module = "symbolica.community.hepkit.vakint")]
 /// Vakint engine and settings used for matching, reduction, and evaluation.
 ///
 /// Construct one instance and reuse it: initialization processes the complete topology library.
@@ -88,7 +88,7 @@ pub struct VakintWrapper {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VakintNumericalResult",
-    module = "symbolica.community.hep.vakint"
+    module = "symbolica.community.hepkit.vakint"
 )]
 /// Numerical Laurent series in the dimensional-regularization parameter epsilon.
 pub struct NumericalEvaluationResultWrapper {
@@ -119,7 +119,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -140,7 +140,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -165,7 +165,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -203,7 +203,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result1 = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ... ])
@@ -249,7 +249,10 @@ impl NumericalEvaluationResultWrapper {
 ///
 /// Construct this wrapper from a Symbolica expression before applying Vakint operations.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintExpression", module = "symbolica.community.hep.vakint")]
+#[pyclass(
+    name = "VakintExpression",
+    module = "symbolica.community.hepkit.vakint"
+)]
 pub struct VakintExpressionWrapper {
     pub value: VakintExpression,
 }
@@ -283,7 +286,7 @@ impl VakintExpressionWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import VakintExpression
+    /// >>> from symbolica.community.hepkit.vakint import VakintExpression
     /// >>> integral = VakintExpression(E('''
     /// ...     k(1,11)*k(1,11)
     /// ...     *topo(prop(1,edge(1,1),k(1),muvsq,1))
@@ -302,7 +305,7 @@ impl VakintExpressionWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import VakintExpression
+    /// >>> from symbolica.community.hepkit.vakint import VakintExpression
     /// >>> integral = E('''
     /// ...     (
     /// ...         k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -340,7 +343,7 @@ impl VakintExpressionWrapper {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VakintEvaluationMethod",
-    module = "symbolica.community.hep.vakint"
+    module = "symbolica.community.hepkit.vakint"
 )]
 /// One configured backend in a `Vakint` instance's evaluation order.
 pub struct VakintEvaluationMethodWrapper {
@@ -376,7 +379,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> alphaloop_method = VakintEvaluationMethod.new_alphaloop_method()
     /// >>> "AlphaLoop" in str(alphaloop_method)
     /// True
@@ -395,7 +398,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> matad_method = VakintEvaluationMethod.new_matad_method(
     /// ...     expand_masters=True,
     /// ...     susbstitute_masters=True,
@@ -446,7 +449,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> fmft_method = VakintEvaluationMethod.new_fmft_method(
     /// ...     expand_masters=True,
     /// ...     susbstitute_masters=True,
@@ -487,7 +490,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(
     /// ...     quiet=True,
     /// ...     relative_precision=1e-7,
@@ -571,7 +574,7 @@ impl VakintWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> vakint is not None
     /// True
@@ -705,7 +708,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> result = vakint.numerical_result_from_expression(
     /// ...     E("vakint::ε^-2 + 1 + 0.12*vakint::ε^-1")
@@ -738,7 +741,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> evaluated = E(
     /// ...     "muvsq*vakint::ε^-1 + mursq",
@@ -800,7 +803,7 @@ impl VakintWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.hep.vakint import Vakint, VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintNumericalResult
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> result = VakintNumericalResult([
     /// ...     (-1, (2.0, 0.0)),
@@ -827,7 +830,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> integral = E(
     /// ...     "topo(prop(18,edge(7,7),k(99),muvsq,1))",
@@ -867,7 +870,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> integral = E(
     /// ...     "k(1,101)*k(1,102)*topo(prop(1,edge(1,1),k(1),muvsq,1))",
@@ -900,7 +903,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint, VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
     /// >>> vakint = Vakint(
     /// ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
     /// ... )
@@ -939,7 +942,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.hep.vakint import Vakint, VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
     /// >>> vakint = Vakint(
     /// ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
     /// ... )
@@ -978,16 +981,16 @@ mod tests {
     use symbolica::api::python::create_symbolica_module;
 
     #[test]
-    fn community_wrapper_imports_under_hep() {
+    fn community_wrapper_imports_under_hepkit() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            assert_eq!(VakintWrapper::get_name(), "hep.vakint");
+            assert_eq!(VakintWrapper::get_name(), "hepkit_vakint");
             let modules = py.import("sys")?.getattr("modules")?;
             let mut parent: Option<Bound<'_, PyModule>> = None;
             for name in [
                 "symbolica",
                 "symbolica.community",
-                "symbolica.community.hep",
+                "symbolica.community.hepkit",
             ] {
                 let package = PyModule::new(py, name)?;
                 package.setattr("__path__", PyList::empty(py))?;
@@ -1012,12 +1015,12 @@ mod tests {
             VakintWrapper::register_module(&native)?;
             modules.set_item(&native_name, &native)?;
 
-            let name = "symbolica.community.hep.vakint";
+            let name = "symbolica.community.hepkit.vakint";
             let wrapper = PyModule::new(py, name)?;
             wrapper.setattr("__package__", name)?;
             modules.set_item(name, &wrapper)?;
             let source = CString::new(include_str!(
-                "../../python/symbolica/community/hep/vakint/__init__.py"
+                "../../python/symbolica/community/hepkit/vakint/__init__.py"
             ))
             .unwrap();
             py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;

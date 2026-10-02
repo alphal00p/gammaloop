@@ -4,8 +4,6 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 This tests the squared current contraction, not diagram generation or phase space.
 """
 
-import importlib
-import sys
 from pathlib import Path
 
 from symbolica import E, S
@@ -16,9 +14,7 @@ from symbolica.community.tensor import (
     chain,
 )
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 p1, p2, k1, k2 = (

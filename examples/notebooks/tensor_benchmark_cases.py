@@ -9,7 +9,7 @@ from pathlib import Path
 from time import process_time_ns
 
 from symbolica import E, S, T
-from symbolica.community.feynkit import Symbols
+from symbolica.community.hepkit import Symbols
 from symbolica.community.tensor import (
     AUTO,
     ReductionStatus,

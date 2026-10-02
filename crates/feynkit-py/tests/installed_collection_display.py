@@ -1,13 +1,9 @@
 """Collection displays retain real diagrams and their aligned tensor terms."""
 
-import importlib
-import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
 
 
 class Collection(HTMLParser):

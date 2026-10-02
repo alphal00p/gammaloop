@@ -7,7 +7,7 @@ Polarized production remains a separate benchmark.
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")

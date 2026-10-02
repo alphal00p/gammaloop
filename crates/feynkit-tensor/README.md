@@ -93,7 +93,7 @@ The Python binding mirrors this API and returns one concrete Symbolica
 
 ```python
 from symbolica import E
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 reducer = fk.TensorReducer.feynkit(E("4"))
 scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)

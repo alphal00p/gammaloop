@@ -22,7 +22,7 @@ def _():
 
     import linnet as lp
     import marimo as mo
-    import symbolica.community.feynkit as fk
+    import symbolica.community.hepkit as fk
 
     # The Standard Model is embedded, so native and browser runs need no model file.
     # Native sessions and browser exports load identical model definitions.

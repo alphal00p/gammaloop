@@ -22,7 +22,7 @@ This self-contained example integrates `k` and leaves `p` external:
 // docs-example: compile feynkit-tensor-selectors
 ```python
 from symbolica import S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 D = S("feynkit_docs::D")
 mu = S("feynkit_docs::mu")
@@ -74,7 +74,7 @@ then be nonzero.
 // docs-example: compile feynkit-tensor-external-basis
 ```python
 from symbolica import S, E
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 D, k, p, mu = S("external_docs::D", "external_docs::k", "external_docs::p", "external_docs::mu")
 mink, dot = S("spenso::mink", "spenso::dot")

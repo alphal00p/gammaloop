@@ -26,14 +26,14 @@ use crate::{
 /// (``particles.py``, ``vertices.py``, and related files).
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
 /// >>> diagnostics = loaded.diagnostics
 /// >>> print(diagnostics.source, diagnostics.particle_count, diagnostics.vertex_rule_count)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "UfoLoadDiagnostics",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -304,7 +304,7 @@ impl PyUfoLoadDiagnostics {
 /// (``particles.py``, ``vertices.py``, and related files).
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
 /// >>> model = loaded.model
 /// >>> particle_names = [particle.name for particle in model.particles]
@@ -312,7 +312,7 @@ impl PyUfoLoadDiagnostics {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LoadedModel",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -448,7 +448,7 @@ impl PyLoadedModel {
 /// Replace ``path/to/MyUFO`` with the directory containing your UFO model
 /// (``particles.py``, ``vertices.py``, and related files).
 ///
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> loader = hep.UfoLoader()
 /// >>> loaded = loader.load("path/to/MyUFO")
 ///
@@ -463,7 +463,7 @@ impl PyLoadedModel {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "UfoLoader",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -589,7 +589,7 @@ mod tests {
     fn exposes_frozen_diagnostics_from_the_normalized_loader_output() {
         Python::initialize();
         Python::attach(|py| {
-            let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();

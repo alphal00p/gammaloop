@@ -78,7 +78,7 @@ python examples/ludy/compute.py --process dy --check
 python examples/ludy/compute.py --process dis --check
 ```
 
-For the community host that calls the FeynKit module `hep`, add `--module hep`.
+The public FeynKit package is `symbolica.community.hepkit`.
 There is no automatic import fallback. The port uses
 `TensorExpression.dirac_gamma(d)` and the current `Expression.solve` API. The pinned
 reference uses the older `TensorName.gamma` API, so regenerating its fixtures

@@ -413,9 +413,9 @@ the release core hash is
 Release compilation took 514.255 s, excluded from computation. Build processes
 used CPUs 24–27. Computation used CPU 28 on the shared host.
 
-The frozen notebook cases needed only an import-namespace correction from the
-historical `symbolica.community.hep` to the host's registered
-`symbolica.community.feynkit`. The historical cohort recorded source and host
+The frozen notebook cases needed only an import-namespace correction between
+the historical host assemblies. Current callers use `symbolica.community.hepkit`.
+The historical cohort recorded source and host
 identities, three samples per case, phase diagnostics, output term counts,
 process peak RSS and independent checks. The notebook harness and clock
 boundaries below describe how to capture a new cohort.

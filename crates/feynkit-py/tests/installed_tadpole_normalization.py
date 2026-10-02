@@ -4,8 +4,8 @@ from math import factorial, pi
 from pathlib import Path
 
 from symbolica import E, S, Symbol
-from symbolica.community import feynkit as hep
-from symbolica.community.feynkit import oneloop
+from symbolica.community import hepkit as hep
+from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")

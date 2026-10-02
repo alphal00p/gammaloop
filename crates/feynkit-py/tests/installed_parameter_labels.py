@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 import typst
 from symbolica import E, S
-from symbolica.community.feynkit import Model, UfoLoader
+from symbolica.community.hepkit import Model, UfoLoader
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 

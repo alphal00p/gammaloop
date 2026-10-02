@@ -14,7 +14,7 @@ in the interpreter used by the Symbolica host, then point the loader at your UFO
 
 // docs-example: compile
 ```python
-from symbolica.community.feynkit import UfoLoader
+from symbolica.community.hepkit import UfoLoader
 
 loaded = UfoLoader(restriction_name="massless").load("models/sm")
 model = loaded.model
@@ -61,7 +61,7 @@ applies to factorized-loop, cut-blob and spectator ranges.
 
 // docs-example: compile
 ```python
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 result = model.process(['g'], ['g'], particle_veto=['c', 't', 's', 'u', 'd']).generate_diagrams(loops=1, coupling_orders={'QCD': 2, 'QED': 0}, zero_snails=fk.SnailFilterOptions(veto_attached_to_massless=True), threads=4)
 ```
@@ -71,7 +71,7 @@ Rust configuration. A process can also be configured independently of generation
 
 // docs-example: compile
 ```python
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 process = model.process(["e-", "e+"], ["mu-", "mu+"])
 result = process.generate_diagrams(loops=1, max_vertices=6, maximum_bridges=None)
@@ -175,7 +175,7 @@ exactly once; the diagnostic automorphism order is not a second symmetry factor.
 
 // docs-example: compile
 ```python
-from symbolica.community.feynkit import Amplitude
+from symbolica.community.hepkit import Amplitude
 
 amplitude = Amplitude(generated.diagrams)
 operator = amplitude.expression()
