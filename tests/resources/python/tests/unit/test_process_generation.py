@@ -72,10 +72,10 @@ class TestProcessGeneration:
             ('a > d d~ z [{{2}}] | d g a -num_grouping only_detect_zeroes', snapshot(0), snapshot("0")),  # nopep8
             # Full particle contents
             ('a > d d~ [{{1}}] --symmetrize_left_right_states', snapshot(1), snapshot("-1")),  # nopep8
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states --compare_canonized_numerator --number_of_samples_for_numerator_comparisons 0 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-27*G^2*Nc*TR*ee^-2+27*G^2*Nc^-1*TR*ee^-2')),  # nopep8
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states --compare_canonized_numerator --number_of_samples_for_numerator_comparisons 0 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-27*G^2*Nc*ee^-2*idx(2,cof(Nc))+27*G^2*Nc^-1*ee^-2*idx(2,cof(Nc))')),  # nopep8
             ('a > d d~ [{{2}}] --symmetrize_left_right_states --compare_canonized_numerator --number_of_samples_for_numerator_comparisons 0 --fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-36*G^2*ee^-2')),  # nopep8
             ('a > d d~ [{{2}}] --symmetrize_left_right_states --no-compare_canonized_numerator --number_of_samples_for_numerator_comparisons 3 --fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-36*G^2*ee^-2')),  # nopep8
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states --no-compare_canonized_numerator --number_of_samples_for_numerator_comparisons 3 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-3*Nc*TR+3*Nc^-1*TR')),  # nopep8
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states --no-compare_canonized_numerator --number_of_samples_for_numerator_comparisons 3 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(10), snapshot('-12+-3*Nc*idx(2,cof(Nc))+3*Nc^-1*idx(2,cof(Nc))')),  # nopep8
             # # Only 1-flavour pure QCD corrections
             ('a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize_left_right_states', snapshot(1), snapshot("-1")),  # nopep8
             ('a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize_left_right_states', snapshot(2), snapshot("-3")),  # nopep8
@@ -276,9 +276,9 @@ class TestProcessGeneration:
             "import_model sm"))
         # autopep8: off
         tests: list[tuple[str, int, str | None]] = [
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(4), snapshot("-4")),
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(40), snapshot("-40")),
-            ('a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] -num_grouping only_detect_zeroes --max_multiplicity_for_fast_cut_filter 0', snapshot(874), snapshot("-266")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] -num_grouping only_detect_zeroes', snapshot(4), snapshot("-4")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] -num_grouping only_detect_zeroes', snapshot(40), snapshot("-40")),
+            ('a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] -num_grouping only_detect_zeroes', snapshot(874), snapshot("-266")),
         ]
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
@@ -336,7 +336,7 @@ class TestProcessGeneration:
              snapshot('-1*CKM1x1^-1*CKM1x2*complexconjugate(CKM1x1)^-1*complexconjugate(CKM1x2)+-1*CKM2x1^-1*CKM2x2*complexconjugate(CKM2x1)^-1*complexconjugate(CKM2x2)+-1*CKM3x1^-1*CKM3x2*complexconjugate(CKM3x1)^-1*complexconjugate(CKM3x2)+-1*I2x12^-1*I2x22*I3x21^-1*I3x22+-1*I2x13^-1*I2x23*I3x31^-1*I3x32+-27/2*G^2*ee^-2+319/24')),
             # b) Using only symbolic tensor canonization of the numerator but this time substituting color group factors allows for more groupings, but still not the maximum (i.e. 281 graphs instead of 243 when grouping as much as possible)
             ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1 --compare_canonized_numerator --number_of_samples_for_numerator_comparisons 0 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(281),
-             snapshot('-1*CKM1x1^-1*CKM1x2*complexconjugate(CKM1x1)^-1*complexconjugate(CKM1x2)+-1*CKM2x1^-1*CKM2x2*complexconjugate(CKM2x1)^-1*complexconjugate(CKM2x2)+-1*CKM3x1^-1*CKM3x2*complexconjugate(CKM3x1)^-1*complexconjugate(CKM3x2)+-1*I2x12^-1*I2x22*I3x21^-1*I3x22+-1*I2x13^-1*I2x23*I3x31^-1*I3x32+-81/8*G^2*Nc*TR*ee^-2+319/24+81/8*G^2*Nc^-1*TR*ee^-2')),
+             snapshot('-1*CKM1x1^-1*CKM1x2*complexconjugate(CKM1x1)^-1*complexconjugate(CKM1x2)+-1*CKM2x1^-1*CKM2x2*complexconjugate(CKM2x1)^-1*complexconjugate(CKM2x2)+-1*CKM3x1^-1*CKM3x2*complexconjugate(CKM3x1)^-1*complexconjugate(CKM3x2)+-1*I2x12^-1*I2x22*I3x21^-1*I3x22+-1*I2x13^-1*I2x23*I3x31^-1*I3x32+-81/8*G^2*Nc*ee^-2*idx(2,cof(Nc))+319/24+81/8*G^2*Nc^-1*ee^-2*idx(2,cof(Nc))')),
             # c) Now instead rely on numerical sample evalutions but still with symbolic color group factors
             # Generation below yields "Could not numerically evaluate numerator: more than one node in the graph", which is a current issue in EW feynman rules when kept with symbolic parameters 
             # ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1 --no-compare_canonized_numerator --number_of_samples_for_numerator_comparisons 3 --no-fully_numerical_substitution_when_comparing_numerators', snapshot(?), snapshot('?')),

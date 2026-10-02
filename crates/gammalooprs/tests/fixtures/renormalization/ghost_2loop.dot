@@ -1,0 +1,125 @@
+digraph d1{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="-1*Q(2,spenso::mink(4,hedge(2)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="-1*Q(4,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(11)),spenso::coad(8,hedge(6)))"];
+  v3[dod="1" int_id="V_36" num="(-1*Q(1,spenso::mink(4,hedge(7)))*spenso::g(spenso::mink(4,hedge(3)),spenso::mink(4,hedge(8)))+-1*Q(3,spenso::mink(4,hedge(8)))*spenso::g(spenso::mink(4,hedge(3)),spenso::mink(4,hedge(7)))+-1*Q(5,spenso::mink(4,hedge(7)))*spenso::g(spenso::mink(4,hedge(3)),spenso::mink(4,hedge(8)))+Q(1,spenso::mink(4,hedge(8)))*spenso::g(spenso::mink(4,hedge(3)),spenso::mink(4,hedge(7)))+Q(3,spenso::mink(4,hedge(3)))*spenso::g(spenso::mink(4,hedge(7)),spenso::mink(4,hedge(8)))+Q(5,spenso::mink(4,hedge(3)))*spenso::g(spenso::mink(4,hedge(7)),spenso::mink(4,hedge(8))))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(3)),spenso::coad(8,hedge(7)),spenso::coad(8,hedge(8)))"];
+  v4[dod="1" int_id="V_35" num="-1*Q(6,spenso::mink(4,hedge(9)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(5)),spenso::coad(8,hedge(9)))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v3:3	 [id=1 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e1" num="-1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))*spenso::g(spenso::mink(4,hedge(2)),spenso::mink(4,hedge(3)))" particle="g"];
+  v1:4	-> v4:5	 [id=2 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))" particle="ghG"];
+  v2:6	-> v3:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e3" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  ext4	 [style=invis];
+  v2:1	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1𝑖" particle="ghG"];
+  v3:8	-> v4:9	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*K(0,a___)+K(1,a___)+P(0,a___)" name="e5" num="-1𝑖*spenso::g(spenso::coad(8,hedge(8)),spenso::coad(8,hedge(9)))*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" particle="g"];
+  v4:10	-> v2:11	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="K(1,a___)+P(0,a___)" name="e6" num="1𝑖*spenso::g(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(11)))" particle="ghG"];
+}
+
+digraph d2{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="-1*Q(2,spenso::mink(4,hedge(2)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="Q(4,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(6)),spenso::coad(8,hedge(9)))"];
+  v3[dod="1" int_id="V_35" num="-1*Q(5,spenso::mink(4,hedge(3)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(11)),spenso::coad(8,hedge(3)),spenso::coad(8,hedge(8)))"];
+  v4[dod="1" int_id="V_35" num="-1*Q(6,spenso::mink(4,hedge(7)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(5)),spenso::coad(8,hedge(7)))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v3:3	 [id=1 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="-1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))*spenso::g(spenso::mink(4,hedge(2)),spenso::mink(4,hedge(3)))" particle="g"];
+  v1:4	-> v4:5	 [id=2 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))" particle="ghG"];
+  v2:6	-> v4:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e3" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  ext4	 [style=invis];
+  v2:1	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1𝑖" particle="ghG"];
+  v3:8	-> v2:9	 [id=5 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="K(1,a___)+P(0,a___)" name="e5" num="1𝑖*spenso::g(spenso::coad(8,hedge(8)),spenso::coad(8,hedge(9)))" particle="ghG"];
+  v4:10	-> v3:11	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+K(1,a___)+P(0,a___)" name="e6" num="1𝑖*spenso::g(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(11)))" particle="ghG"];
+}
+
+digraph d3{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="-1*Q(2,spenso::mink(4,hedge(2)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="-1*Q(3,spenso::mink(4,hedge(3)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(11)),spenso::coad(8,hedge(3)))"];
+  v3[dod="1" int_id="V_35" num="-1*Q(5,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(5)),spenso::coad(8,hedge(6)),spenso::coad(8,hedge(8)))"];
+  v4[dod="1" int_id="V_35" num="Q(6,spenso::mink(4,hedge(7)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(7)),spenso::coad(8,hedge(9)))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v2:3	 [id=1 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="-1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))*spenso::g(spenso::mink(4,hedge(2)),spenso::mink(4,hedge(3)))" particle="g"];
+  v1:4	-> v3:5	 [id=2 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))" particle="ghG"];
+  ext3	 [style=invis];
+  v2:1	-> ext3	 [id=3 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e3" num="1𝑖" particle="ghG"];
+  v3:6	-> v4:7	 [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  v3:8	-> v4:9	 [id=5 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+P(0,a___)" name="e5" num="1𝑖*spenso::g(spenso::coad(8,hedge(8)),spenso::coad(8,hedge(9)))" particle="ghG"];
+  v4:10	-> v2:11	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e6" num="1𝑖*spenso::g(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(11)))" particle="ghG"];
+}
+
+digraph d4{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "-1";
+  overall_factor_evaluated = "-1";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="Q(1,spenso::mink(4,hedge(4)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="-1*Q(4,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(3)),spenso::coad(8,hedge(6)))"];
+  v3[dod="0" int_id="V_74" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(11)),spenso::mink(4,hedge(5)))*spenso::t(spenso::coad(8,hedge(5)),spenso::cof(3,hedge(11)),spenso::dind(spenso::cof(3,hedge(8))))"];
+  v4[dod="0" int_id="V_74" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(7)))*spenso::t(spenso::coad(8,hedge(7)),spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v2:3	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))" particle="ghG"];
+  v1:4	-> v3:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="-1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))" particle="g"];
+  v2:6	-> v4:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  ext4	 [style=invis];
+  v2:1	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1𝑖" particle="ghG"];
+  v3:8	-> v4:9	 [id=5 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1" lmb_id="1" lmb_rep="K(1,a___)" name="e5" num="1𝑖*Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(5,1)))" particle="d"];
+  v4:10	-> v3:11	 [id=6 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1" lmb_rep="-1*P(0,a___)+K(0,a___)+K(1,a___)" name="e6" num="1𝑖*Q(6,spenso::mink(4,edge(6,1)))*spenso::g(spenso::cof(3,hedge(10)),spenso::dind(spenso::cof(3,hedge(11))))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(10)),spenso::mink(4,edge(6,1)))" particle="d"];
+}
+
+digraph d5{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "1/2";
+  overall_factor_evaluated = "1/2";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="Q(1,spenso::mink(4,hedge(4)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="-1*Q(4,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(3)),spenso::coad(8,hedge(6)))"];
+  v3[dod="1" int_id="V_36" num="(-1*Q(2,spenso::mink(4,hedge(8)))*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(5)))+-1*Q(5,spenso::mink(4,hedge(5)))*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(8)))+-1*Q(6,spenso::mink(4,hedge(8)))*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(5)))+Q(2,spenso::mink(4,hedge(10)))*spenso::g(spenso::mink(4,hedge(5)),spenso::mink(4,hedge(8)))+Q(5,spenso::mink(4,hedge(10)))*spenso::g(spenso::mink(4,hedge(5)),spenso::mink(4,hedge(8)))+Q(6,spenso::mink(4,hedge(5)))*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(8))))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(5)),spenso::coad(8,hedge(8)))"];
+  v4[dod="1" int_id="V_36" num="(-1*Q(3,spenso::mink(4,hedge(9)))*spenso::g(spenso::mink(4,hedge(11)),spenso::mink(4,hedge(7)))+-1*Q(5,spenso::mink(4,hedge(11)))*spenso::g(spenso::mink(4,hedge(7)),spenso::mink(4,hedge(9)))+-1*Q(6,spenso::mink(4,hedge(7)))*spenso::g(spenso::mink(4,hedge(11)),spenso::mink(4,hedge(9)))+Q(3,spenso::mink(4,hedge(11)))*spenso::g(spenso::mink(4,hedge(7)),spenso::mink(4,hedge(9)))+Q(5,spenso::mink(4,hedge(7)))*spenso::g(spenso::mink(4,hedge(11)),spenso::mink(4,hedge(9)))+Q(6,spenso::mink(4,hedge(9)))*spenso::g(spenso::mink(4,hedge(11)),spenso::mink(4,hedge(7))))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(11)),spenso::coad(8,hedge(7)),spenso::coad(8,hedge(9)))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v2:3	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))" particle="ghG"];
+  v1:4	-> v3:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="-1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))" particle="g"];
+  v2:6	-> v4:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  ext4	 [style=invis];
+  v2:1	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1𝑖" particle="ghG"];
+  v3:8	-> v4:9	 [id=5 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e5" num="-1𝑖*spenso::g(spenso::coad(8,hedge(8)),spenso::coad(8,hedge(9)))*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" particle="g"];
+  v3:10	-> v4:11	 [id=6 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+P(0,a___)" name="e6" num="-1𝑖*spenso::g(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(11)))*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" particle="g"];
+}
+
+digraph d6{
+  num = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))";
+  overall_factor = "-1";
+  overall_factor_evaluated = "-1";
+  projector = "1";
+  v1[dod="1" int_id="V_35" num="Q(1,spenso::mink(4,hedge(4)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(4)))"];
+  v2[dod="1" int_id="V_35" num="-1*Q(4,spenso::mink(4,hedge(6)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(3)),spenso::coad(8,hedge(6)))"];
+  v3[dod="1" int_id="V_35" num="-1*Q(5,spenso::mink(4,hedge(5)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(11)),spenso::coad(8,hedge(5)),spenso::coad(8,hedge(8)))"];
+  v4[dod="1" int_id="V_35" num="Q(6,spenso::mink(4,hedge(7)))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(7)),spenso::coad(8,hedge(9)))"];
+
+  ext0	 [style=invis];
+  ext0	-> v1:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  v1:2	-> v2:3	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="1𝑖*spenso::g(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(3)))" particle="ghG"];
+  v1:4	-> v3:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="-1𝑖*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))" particle="g"];
+  v2:6	-> v4:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" num="-1𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
+  ext4	 [style=invis];
+  v2:1	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1𝑖" particle="ghG"];
+  v3:8	-> v4:9	 [id=5 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e5" num="1𝑖*spenso::g(spenso::coad(8,hedge(8)),spenso::coad(8,hedge(9)))" particle="ghG"];
+  v4:10	-> v3:11	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)+K(1,a___)" name="e6" num="1𝑖*spenso::g(spenso::coad(8,hedge(10)),spenso::coad(8,hedge(11)))" particle="ghG"];
+}

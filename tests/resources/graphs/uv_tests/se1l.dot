@@ -1,11 +1,15 @@
-digraph se1l {
-    projector = "(1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(4)),spenso::coad(8,gammalooprs::hedge(5)))*spenso::g(spenso::mink(4,gammalooprs::hedge(5)),spenso::mink(4,gammalooprs::hedge(4)))";
+digraph se1l{
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1/8*spenso::g(spenso::coad(8,hedge(4)),spenso::coad(8,hedge(5)))*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))";
+  0[dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(5)))*spenso::t(spenso::coad(8,hedge(5)),spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(0))))"];
+  1[dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(4)))*spenso::t(spenso::coad(8,hedge(4)),spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(2))))"];
 
-    ext [style=invis];
-
-    ext -> 0 [dir=none id=0 particle="g"];
-    1 -> ext [dir=none id=1 particle="g"];
-
-    0 -> 1 [id=2 particle="t" lmb_id=0];
-    1 -> 0 [id=3 particle="t"];
+  ext0	 [style=invis];
+  ext0	-> 0:5	 [id=0 dir=none sink="{ufo_order:2}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="g"];
+  ext1	 [style=invis];
+  1:4	-> ext1	 [id=1 dir=none source="{ufo_order:2}" dod="-2" lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="g"];
+  0:0	-> 1:1	 [id=2 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="(Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(0)),spenso::mink(4,edge(2,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(1))))*1𝑖*spenso::g(spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))" particle="t"];
+  1:2	-> 0:3	 [id=3 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" num="(Q(3,spenso::mink(4,edge(3,1)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(3,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*1𝑖*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))" particle="t"];
 }

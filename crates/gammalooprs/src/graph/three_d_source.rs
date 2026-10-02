@@ -2778,7 +2778,12 @@ impl<'a> GraphThreeDSource<'a> {
                     tail: node_to_internal[&self.graph.node_id(source)],
                     head: node_to_internal[&self.graph.node_id(sink)],
                     label: edge.data.name.value.clone(),
-                    mass_key: Some(edge.data.particle.mass_atom().to_canonical_string()),
+                    mass_key: Some(
+                        edge.data
+                            .particle
+                            .mass_atom(&self.graph.model)
+                            .to_canonical_string(),
+                    ),
                     signature: MomentumSignature {
                         loop_signature: self.outer_loop_signature(edge_index)?,
                         external_signature: (&signature.external)
@@ -2837,11 +2842,15 @@ impl<'a> GraphThreeDSource<'a> {
             // momentum wrapper of this owner.  Momentum spelling still
             // controls occurrence provenance below; it cannot split repeated
             // denominators into different CFF mass classes.
-            let mass_key = if representative.mass_squared == edge.data.mass_atom().pow(2) {
-                edge.data.particle.mass_atom().to_canonical_string()
-            } else {
-                mass
-            };
+            let mass_key =
+                if representative.mass_squared == edge.data.mass_atom(&self.graph.model).pow(2) {
+                    edge.data
+                        .particle
+                        .mass_atom(&self.graph.model)
+                        .to_canonical_string()
+                } else {
+                    mass
+                };
             for (position, (occurrence, (tail, head))) in
                 members.into_iter().zip(incidences).enumerate()
             {
@@ -3131,7 +3140,10 @@ impl FourDDenominator {
             .add_arg(usize::from(self.source_edge))
             .finish();
         (self.momentum == source_momentum || self.momentum == -source_momentum)
-            && self.mass_squared == graph.underlying[self.source_edge].mass_atom().pow(2)
+            && self.mass_squared
+                == graph.underlying[self.source_edge]
+                    .mass_atom(&graph.model)
+                    .pow(2)
     }
 
     fn on_shell_energy(&self) -> Atom {
@@ -3329,7 +3341,13 @@ impl ThreeDGraphSource for GraphThreeDSource<'_> {
                         tail,
                         head,
                         label,
-                        mass_key: Some(edge_data.data.particle.mass_atom().to_canonical_string()),
+                        mass_key: Some(
+                            edge_data
+                                .data
+                                .particle
+                                .mass_atom(&self.graph.model)
+                                .to_canonical_string(),
+                        ),
                         signature: momentum_signature,
                         had_pow: false,
                     });
@@ -4014,8 +4032,8 @@ mod tests {
     use crate::{
         cff::expression::GammaLoopOrientationExpression,
         cff::surface::GammaLoopSurfaceCache,
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{cuts::CutSet, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         momentum::sample::LoopIndex,
         numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},
@@ -4028,7 +4046,7 @@ mod tests {
     #[test]
     fn exact_momentum_signatures_reject_overflow_and_preserve_cancellation() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_momentum_integer_range {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_momentum_integer_range {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -4062,7 +4080,7 @@ mod tests {
     #[test]
     fn contracted_source_preserves_emr_ids_without_denominator_aliases() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph {
+        let graph: Graph = finalized_runtime_dot!(digraph {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4133,7 +4151,7 @@ mod tests {
     #[test]
     fn exact_source_preserves_the_complete_cubic_propagator_contour() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph {
+        let graph: Graph = finalized_runtime_dot!(digraph {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4146,7 +4164,10 @@ mod tests {
         let momentum = FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(edge))
             .finish();
-        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let mass_squared = graph.underlying[edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2);
         let first = FourDDenominator {
             source_edge: edge,
             momentum: momentum.clone(),
@@ -4216,7 +4237,7 @@ mod tests {
     #[test]
     fn exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph exact_distinct_owners {
+        let mut graph: Graph = finalized_runtime_dot!(digraph exact_distinct_owners {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4228,7 +4249,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         });
         // Relabel the second algebraically identical denominator with the first
@@ -4409,7 +4433,7 @@ mod tests {
     #[test]
     fn exact_source_keeps_source_instantiated_domains_and_masses_separate() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_same_owner_domains {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_same_owner_domains {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4426,7 +4450,10 @@ mod tests {
         let cograph_edge = EdgeIndex(0);
         let other_cograph_edge = EdgeIndex(1);
         let uv_edge = EdgeIndex(2);
-        let cograph_mass = graph.underlying[cograph_edge].particle.mass_atom().pow(2);
+        let cograph_mass = graph.underlying[cograph_edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2);
         let other_cograph_mass = Atom::num(2);
         let uv_mass = Atom::var(GS.m_uv_expansion).pow(2);
         let denominators = [
@@ -4495,7 +4522,7 @@ mod tests {
     #[test]
     fn exact_source_normalizes_opposite_spelling_inside_one_power_chain() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_opposite_same_owner {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_opposite_same_owner {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4503,7 +4530,10 @@ mod tests {
             a -> b [id=1]
         })?;
         let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
-        let repeated_mass = graph.underlying[EdgeIndex(0)].particle.mass_atom().pow(2);
+        let repeated_mass = graph.underlying[EdgeIndex(0)]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2);
         let denominators = [
             FourDDenominator {
                 source_edge: EdgeIndex(0),
@@ -4613,7 +4643,7 @@ mod tests {
     #[test]
     fn exact_massless_surface_uses_normalized_edge_mass() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_massless_surface {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_massless_surface {
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
@@ -4625,13 +4655,16 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge].mass_atom(&graph.model).pow(2),
             full_expr: Atom::one(),
         });
         assert_eq!(denominators[0].mass_squared, Atom::Zero);
         assert_ne!(
             denominators[0].mass_squared,
-            graph.underlying[EdgeIndex(0)].particle.mass_atom().pow(2)
+            graph.underlying[EdgeIndex(0)]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2)
         );
 
         let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
@@ -4663,7 +4696,7 @@ mod tests {
     #[test]
     fn unexpanded_exact_source_is_the_production_source() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph exact_unexpanded_identity {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -4694,7 +4727,10 @@ mod tests {
                         momentum: FunctionBuilder::new(GS.emr_mom)
                             .add_arg(usize::from(source_edge))
                             .finish(),
-                        mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+                        mass_squared: graph.underlying[source_edge]
+                            .particle
+                            .mass_atom(&graph.model)
+                            .pow(2),
                         full_expr: Atom::one(),
                     },
                 )
@@ -4739,7 +4775,7 @@ mod tests {
     #[test]
     fn unexpanded_massless_opposite_spelling_preserves_the_source_frame() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_massless_opposite_identity {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_massless_opposite_identity {
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
@@ -4757,7 +4793,7 @@ mod tests {
                     momentum: FunctionBuilder::new(GS.emr_mom)
                         .add_arg(usize::from(source_edge))
                         .finish(),
-                    mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+                    mass_squared: graph.underlying[source_edge].mass_atom(&graph.model).pow(2),
                     full_expr: Atom::one(),
                 }
             })
@@ -4805,7 +4841,7 @@ mod tests {
     #[test]
     fn tagged_odd_hard_momentum_composes_the_d_neg_q_routing_sign() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_tagged_massless_opposite {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_tagged_massless_opposite {
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
@@ -4869,7 +4905,7 @@ mod tests {
     #[test]
     fn exact_full_source_preserves_production_carrier_orientations() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph exact_production_basis {
+        let mut graph: Graph = finalized_runtime_dot!(digraph exact_production_basis {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -4888,7 +4924,10 @@ mod tests {
                     momentum: FunctionBuilder::new(GS.emr_mom)
                         .add_arg(usize::from(edge))
                         .finish(),
-                    mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                    mass_squared: graph.underlying[edge]
+                        .particle
+                        .mass_atom(&graph.model)
+                        .pow(2),
                     full_expr: Atom::one(),
                 }
             })
@@ -4950,7 +4989,7 @@ mod tests {
     #[test]
     fn exact_shifted_factor_reversal_preserves_projected_affine_maps() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_shifted_reversal {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_shifted_reversal {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -4966,7 +5005,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         });
         let options = graph.denominator_only_cff_3d_expression_options();
@@ -5020,7 +5062,7 @@ mod tests {
     #[test]
     fn unexpanded_external_source_reuses_production_frame_for_reversed_input() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_external_production_identity {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_external_production_identity {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -5036,7 +5078,7 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge].mass_atom(&graph.model).pow(2),
             full_expr: Atom::one(),
         });
         denominators[0].momentum = -denominators[0].momentum.clone();
@@ -5087,7 +5129,7 @@ mod tests {
     #[test]
     fn exact_rank_deficient_source_keeps_the_complete_active_direction() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_rank_deficient {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_rank_deficient {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -5114,7 +5156,10 @@ mod tests {
                 + FunctionBuilder::new(GS.emr_mom)
                     .add_arg(usize::from(parent_carriers[1]))
                     .finish(),
-            mass_squared: graph.underlying[EdgeIndex(0)].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[EdgeIndex(0)]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         };
         let denominators = [denominator];
@@ -5161,7 +5206,7 @@ mod tests {
     #[test]
     fn exact_rank_deficient_initial_cut_energy_uses_its_external_alias() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph exact_rank_deficient_initial_cut {
+        let mut graph: Graph = finalized_runtime_dot!(digraph exact_rank_deficient_initial_cut {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -5198,7 +5243,7 @@ mod tests {
                 .finish(),
             mass_squared: graph.underlying[parent_carriers[0]]
                 .particle
-                .mass_atom()
+                .mass_atom(&graph.model)
                 .pow(2),
             full_expr: Atom::one(),
         };
@@ -5674,7 +5719,7 @@ mod tests {
         // The frozen GL04 Taylor numerator below belongs to the two-line
         // self-energy on owners 5 and 6. Retain that physical incidence while
         // reconstructing its raised denominators through the production API.
-        let gl04: Graph = dot!(digraph gl04_t2_source_certificate {
+        let gl04: Graph = finalized_runtime_dot!(digraph gl04_t2_source_certificate {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -5693,7 +5738,7 @@ mod tests {
         // This GL00 graph and owner-local Q5^0 probe are used by the scalar LU
         // regression. Its first bubble has Q4=q, Q3=p and Q5=-q-p; the complete
         // T<=1 numerator below retains the odd fixed-owner factor and soft p.
-        let gl00: Graph = dot!(digraph gl00_t1_source_certificate {
+        let gl00: Graph = finalized_runtime_dot!(digraph gl00_t1_source_certificate {
             edge [num=1 mass=0]
             node [num=1]
             incoming [style=invis]
@@ -6576,7 +6621,7 @@ mod tests {
     #[test]
     fn exact_energy_mapper_uses_selected_fixed_owner_sample_with_uv_mass() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_literal_momentum {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_literal_momentum {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -6637,7 +6682,7 @@ mod tests {
     #[test]
     fn exact_uv_component_inherits_source_minor_and_rejects_wrong_provenance() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_source_minor {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_source_minor {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -6769,7 +6814,7 @@ mod tests {
     #[test]
     fn exact_source_routes_a_hard_uv_row_modulo_the_soft_cograph_span() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_hard_soft_routing {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_hard_soft_routing {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -6793,7 +6838,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         });
         let uv_mass = Atom::var(GS.m_uv_expansion).pow(2);
@@ -6869,7 +6917,7 @@ mod tests {
     #[test]
     fn exact_uv_triangle_cached_and_uncached_residues_agree() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_triangle_cache {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_cache {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -6957,7 +7005,7 @@ mod tests {
     #[test]
     fn exact_uv_triangle_matches_direct_factorized_minkowski_cff_variants() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_triangle_source {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_source {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -7001,7 +7049,7 @@ mod tests {
             &sub_lmb,
             ExactUvSubLmbFrame::TaylorVacuum,
         )?;
-        let direct_graph: Graph = dot!(digraph direct_physical_uv_triangle {
+        let direct_graph: Graph = finalized_runtime_dot!(digraph direct_physical_uv_triangle {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -7140,7 +7188,7 @@ mod tests {
     #[test]
     fn exact_sub_lmb_taylor_vacuum_keeps_dotted_bubble_owner_incidence() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_taylor_vacuum_bubble {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_taylor_vacuum_bubble {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -7168,7 +7216,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         });
         let physical_source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
@@ -7483,7 +7534,7 @@ mod tests {
     #[test]
     fn exact_uv_source_retains_a_non_vacuum_two_point_shift() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_two_point {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_two_point {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -7549,7 +7600,7 @@ mod tests {
     #[test]
     fn exact_source_separates_loop_denominators_from_external_tree_factors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph shifted_loop {
+        let graph: Graph = finalized_runtime_dot!(digraph shifted_loop {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -7569,7 +7620,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(loop_edge))
                 .finish(),
-            mass_squared: graph.underlying[loop_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[loop_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         };
         let tree_denominator = FourDDenominator {
@@ -7577,7 +7631,10 @@ mod tests {
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(tree_edge))
                 .finish(),
-            mass_squared: graph.underlying[tree_edge].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[tree_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::one(),
         };
 
@@ -7613,7 +7670,7 @@ mod tests {
     #[test]
     fn pure_tree_exact_denominators_have_no_active_loop_source() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph {
+        let graph: Graph = finalized_runtime_dot!(digraph {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -7626,7 +7683,10 @@ mod tests {
                 momentum: FunctionBuilder::new(GS.emr_mom)
                     .add_arg(usize::from(edge))
                     .finish(),
-                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                mass_squared: graph.underlying[edge]
+                    .particle
+                    .mass_atom(&graph.model)
+                    .pow(2),
                 full_expr: Atom::one(),
             };
             assert!(!denominator.depends_on_loop(&graph, false)?);
@@ -7637,7 +7697,7 @@ mod tests {
     #[test]
     fn pinched_affine_carrier_requires_occurrence_interpolation() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph pinched_affine_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph pinched_affine_sunset {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -7843,7 +7903,7 @@ mod tests {
     #[test]
     fn pinched_positive_block_preserves_joint_affine_assignment() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph pinched_positive_affine_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph pinched_positive_affine_sunset {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -7942,7 +8002,7 @@ mod tests {
     #[test]
     fn exact_taylor_vacuum_affine_circulation_preserves_energy_mapping() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_affine_taylor_vacuum {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_affine_taylor_vacuum {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]

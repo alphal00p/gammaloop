@@ -24,25 +24,21 @@ use tracing::{info, warn};
 use crate::{
     command_template::contains_placeholder,
     commands::{
+        process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{
             prepare_command_histories_with_context, PreparedCommand, PreparedRun, MAX_RUN_DEPTH,
         },
         save::SaveState,
         CommandExecution, Commands, StartCommandsBlock,
     },
-    completion::{
+    integrand_info::IntegrandKind,
+    render_smart_toml,
+    repl::{
         IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ModelVertexCompletionEntry,
         ProcessCompletionEntry, ProcessKind,
     },
-    integrand_info::IntegrandKind,
-    render_smart_toml,
     state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
     CLISettings, ReadOnlyStateOrigin,
-};
-
-#[cfg(feature = "cli")]
-use crate::commands::process_settings::{
-    serialize_runtime_named_settings, ProcessSettingsCompletionEntry,
 };
 
 const MAX_DISPLAY_COMMAND_LINES: usize = 5;
@@ -469,8 +465,11 @@ impl<'a> CliSession<'a> {
                         if info.kind == IntegrandKind::CrossSection {
                             categories.push("cuts".to_string());
                         }
-                        let signature_inventory =
-                            integrand_signature_inventory(&process.collection, &integrand_name);
+                        let signature_inventory = integrand_signature_inventory(
+                            &process.collection,
+                            &integrand_name,
+                            &self.state.model,
+                        );
                         let amplitude_signature_inventory = amplitude_graph_signature_inventory(
                             &process.collection,
                             &integrand_name,
@@ -532,7 +531,8 @@ impl<'a> CliSession<'a> {
                             else {
                                 return None;
                             };
-                            let completion_entries = integrand.ir_profile_completion_entries();
+                            let completion_entries =
+                                integrand.ir_profile_completion_entries(&self.state.model);
                             let mut graph_names = completion_entries
                                 .iter()
                                 .map(|(graph_name, _)| graph_name.clone())
@@ -565,7 +565,6 @@ impl<'a> CliSession<'a> {
             .collect()
     }
 
-    #[cfg(feature = "cli")]
     pub(crate) fn current_process_settings_entries(&self) -> Vec<ProcessSettingsCompletionEntry> {
         let mut entries = Vec::new();
 
@@ -603,7 +602,7 @@ impl<'a> CliSession<'a> {
 
     pub fn current_model_parameter_entries(
         &self,
-    ) -> Vec<crate::completion::ModelParameterCompletionEntry> {
+    ) -> Vec<crate::repl::ModelParameterCompletionEntry> {
         let mut entries = self
             .state
             .model_parameters
@@ -611,13 +610,12 @@ impl<'a> CliSession<'a> {
             .filter_map(|name| {
                 self.state
                     .model
-                    .get_parameter_opt(name.to_string())
-                    .map(
-                        |parameter| crate::completion::ModelParameterCompletionEntry {
-                            name: name.to_string(),
-                            parameter_type: parameter.parameter_type.clone(),
-                        },
-                    )
+                    .parameter(name.namespaceless_string())
+                    .ok()
+                    .map(|parameter| crate::repl::ModelParameterCompletionEntry {
+                        name: name.namespaceless_string().to_owned(),
+                        parameter_type: parameter.parameter_type.clone(),
+                    })
             })
             .collect::<Vec<_>>();
         entries.sort_by(|left, right| left.name.cmp(&right.name));
@@ -628,9 +626,9 @@ impl<'a> CliSession<'a> {
         let mut names = self
             .state
             .model
-            .particles
+            .particles()
             .iter()
-            .flat_map(|particle| [particle.name.to_string(), particle.antiname.to_string()])
+            .map(|particle| particle.name.clone())
             .collect::<Vec<_>>();
         names.sort();
         names.dedup();
@@ -641,7 +639,7 @@ impl<'a> CliSession<'a> {
         let mut names = self
             .state
             .model
-            .particles
+            .particles()
             .iter()
             .filter(|particle| particle.pdg_code > 0)
             .map(|particle| particle.name.to_string())
@@ -655,7 +653,7 @@ impl<'a> CliSession<'a> {
         let mut names = self
             .state
             .model
-            .orders
+            .orders()
             .iter()
             .map(|order| order.name.to_string())
             .collect::<Vec<_>>();
@@ -668,15 +666,15 @@ impl<'a> CliSession<'a> {
         let mut entries = self
             .state
             .model
-            .vertex_rules
+            .vertex_rules()
             .iter()
             .map(|vertex_rule| ModelVertexCompletionEntry {
-                name: vertex_rule.0.name.to_string(),
+                name: vertex_rule.name.clone(),
                 particles: vertex_rule
-                    .0
                     .particles
                     .iter()
-                    .map(|particle| particle.name.to_string())
+                    .filter_map(|particle| self.state.model.particle_by_id(*particle).ok())
+                    .map(|particle| particle.name.clone())
                     .collect(),
             })
             .collect::<Vec<_>>();
@@ -941,12 +939,14 @@ impl<'a> CliSession<'a> {
 fn integrand_signature_inventory(
     collection: &ProcessCollection,
     integrand_name: &str,
+    model: &Model,
 ) -> GraphSelectionSignatureInventory {
     match collection {
         ProcessCollection::Amplitudes(amplitudes) => amplitudes
             .get(integrand_name)
             .map(|amplitude| {
                 GraphSelectionSignatureInventory::from_master_graphs(
+                    model,
                     amplitude.graph_group_structure.iter().map(|group| {
                         let master_graph_id = group
                             .into_iter()
@@ -961,6 +961,7 @@ fn integrand_signature_inventory(
             .get(integrand_name)
             .map(|cross_section| {
                 GraphSelectionSignatureInventory::from_master_graphs(
+                    model,
                     cross_section.graph_group_structure.iter().map(|group| {
                         let master_graph_id = group
                             .into_iter()

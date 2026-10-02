@@ -1,11 +1,9 @@
 use crate::{
     debug_tags,
     graph::{Graph, LoopMomentumBasis},
-    settings::global::GenerationSettings,
-    uv::{Spinney, approx::CutStructure, forest::CutForests},
+    model::Model,
+    uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
-use color_eyre::Result;
-use eyre::WrapErr;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -34,24 +32,18 @@ impl CutWoods {
     pub(crate) fn new(
         cuts: CutStructure,
         graph: &Graph,
-        settings: &GenerationSettings,
-    ) -> Result<Self> {
+        model: &Model,
+        settings: &UVgenerationSettings,
+    ) -> Self {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
-        for (cut_index, cut) in cuts.cuts.iter().enumerate() {
+        for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let mut spinneys = graph
-                .classified_spinneys(&subgraph, &settings.uv, &graph.loop_momentum_basis)
-                .wrap_err_with(|| {
-                    format!(
-                        "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
-                        graph.name
-                    )
-                })?;
-            graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
+            let spinneys =
+                graph.classified_spinneys(&subgraph, model, settings, &graph.loop_momentum_basis);
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;
@@ -64,9 +56,9 @@ impl CutWoods {
 
             let wood = Wood::from_spinneys(spinneys, graph);
 
-            let mut lvk_settings = settings.uv.vakint.true_settings();
+            let mut lvk_settings = settings.vakint.true_settings();
             lvk_settings.project_onto_tensor_integrals =
-                settings.uv.project_integrated_uv_cts_onto_tensor_integrals;
+                settings.project_integrated_uv_cts_onto_tensor_integrals;
             // Keep the legacy wood path aligned with the hedge-poset path:
             // the downstream integrand builder extracts the epsilon^0 term, so
             // Vakint must provide one term beyond the maximal pole order.
@@ -74,11 +66,11 @@ impl CutWoods {
             vakint_settings.push(lvk_settings);
             woods.push(wood);
         }
-        Ok(CutWoods {
+        CutWoods {
             cuts,
             woods,
             settings: vakint_settings,
-        })
+        }
     }
 
     pub(crate) fn unfold(self, graph: &Graph) -> CutForests {

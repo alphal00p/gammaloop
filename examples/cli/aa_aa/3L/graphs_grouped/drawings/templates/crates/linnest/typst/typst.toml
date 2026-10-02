@@ -1,0 +1,15 @@
+[package]
+name = "linnest"
+version = "0.1.0"
+entrypoint = "src/lib.typ"
+compiler = "0.15.0"
+authors = ["GammaLoop contributors"]
+license = "MIT"
+description = "Typst wrapper package for the linnest WebAssembly graph layout plugin."
+repository = "https://github.com/alphal00p/gammaloop"
+keywords = ["graph", "layout", "dot", "wasm"]
+categories = ["visualization", "utility"]
+exclude = [
+  "docs",
+  "examples",
+]

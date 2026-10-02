@@ -37,11 +37,11 @@ from IPython.display import Markdown as md # type: ignore
 if SYMBOLICA_COMMUNITY_PATH is not None:
     sys.path.insert(0, SYMBOLICA_COMMUNITY_PATH)
 from symbolica import Expression, S,E, Replacement, PrintMode
-from symbolica.community.spenso import TensorName as \
+from symbolica.community.tensor import TensorName as \
     N,TensorNetwork,Representation,Tensor,Slot,TensorLibrary, ExecutionMode
 from symbolica.community.idenso import *
-from symbolica.community.spenso import Tensor
-#from symbolica.community.spenso import initialize as spenso_initialize
+from symbolica.community.tensor import Tensor
+#from symbolica.community.tensor import initialize as spenso_initialize
 #spenso_initialize()
 
 #print(E("spenso::{spenso::upper}::bis(4,x)").to_canonical_string())
@@ -1115,8 +1115,8 @@ def function_map_for_evaluation(ks, hels, debug_pols=False, loop_mom=None, rotat
     if loop_mom is not None:
         function_map[E('UFO::G')] = complex(1.2177157847767197,0.0)
         function_map[E('UFO::GC_11')] = complex(0.0,1.2177157847767197)
-        function_map[E('spenso::TR')] = complex(0.5,0.0)
-        function_map[E('spenso::CF')] = complex(4./3.,0.0)
+        function_map[E('spenso::idx(2,spenso::cof(3))')] = complex(0.5,0.0)
+        function_map[E('spenso::cas(2,spenso::cof(3))')] = complex(4./3.,0.0)
         function_map[E('vakint::EulerGamma')] = complex(0.577215664901533,0.0)
         function_map[E('𝜋')] = complex(math.pi,0.0)
 
@@ -1886,7 +1886,7 @@ P2Proj = E("spenso::g(proj_bis_indices(left), proj_bis_indices(right))") - P1Pro
 
 # %%
 # Include the CF factor modified w.r.t Babis QED example
-tree_amplitude_proj_emr = (simplify_color(E("spenso::CF")*get_color_projector(tree_qqx_aaa_graphs[0])*get_numerator(tree_qqx_aaa_graphs[0]))/get_propagator_denominators(tree_qqx_aaa_graphs[0]))
+tree_amplitude_proj_emr = (simplify_color(E("spenso::cas(2,spenso::cof(3))")*get_color_projector(tree_qqx_aaa_graphs[0])*get_numerator(tree_qqx_aaa_graphs[0]))/get_propagator_denominators(tree_qqx_aaa_graphs[0]))
 tree_amplitude_proj = tree_amplitude_proj_emr.replace_multiple([Replacement(lhs, rhs) for lhs, rhs in get_emr_replacements(tree_qqx_aaa_graphs[0])])
 
 # %% [markdown]
@@ -2185,7 +2185,7 @@ integrated_uv_counterterms = []
 
 # %%
 # For the integrated CT directly proportional to the born
-ct_born_me_bare = tree_amplitude_proj*(1/E("spenso::CF"))
+ct_born_me_bare = tree_amplitude_proj*(1/E("spenso::cas(2,spenso::cof(3))"))
 
 ct_born_me_dressed = ct_born_me_bare.replace_multiple([
     Replacement(E("spenso::bis(4,gammalooprs::hedge(1))"),E("spenso::bis(4,ct_connection_spinor_1)")),
@@ -2588,7 +2588,7 @@ def get_fudge_factor(g_name):
 def preprocess_expression_for_gammaloop(expr):
     expr = expr.replace(E("gammalooprs::P(i_,a___)"),E("gammalooprs::Q(i_,a___)"))
     expr = expr.replace(E("vakint::EulerGamma"),to_complex(complex(0.577215664901533,0.0)))
-    return cook_indices(simplify_metrics(expr)).replace(E('spenso::CF'),E('4/3'))
+    return cook_indices(simplify_metrics(expr)).replace(E('spenso::cas(2,spenso::cof(3))'),E('4/3'))
 
 # %%
 loop_graphs = pydot.graph_from_dot_file(os.path.join(ROOT_DIR, "dot_graphs", "loop_graphs", "qqx_aaa_loops.dot"))

@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap},
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -8,9 +7,10 @@ use std::{
 use bincode::{Decode, Encode};
 
 use color_eyre::Result;
-use idenso::color::CS;
+use idenso::{coad, cof, color::CS, color_cas, color_idx};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{
         algebraic_traits::{IsZero, RefZero},
@@ -20,13 +20,11 @@ use spenso::{
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
 };
-use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
-use three_dimensional_reps::{MediumMode, ThermalDistributionCall};
 use tracing::debug;
 use tracing::warn;
 
@@ -37,12 +35,12 @@ use crate::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
-    model::Model,
+    model::{Model, ModelGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
     utils::{
-        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
+        ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
@@ -105,74 +103,9 @@ pub trait ParamBuilderGraph {
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    /// Expand the medium numerator weight at the requested temperature limit.
-    /// Derivatives are with respect to positive on-shell energy, holding temperature,
-    /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
-    /// Zero-temperature derivatives with a chemical potential require Fermi-surface
-    /// localization and return an error rather than a pointwise body.
-    fn explicit_thermal_distribution_atom(
-        &self,
-        edge: EdgeIndex,
-        derivative_order: usize,
-        thermal_sign: Atom,
-        orientation_sign: Atom,
-        limit: MediumMode,
-    ) -> Result<Atom>;
-    fn make_thermal_distributions_explicit(
-        &self,
-        atom: &Atom,
-        limit: MediumMode,
-        edges: impl IntoIterator<Item = EdgeIndex>,
-    ) -> Result<Atom> {
-        let edges = edges.into_iter().collect::<BTreeSet<_>>();
-        let mut error = None;
-        let explicit = atom.replace_map(|term, _, out| {
-            if error.is_some() {
-                return;
-            }
-
-            let AtomView::Fun(function) = term else {
-                return;
-            };
-            if function.get_symbol() != GS.thermal_distribution {
-                return;
-            }
-            let call = match ThermalDistributionCall::try_from(term) {
-                Ok(call) => call,
-                Err(parse_error) => {
-                    error = Some(parse_error.into());
-                    return;
-                }
-            };
-            let ThermalDistributionCall {
-                edge,
-                derivative_order,
-                thermal_sign,
-                orientation_sign,
-                ..
-            } = call;
-            if !edges.contains(&edge) {
-                return;
-            }
-            match self.explicit_thermal_distribution_atom(
-                edge,
-                derivative_order,
-                thermal_sign,
-                orientation_sign,
-                limit,
-            ) {
-                Ok(replacement) => **out = replacement,
-                Err(distribution_error) => error = Some(distribution_error),
-            }
-        });
-
-        match error {
-            Some(error) => Err(error),
-            None => Ok(explicit),
-        }
-    }
-    fn get_ose_replacements(&self) -> Vec<Replacement>;
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom;
+    // fn explicit_meduium_numerato(&self,edge)
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement>;
 }
 
 macro_rules! define_gamma_loop_pairs {
@@ -246,7 +179,6 @@ define_gamma_loop_pairs! {
     uv_damp_minus_right,
     radius_right,
     radius_star_right,
-    inverse_temperature,
     pub additional_params,
 }
 
@@ -302,8 +234,6 @@ impl GammaLoopPairs {
         debug!("Validating radius_star");
         self.radius_star_left.validate();
         self.radius_star_right.validate();
-        debug!("Validating inverse_temperature");
-        self.inverse_temperature.validate();
     }
 
     pub(crate) fn new<
@@ -344,7 +274,6 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
-            inverse_temperature: ParamValuePairs::default_from_symbol(GS.inverse_temperature),
             additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
@@ -664,32 +593,33 @@ impl GammaLoopPairs {
 
 #[derive(Clone)]
 pub struct ParamCache<T: FloatLike> {
-    cache: [Option<Vec<Complex<F<T>>>>; 64],
+    cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
     len: usize,
 }
 
 impl<T: FloatLike> ParamCache<T> {
-    const CAPACITY: usize = 64;
-
     pub fn get(&self, key: usize) -> Option<&Vec<Complex<F<T>>>> {
-        if key >= self.len || self.len - key > Self::CAPACITY {
+        if self.len <= key || key + 64 < self.len {
             None
+        } else if self.len < 64 {
+            Some(&self.cache[key])
         } else {
-            self.cache[key % Self::CAPACITY].as_ref()
+            let cachekey = (64 + key) - self.len;
+            Some(&self.cache[cachekey])
         }
     }
 
     pub fn checked_push(&mut self, key: usize, value: Vec<Complex<F<T>>>) {
         debug_assert_eq!(self.len, key);
-        self.cache[self.len % Self::CAPACITY] = Some(value);
         self.len += 1;
+        self.cache.enqueue(value);
     }
 }
 
 impl<T: FloatLike> Default for ParamCache<T> {
     fn default() -> Self {
         Self {
-            cache: [const { None }; 64],
+            cache: ConstGenericRingBuffer::new(),
             len: 0,
         }
     }
@@ -712,9 +642,9 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
-    pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
@@ -725,101 +655,18 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T> {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        let medium_mode = Decode::decode(decoder)?;
-        let values = Decode::decode(decoder)?;
-        let pairs = Decode::decode(decoder)?;
-        let polarization_cache = Decode::decode(decoder)?;
-        let reps: Vec<FnMapEntry> = Decode::decode(decoder)?;
-        // Consume the existing wire field, then rebuild from the recorded entries:
-        // Symbolica's imported map can retain stale inline argument symbol IDs.
-        let _: FunctionMap = Decode::decode(decoder)?;
-        let mut fn_map = FunctionMap::new();
-        for entry in &reps {
-            entry
-                .register(&mut fn_map)
-                .map_err(bincode::error::DecodeError::OtherString)?;
-        }
-        Ok(Self {
-            medium_mode,
-            values,
-            pairs,
-            polarization_cache,
-            reps,
-            fn_map,
-        })
-    }
-}
-
-#[derive(Clone, bincode_trait_derive::Encode, Debug, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
+)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
     pub lhs: Atom,
     pub rhs: Atom,
     pub args: Vec<Indeterminate>,
     pub tags: Vec<Atom>,
-    pub inlining: InliningPolicy,
-    pub is_alias: bool,
 }
-
-impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        let lhs = Decode::decode(decoder)?;
-        let rhs = Decode::decode(decoder)?;
-        let args: Vec<Indeterminate> = Decode::decode(decoder)?;
-        // The Symbol/Atom is remapped on import; Indeterminate's inline symbol
-        // cache is not. Recreate the formal from its remapped representation.
-        let args = args
-            .into_iter()
-            .map(|arg| Indeterminate::try_from(Atom::from(arg)))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(bincode::error::DecodeError::OtherString)?;
-        Ok(Self {
-            lhs,
-            rhs,
-            args,
-            tags: Decode::decode(decoder)?,
-            inlining: Decode::decode(decoder)?,
-            is_alias: Decode::decode(decoder)?,
-        })
-    }
-}
-
-pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
 
 impl FnMapEntry {
-    /// Keep registration policy and caller-scope aliases intact when rebuilding a map.
-    pub fn register(&self, fn_map: &mut FunctionMap) -> Result<(), String> {
-        if self.is_alias {
-            if !self.args.is_empty() || self.inlining != InliningPolicy::Always {
-                return Err(
-                    "Caller-scope aliases require no formal arguments and Always inlining".into(),
-                );
-            }
-            return fn_map
-                .add_aliases([(self.lhs.clone(), self.rhs.clone())])
-                .map_err(|error| error.to_string());
-        }
-        let name = match self.lhs.as_view() {
-            AtomView::Fun(function) => function.get_symbol(),
-            AtomView::Var(variable) if self.tags.is_empty() => variable.get_symbol(),
-            _ => return Err("Function definitions require a symbol or function call".into()),
-        };
-        fn_map
-            .add_tagged_function_with_options(
-                name,
-                self.tags.clone(),
-                self.args.clone(),
-                self.rhs.clone(),
-                FunctionRegistrationOptions::new().inlining(self.inlining),
-            )
-            .map_err(|error| error.to_string())
-    }
-
     pub fn replacement(&self) -> Replacement {
         let mut rhs = self.rhs.clone();
         let mut lhs = self.lhs.clone();
@@ -838,7 +685,7 @@ impl FnMapEntry {
         Replacement::new(lhs.to_pattern(), rhs)
     }
 
-    pub fn archive<T: ExportAtomTo>(&self) -> Result<SerializedFnMapEntry<T>> {
+    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
         Ok((
             T::export_atom_to(&self.lhs)?,
             T::export_atom_to(&self.rhs)?,
@@ -850,8 +697,6 @@ impl FnMapEntry {
                 .iter()
                 .map(|t| T::export_atom_to(&Atom::from(t.clone())))
                 .collect::<Result<Vec<_>>>()?,
-            self.inlining,
-            self.is_alias,
         ))
     }
 }
@@ -1074,22 +919,19 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     }
 }
 
-impl<const N: u32> UpdateAndGetParams<VarFloat<N>> for ParamBuilder<f64>
-where
-    VarFloat<N>: FloatLike,
-{
+impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         _cache: (bool, bool),
-        sample: &MomentumSample<VarFloat<N>>,
+        sample: &MomentumSample<ArbPrec>,
         graph: &Graph,
         helicities: &[Helicity],
-        additional_params: &[F<VarFloat<N>>],
-        left_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
-        right_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
-        lu_params: Option<&LUParams<VarFloat<N>>>,
-    ) -> InputParams<'a, VarFloat<N>> {
+        additional_params: &[F<ArbPrec>],
+        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        lu_params: Option<&LUParams<ArbPrec>>,
+    ) -> InputParams<'a, ArbPrec> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -1100,12 +942,12 @@ where
 
         let loop_mom_start = self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
 
-        let mut values: Vec<Complex<F<VarFloat<N>>>> = self.values[value_index]
+        let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
             .iter()
             .map(|value| {
                 Complex::new(
-                    F::<VarFloat<N>>::from_ff64(value.re),
-                    F::<VarFloat<N>>::from_ff64(value.im),
+                    F::<ArbPrec>::from_ff64(value.re),
+                    F::<ArbPrec>::from_ff64(value.im),
                 )
             })
             .collect();
@@ -1215,23 +1057,22 @@ impl<T: FloatLike> ParamBuilder<T> {
     ) -> Result<(), String> {
         let args = args.into_iter().map(|a| a.into()).collect_vec();
         let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
-        self.add_function_entry(FnMapEntry {
+
+        self.reps.push(FnMapEntry {
             lhs: FunctionBuilder::new(name)
                 .add_args(&tags)
                 .add_args(&atom_args)
                 .finish(),
-            rhs: body,
-            tags,
-            args,
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-        })
-    }
+            rhs: body.clone(),
+            tags: tags.clone(),
+            args: args.clone(),
+        });
 
-    pub fn add_function_entry(&mut self, entry: FnMapEntry) -> Result<(), String> {
-        entry.register(&mut self.fn_map)?;
-        self.reps.push(entry);
-        Ok(())
+        self.fn_map
+            .add_tagged_function(name, tags, args, body)
+            .map_err(|e| e.to_string())
+
+        // body.evaluate(coeff_map, const_map, function_map)
     }
 
     pub fn add_function<A: Into<Indeterminate> + Clone>(
@@ -1240,7 +1081,18 @@ impl<T: FloatLike> ParamBuilder<T> {
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
-        self.add_tagged_function(name, Vec::new(), String::new(), args, body)
+        let args = args.into_iter().map(|a| a.into()).collect_vec();
+        let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
+        self.reps.push(FnMapEntry {
+            lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
+            rhs: body.clone(),
+            tags: vec![],
+            args: args.clone(),
+        });
+
+        self.fn_map
+            .add_function(name, args, body)
+            .map_err(|e| e.to_string())
     }
 
     pub fn initialize_duals(&mut self, max_dual_size: usize) {
@@ -1278,20 +1130,21 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
-        self.add_function_entry(FnMapEntry {
-            lhs: key,
-            rhs: Atom::num(value),
+        self.reps.push(FnMapEntry {
+            lhs: key.clone(),
+            rhs: Atom::num(value.clone()),
             tags: vec![],
             args: vec![],
-            inlining: InliningPolicy::Always,
-            is_alias: true,
-        })
-        .expect("failed to add constant to function map");
+        });
+
+        self.fn_map
+            .add_aliases([(key, Atom::num(value))])
+            .map_err(|e| e.to_string())
+            .expect("failed to add constant to function map");
     }
 
     pub(crate) fn new_empty() -> Self {
         Self {
-            medium_mode: MediumMode::Vacuum,
             polarization_cache: ParamCache::default(),
 
             fn_map: FunctionMap::default(),
@@ -1311,7 +1164,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         model: &Model,
         lmb: &LoopMomentumBasis,
         additional_params: P,
-    ) -> Result<Self> {
+    ) -> Self {
         let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
@@ -1320,19 +1173,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        for wrapper in [GS.tree_denom_wrapper, GS.thermal_weight_wrapper] {
-            new.add_function(wrapper, vec![arg], Atom::var(arg))
-                .unwrap();
-        }
-        // Compile the energy definition once at the evaluator boundary. The
-        // integrand keeps a semantic function with visible momentum dependence.
-        let invariant = symbol!("energy_invariant");
-        new.add_function(
-            GS.on_shell_energy,
-            vec![symbol!("on_shell_energy_owner"), invariant],
-            Atom::var(invariant).pow((1, 2)),
-        )
-        .unwrap();
+        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
+            .unwrap();
 
         let lmb_ose_replacements = graph
             .iter_edge_ids()
@@ -1345,12 +1187,12 @@ impl<T: FloatLike> ParamBuilder<T> {
             .map(|edge_id| {
                 Replacement::new(
                     GS.ose(edge_id).to_pattern(),
-                    graph.explicit_ose_atom(edge_id).to_pattern(),
+                    graph.explicit_ose_atom(edge_id, model).to_pattern(),
                 )
             });
 
         for replacement in graph
-            .get_ose_replacements()
+            .get_ose_replacements(model)
             .into_iter()
             .chain(lmb_ose_replacements)
             .unique_by(|replacement| replacement.pat.to_atom())
@@ -1419,26 +1261,16 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
-        // For real x, theta(x) is exactly zero for x < 0 and one up to roundoff
-        // for x > 0. At x = 0 it is undefined (NaN): no arbitrary boundary
-        // value, such as 1/2, is assigned at the Fermi surface.
-        new.add_function(
-            GS.heaviside,
-            vec![symbol!("x")],
-            parse_lit!((abs(x) + x) / (2 * abs(x))),
-        )
-        .unwrap();
-
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
-        new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
+        new.add_constant(color_cas!(2, cof!(3)), Rational::new(4, 3).into());
+        new.add_constant(color_cas!(2, coad!(8)), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
-        new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
+        new.add_constant(color_idx!(2, cof!(3)), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
-        new.update_model_values(model)?;
+        new.update_model_values(model);
         //panic!();
-        Ok(new)
+        new
     }
 
     #[inline]
@@ -1502,59 +1334,37 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn inverse_temperature_value(&mut self, inverse_temperature: Complex<F<T>>) {
-        debug_assert!(self.pairs.inverse_temperature.value_range.len() == 1);
-        for (index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = index + 1;
-            values[self.pairs.inverse_temperature.value_range.start * multiplicative_offset] =
-                inverse_temperature.clone();
-        }
-    }
-
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
-    pub fn update_model_values(&mut self, model: &Model) -> Result<()> {
-        // Importing symbols can change model iteration order. The evaluator
-        // still expects the parameter order recorded in this builder.
-        let model_values: HashMap<Atom, Complex<F<T>>> = model
-            .couplings
-            .values()
-            .filter_map(|coupling| {
-                coupling
-                    .value
-                    .map(|value| (coupling.name.into(), value.map(F::from_f64)))
-            })
-            .chain(model.parameters.values().filter_map(|parameter| {
-                parameter.value.map(|value| {
-                    (
-                        parameter.name.into(),
-                        Complex::new(F::from_ff64(value.re), F::from_ff64(value.im)),
-                    )
-                })
-            }))
-            .collect();
-        let required_values = self
-            .pairs
-            .model_parameters
-            .params
-            .iter()
-            .map(|param| {
-                model_values.get(param).ok_or_else(|| {
-                    color_eyre::eyre::eyre!(
-                        "Model parameter {param} has no value in model {}",
-                        model.name
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        for (value, position) in required_values
-            .into_iter()
-            .zip_eq(self.pairs.model_parameters.value_range.clone())
-        {
-            for (value_index, values) in self.values.iter_mut().enumerate() {
-                values[position * (value_index + 1)] = value.clone();
+    pub fn update_model_values(&mut self, model: &Model) {
+        for (value_index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
+            let _value_index = multiplicative_offset - 1;
+            for cpl in model.couplings().iter().filter(|c| c.value.is_some()) {
+                if let Some(value) = cpl.value {
+                    values[pos] = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
+                    pos += multiplicative_offset;
+                }
             }
+            for param in model.parameters().iter().filter(|p| p.value.is_some()) {
+                if let Some(value) = param.value {
+                    let value = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
+                    values[pos] = value.clone();
+                    pos += multiplicative_offset;
+                }
+            }
+
+            debug_assert_eq!(
+                pos,
+                self.pairs.model_parameters.value_range.end * multiplicative_offset
+            );
         }
-        Ok(())
     }
 
     pub(crate) fn add_external_four_mom(
@@ -1920,236 +1730,11 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 mod tests {
     use super::*;
     use crate::{
-        dot,
-        graph::parse::from_dot::IntoGraph,
+        finalized_runtime_dot,
+        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat, load_generic_model},
-        uv::uv_graph::UVE,
     };
-
-    #[test]
-    fn polarization_cache_keeps_the_latest_64_absolute_keys() {
-        let mut cache = ParamCache::<f64>::default();
-        assert!(cache.get(0).is_none());
-        assert!(cache.get(usize::MAX).is_none());
-
-        for key in 0..130 {
-            let value = vec![Complex::new(F(key as f64), F(0.0))];
-            cache.checked_push(key, value.clone());
-            assert_eq!(cache.get(key), Some(&value));
-            assert_eq!(cache.len, key + 1);
-            assert_eq!(cache.cache.iter().flatten().count(), (key + 1).min(64));
-
-            let first_key = (key + 1).saturating_sub(64);
-            for retained_key in first_key..=key {
-                assert_eq!(
-                    cache.get(retained_key),
-                    Some(&vec![Complex::new(F(retained_key as f64), F(0.0))]),
-                );
-            }
-            if first_key > 0 {
-                assert!(cache.get(first_key - 1).is_none());
-            }
-            assert!(cache.get(key + 1).is_none());
-            assert!(cache.get(usize::MAX).is_none());
-        }
-    }
-
-    #[test]
-    fn polarization_cache_looks_up_absolute_keys_without_overflow() {
-        let first_key = usize::MAX - 65;
-        let mut cache = ParamCache::<f64> {
-            len: first_key,
-            ..Default::default()
-        };
-        for value in 0..64 {
-            cache.checked_push(
-                first_key + value,
-                vec![Complex::new(F(value as f64), F(0.0))],
-            );
-        }
-        for value in 0..64 {
-            assert_eq!(
-                cache.get(first_key + value),
-                Some(&vec![Complex::new(F(value as f64), F(0.0))]),
-            );
-        }
-        assert!(cache.get(first_key - 1).is_none());
-        assert!(cache.get(usize::MAX - 1).is_none());
-        assert!(cache.get(usize::MAX).is_none());
-
-        let value = vec![Complex::new(F(64.0), F(0.0))];
-        cache.checked_push(usize::MAX - 1, value.clone());
-        assert!(cache.get(first_key).is_none());
-        assert_eq!(cache.get(usize::MAX - 1), Some(&value));
-        assert!(cache.get(usize::MAX).is_none());
-        assert_eq!(cache.len, usize::MAX);
-        assert_eq!(cache.cache.iter().flatten().count(), 64);
-    }
-
-    #[test]
-    fn model_values_follow_saved_names_in_all_derivative_buffers() {
-        use crate::model::{
-            Coupling, CouplingName, Parameter, ParameterName, ParameterNature, ParameterType,
-            UFOSymbol,
-        };
-
-        test_initialise().unwrap();
-        let mass = UFOSymbol::from("slot_order_mass");
-        let coupling = UFOSymbol::from("slot_order_coupling");
-        let zero = UFOSymbol::zero();
-        let mut model = Model::default();
-        for (name, value) in [(mass, 17.0), (zero, 0.0)] {
-            model.parameters.insert(
-                ParameterName(name),
-                Parameter {
-                    name,
-                    lhablock: None,
-                    lhacode: None,
-                    nature: ParameterNature::External,
-                    parameter_type: ParameterType::Real,
-                    value: Some(Complex::new_re(F(value))),
-                    expression: None,
-                },
-            );
-        }
-        model.couplings.insert(
-            CouplingName(coupling),
-            Coupling {
-                name: coupling,
-                expression: Atom::num(1),
-                orders: Default::default(),
-                value: Some(Complex::new(2.0, 3.0)),
-            },
-        );
-
-        let mut builder = ParamBuilder::<f64>::new_empty();
-        builder.pairs.model_parameters = ParamValuePairs {
-            value_range: 2..5,
-            params: vec![mass.into(), zero.into(), coupling.into()],
-        };
-        assert_ne!(
-            builder.pairs.model_parameters.params,
-            model.generate_params()
-        );
-        let sentinel = Complex::new(F(-123.0), F(456.0));
-        builder.values = vec![vec![sentinel; 7]];
-        builder.initialize_duals(3);
-        for values in &mut builder.values {
-            values.fill(sentinel);
-        }
-
-        for (mass_value, coupling_value) in [
-            (17.0, Complex::new(2.0, 3.0)),
-            (29.0, Complex::new(5.0, -7.0)),
-        ] {
-            model
-                .parameters
-                .get_mut(&ParameterName(mass))
-                .unwrap()
-                .value = Some(Complex::new_re(F(mass_value)));
-            model
-                .couplings
-                .get_mut(&CouplingName(coupling))
-                .unwrap()
-                .value = Some(coupling_value);
-            builder.update_model_values(&model).unwrap();
-            for (buffer_index, values) in builder.values.iter().enumerate() {
-                let stride = buffer_index + 1;
-                for (position, value) in values.iter().enumerate() {
-                    let expected = if position == 2 * stride {
-                        Complex::new_re(F(mass_value))
-                    } else if position == 3 * stride {
-                        Complex::new_re(F(0.0))
-                    } else if position == 4 * stride {
-                        coupling_value.map(F)
-                    } else {
-                        sentinel
-                    };
-                    assert_eq!(*value, expected, "buffer {buffer_index}, slot {position}");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn function_entry_roundtrip_preserves_policy_and_alias_scope() {
-        use crate::GammaLoopContextContainer;
-        use std::io::Cursor;
-        use symbolica::prelude::State;
-
-        let x = Atom::var(symbol!("entry_roundtrip::x"));
-        let global = Atom::var(symbol!("entry_roundtrip::global"));
-        let alias = symbol!("entry_roundtrip::alias").call_args([Atom::num(0)]);
-        let function = symbol!("entry_roundtrip::function");
-        for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
-            let entries = vec![
-                FnMapEntry {
-                    lhs: alias.clone(),
-                    rhs: x.pow(2),
-                    args: vec![],
-                    tags: vec![Atom::num(0)],
-                    inlining: InliningPolicy::Always,
-                    is_alias: true,
-                },
-                FnMapEntry {
-                    lhs: function.call_args([Atom::num(7), x.clone()]),
-                    rhs: &alias + &global,
-                    args: vec![x.clone().try_into().unwrap()],
-                    tags: vec![Atom::num(7)],
-                    inlining,
-                    is_alias: false,
-                },
-            ];
-            let encoded = bincode::encode_to_vec(&entries, bincode::config::standard()).unwrap();
-            let mut state = Vec::new();
-            State::export(&mut state).unwrap();
-            let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-            let model = Model::default();
-            let (restored, consumed): (Vec<FnMapEntry>, _) =
-                bincode::decode_from_slice_with_context(
-                    &encoded,
-                    bincode::config::standard(),
-                    GammaLoopContextContainer {
-                        state_map: &state_map,
-                        model: &model,
-                    },
-                )
-                .unwrap();
-            assert_eq!(consumed, encoded.len());
-            assert_eq!(restored, entries);
-            let mut builder = ParamBuilder::<f64>::new_empty();
-            for entry in restored {
-                builder.add_function_entry(entry).unwrap();
-            }
-            assert_eq!(builder.reps, entries);
-            assert!(builder.add_function_entry(entries[1].clone()).is_err());
-            assert_eq!(builder.reps.len(), 2);
-            let root = function.call_args([Atom::num(7), Atom::num(2)])
-                + function.call_args([Atom::num(7), Atom::num(3)]);
-            let mut evaluator = root
-                .evaluator(&[global.clone(), x.clone()])
-                .function_map(builder.fn_map)
-                .horner_iterations(1)
-                .build()
-                .unwrap()
-                .map_coeff(&|c| {
-                    symbolica::domains::float::Complex::new(c.re.to_f64(), c.im.to_f64())
-                });
-            assert_eq!(
-                evaluator.export_instructions().sub_evaluators.len(),
-                usize::from(inlining == InliningPolicy::Never)
-            );
-            assert_eq!(
-                evaluator.evaluate_single(&[
-                    symbolica::domains::float::Complex::new(10.0, 0.0),
-                    symbolica::domains::float::Complex::new(11.0, 0.0),
-                ]),
-                symbolica::domains::float::Complex::new(33.0, 0.0)
-            );
-        }
-    }
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {
@@ -2185,526 +1770,52 @@ mod tests {
     }
 
     #[test]
-    fn model_parameter_refresh_fails_without_changing_slots() {
-        test_initialise().unwrap();
-        let mut model = load_generic_model("sm");
-        let mut builder = ParamBuilder::<f64>::new_empty();
-        builder.pairs.model_parameters = ParamValuePairs {
-            params: vec![
-                model.get_parameter("MT").name.into(),
-                model.get_parameter("aS").name.into(),
-            ],
-            value_range: 0..2,
-        };
-        builder.values = vec![
-            vec![Complex::new_re(F(3.0)), Complex::new_re(F(5.0))],
-            vec![
-                Complex::new_re(F(3.0)),
-                Complex::new_re(F(7.0)),
-                Complex::new_re(F(5.0)),
-                Complex::new_re(F(11.0)),
-            ],
-        ];
-        let previous = builder.values.clone();
-        model.get_parameter_mut("MT").unwrap().value = Some(Complex::new_re(F(13.0)));
-        model.get_parameter_mut("aS").unwrap().value = None;
-        let error = builder.update_model_values(&model).unwrap_err().to_string();
-        assert!(error.contains("aS"), "{error}");
-        assert_eq!(builder.values, previous);
-        model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(17.0)));
-        builder.update_model_values(&model).unwrap();
-        assert_eq!(
-            builder.values,
-            vec![
-                vec![Complex::new_re(F(13.0)), Complex::new_re(F(17.0))],
-                vec![
-                    Complex::new_re(F(13.0)),
-                    Complex::new_re(F(7.0)),
-                    Complex::new_re(F(17.0)),
-                    Complex::new_re(F(11.0))
-                ],
-            ]
-        );
-    }
-
-    #[test]
-    fn thermal_function_registration_follows_the_selected_medium() {
-        // A call must also work before GammaLoop's Symbolica initializer has run.
-        let _ = ThermalDistributionCall::atom(0, 0, 1, 1, 1);
-        test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph thermal {
-            node [num=1]; edge [num=1 particle="d"];
-            A -> B; B -> A [particle="g"];
-        })
-        .unwrap();
-        let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
-        graph
-            .param_builder
-            .add_constant(alias.clone(), Rational::from(5).into());
-        let vacuum_entries = graph.param_builder.reps.clone();
-        assert!(
-            !vacuum_entries
-                .iter()
-                .any(|entry| entry.lhs.contains_symbol(GS.thermal_distribution))
-        );
-        for mode in [
-            MediumMode::ThermodynamicEquilibrium,
-            MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            graph.set_medium_mode(mode).unwrap();
-            let entries = graph.param_builder.reps.clone();
-            let calls = entries
-                .iter()
-                .filter_map(|entry| ThermalDistributionCall::try_from(entry.lhs.as_view()).ok())
-                .collect_vec();
-            assert!(!calls.is_empty());
-            assert!(
-                calls.iter().all(|call| call.temperature_flag
-                    == Atom::num(i64::from(mode.is_finite_temperature())))
-            );
-            let expected_orders = if mode.is_finite_temperature() {
-                vec![0, 1, 2]
-            } else {
-                vec![0]
-            };
-            // Both chemical-potential metadata and its absence use only the
-            // ordinary order-zero function at zero temperature.
-            // Every order is registered once per contour offset.
-            for edge in graph.iter_edge_ids() {
-                assert_eq!(
-                    calls
-                        .iter()
-                        .filter(|call| call.edge == edge)
-                        .map(|call| (call.derivative_order, call.thermal_sign.clone()))
-                        .collect_vec(),
-                    expected_orders
-                        .iter()
-                        .flat_map(|&order| [-1, 0, 1].map(|contour| (order, Atom::num(contour))))
-                        .collect_vec(),
-                );
-            }
-            graph.set_medium_mode(mode).unwrap();
-            assert_eq!(graph.param_builder.reps, entries);
-            assert_eq!(
-                alias
-                    .evaluator(&[] as &[Atom])
-                    .function_map(graph.param_builder.fn_map.clone())
-                    .build()
-                    .unwrap()
-                    .map_coeff(&|coefficient| coefficient.re.to_f64())
-                    .evaluate_single(&[]),
-                5.0,
-            );
-        }
-        graph.set_medium_mode(MediumMode::Vacuum).unwrap();
-        assert_eq!(graph.param_builder.reps, vacuum_entries);
-    }
-
-    #[test]
-    fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
-        test_initialise().unwrap();
-        let model = load_generic_model("sm");
-        for particle in ["d", "G+", "g"] {
-            let mut graph: Graph = format!(
-                r#"digraph thermal_cycle {{
-                    node [num=1]; edge [num=1 particle="{particle}"];
-                    A -> B; B -> C; C -> D; D -> E; E -> A;
-                }}"#
-            )
-            .into_graph(&model)
-            .unwrap();
-            let edge = EdgeIndex(0);
-            // Concrete orientation calls must not depend on a global sign slot.
-            let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
-            let mut input = vec![1.0, 2.0];
-            if let Some(mu) = graph[edge].chemical_potential_atom() {
-                params.push(mu);
-                input.push(if graph[edge].is_fermion() { 1.5 } else { 0.4 });
-            }
-            for limit in [
-                MediumMode::ThermodynamicEquilibrium,
-                MediumMode::ZeroTemperatureEquilibrium,
-            ] {
-                graph.set_medium_mode(limit).unwrap();
-                let orders = match limit {
-                    MediumMode::ThermodynamicEquilibrium => 0..=4,
-                    _ => 0..=0,
-                };
-                for order in orders {
-                    for thermal_sign in [-1, 0, 1] {
-                        for orientation_sign in [-1, 1] {
-                            let expressions = [
-                                ThermalDistributionCall::atom(
-                                    0,
-                                    order,
-                                    Atom::num(i64::from(limit.is_finite_temperature())),
-                                    thermal_sign,
-                                    orientation_sign,
-                                ),
-                                graph
-                                    .explicit_thermal_distribution_atom(
-                                        edge,
-                                        order as usize,
-                                        Atom::num(thermal_sign),
-                                        Atom::num(orientation_sign),
-                                        limit,
-                                    )
-                                    .unwrap(),
-                            ];
-                            let [registered, explicit] = expressions.map(|expression| {
-                                expression
-                                    .evaluator(&params)
-                                    .function_map(graph.param_builder.fn_map.clone())
-                                    .build()
-                                    .unwrap()
-                                    .map_coeff(&|coefficient| coefficient.re.to_f64())
-                                    .evaluate_single(&input)
-                            });
-                            assert!(
-                                (registered - explicit).abs() < 1e-13,
-                                "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
-                            );
-                            if order == 0 {
-                                let shifted_energy = input[0]
-                                    - orientation_sign as f64
-                                        * input.get(2).copied().unwrap_or(0.0);
-                                let occupation = if limit.is_finite_temperature() {
-                                    let tanh = (input[1] * shifted_energy / 2.0).tanh();
-                                    if graph[edge].is_fermion() {
-                                        tanh
-                                    } else {
-                                        tanh.recip()
-                                    }
-                                } else {
-                                    shifted_energy.signum()
-                                };
-                                let expected = (thermal_sign as f64 + occupation) / 2.0;
-                                assert!(
-                                    (registered - expected).abs() < 1e-13,
-                                    "{particle}: {limit:?}, thermal sign {thermal_sign}, orientation {orientation_sign}: {registered} != {expected}"
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
-        test_initialise().unwrap();
-        let graph: Graph = dot!(digraph G {
-            edge [particle="scalar_1"]; node [num=1];
-            v1 -> v2; v1 -> v2;
-        }, "scalars")
-        .unwrap();
-        let weight = symbolica::function!(
-            GS.thermal_weight_wrapper,
-            ThermalDistributionCall::atom(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
-                * ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
-                - 1
-        );
-        let partial = graph
-            .make_thermal_distributions_explicit(&weight, MediumMode::Vacuum, [EdgeIndex(0)])
-            .unwrap();
-        assert_eq!(
-            partial,
-            symbolica::function!(
-                GS.thermal_weight_wrapper,
-                ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
-            )
-        );
-        assert!(
-            graph
-                .make_thermal_distributions_explicit(&partial, MediumMode::Vacuum, [EdgeIndex(1)],)
-                .unwrap()
-                .is_zero()
-        );
-
-        let params = [ThermalDistributionCall::atom(
-            1,
-            0,
-            1,
-            1,
-            GS.sign(EdgeIndex(1)),
-        )];
-        let replacements = graph
-            .param_builder
-            .reps
-            .iter()
-            .map(FnMapEntry::replacement)
-            .collect::<Vec<_>>();
-        for explicit_replacements in [false, true] {
-            let expression = if explicit_replacements {
-                partial.replace_multiple(&replacements)
-            } else {
-                partial.clone()
-            };
-            let mut evaluator = expression
-                .evaluator(&params)
-                .function_map(graph.param_builder.fn_map.clone())
-                .build()
-                .unwrap()
-                .map_coeff(&|coefficient| coefficient.re.to_f64());
-            assert_eq!(evaluator.evaluate_single(&[1.25]), 0.25);
-        }
-    }
-
-    /// Production evaluators must stay within rounding of an Arb oracle from the
-    /// bulk to occupations near binary64 underflow. This needs occupations free of
-    /// cancellation, a vacuum constant cancelled symbolically and contour offsets
-    /// folded into each body. At zero temperature, weights outside the Fermi sea
-    /// must vanish exactly.
-    #[test]
-    fn vacuum_subtracted_thermal_weights_keep_uv_tails_and_exact_zeros() {
-        use three_dimensional_reps::{
-            ThermalDistributionFactor,
-            thermal::{ThermalNumerator, ThermalWeight, VACUUM_SUBTRACTION},
-        };
-
-        use symbolica::evaluate::OptimizationSettings;
-
-        use crate::{
-            integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
-            processes::EvaluatorSettings,
-            settings::global::GammaloopCompileOptions,
-            utils::f128,
-        };
-
-        test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph thermal_sunrise {
-            node [num=1]
-            edge [num=1]
-            A -> B [particle="d"]
-            B -> A [particle="d"]
-            A -> B [particle="g"]
-        })
-        .unwrap();
-        // Order the edges as quark, quark, gluon; DOT import assigns the indices.
-        let mut edges = graph.iter_edge_ids().collect_vec();
-        edges.sort_by_key(|&edge| !graph[edge].is_fermion());
-        let edges: [EdgeIndex; 3] = edges.try_into().unwrap();
-        assert!(graph[edges[2]].chemical_potential_atom().is_none());
-        let orientations = [1, -1, 1];
-        let params = edges
-            .map(|edge| GS.ose(edge))
-            .into_iter()
-            .chain([
-                Atom::var(GS.inverse_temperature),
-                graph[edges[0]].chemical_potential_atom().unwrap(),
-            ])
-            .collect_vec();
-        // With beta = 2, edge e has a = E - sigma*mu = scale * shifts[e], so its
-        // occupation is about exp(-2a); the largest one stays a normal binary64.
-        let (beta, mu) = (2.0, 0.5);
-        let shifts = [1.0, 1.05, 1.1];
-        let scales = [0.5, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 300.0];
-        let inputs = |shifted: [f64; 3]| {
-            let mut input = (0..3)
-                .map(|e| {
-                    let chemical_shift = if e < 2 {
-                        f64::from(orientations[e]) * mu
-                    } else {
-                        0.0
-                    };
-                    shifted[e] + chemical_shift
-                })
-                .collect_vec();
-            input.extend([beta, mu]);
-            input
-        };
-        for medium_mode in [
-            MediumMode::ThermodynamicEquilibrium,
-            MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            graph.set_medium_mode(medium_mode).unwrap();
-            // Both weights have a nonzero vacuum value, so their vacuum-subtracted
-            // forms are exponentially small once every occupation is.
-            let expressions = [
-                ThermalWeight {
-                    medium_mode,
-                    numerators: vec![ThermalNumerator {
-                        positive_energies: edges.to_vec(),
-                        negative_energies: vec![],
-                    }],
-                    distributions: vec![],
-                },
-                ThermalWeight {
-                    medium_mode,
-                    numerators: vec![ThermalNumerator {
-                        positive_energies: vec![edges[0], edges[1]],
-                        negative_energies: vec![],
-                    }],
-                    distributions: vec![ThermalDistributionFactor {
-                        edge_id: edges[2],
-                        sign: 0,
-                        derivative_order: 0,
-                    }],
-                },
-            ]
-            .map(|weight| {
-                edges.into_iter().zip(orientations).fold(
-                    weight.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
-                    |atom, (edge, orientation)| {
-                        atom.replace(GS.sign(edge)).with(Atom::num(orientation))
-                    },
-                )
-            });
-            let build = || {
-                GenericEvaluator::new_from_raw_params(
-                    expressions.clone(),
-                    &params,
-                    &graph.param_builder.fn_map,
-                    vec![],
-                    OptimizationSettings::default(),
-                    None,
-                    &EvaluatorSettings::default(),
-                )
-                .unwrap()
-            };
-            let mut eager = build();
-            let mut symjit = build();
-            symjit
-                .activate_symjit(&GammaloopCompileOptions::default().options_snapshot())
-                .unwrap();
-            let mut precise = build();
-            let evaluate_f64 = |evaluator: &mut GenericEvaluator, input: &[f64]| {
-                let input = input.iter().map(|v| Complex::new_re(F(*v))).collect_vec();
-                f64::get_evaluator(evaluator)(&input)
-                    .into_iter()
-                    .map(|value| value.unwrap_real())
-                    .collect_vec()
-            };
-            let mut points = scales
-                .map(|scale| shifts.map(|shift| scale * shift))
-                .to_vec();
-            // Inside the Fermi sea of edge 0 the occupations are of order one.
-            points.push([-0.3, 0.7, 0.9]);
-            for shifted in points {
-                let input = inputs(shifted);
-                let arb = ArbPrec::get_evaluator(&mut precise)(
-                    &input
-                        .iter()
-                        .map(|v| Complex::new_re(F(ArbPrec::from_f64_exact_binary(*v))))
-                        .collect_vec(),
-                )
-                .into_iter()
-                .map(|value| value.unwrap_real())
-                .collect_vec();
-                let quad = f128::get_evaluator(&mut eager)(
-                    &input
-                        .iter()
-                        .map(|v| Complex::new_re(F(f128::from_f64_exact_binary(*v))))
-                        .collect_vec(),
-                )
-                .into_iter()
-                .map(|value| value.unwrap_real())
-                .collect_vec();
-                let results = [
-                    ("eager f64", evaluate_f64(&mut eager, &input)),
-                    ("symjit f64", evaluate_f64(&mut symjit, &input)),
-                ];
-                for (index, reference) in arb.iter().enumerate() {
-                    let context = format!("{medium_mode:?}, weight {index}, a={shifted:?}");
-                    let outside_fermi_sea = shifted.iter().all(|a| *a > 0.0);
-                    if medium_mode == MediumMode::ZeroTemperatureEquilibrium && outside_fermi_sea {
-                        // Every occupation is an exact zero, so no residue may survive.
-                        assert!(
-                            reference.re.is_zero() && reference.im.is_zero(),
-                            "Arb {context}"
-                        );
-                        assert!(
-                            quad[index].re.is_zero() && quad[index].im.is_zero(),
-                            "Quad {context}"
-                        );
-                        for (backend, result) in &results {
-                            assert_eq!(
-                                result[index],
-                                Complex::new_re(F(0.0)),
-                                "{backend} {context}"
-                            );
-                        }
-                        continue;
-                    }
-                    let reference_re = reference.re.into_ff64().0;
-                    assert!(reference_re != 0.0, "Arb {context}");
-                    let quad_error = ((&quad[index].re.to_arb_exact().unwrap() - &reference.re)
-                        / &reference.re)
-                        .into_ff64()
-                        .0
-                        .abs();
-                    assert!(
-                        quad_error < 1e-28,
-                        "Quad {context}: relative error {quad_error:e}"
-                    );
-                    for (backend, result) in &results {
-                        let error = ((result[index].re.0 - reference_re) / reference_re).abs();
-                        assert!(
-                            error < 1e-13,
-                            "{backend} {context}: relative error {error:e}"
-                        );
-                        assert_eq!(result[index].im.0, 0.0, "{backend} {context}");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
         test_initialise().unwrap();
-        fn check<T: FloatLike>()
-        where
-            ParamBuilder<f64>: UpdateAndGetParams<T>,
-        {
-            let graph = dot!(
-                digraph arb_parameter_baseline {
-                    edge [num=1 mass=0]
-                    node [num=1]
-                    A -> B [id=0]
-                }
-            )
-            .unwrap();
-            let mut param_builder = ParamBuilder::<f64>::new_empty();
-            param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
-            let sample = MomentumSample {
-                sample: BareMomentumSample {
-                    loop_moms: LoopMomenta(Vec::new()),
-                    dual_loop_moms: None,
-                    loop_mom_cache_id: 0,
-                    loop_mom_base_cache_id: 0,
-                    external_moms: Vec::new().into(),
-                    external_mom_cache_id: 0,
-                    external_mom_base_cache_id: 0,
-                    jacobian: F::<T>::from_f64(1.0),
-                    orientation: None,
-                    parameterization_branch: None,
-                },
-            };
+        let graph = finalized_runtime_dot!(
+            digraph arb_parameter_baseline {
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0]
+            }
+        )
+        .unwrap();
+        let mut param_builder = ParamBuilder::<f64>::new_empty();
+        param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: LoopMomenta(Vec::new()),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: Vec::new().into(),
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F::<ArbPrec>::from_f64(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
 
-            let lifted = <ParamBuilder<f64> as UpdateAndGetParams<T>>::update_emr_and_get_params(
-                &mut param_builder,
-                (false, false),
-                &sample,
-                &graph,
-                &[],
-                &[],
-                None,
-                None,
-                None,
-            );
-            // These fractions give the decimal-promoted values at native precision.
-            let zero = F::<T>::default();
-            let direct = Complex::new(
-                zero.from_i64(1) / zero.from_i64(10),
-                zero.from_i64(-3) / zero.from_i64(10),
-            );
+        let lifted = <ParamBuilder<f64> as UpdateAndGetParams<ArbPrec>>::update_emr_and_get_params(
+            &mut param_builder,
+            (false, false),
+            &sample,
+            &graph,
+            &[],
+            &[],
+            None,
+            None,
+            None,
+        );
+        // These fractions give the decimal-promoted values at Arb precision.
+        let zero = F::<ArbPrec>::default();
+        let expected = Complex::new(
+            zero.from_i64(1) / zero.from_i64(10),
+            zero.from_i64(-3) / zero.from_i64(10),
+        );
 
-            assert_eq!(lifted.as_slice(), &[direct]);
-        }
-        check::<ArbPrec>();
-        check::<SamplingFloat>();
+        assert_eq!(lifted.as_slice(), &[expected]);
     }
 }
 
