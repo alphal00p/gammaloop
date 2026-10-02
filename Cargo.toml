@@ -89,6 +89,7 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
+clarabel = { path = "vendor/clarabel" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
