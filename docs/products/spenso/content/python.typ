@@ -169,9 +169,10 @@ python -m marimo edit examples/notebooks/spenso_api_tour.py
 ```
 
 #source-link("examples/notebooks/spenso_notation.py", label: "The tensor notation showcase")
-explains free indices, unresolved and supplied ports, scalar products, Dirac slashes,
-ordered chains, scoped copies, scalar invariants, and component coordinates. It compares
-display settings and checks that compact contractions preserve every component.
+explains vectors and their family labels, free indices, unresolved and supplied ports,
+scalar products, Dirac slashes, ordered chains, scoped copies, scalar invariants, and
+component coordinates. It compares display settings and checks that compact contractions
+preserve every component.
 
 Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` draws its
 current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
