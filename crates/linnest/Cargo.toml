@@ -17,14 +17,27 @@ linnet = { workspace = true, features = ["drawing", "nodestore-vec", "rkyv", "se
 rkyv = { version = "0.7", features = ["validation"] }
 serde = { version = "1.0", features = ["derive"] }
 self_cell = { workspace = true }
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 
 cgmath = { version = "0.18.0", features = ["serde"] }
 figment = "0.10.19"
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
+indexmap = { workspace = true, features = ["serde"] }
 rand = "0.8.5"
 thiserror = { workspace = true }
 wasm-minimal-protocol = "0.2.0"
+kurbo = { version = "0.13", optional = true }
+# Native SVG drawing shares Kurvst's curve geometry with the Typst renderer.
+kurvst = { path = "../kurvst", optional = true }
 
 [features]
+projection-service = []
+# Native SVG drawing of prepared graphs; Typst only typesets their labels.
+svg = ["dep:kurbo", "dep:kurvst"]
 custom = []
 typst-plugin = ["custom"]
+
+[[bin]]
+name = "impred-project"
+path = "src/bin/impred_project.rs"
+required-features = ["projection-service"]

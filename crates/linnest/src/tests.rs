@@ -7,7 +7,7 @@ use linnet::half_edge::layout::{
     simulatedanneale::{anneal, Energy, GeoSchedule, Neighbor, SAConfig},
     spring::{Constraint, PinnedLayoutNeighbor, ShiftDirection},
 };
-use linnet::half_edge::subgraph::Inclusion;
+use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph};
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::{involution::EdgeIndex, NodeIndex};
 use linnet::{dot, parser::set::DotGraphSet};
@@ -98,7 +98,8 @@ fn parsed_dot_layout_keys_do_not_configure_layout() {
         graph.layout_config.layout_algo,
         crate::LayoutAlgo::Force
     ));
-    assert_eq!(graph.layout_config.schedule.steps, 30);
+    assert_eq!(graph.layout_config.schedule.steps, 100);
+    assert_eq!(graph.layout_config.schedule.epochs, 30);
     assert_eq!(graph.layout_config.seed, 2);
     assert_eq!(
         graph.global_statements.get("steps").map(String::as_str),
@@ -112,10 +113,15 @@ fn parsed_dot_layout_keys_do_not_configure_layout() {
 
 #[test]
 fn explicit_layout_figment_configures_layout() {
+    assert_eq!(
+        crate::LayoutConfig::default().subgraph_mode,
+        crate::LayoutSubgraphMode::FixedBoundary
+    );
     let figment = Figment::from(Serialized::from(
         BTreeMap::from([
             ("layout-algo".to_string(), "tree".to_string()),
             ("label-layout".to_string(), "fixed-length".to_string()),
+            ("subgraph-mode".to_string(), "isolated".to_string()),
             ("tree-dx".to_string(), "3.0".to_string()),
         ]),
         Profile::Default,
@@ -130,6 +136,10 @@ fn explicit_layout_figment_configures_layout() {
         graph.layout_config.label_layout,
         crate::LabelLayout::FixedLength
     ));
+    assert_eq!(
+        graph.layout_config.subgraph_mode,
+        crate::LayoutSubgraphMode::Isolated
+    );
     assert_eq!(graph.layout_config.tree_dx, 3.0);
 }
 
@@ -1139,7 +1149,7 @@ fn measured_label_collision_pass_preserves_repulsion() {
                 ("viewport-h", "1"),
                 ("length-scale", "1"),
                 ("label-layout", "normal"),
-                ("label-length-scale", "1"),
+                ("internal-label-length-scale", "1"),
                 ("label-spring", "0"),
                 ("label-charge", charge),
                 ("label-steps", "1"),
@@ -1238,43 +1248,54 @@ fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
     }))
     .unwrap();
 
-    let laid_out = layout_parsed_graph_bytes(
-        &graph,
-        &encode_cbor(&BTreeMap::from([
-            ("layout-algo".to_string(), "tree".to_string()),
-            ("layout-nodes".to_string(), "fixed".to_string()),
-            ("label-layout".to_string(), "dangling-tangent".to_string()),
-            ("label-charge".to_string(), "0".to_string()),
-            ("label-steps".to_string(), "1".to_string()),
-        ])),
-    )
-    .unwrap();
-    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
-    let expected_offset = crate::default_label_length_scale()
-        * crate::default_length_scale()
-        * (crate::default_viewport_w() * crate::default_viewport_h() / 2.0).sqrt();
+    for (internal, external) in [(0.6_f64, 0.6_f64), (0.9, 0.6), (0.6, 1.2)] {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), "tree".to_string()),
+                ("layout-nodes".to_string(), "fixed".to_string()),
+                ("label-layout".to_string(), "dangling-tangent".to_string()),
+                ("label-charge".to_string(), "0".to_string()),
+                (
+                    "internal-label-length-scale".to_string(),
+                    internal.to_string(),
+                ),
+                (
+                    "external-label-length-scale".to_string(),
+                    external.to_string(),
+                ),
+                ("label-steps".to_string(), "1".to_string()),
+            ])),
+        )
+        .unwrap();
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+        let spring_length = crate::default_length_scale()
+            * (crate::default_viewport_w() * crate::default_viewport_h() / 2.0).sqrt();
 
-    let dangling = &edges[0];
-    let dangling_pos = dangling.pos.as_ref().unwrap();
-    let dangling_label = dangling.label_pos.as_ref().unwrap();
-    let dangling_dx = dangling_label.x - dangling_pos.x;
-    let dangling_dy = dangling_label.y - dangling_pos.y;
-    assert!(
-        (dangling_dx - expected_offset).abs() < 1e-9,
-        "{dangling_dx} != {expected_offset}"
-    );
-    assert!(dangling_dy.abs() < 1e-9, "{dangling_dy} != 0");
+        let expected_offset = external * spring_length;
+        let dangling = &edges[0];
+        let dangling_pos = dangling.pos.as_ref().unwrap();
+        let dangling_label = dangling.label_pos.as_ref().unwrap();
+        let dangling_dx = dangling_label.x - dangling_pos.x;
+        let dangling_dy = dangling_label.y - dangling_pos.y;
+        assert!(
+            (dangling_dx - expected_offset).abs() < 1e-9,
+            "{dangling_dx} != {expected_offset}"
+        );
+        assert!(dangling_dy.abs() < 1e-9, "{dangling_dy} != 0");
 
-    let paired = &edges[1];
-    let paired_pos = paired.pos.as_ref().unwrap();
-    let paired_label = paired.label_pos.as_ref().unwrap();
-    let paired_dx = paired_label.x - paired_pos.x;
-    let paired_dy = paired_label.y - paired_pos.y;
-    assert!(paired_dx.abs() < 1e-9, "{paired_dx} != 0");
-    assert!(
-        (paired_dy - expected_offset).abs() < 1e-9,
-        "{paired_dy} != {expected_offset}"
-    );
+        let expected_offset = internal * spring_length;
+        let paired = &edges[1];
+        let paired_pos = paired.pos.as_ref().unwrap();
+        let paired_label = paired.label_pos.as_ref().unwrap();
+        let paired_dx = paired_label.x - paired_pos.x;
+        let paired_dy = paired_label.y - paired_pos.y;
+        assert!(paired_dx.abs() < 1e-9, "{paired_dx} != 0");
+        assert!(
+            (paired_dy - expected_offset).abs() < 1e-9,
+            "{paired_dy} != {expected_offset}"
+        );
+    }
 }
 
 #[test]
@@ -1636,6 +1657,56 @@ fn test_graph_structural_patch_updates_edge_position() {
     assert!(dot.contains("bend=\"0.75rad\""), "{dot}");
     assert!(dot.contains("\"pos-x-set\"=\"true\""), "{dot}");
     assert!(dot.contains("\"pos-y-set\"=\"true\""), "{dot}");
+}
+
+#[test]
+fn test_edge_structural_patch_preserves_unpatched_layout_positions() {
+    let parsed =
+        parse_dot_graphs_bytes(br#"digraph { a [pos="-4,2"]; b [pos="4,2"]; a -> b [pos="0,0"] }"#)
+            .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "force".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+            ("steps".to_string(), "20".to_string()),
+            ("epochs".to_string(), "1".to_string()),
+            ("step".to_string(), "0.05".to_string()),
+            ("beta".to_string(), "0".to_string()),
+            ("gamma-ev".to_string(), "0".to_string()),
+            ("k-spring".to_string(), "4".to_string()),
+            ("depth-scale".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let before: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    assert_ne!(before[0].pos.as_ref().unwrap().x, -4.0);
+
+    let patched = graph_apply_structural_patches_bytes(
+        &laid_out,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: Vec::new(),
+            edges: vec![TestEdgeStructuralPatch {
+                index: 0,
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(0.0)),
+                    y: Some(TestPlacementCoord::Number(-2.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                label_pos: None,
+                bend: None,
+                statements: BTreeMap::new(),
+            }],
+            hedges: Vec::new(),
+        }),
+    )
+    .unwrap();
+    let after: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&patched).unwrap());
+    assert_eq!(after, before);
 }
 
 #[test]
@@ -3423,6 +3494,207 @@ fn test_partial_iterative_layout_preserves_complement_positions() {
 }
 
 #[test]
+fn isolated_partial_iterative_layout_ignores_complement() {
+    for algo in ["force", "anneal"] {
+        let mut outputs = Vec::new();
+        for (node_pos, edge_pos, extra) in [
+            ("4,4", "4,5", ""),
+            ("400,-300", "-250,500", ""),
+            ("4,4", "4,5", "d [pos=\"900,-800\"]"),
+        ] {
+            let source = format!(
+                r#"digraph partial {{
+                    a [pos="0,0"]
+                    b [pos="1,0"]
+                    c [pos="{node_pos}"]
+                    {extra}
+                    a -> b [pos="0.5,0"]
+                    b -> c [pos="{edge_pos}"]
+                }}"#
+            );
+            let parsed = parse_dot_graphs_bytes(source.as_bytes()).unwrap();
+            let graph = decode_graphs(&parsed).remove(0);
+            let selected_label: String = decode_cbor(
+                &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false]))
+                    .unwrap(),
+            );
+            let laid_out = layout_parsed_graph_bytes(
+                &graph,
+                &encode_cbor(&BTreeMap::from([
+                    ("layout-algo".to_string(), algo.to_string()),
+                    ("subgraph-mode".to_string(), "isolated".to_string()),
+                    ("subgraph".to_string(), selected_label),
+                    ("label-steps".to_string(), "0".to_string()),
+                    ("depth-scale".to_string(), "0".to_string()),
+                    ("steps".to_string(), "8".to_string()),
+                    ("epochs".to_string(), "2".to_string()),
+                    ("seed".to_string(), "17".to_string()),
+                ])),
+            )
+            .unwrap();
+            outputs.push((
+                decode_cbor::<Vec<TypstDotNode>>(&graph_nodes_bytes(&laid_out).unwrap()),
+                decode_cbor::<Vec<TypstDotEdge>>(&graph_edges_bytes(&laid_out).unwrap()),
+            ));
+        }
+
+        for output in &outputs[1..] {
+            for node in 0..2 {
+                assert_point_close(
+                    outputs[0].0[node].pos.as_ref().unwrap(),
+                    output.0[node].pos.as_ref().unwrap(),
+                );
+            }
+            assert_point_close(
+                outputs[0].1[0].pos.as_ref().unwrap(),
+                output.1[0].pos.as_ref().unwrap(),
+            );
+        }
+        assert_point_close(
+            outputs[0].0[2].pos.as_ref().unwrap(),
+            &TypstPoint { x: 4.0, y: 4.0 },
+        );
+        assert_point_close(
+            outputs[1].0[2].pos.as_ref().unwrap(),
+            &TypstPoint {
+                x: 400.0,
+                y: -300.0,
+            },
+        );
+        assert_point_close(
+            outputs[0].1[1].pos.as_ref().unwrap(),
+            &TypstPoint { x: 4.0, y: 5.0 },
+        );
+        assert_point_close(
+            outputs[1].1[1].pos.as_ref().unwrap(),
+            &TypstPoint {
+                x: -250.0,
+                y: 500.0,
+            },
+        );
+    }
+}
+
+#[test]
+fn isolated_layout_preserves_complement_fixed_gap_labels() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="2,0!"]
+            c [id=2 pos="4,0!"]
+            a -> b [id=0 pos="1,1" "label-width"="0.4" "label-height"="0.2"]
+            b -> c [id=1 pos="3,1" "label-width"="0.4" "label-height"="0.2"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let graph = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo", "tree"),
+            ("layout-nodes", "fixed"),
+            ("label-layout", "fixed-gap"),
+            ("label-steps", "30"),
+        ])),
+    )
+    .unwrap();
+    let expected: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert!(expected[1].statements.contains_key("layout-label-gap"));
+    let selected_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap(),
+    );
+    for algo in ["force", "anneal"] {
+        for label_steps in ["0", "30"] {
+            let output = layout_parsed_graph_bytes(
+                &graph,
+                &encode_cbor(&BTreeMap::from([
+                    ("layout-algo", algo),
+                    ("subgraph-mode", "isolated"),
+                    ("subgraph", selected_label.as_str()),
+                    ("label-layout", "normal"),
+                    ("label-steps", label_steps),
+                    ("steps", "4"),
+                    ("epochs", "1"),
+                    ("depth-scale", "0"),
+                ])),
+            )
+            .unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&output).unwrap());
+            assert_eq!(
+                edges[1], expected[1],
+                "algo={algo}, label_steps={label_steps}"
+            );
+            assert!(!edges[0].statements.contains_key("layout-label-gap"));
+        }
+    }
+}
+
+#[test]
+fn empty_partial_iterative_layout_is_a_no_op() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph empty_partial {
+            a [pos="0,0"]
+            b [pos="2,3"]
+            a -> b [pos="5,7"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let selected_label: String =
+        decode_cbor(&graph_subgraph_bytes(&graph, &encode_cbor(&vec![false, false])).unwrap());
+    let expected_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    let expected_edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+
+    for algo in ["force", "anneal"] {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), algo.to_string()),
+                ("subgraph-mode".to_string(), "isolated".to_string()),
+                ("subgraph".to_string(), selected_label.clone()),
+            ])),
+        )
+        .unwrap();
+        let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+        for (actual, expected) in nodes.iter().zip(&expected_nodes) {
+            assert_point_close(actual.pos.as_ref().unwrap(), expected.pos.as_ref().unwrap());
+        }
+        for (actual, expected) in edges.iter().zip(&expected_edges) {
+            assert_point_close(actual.pos.as_ref().unwrap(), expected.pos.as_ref().unwrap());
+        }
+    }
+}
+
+#[test]
+fn isolated_partial_layout_rejects_cross_boundary_groups() {
+    let figment = Figment::from(Serialized::from(
+        BTreeMap::from([
+            ("layout-algo".to_string(), "force".to_string()),
+            ("subgraph-mode".to_string(), "isolated".to_string()),
+        ]),
+        Profile::Default,
+    ));
+    let mut graph = TypstGraph::from_dot(
+        dot!(digraph {
+            helper [id=0 pin="y:@row"]
+            a [id=1 pin="y:@row"]
+            b [id=2]
+            a -> b [id=0]
+        })
+        .unwrap(),
+        &figment,
+    );
+    let mut selected = graph.empty_subgraph::<SuBitGraph>();
+    selected.add(graph.iter_edges().next().unwrap().0);
+
+    assert_eq!(
+        graph.layout_with_subgraph(Some(&selected)).unwrap_err(),
+        "isolated subgraph layout cannot cross a grouped coordinate boundary"
+    );
+}
+
+#[test]
 fn test_fixed_node_iterative_layout_keeps_nodes_and_complement_fixed() {
     let parsed = parse_dot_graphs_bytes(
         br#"digraph fixed_force {
@@ -4334,7 +4606,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
     graph.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
 
     let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
-    let (tree, energy) = graph.tree_init_cfg(&spring);
+    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_nodes());
     let (mut nodes, mut edges) = graph.new_positions(tree);
     nodes[NodeIndex(0)].y = 4.0;
     edges[EdgeIndex(0)].y = -3.0;
@@ -4373,7 +4645,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
     let exact = energy.energy(None, &full);
     assert!((incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()));
 
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None);
+    let (nodes, edges, _) = graph.optimized_positions(nodes, edges, &energy, None, None);
     assert_eq!(nodes[NodeIndex(0)].y, edges[EdgeIndex(0)].y);
     assert_ne!(nodes[NodeIndex(0)].y, 4.0);
 }
@@ -4547,10 +4819,10 @@ fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
     let mut graph = TypstGraph::parse(input).unwrap();
     graph.layout_config = crate::LayoutConfig::from_figment(&figment);
     let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
-    let (tree, energy) = graph.tree_init_cfg(&spring);
+    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_nodes());
     assert!((energy.dangling_centroid_charge / energy.c_vv - 1.25).abs() < 1e-12);
     let (nodes, edges) = graph.new_positions(tree);
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None);
+    let (nodes, edges, _) = graph.optimized_positions(nodes, edges, &energy, None, None);
 
     assert!(edges[EdgeIndex(4)].x > nodes[NodeIndex(3)].x);
     assert!(edges[EdgeIndex(2)].x < nodes[NodeIndex(2)].x);
@@ -4924,6 +5196,117 @@ fn edge_spring_length_scales_reject_invalid_statements() {
 }
 
 #[test]
+fn external_pull_balance_defaults_and_propagates_through_settings() {
+    let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&test_figment());
+    assert_eq!(graph.layout_config.spring.external_pull_balance, 1.0);
+    assert_eq!(graph.layout_energy_state().1.external_pull_balance, 1.0);
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external-pull-balance"
+    ));
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external_pull_balance"
+    ));
+
+    for balance in [0.0, 0.25, 1.0, 2.0, 3.5] {
+        let config = one_statement("external-pull-balance", &balance.to_string());
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            config,
+            Profile::Default,
+        )));
+        assert_eq!(graph.layout_config.spring.external_pull_balance, balance);
+        graph.validate_layout().unwrap();
+        assert_eq!(graph.layout_energy_state().1.external_pull_balance, balance);
+        let archived = rkyv::to_bytes::<_, 4096>(&graph).unwrap();
+        let restored = crate::graph_api::decode_typst_graph(&archived).unwrap();
+        assert_eq!(
+            restored.layout_energy_state().1.external_pull_balance,
+            balance
+        );
+    }
+}
+
+#[test]
+fn external_pull_balance_rejects_invalid_settings_before_layout_or_streaming() {
+    for value in ["-0.1", "NaN", "inf", "-inf"] {
+        let config = one_statement("external-pull-balance", value);
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            &config,
+            Profile::Default,
+        )));
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("external-pull-balance"));
+        let bytes = encode_cbor(&config);
+        assert!(
+            crate::ForceLayoutStream::from_dot("digraph { a -> b }", &bytes)
+                .err()
+                .unwrap()
+                .contains("external-pull-balance")
+        );
+    }
+}
+
+#[test]
+fn external_pull_attachment_defaults_and_propagates_through_settings() {
+    let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&test_figment());
+    assert_eq!(graph.layout_config.spring.external_pull_attachment, 1.0);
+    assert_eq!(graph.layout_energy_state().1.external_pull_attachment, 1.0);
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external-pull-attachment"
+    ));
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external_pull_attachment"
+    ));
+
+    for balance in [0.0, 0.25, 1.0, 2.0, 16.0] {
+        let config = one_statement("external-pull-attachment", &balance.to_string());
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            config,
+            Profile::Default,
+        )));
+        assert_eq!(graph.layout_config.spring.external_pull_attachment, balance);
+        graph.validate_layout().unwrap();
+        assert_eq!(
+            graph.layout_energy_state().1.external_pull_attachment,
+            balance
+        );
+        let archived = rkyv::to_bytes::<_, 4096>(&graph).unwrap();
+        let restored = crate::graph_api::decode_typst_graph(&archived).unwrap();
+        assert_eq!(
+            restored.layout_energy_state().1.external_pull_attachment,
+            balance
+        );
+    }
+}
+
+#[test]
+fn external_pull_attachment_rejects_invalid_settings_before_layout_or_streaming() {
+    for value in ["-0.1", "NaN", "inf", "-inf"] {
+        let config = one_statement("external-pull-attachment", value);
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            &config,
+            Profile::Default,
+        )));
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("external-pull-attachment"));
+        let bytes = encode_cbor(&config);
+        assert!(
+            crate::ForceLayoutStream::from_dot("digraph { a -> b }", &bytes)
+                .err()
+                .unwrap()
+                .contains("external-pull-attachment")
+        );
+    }
+}
+
+#[test]
 fn dangling_centroid_incremental_delta_matches_total_delta() {
     let input = r#"digraph {
         ext [style=invis]
@@ -4933,13 +5316,21 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
         b -> c
         c -> a
     }"#;
-    let settings = BTreeMap::from([("gamma-dangling-centroid".to_string(), "1.25".to_string())]);
+    let settings = BTreeMap::from([
+        ("gamma-dangling-centroid".to_string(), "1.25".to_string()),
+        ("external-pull".to_string(), "2.0".to_string()),
+    ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
     let mut graph = TypstGraph::parse(input).unwrap();
     graph.layout_config = crate::LayoutConfig::from_figment(&figment);
     let (mut state, energy) = graph.layout_energy_state();
     let mut baseline_energy = energy;
     baseline_energy.dangling_centroid_charge = 0.0;
+    assert_eq!(
+        energy.external_pull,
+        2.0 * energy.k_spring * energy.spring_length
+    );
+    baseline_energy.external_pull = 0.0;
     let mut rng = SmallRng::seed_from_u64(17);
     let mut cached = energy.energy(None, &state);
     let mut baseline_cached = baseline_energy.energy(None, &state);
@@ -4964,5 +5355,240 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
         energy.on_accept(&mut state);
         cached = incremental;
         baseline_cached = baseline_incremental;
+    }
+}
+
+#[test]
+fn fixed_gap_labels_preserve_clearance_across_sizes_bends_and_rotations() {
+    for angle in [
+        0.0_f64,
+        std::f64::consts::FRAC_PI_4,
+        std::f64::consts::FRAC_PI_2,
+    ] {
+        let (sin, cos) = angle.sin_cos();
+        let dot = format!(
+            r#"digraph {{
+                a [pos="{},{}!" "layout-width"="0.2" "layout-height"="0.2"]
+                b [pos="{},{}!" "layout-width"="0.2" "layout-height"="0.2"]
+                a -> b [id=0 pos="{},{}!" "label-width"="0.2" "label-height"="0.4"]
+                b -> a [id=1 pos="{},{}!" "label-width"="2.2" "label-height"="1.4"]
+                a -> b [id=2 pos="0,0!" "label-width"="0.6" "label-height"="0.6"]
+                a -> b [id=3 pos="0,0!" "label-width"="2.0" "label-height"="1.2"]
+            }}"#,
+            -4.0 * cos,
+            -4.0 * sin,
+            4.0 * cos,
+            4.0 * sin,
+            -2.0 * sin,
+            2.0 * cos,
+            2.0 * sin,
+            -2.0 * cos,
+        );
+        let graph = decode_graphs(&parse_dot_graphs_bytes(dot.as_bytes()).unwrap()).remove(0);
+        for charge in ["0", "100"] {
+            let config = BTreeMap::from([
+                ("layout-algo", "tree"),
+                ("layout-nodes", "fixed"),
+                ("viewport-w", "2"),
+                ("viewport-h", "1"),
+                ("length-scale", "1"),
+                ("label-layout", "fixed-gap"),
+                ("internal-label-length-scale", "0.6"),
+                ("label-charge", charge),
+                ("label-steps", "30"),
+            ]);
+            let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+            for (edge, (width, height, side)) in edges.iter().zip([
+                (0.2, 0.4, 1.0),
+                (2.2, 1.4, -1.0),
+                (0.6, 0.6, 1.0),
+                (2.0, 1.2, 1.0),
+            ]) {
+                assert_eq!(edge.statements["layout-label-gap"], "0.6");
+                let point = edge.pos.as_ref().unwrap();
+                let label = edge.label_pos.as_ref().unwrap();
+                let outward_distance =
+                    side * (-(label.x - point.x) * sin + (label.y - point.y) * cos);
+                let text_extent = (width * sin.abs() + height * cos.abs()) / 2.0;
+                assert!(
+                    (outward_distance - text_extent - 0.6).abs() < 1e-9,
+                    "angle={angle}, charge={charge}, edge={}, clearance={}",
+                    edge.edge,
+                    outward_distance - text_extent
+                );
+            }
+            let mut config = config;
+            config.insert("label-layout", "normal");
+            let relaxed = layout_parsed_graph_bytes(&laid_out, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&relaxed).unwrap());
+            assert!(edges
+                .iter()
+                .all(|edge| !edge.statements.contains_key("layout-label-gap")));
+        }
+    }
+}
+
+#[test]
+fn global_rest_length_scale_multiplies_edges_without_rescaling_forces() {
+    let mut graph =
+        TypstGraph::parse(r#"digraph { a -> b ["spring-length"=2]; b -> c; c -> a }"#).unwrap();
+    graph.layout_config.spring.external_pull = 1.0;
+    let (_, baseline_energy) = graph.layout_energy_state();
+    graph.layout_config.spring_length_scale = 0.75;
+    let (state, energy) = graph.layout_energy_state();
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(0)], 1.5);
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(1)], 0.75);
+    assert_eq!(state.edge_spring_length_scales[EdgeIndex(2)], 0.75);
+    assert_eq!(energy.spring_length, baseline_energy.spring_length);
+    assert_eq!(energy.c_vv, baseline_energy.c_vv);
+    assert_eq!(energy.external_pull, baseline_energy.external_pull);
+}
+
+#[test]
+fn relaxation_parameters_reject_invalid_values() {
+    for key in ["initial-repulsion", "repulsion-growth"] {
+        for value in ["-0.1", "1.1", "NaN", "inf"] {
+            let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+            graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(
+                Serialized::from(one_statement(key, value), Profile::Default),
+            ));
+            assert!(graph.validate_layout().unwrap_err().contains(key));
+        }
+    }
+    for value in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config.spring_length_scale = value;
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("spring-length-scale"));
+    }
+}
+
+#[test]
+fn iterative_layout_preserves_and_relaxes_variable_half_routes() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+
+    for algorithm in ["force", "anneal"] {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="4,0!"]
+            a:0 -> b:1 [id=0 pos="2,0"]
+        }"#,
+        )
+        .unwrap();
+        graph.graph[Hedge(0)].route_points = vec![Point2::new(0.5, 1.0), Point2::new(1.5, 1.0)];
+        graph.graph[Hedge(1)].route_points = vec![Point2::new(3.0, -1.0)];
+        let settings = BTreeMap::from([
+            ("layout-algo", algorithm),
+            ("steps", "0"),
+            ("epochs", "1"),
+            ("label-steps", "0"),
+            ("beta", "0"),
+            ("k-spring", "1"),
+            ("depth-scale", "0"),
+            ("early-tol", "0"),
+            ("step", "0.01"),
+        ]);
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings.clone(),
+            Profile::Default,
+        )));
+        let original = graph.layout_route_points();
+        graph.layout_with_subgraph(None).unwrap();
+        for (hedge, points) in &original {
+            assert_eq!(
+                &graph.graph[hedge].route_points, points,
+                "{algorithm}: zero steps"
+            );
+        }
+        let mut settings = settings;
+        settings.insert("steps", "30");
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        graph.layout_with_subgraph(None).unwrap();
+        assert_ne!(
+            graph.graph[Hedge(0)].route_points,
+            original[Hedge(0)],
+            "{algorithm}: bends must move"
+        );
+        assert_eq!(graph.graph[Hedge(0)].route_points.len(), 2);
+        assert_eq!(graph.graph[Hedge(1)].route_points.len(), 1);
+        assert_eq!(graph.graph[NodeIndex(0)].pos, Point2::new(0.0, 0.0));
+        assert_eq!(graph.graph[NodeIndex(1)].pos, Point2::new(4.0, 0.0));
+        graph.layout_with_subgraph(None).unwrap();
+        assert_eq!(
+            graph.graph[Hedge(0)].route_points.len(),
+            2,
+            "{algorithm}: warm start"
+        );
+    }
+}
+
+#[test]
+fn invalid_half_route_coordinates_are_rejected_before_layout() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+    for value in [f64::NAN, f64::INFINITY] {
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.graph[Hedge(0)].route_points = vec![Point2::new(value, 0.0)];
+        assert!(graph
+            .layout_with_subgraph(None)
+            .unwrap_err()
+            .contains("route points must be finite"));
+    }
+}
+
+#[test]
+fn isolated_half_route_writeback_preserves_complement_with_edge_shift() {
+    use cgmath::Point2;
+    use linnet::half_edge::involution::Hedge;
+
+    for algorithm in ["force", "anneal"] {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="4,0!"]
+            a:0 -> b:1 [id=0 pos="2,0" shift="0.5,1.0"]
+        }"#,
+        )
+        .unwrap();
+        let source = vec![Point2::new(0.5, 1.0), Point2::new(1.5, 1.0)];
+        let sink = vec![Point2::new(3.0, -1.0)];
+        graph.graph[Hedge(0)].route_points = source.clone();
+        graph.graph[Hedge(1)].route_points = sink.clone();
+        let settings = BTreeMap::from([
+            ("layout-algo", algorithm),
+            ("subgraph-mode", "isolated"),
+            ("steps", "0"),
+            ("epochs", "0"),
+            ("label-steps", "0"),
+            ("depth-scale", "0"),
+        ]);
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        selected.add(Hedge(0));
+        graph.layout_with_subgraph(Some(&selected)).unwrap();
+        assert_eq!(
+            graph.graph[Hedge(1)].route_points,
+            sink,
+            "{algorithm}: inactive half moved"
+        );
+        assert_eq!(
+            graph.graph[Hedge(0)].route_points,
+            source
+                .into_iter()
+                .map(|point| Point2::new(point.x + 0.5, point.y + 1.0))
+                .collect::<Vec<_>>(),
+            "{algorithm}: active half must receive its edge shift"
+        );
     }
 }

@@ -61,7 +61,11 @@
         assert(layers.len() == 2)
         assert(not layers.any(layer => layer.at("label-only", default: false)))
         // An explicit momentum shift still requests path-relative placement.
-        assert(half-style(record + (momentum-label-shift: 0.1)).len() == 3)
+        let shifted = half-style(record + (momentum-label-shift: 0.1))
+        assert.eq(shifted.len(), 2)
+        assert(shifted.last().label-only)
+        assert.eq(shifted.last().label-shift, 0.1)
+        assert(type(shifted.last().label-path) == dictionary)
       }
     } else if record.ext and not cases.at(record.eid).at("explicit", default: false) {
       assert(result == (:))

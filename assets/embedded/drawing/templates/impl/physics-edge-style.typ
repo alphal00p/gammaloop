@@ -75,7 +75,7 @@
     mark = mark.trim("\"")
     if mark == "none" { mark = none } else if mark == "auto" { mark = auto }
   }
-  let base = (end: "straight", stroke: arrow-stroke, scale: 1.1)
+  let base = (end: "straight", stroke: arrow-stroke, scale: 0.8)
   if mark == auto { base } else if mark == none { none } else if (
     type(mark) == dictionary
   ) {
@@ -92,12 +92,17 @@
     side in ("auto", "left", "right"),
     message: "momentum-arrow-side must be auto, left, or right",
   )
+  let label-side = options.momentum-label-side
+  let label-side = if label-side == auto { "auto" } else { str(label-side).trim("\"") }
+  let label-side = if label-side == "auto" { side } else { label-side }
+  assert(label-side in ("auto", "left", "right"), message: "momentum-label-side must be auto, left, or right")
   let stroke = options.momentum-arrow-stroke
   if stroke == none { stroke = options.api.momentum-arrow-defaults.stroke }
   let offset = options.momentum-arrow-offset
   if side == "auto" {
-    // Use the edge's bend relative to its chord, independently of label content
-    // or relaxation. Straight, dangling and closed edges use the signed offset.
+    // The edge's bend relative to its chord sets the preferred annotation side.
+    // Automatic placement may switch it; fixed external arrows retain it.
+    // Straight, dangling and closed edges use the signed offset.
     let direction = if offset < 0 { -1 } else { 1 }
     let source = edge.at("source-node", default: none)
     let sink = edge.at("sink-node", default: none)
@@ -131,37 +136,38 @@
   let shift = options.momentum-arrow-shift
   let label-shift = options.momentum-label-shift
   // Auto clears the complete label box; explicit anchors use only the gap.
-  // Labels follow the full invisible path, so endpoint clamps never depend on
-  // arrow length. Linnest resolves label:auto and owns all generic overlays.
+  // The full base carrier keeps label clamps independent of arrow length.
+  // Linnest evaluates the offset arrow and label together for each candidate.
+  let arrow = geometry + (
+    length: options.momentum-arrow-length,
+    ratio: options.momentum-arrow-ratio,
+    resolve-length: if options.momentum-arrow-ratio == none { "length" } else { "min" },
+    shift: shift,
+    stroke: stroke,
+    pattern: none,
+    mark: if options.show-mark {
+      _single-end-mark(options.momentum-arrow-mark, stroke)
+    } else { none },
+    // A numeric end position uses Linnest's continuous paired-edge carrier,
+    // keeping one arrowhead when a shift crosses the source/sink split.
+    mark-position: 1,
+    mark-orientation: "path",
+  )
   (
-    geometry
-      + (
-        length: options.momentum-arrow-length,
-        ratio: options.momentum-arrow-ratio,
-        resolve-length: if options.momentum-arrow-ratio == none {
-          "length"
-        } else { "min" },
-        shift: shift,
-        stroke: stroke,
-        pattern: none,
-        mark: if options.show-mark {
-          _single-end-mark(options.momentum-arrow-mark, stroke)
-        } else { none },
-        // A numeric end position uses Linnest's continuous paired-edge carrier,
-        // keeping one arrowhead when a shift crosses the source/sink split.
-        mark-position: 1,
-        mark-orientation: "path",
-      ),
-    geometry
-      + (
-        length: none,
-        ratio: none,
-        resolve-length: "none",
-        shift: 0,
-        label-only: true,
-        label: auto,
-        label-shift: if label-shift == auto { shift } else { label-shift },
-      ),
+    arrow,
+    geometry + (
+      offset: 0,
+      length: none,
+      ratio: none,
+      resolve-length: "none",
+      shift: 0,
+      label-only: true,
+      label: auto,
+      label-shift: if label-shift == auto { shift } else { label-shift },
+      label-slide: options.momentum-label-slide,
+      label-side: if label-side == "auto" { auto } else { label-side },
+      label-path: arrow,
+    ),
   )
 }
 
@@ -185,6 +191,8 @@
     "momentum-arrow-shift",
     "momentum-label-gap",
     "momentum-label-shift",
+    "momentum-label-slide",
+    "momentum-label-side",
     "momentum-label-anchor",
   ) {
     let value = _half-data-field(edge, half, key, _edge-data-field(
@@ -209,6 +217,11 @@
         auto
       } else { float(value-text) }
     }
+    if key == "momentum-label-slide" and type(value) == str {
+      let value-text = value.trim("\"")
+      assert(value-text in ("true", "false"), message: "momentum-label-slide must be true or false")
+      value = value-text == "true"
+    }
     options.insert(key, value)
   }
   let arrow-half = if edge.at("sink-half-edge", default: none) != none {
@@ -228,8 +241,11 @@
       and options.momentum-arrow-shift == 0
       and options.momentum-label-shift == auto
       and options.momentum-label-anchor == auto
+      and options.momentum-label-side in (auto, "auto", "\"auto\"")
   ) {
     layers = layers.slice(0, 1)
+  } else {
+    layers = layers.slice(1)
   }
   (style, ..layers)
 }
@@ -264,9 +280,9 @@
 
 #let _selected-label(edge, options) = {
   let api = options.api
-  let pieces = ()
+  let particle = none
   if options.show-particle != false {
-    let particle = (api.edge-entry)(
+    particle = (api.edge-entry)(
       edge,
       map: options.map,
       default: options.default,
@@ -278,32 +294,60 @@
         map: options.map,
         scope: options.scope,
       )
-      pieces.push(if options.particle-prefix == none { particle } else {
-        options.particle-prefix + particle
-      })
+      if options.particle-prefix != none {
+        particle = options.particle-prefix + particle
+      }
     }
   }
+  // Momentum lines: one, or a long routed sum split between two lines.
+  let momentum = ()
   if options.show-momentum {
-    pieces.push([$q_(#edge.eid)$])
+    let terms = (api.momentum-terms)(edge)
+    momentum = if terms == none {
+      let value = (api.momentum-value)(edge)
+      (if value == none { [$q_(#edge.eid)$] } else {
+        (api.label-content)(value, edge, map: options.map, scope: options.scope)
+      },)
+    } else if (
+      options.label-stack
+        and options.label-stack-terms != none
+        and terms.len() >= options.label-stack-terms
+    ) {
+      let split = calc.ceil(terms.len() / 2)
+      (
+        (api.momentum-sum)(terms.slice(0, split)),
+        (api.momentum-sum)(terms.slice(split), continued: true),
+      )
+    } else { ((api.momentum-sum)(terms),) }
   }
+  let indices = ()
   if options.show-edge-index {
-    pieces.push(_prefixed-content(
+    indices.push(_prefixed-content(
       options.edge-index-prefix,
       (api.edge-index)(edge, fields: options.edge-index-fields),
       api,
     ))
   }
   if options.show-half-edge-index {
-    pieces.push(_prefixed-content(
+    indices.push(_prefixed-content(
       options.half-edge-index-prefix,
       (api.dangling-half-edge-index)(edge),
       api,
     ))
   }
-  let joined = _join-content(pieces, options.label-separator)
-  if joined == none { none } else {
-    text(size: options.label-size, fill: options.label-fill)[#joined]
+  let lines = if options.label-stack {
+    // The particle and any indices head the stack, above the momentum.
+    let head = _join-content((particle, ..indices), options.label-separator)
+    (if head == none { () } else { (head,) }) + momentum
+  } else {
+    let line = _join-content((particle, ..momentum, ..indices), options.label-separator)
+    if line == none { () } else { (line,) }
   }
+  if lines.len() == 0 { return none }
+  let body = if lines.len() == 1 { lines.first() } else {
+    grid(columns: 1, align: center, row-gutter: 0.45em, ..lines)
+  }
+  text(size: options.label-size, fill: options.label-fill)[#body]
 }
 
 #let edge-label(edge, options) = {

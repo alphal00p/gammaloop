@@ -903,21 +903,69 @@ fn dictionary_source(fields: impl IntoIterator<Item = (impl AsRef<str>, String)>
 }
 
 fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Result<TypstConfig> {
-    let inputs = input_map(inputs);
+    let mut inputs = input_map(inputs);
     if inputs.contains_key("typst-fields") {
         bail!("typst-fields is not supported by the V1 renderer; fields are always plain data");
     }
     let mut layout = Vec::new();
-    for key in ["steps", "seed"] {
-        if let Some(value) = inputs.get(key) {
+    for key in [
+        "steps",
+        "epochs",
+        "seed",
+        "impred-steps",
+        "impred-step-scale",
+        "impred-external-max-points",
+    ] {
+        if let Some(value) = inputs.remove(key) {
             layout.push((key, TypstValue::Integer(integer_input(key, value)?)));
         }
     }
 
+    for key in [
+        "internal-label-length-scale",
+        "external-label-length-scale",
+        "external-pull",
+        "spring-length-scale",
+        "k-spring",
+        "initial-repulsion",
+        "repulsion-growth",
+        "impred-spacing",
+        "impred-repulsion",
+        "impred-attraction",
+        "impred-parallel-balance",
+        "impred-pull",
+        "impred-pull-balance",
+        "impred-pull-attachment",
+        "impred-split-length-ratio",
+        "impred-contract-chord-ratio",
+        "impred-edge-clearance",
+        "impred-node-edge-strength",
+    ] {
+        if let Some(value) = inputs.remove(key) {
+            let value = typst_native_value(value);
+            if !matches!(value, TypstValue::Float(_) | TypstValue::Integer(_)) {
+                bail!("{key} must be a number");
+            }
+            layout.push((key, value));
+        }
+    }
+
+    if let Some(value) = inputs.remove("impred-level") {
+        let value = typst_native_value(value);
+        if !matches!(value, TypstValue::Bool(_)) {
+            bail!("impred-level must be a boolean");
+        }
+        layout.push(("impred-level", value));
+    }
+
+    if let Some(algorithm) = inputs.remove("layout-algo") {
+        layout.push(("layout-algo", TypstValue::String(algorithm.to_owned())));
+    }
+
+    // Consumed layout fields cannot leak into the physics style's options.
     let options = inputs
-        .iter()
-        .filter(|(key, _)| !matches!(**key, "steps" | "seed"))
-        .map(|(key, value)| (*key, typst_native_value(value)));
+        .into_iter()
+        .map(|(key, value)| (key, typst_native_value(value)));
 
     let TypstValue::Dictionary(fields) = typed_dictionary([
         ("title", TypstValue::String(derive_title(&plan.relative))),
@@ -1364,6 +1412,87 @@ mod tests {
             typst_native_value("#graph-name"),
             TypstValue::String("#graph-name".to_owned())
         );
+    }
+
+    #[test]
+    fn impred_inputs_are_typed_layout_fields_not_physics_options() -> Result<()> {
+        let plan = FigurePlan {
+            data_path: PathBuf::from("example.dot"),
+            relative: PathBuf::from("processes/amplitudes/example.dot"),
+            output_path: PathBuf::from("example.pdf"),
+        };
+        let mut inputs = vec![
+            ("layout-algo".to_owned(), "impred".to_owned()),
+            ("impred-steps".to_owned(), "1500".to_owned()),
+            ("impred-step-scale".to_owned(), "1".to_owned()),
+            ("impred-level".to_owned(), "false".to_owned()),
+            ("impred-external-max-points".to_owned(), "2".to_owned()),
+            ("momentum-arrows".to_owned(), "true".to_owned()),
+        ];
+        let mut expected_layout = vec![
+            ("layout-algo", TypstValue::String("impred".into())),
+            ("impred-steps", TypstValue::Integer(1500)),
+            ("impred-step-scale", TypstValue::Integer(1)),
+            ("impred-level", TypstValue::Bool(false)),
+            ("impred-external-max-points", TypstValue::Integer(2)),
+        ];
+        for (key, value) in [
+            ("impred-spacing", 2.4),
+            ("impred-repulsion", 2.5),
+            ("impred-attraction", 2.5),
+            ("impred-parallel-balance", 1.25),
+            ("impred-pull", 0.3),
+            ("impred-pull-balance", 0.25),
+            ("impred-pull-attachment", 4.5),
+            ("impred-split-length-ratio", 1.5),
+            ("impred-contract-chord-ratio", 1.25),
+            ("impred-edge-clearance", 0.4),
+            ("impred-node-edge-strength", 4.5),
+        ] {
+            inputs.push((key.to_owned(), value.to_string()));
+            expected_layout.push((key, TypstValue::Float(value)));
+        }
+        let TypstValue::Dictionary(fields) = typed_dictionary([
+            ("title", TypstValue::String(derive_title(&plan.relative))),
+            (
+                "layouts",
+                TypstValue::Array(vec![typed_dictionary(expected_layout)]),
+            ),
+            (
+                "style",
+                typed_dictionary(Vec::<(String, TypstValue)>::new()),
+            ),
+            ("draw", typed_dictionary(Vec::<(String, TypstValue)>::new())),
+            (
+                "options",
+                typed_dictionary([("momentum-arrows", TypstValue::Bool(true))]),
+            ),
+            (
+                "elements",
+                typed_dictionary([
+                    ("graph", TypstValue::None),
+                    ("nodes", TypstValue::Array(Vec::new())),
+                    ("edges", TypstValue::Array(Vec::new())),
+                    ("hedges", TypstValue::Array(Vec::new())),
+                ]),
+            ),
+        ]) else {
+            unreachable!()
+        };
+        assert_eq!(
+            figure_render_config(&plan, &inputs)?,
+            TypstConfig::new(fields)?
+        );
+        for (key, value) in [
+            ("impred-steps", "1.5"),
+            ("impred-step-scale", "1.5"),
+            ("impred-level", "1.5"),
+            ("impred-external-max-points", "2.5"),
+            ("impred-pull", "blue"),
+        ] {
+            assert!(figure_render_config(&plan, &[(key.into(), value.into())]).is_err());
+        }
+        Ok(())
     }
 
     #[test]

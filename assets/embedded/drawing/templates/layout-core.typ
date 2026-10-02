@@ -25,16 +25,15 @@
   let external = graph
     .edges(g)
     .filter(edge => edge.source == none or edge.sink == none)
-  let cut = external.any(edge => _field(edge, "is_cut") != none)
+  let cut = graph.edges(g).any(edge => _field(edge, "is_cut") != none)
   (amplitude: external.len() > 0 and not cut, cross-section: cut)
 }
 
 // Match GammaLoop external-edge conventions with outward-facing particle
-// labels. Relative half-edge order follows amplitude kinematics; numeric cut
-// tags order and pair cross-section legs without becoming momentum-label indices.
-// Matched legs share fixed Y coordinates
-// across the left and right columns. Every dangling endpoint stays at raw
-// depth zero, independently of explicit XY placement or an unmatched cut tag.
+// labels. Both modes start in half-edge order, with one free X group per side.
+// Cross-section cut tags share free Y groups without becoming momentum-label
+// indices; dangling-centroid repulsion spreads the endpoints. Every endpoint
+// stays at raw depth zero, independently of explicit XY placement or an unmatched cut tag.
 #let autogen-external-edge-fields(
   g,
   graph: none,
@@ -46,22 +45,17 @@
   let right = ()
   let edges = graph.edges(g)
   for edge in edges {
-    let id = if match-field == none { edge.edge } else {
-      _field(edge, match-field)
-    }
-    if id != none and edge.source == none and edge.sink != none {
-      left.push(id)
-    } else if id != none and edge.source != none and edge.sink == none {
-      right.push(id)
+    if edge.source == none and edge.sink != none {
+      left.push(edge.edge)
+    } else if edge.source != none and edge.sink == none {
+      right.push(edge.edge)
     }
   }
+  // A single momentum direction has no scattering axis: let all legs spread radially.
+  let place = place and left.len() > 0 and right.len() > 0
   if place {
-    if match-field == none {
-      left = left.sorted(key: id => edges.at(id).sink.hedge)
-      right = right.sorted(key: id => edges.at(id).source.hedge)
-    } else if match-field == "is_cut" {
-      left = left.map(value => int(value)).sorted()
-    }
+    left = left.sorted(key: id => edges.at(id).sink.hedge)
+    right = right.sorted(key: id => edges.at(id).source.hedge)
   }
   graph.map(g, edge: edge => {
     let side = if edge.source == none and edge.sink != none { "left" } else if (
@@ -79,13 +73,9 @@
       // incoming or outgoing legs on either side of the graph.
       generated.insert("label-anchor", auto)
     }
-    let id = if match-field == none { edge.edge } else {
-      _field(edge, match-field)
-    }
-    if place and match-field == "is_cut" and id != none { id = int(id) }
-    let ids = if match-field != none or side == "left" { left } else { right }
-    let rank = ids.position(value => value == id)
-    if rank != none and place {
+    if place {
+      let ids = if side == "left" { left } else { right }
+      let rank = ids.position(id => id == edge.edge)
       let position = (z: graph.pin(0))
       if not edge.at("pos-x-set", default: false) {
         position.x = graph.group(side, side: if side == "left" { "-" } else {
@@ -95,8 +85,10 @@
       }
       if not edge.at("pos-y-set", default: false) {
         let y = ((ids.len() - 1) / 2 - rank) * y-scale
-        position.y = if match-field == none { graph.start(y) } else {
-          graph.pin(y)
+        let tag = if match-field == none { none } else { _field(edge, match-field) }
+        position.y = if tag == none { graph.start(y) } else {
+          if match-field == "is_cut" { tag = int(tag) }
+          graph.group(match-field + "-" + str(tag), start: y)
         }
       }
       generated.pos = graph.pos(..position)
@@ -143,9 +135,11 @@
   if show-momentum == auto {
     show-momentum = options.at("momentum-arrows", default: false)
   }
-  let label-length-scale = if show-momentum in (true, "true", "\"true\"") {
-    0.45
-  } else { 0.30 }
+  let (internal-label-length-scale, external-label-length-scale) = if (
+    show-momentum in (true, "true", "\"true\"")
+  ) {
+    (0.45, 0.60)
+  } else { (0.36, 0.45) }
   let styles = (
     (
       scope: scope,
@@ -160,8 +154,9 @@
       + physics.style(..options)
       + style-options
   )
-  for g in graph.parse(input) {
-    g = renderer.attach-elements(g, elements)
+  // Native callers already have a graph; DOT callers share the same pipeline.
+  for g in if type(input) == dictionary { (input,) } else { graph.parse(input) } {
+    g = (renderer.attach-elements)(g, elements)
     let mode = _resolved-mode(
       g,
       graph: graph,
@@ -178,29 +173,39 @@
     }
     let defaults = if mode.amplitude {
       (
-        k-spring: 4.5,
+        k-spring: 9.0,
         eps: 1e-7,
         step: 0.6,
         gamma-dangling: 2.3,
-        label-length-scale: label-length-scale,
+        internal-label-length-scale: internal-label-length-scale,
+        external-label-length-scale: external-label-length-scale,
         label-steps: 100,
         directional-force: 4.5,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else if mode.cross-section {
       (
         length-scale: 0.4,
-        label-length-scale: label-length-scale,
+        k-spring: 22.0,
+        internal-label-length-scale: internal-label-length-scale,
+        external-label-length-scale: external-label-length-scale,
         label-steps: 100,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else { (:) }
-    renderer.layout-graph(
+    if mode.amplitude or mode.cross-section {
+      defaults.insert("gamma-dangling-centroid", 1.25)
+      defaults.insert("external-pull", 1.0)
+      defaults.insert("spring-length-scale", 0.75)
+      defaults.insert("initial-repulsion", 0.15)
+      defaults.insert("repulsion-growth", 0.7)
+    }
+    (renderer.layout-graph)(
       (
         style: styles,
         draw: (show-half-edge-ids: debug) + diagram-options,
         layouts: layout-passes,
-        layout-defaults: defaults + additional-data,
+        layout-defaults: (seed: 42) + defaults + additional-data,
       ),
       g,
     )
@@ -211,6 +216,7 @@
 // arrays; this layer never parses strings or evaluates source fragments.
 #let render-layout(
   config,
+  input: none,
   graph: none,
   renderer: none,
   physics: none,
@@ -218,7 +224,10 @@
   diagram-options: (:),
 ) = {
   let path = config.at("data-path", default: none)
-  if path == none { panic("render config requires data-path") }
+  if input == none {
+    if path == none { panic("render config requires data-path") }
+    input = read(path)
+  }
   let options = config.at("options", default: (:))
   let amplitude = options.at("amplitude-mode", default: false)
   let cross-section = options.at("cross-section-mode", default: false)
@@ -238,6 +247,7 @@
     "mode",
     "amplitude-mode",
     "cross-section-mode",
+    "split-initial-state",
     "show-node-index",
     "debug",
     "columns",
@@ -275,7 +285,7 @@
       + config.at("draw", default: (:))
   )
   layout(
-    read(path),
+    input,
     graph: graph,
     renderer: renderer,
     physics: physics,
