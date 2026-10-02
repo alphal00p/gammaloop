@@ -5,7 +5,7 @@
 
 #catalog-contract(
   rust-scope: "feynkit, feynkit-model, feynkit-ufo, feynkit-kinematics, feynkit-graph, feynkit-amplitude, feynkit-generator, feynkit-cff, feynkit-tensor",
-  python-scope: "symbolica.community.feynkit",
+  python-scope: "symbolica.community.hepkit",
 )
 
 == Rust ownership map

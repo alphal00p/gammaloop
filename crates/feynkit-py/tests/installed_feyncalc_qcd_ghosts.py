@@ -7,7 +7,7 @@ Both ghost orderings are generated independently; all gluon interference is kept
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
 index_scope = S("spenso::index_scope")

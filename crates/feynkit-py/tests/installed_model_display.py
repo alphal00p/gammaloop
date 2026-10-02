@@ -8,7 +8,7 @@ from pathlib import Path
 
 import linnet
 from IPython.lib.pretty import pretty
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 
 model = hep.Model.standard_model()
 vertex = model.vertex_rule("V_98")

@@ -59,7 +59,7 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -70,7 +70,7 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramVertex",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -210,7 +210,7 @@ impl PyDiagramVertex {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -222,7 +222,7 @@ impl PyDiagramVertex {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramEdge",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -712,7 +712,7 @@ impl PyDiagramEdge {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_cross_section(loops=1)
@@ -721,11 +721,7 @@ impl PyDiagramEdge {
 /// >>> side = cut.left
 /// >>> side_numerator = side.subgraph.numerator_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    name = "DiagramCutSide",
-    module = "symbolica.community.feynkit",
-    frozen
-)]
+#[pyclass(name = "DiagramCutSide", module = "symbolica.community.hepkit", frozen)]
 pub struct PyDiagramCutSide {
     diagram: Py<PyFeynmanDiagram>,
     inner: DiagramCutSide,
@@ -782,7 +778,7 @@ impl PyDiagramCutSide {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_cross_section(loops=1)
@@ -791,7 +787,7 @@ impl PyDiagramCutSide {
 /// >>> factors = cut.propagators()
 /// >>> assert len(factors) == len(cut.edges)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "DiagramCut", module = "symbolica.community.feynkit", frozen)]
+#[pyclass(name = "DiagramCut", module = "symbolica.community.hepkit", frozen)]
 pub struct PyDiagramCut {
     diagram: Py<PyFeynmanDiagram>,
     inner: DiagramCut,
@@ -997,7 +993,7 @@ impl PyDiagramCut {
 /// physical final-state cuts are available separately through ``diagram.cuts``.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_cross_section(loops=1)
@@ -1010,7 +1006,7 @@ impl PyDiagramCut {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramThresholdCandidate",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen
 )]
 pub struct PyDiagramThresholdCandidate {
@@ -1092,7 +1088,7 @@ impl PyDiagramThresholdCandidate {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -1104,7 +1100,7 @@ impl PyDiagramThresholdCandidate {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "MomentumSignature",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1276,7 +1272,7 @@ impl PyMomentumSignature {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -1287,7 +1283,7 @@ impl PyMomentumSignature {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LoopMomentumBasis",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1868,7 +1864,7 @@ submit! {
 /// renders the graph. The methods below reuse this setup.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -1882,7 +1878,7 @@ submit! {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FeynmanDiagram",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     subclass,
     frozen,
     from_py_object
@@ -3065,7 +3061,7 @@ impl PyFeynmanDiagram {
     /// Reduce a vacuum graph after explicitly selecting its integrated momentum head:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -3103,7 +3099,7 @@ impl PyFeynmanDiagram {
     /// Construct scalar numerator graphs for a vacuum diagram:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
@@ -3825,7 +3821,7 @@ impl PyFeynmanDiagram {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
@@ -3837,7 +3833,7 @@ impl PyFeynmanDiagram {
 /// >>> independent = region.excise()
 /// >>> independent.validate()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Subgraph", module = "symbolica.community.feynkit", extends=PyFeynmanDiagram, frozen)]
+#[pyclass(name = "Subgraph", module = "symbolica.community.hepkit", extends=PyFeynmanDiagram, frozen)]
 pub struct PySubgraph {}
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]

@@ -1,19 +1,16 @@
 """Exercise optional expression routing in an installed FeynKit community host.
 
-Pass the community module name as the first argument (``hep`` for that host).
+The public API is provided by ``symbolica.community.hepkit``.
 """
 
-import importlib
 import json
-import sys
 from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community.tensor import Representation, TensorExpression, TensorName, dot
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
     model.process(

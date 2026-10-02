@@ -1,16 +1,13 @@
 """Check shared canonical exports and Python GC across physics views."""
 
 import gc
-import importlib
-import sys
 import weakref
 from pathlib import Path
 
 import linnet
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = (
     model.process(

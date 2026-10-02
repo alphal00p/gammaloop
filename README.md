@@ -44,7 +44,7 @@ replay, and the cost of the maintained scientific examples.
 ## Standalone FeynKit toolkit
 
 The `feynkit-*` crates expose reusable model loading, graph generation, CFF,
-kinematics, and tensor reduction through Rust and `symbolica.community.feynkit`.
+kinematics, and tensor reduction through Rust and `symbolica.community.hepkit`.
 Start with the [FeynKit manual](https://alphal00p.github.io/gammaloop/products/feynkit/latest/),
 its [Rust quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/rust/),
 or its [Python quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/python/).

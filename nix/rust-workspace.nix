@@ -472,7 +472,7 @@
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
+    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet.pyi" "docs/api/python"];
     clinnet = [
@@ -504,7 +504,7 @@
       "assets/gammalooplogo-light.svg"
       "crates/clinnet/CHANGELOG.typ"
       "crates/feynkit-py/examples/ufo_generation.py"
-      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"

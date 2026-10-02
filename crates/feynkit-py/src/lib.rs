@@ -1,4 +1,4 @@
-//! Python bindings installed as `symbolica.community.feynkit`.
+//! Python bindings installed as `symbolica.community.hepkit`.
 
 mod amplitude;
 mod cff;
@@ -187,11 +187,11 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     )?;
     let module = info
         .modules
-        .get_mut("symbolica.community.feynkit")
+        .get_mut("symbolica.community.hepkit")
         .ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "FeynKit did not contribute a symbolica.community.feynkit stub module",
+                "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
     // Type overrides preserve Rust default expressions verbatim in stubgen.
@@ -353,7 +353,7 @@ mod tests {
     const NORMALIZED_SCALAR_MODEL: &str = include_str!("../tests/fixtures/scalars_2p_3p.json");
 
     fn registered_module<'py>(py: Python<'py>) -> Bound<'py, PyModule> {
-        let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
         FeynkitModule::register_module(&module).unwrap();
         FeynkitModule::initialize(py).unwrap();
         module
@@ -382,7 +382,7 @@ mod tests {
             let info = stub_info().unwrap();
             let source = info
                 .modules
-                .get("symbolica.community.feynkit")
+                .get("symbolica.community.hepkit")
                 .unwrap()
                 .to_string();
             let locals = PyDict::new(py);
@@ -458,7 +458,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
 import sys
 
 assert "_gammaloop" not in sys.modules
-assert fk.__name__ == "symbolica.community.feynkit"
+assert fk.__name__ == "symbolica.community.hepkit"
 
 model = fk.Model.from_json(MODEL_JSON)
 assert model.name == "scalars"
@@ -597,7 +597,7 @@ def assert_feynkit_error(error_type, operation):
         operation()
     except error_type as error:
         assert isinstance(error, fk.FeynkitError)
-        assert type(error).__module__ == "symbolica.community.feynkit"
+        assert type(error).__module__ == "symbolica.community.hepkit"
     else:
         raise AssertionError(f"{error_type.__name__} was not raised")
 

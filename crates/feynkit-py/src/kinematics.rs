@@ -33,7 +33,7 @@ use symbolica::{
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> P = hep.Kinematics.external_momentum
 /// >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
 /// >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
@@ -42,7 +42,7 @@ use symbolica::{
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Kinematics",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -60,7 +60,7 @@ impl PyKinematics {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> s = hep.Kinematics.s
     #[classattr]
     fn s() -> PythonExpression {
@@ -71,7 +71,7 @@ impl PyKinematics {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> t = hep.Kinematics.t
     #[classattr]
     fn t() -> PythonExpression {
@@ -82,7 +82,7 @@ impl PyKinematics {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> u = hep.Kinematics.u
     #[classattr]
     fn u() -> PythonExpression {
@@ -93,7 +93,7 @@ impl PyKinematics {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Kinematics.external_momentum
     #[classattr]
     fn external_momentum() -> PythonExpression {
@@ -104,7 +104,7 @@ impl PyKinematics {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Kinematics.loop_momentum
     #[classattr]
     fn loop_momentum() -> PythonExpression {
@@ -477,7 +477,7 @@ submit! {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> incoming_fermion_helicity = hep.Helicity(-1)
 /// >>> incoming_fermion_helicity == hep.Helicity.MINUS
 /// True
@@ -489,7 +489,7 @@ submit! {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Helicity",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -647,13 +647,13 @@ impl PyHelicity {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> beam_axis = hep.Axis.Z
 /// >>> rotation = hep.Rotation.quarter_turn(beam_axis)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "Axis",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     eq,
     eq_int,
@@ -682,13 +682,13 @@ impl From<PyAxis> for Axis {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> algorithm = hep.JetAlgorithm.AntiKt
 /// >>> definition = hep.JetDefinition(algorithm, radius=0.4)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "JetAlgorithm",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     eq,
     eq_int,
@@ -729,7 +729,7 @@ impl From<JetAlgorithm> for PyJetAlgorithm {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
 /// >>> p = momentum
 /// >>> first = hep.ThreeMomentum(0.0, 1.0, 0.0)
@@ -747,7 +747,7 @@ impl From<JetAlgorithm> for PyJetAlgorithm {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ThreeMomentum",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1108,7 +1108,7 @@ impl PyThreeMomentum {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
 /// >>> p = momentum
 /// >>> first = hep.FourMomentum(5.0, 0.0, 5.0, 0.0)
@@ -1128,7 +1128,7 @@ impl PyThreeMomentum {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FourMomentum",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1520,13 +1520,13 @@ impl PyFourMomentum {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
 /// >>> rotated = rotation.apply_three(hep.ThreeMomentum(1.0, 0.0, 0.0))
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Rotation",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1672,7 +1672,7 @@ impl PyRotation {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> momentum = hep.FourMomentum(10.0, 0.0, 0.0, 0.0)
 /// >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
 /// >>> boosted = boost.apply(momentum)
@@ -1685,7 +1685,7 @@ impl PyRotation {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Boost",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1768,7 +1768,7 @@ impl PyBoost {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
 /// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
 /// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -1780,7 +1780,7 @@ impl PyBoost {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Jet",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1928,7 +1928,7 @@ impl PyJet {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
 /// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
 /// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -1938,7 +1938,7 @@ impl PyJet {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ClusteringResult",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -2118,7 +2118,7 @@ impl PyClusteringResult {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
 /// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
 /// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
@@ -2137,7 +2137,7 @@ impl PyClusteringResult {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "JetDefinition",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]

@@ -1,7 +1,7 @@
 """Physical state counts, transverse projectors and sewing in arbitrary dimensions."""
 
 from symbolica import E, S
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression, TensorName
 
 model = hep.Model.standard_model()

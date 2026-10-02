@@ -9,7 +9,7 @@ from functools import reduce
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 
 fixture = json.loads(
     (Path(__file__).parent / "fixtures/feyncalc_etac_topologies.json").read_text()

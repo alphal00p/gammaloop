@@ -3,7 +3,7 @@
 #let showcase-first-diagram = [
 = A first diagram
 
-This tour joins the model, generator, and graph APIs through `symbolica.community.feynkit`. Inspect the generation report, the diagram-wide factor, and the particle metadata on every edge.
+This tour joins the model, generator, and graph APIs through `symbolica.community.hepkit`. Inspect the generation report, the diagram-wide factor, and the particle metadata on every edge.
 
 The notebook runs in the browser when this site's notebook assets are available. Its cells
 are editable; run a changed cell to update the dependent results. The first load downloads

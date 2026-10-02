@@ -457,7 +457,7 @@ The #source-link(
 FeynKit renders the parsed diagram with a shared `RenderConfig`, including momentum labels
 from its stored loop momentum basis and interactive SVG hover and selection.
 Run it from a checkout using a Python environment with Marimo, Linnet, and the Symbolica host
-containing `symbolica.community.feynkit`:
+containing `symbolica.community.hepkit`:
 `python -m marimo edit crates/linnet-py/examples/physics_render_settings.py`.
 The #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook")
 previews the force solver as it runs. Its DOT editor and collapsible sliders restart the

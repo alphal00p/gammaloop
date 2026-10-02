@@ -160,7 +160,7 @@ rather than through GammaLoop's application state:
     is enabled by default and raw UFO loading uses the opt-in `ufo`
     feature],
     [`feynkit-py`], [Symbolica community binding for
-    `symbolica.community.feynkit`, including generated type stubs and
+    `symbolica.community.hepkit`, including generated type stubs and
     direct Symbolica expression conversion],
   )]
   , kind: table
@@ -190,7 +190,7 @@ Rust clients load the canonical `Model`, construct a generation request,
 and receive finalized `FeynmanDiagram` values. Enabling `feynkit/ufo`
 exposes an attached-interpreter loader that returns the same model type
 directly. Python clients use this ownership flow through
-`symbolica.community.feynkit`; the curated PyO3 API does not expose
+`symbolica.community.hepkit`; the curated PyO3 API does not expose
 GammaLoop runtime details.
 
 The canonical model retains exact rational electric charges and optional

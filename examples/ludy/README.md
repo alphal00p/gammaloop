@@ -8,6 +8,5 @@ reduction**, with the full-integration gaps recorded in
 python examples/ludy/compute.py --check --output /tmp/ludy.json
 ```
 
-Use a current Symbolica host with FeynKit, Spenso and Idenso. Hosts that package
-FeynKit as `symbolica.community.hep` need `--module hep`.
+Use a current Symbolica host with `symbolica.community.hepkit`, Spenso and Idenso.
 The private reference checkout is not required to run the port.

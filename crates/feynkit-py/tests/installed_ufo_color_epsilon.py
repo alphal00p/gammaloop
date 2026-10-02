@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
 source = json.loads(

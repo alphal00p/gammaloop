@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 
 root = Path(__file__).resolve().parents[3]
 model = hep.UfoLoader(simplify_model=False).load(root / "assets/models/ufo/sm").model

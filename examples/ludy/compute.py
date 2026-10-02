@@ -11,17 +11,16 @@ from symbolica.community.tensor import (
 )
 
 import argparse
-import importlib
 import json
 from itertools import combinations
 from math import factorial, prod
 from pathlib import Path
 
 from symbolica import E, Expression, S
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import Representation, TensorExpression, TensorName, dot
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--module", choices=("feynkit", "hep"), default="feynkit")
 parser.add_argument("--process", choices=("dy", "dis", "both"), default="both")
 parser.add_argument(
     "--check", action="store_true", help="compare separate reference oracles"
@@ -30,7 +29,6 @@ parser.add_argument(
     "--output", type=Path, help="write scalar numerators, cuts and integral indices"
 )
 args = parser.parse_args()
-fk = importlib.import_module(f"symbolica.community.{args.module}")
 directory = Path(__file__).resolve().parent
 inputs = json.loads((directory / "inputs.json").read_text())
 d, kk, kp1, kp2, p1sq, p2sq, p12, msq, x, Qsq = (

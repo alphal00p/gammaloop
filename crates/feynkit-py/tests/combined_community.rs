@@ -14,7 +14,7 @@ use symbolica::{
     parser::ParseSettings,
 };
 
-const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/feynkit/__init__.py");
+const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
@@ -51,28 +51,25 @@ where
 
 fn import_wrapper<'py>(
     py: Python<'py>,
-    community: &Bound<'py, PyModule>,
-    name: &str,
+    parent: &Bound<'py, PyModule>,
+    full_name: &str,
     source: &str,
 ) -> PyResult<Bound<'py, PyModule>> {
-    let full_name = format!("symbolica.community.{name}");
-    let wrapper = PyModule::new(py, &full_name)?;
-    wrapper.setattr("__package__", &full_name)?;
+    let wrapper = PyModule::new(py, full_name)?;
+    wrapper.setattr("__package__", full_name)?;
     wrapper.setattr("__path__", PyList::empty(py))?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item(&full_name, &wrapper)?;
+        .set_item(full_name, &wrapper)?;
     let source = CString::new(source).expect("community wrapper contains a null byte");
     py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;
-    community.add(name, &wrapper)?;
-    PyModule::import(py, &full_name)
+    parent.add(full_name.rsplit('.').next().unwrap(), &wrapper)?;
+    PyModule::import(py, full_name)
 }
 
-fn remove_wrapper(py: Python<'_>, community: &Bound<'_, PyModule>, name: &str) -> PyResult<()> {
-    py.import("sys")?
-        .getattr("modules")?
-        .del_item(format!("symbolica.community.{name}"))?;
-    community.delattr(name)
+fn remove_wrapper(py: Python<'_>, parent: &Bound<'_, PyModule>, full_name: &str) -> PyResult<()> {
+    py.import("sys")?.getattr("modules")?.del_item(full_name)?;
+    parent.delattr(full_name.rsplit('.').next().unwrap())
 }
 
 fn tensor_diagram(
@@ -117,17 +114,17 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
 
-        for order in [["feynkit", "tensor"], ["tensor", "feynkit"]] {
+        for order in [["hepkit", "tensor"], ["tensor", "hepkit"]] {
             for name in order {
-                let source = match name {
-                    "feynkit" => FEYNKIT_WRAPPER,
-                    "tensor" => SPENSO_WRAPPER,
+                let (parent, full_name, source) = match name {
+                    "hepkit" => (&community, "symbolica.community.hepkit", FEYNKIT_WRAPPER),
+                    "tensor" => (&community, "symbolica.community.tensor", SPENSO_WRAPPER),
                     _ => unreachable!(),
                 };
-                import_wrapper(py, &community, name, source)?;
+                import_wrapper(py, parent, full_name, source)?;
             }
 
-            let feynkit = PyModule::import(py, "symbolica.community.feynkit")?;
+            let feynkit = PyModule::import(py, "symbolica.community.hepkit")?;
             let spenso = PyModule::import(py, "symbolica.community.tensor")?;
             let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
             let tensor_numerator = Atom::parse(
@@ -374,8 +371,8 @@ assert type(free_tensor_reduced) is core.Expression
             .unwrap();
             py.run(&assertions, Some(&locals), Some(&locals))?;
 
-            remove_wrapper(py, &community, "feynkit")?;
-            remove_wrapper(py, &community, "tensor")?;
+            remove_wrapper(py, &community, "symbolica.community.hepkit")?;
+            remove_wrapper(py, &community, "symbolica.community.tensor")?;
         }
         Ok(())
     })

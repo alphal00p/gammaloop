@@ -7,7 +7,7 @@ products, partial-fractions dependent propagators, finds verified momentum shift
 and rewrites scalar numerators
 in propagator variables. The Rust
 implementation belongs to `feynkit-graph`; Python exposes the same implementation
-through `symbolica.community.feynkit`. Symbolica supplies the rank calculation
+through `symbolica.community.hepkit`. Symbolica supplies the rank calculation
 and exact linear solve.
 
 Leave a family as the final expression in a notebook cell to see its ordered
@@ -51,7 +51,7 @@ an installed workflow.
 // docs-example: compile feynkit-diagram-integral-family
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 model = fk.Model("crates/feynkit-py/tests/fixtures/scalars_2p_3p.json")
 diagrams = model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False).diagrams
@@ -104,7 +104,7 @@ them with `diagram.propagator_family()`, partial-fraction them, then call
 // docs-example: compile feynkit-integral-family-bubble
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 D, k, p, s, m1sq, m2sq, d1, d2 = S(
     "family_docs::D", "family_docs::k", "family_docs::p", "s",
@@ -163,7 +163,7 @@ relations are handled, including repeated poles.
 // docs-example: compile feynkit-integral-family-partial-fractions
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, m2 = S("apart_docs::k", "m2")
 kin = fk.Kinematics()
@@ -207,7 +207,7 @@ and exact partial fractions with fractional quadratic coefficients.
 // docs-example: compile feynkit-integral-family-mapping
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, l, p, s, m1sq, m2sq = S("map_docs::k", "map_docs::l", "map_docs::p", "s", "m1sq", "m2sq")
 kin = fk.Kinematics(momenta=[k, l, p]).with_scalar_product(p, p, s)
@@ -260,7 +260,7 @@ For nonsingular matrices this equals `U*(Q.M^-1.Q - J)`.
 // docs-example: compile feynkit-integral-family-symanzik
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, p, s, m1sq, m2sq, x1, x2 = S("uf_docs::k", "uf_docs::p", "s", "m1sq", "m2sq", "x1", "x2")
 kin = fk.Kinematics(momenta=[k, p]).with_scalar_product(p, p, s)
@@ -312,7 +312,7 @@ fixed-external-momentum search finds no shift. It appears as `topos4` in
 // docs-example: compile feynkit-integral-family-parametric-mapping
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, l, p, q, s, m2 = S("uf_map_docs::k", "uf_map_docs::l", "uf_map_docs::p", "uf_map_docs::q", "s", "m2")
 xs = list(S("x1", "x2", "x3", "x4", "x5"))
@@ -378,7 +378,7 @@ exchanges and integration prescriptions are not inferred.
 // docs-example: compile feynkit-integral-family-grouping
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, l, p, s = S("group_docs::k", "group_docs::l", "group_docs::p", "s")
 kin = fk.Kinematics(momenta=[k, l, p]).with_scalar_product(p, p, s)
@@ -413,7 +413,7 @@ certificate. This restriction is stronger than the algebraic `symanzik` API.
 // docs-example: compile feynkit-integral-family-scaleless-sector
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, l, m2, M2, x, y, z = S("scale_docs::k", "scale_docs::l", "m2", "M2", "x", "y", "z")
 kin = fk.Kinematics(momenta=[k, l])
@@ -461,7 +461,7 @@ an additional contour argument.
 // docs-example: compile feynkit-integral-family-transverse-sector
 ```python
 from symbolica import E, S
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 k, q, p, s, m2, delta = S("transverse_docs::k", "transverse_docs::q", "transverse_docs::p", "s", "m2", "delta")
 kin = fk.Kinematics(momenta=[k, q, p]).with_scalar_product(p, p, s)

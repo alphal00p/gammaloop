@@ -9,7 +9,7 @@ from itertools import permutations, product
 from pathlib import Path
 
 from symbolica import core
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(

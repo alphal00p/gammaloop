@@ -10,8 +10,8 @@ projection, topology mappings and bounded native IBP produce the bare poles.
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import feynkit as hep
-from symbolica.community.feynkit import oneloop
+from symbolica.community import hepkit as hep
+from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")

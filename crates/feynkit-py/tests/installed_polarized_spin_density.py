@@ -8,7 +8,7 @@ initial-state spin average belongs to a selected state.
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression, TensorName
 
 # The fixture declares a nonzero tau mass; its muon mass parameter is zero.

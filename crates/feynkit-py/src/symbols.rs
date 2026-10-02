@@ -15,12 +15,12 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import hepkit as hep
 /// >>> Q = hep.Symbols.edge_momentum
 /// >>> edge_momentum = Q(0)
 /// >>> mass = hep.Model.standard_model().particle("e-").mass
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Symbols", module = "symbolica.community.feynkit", frozen)]
+#[pyclass(name = "Symbols", module = "symbolica.community.hepkit", frozen)]
 pub struct PySymbols;
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -31,7 +31,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.edge_momentum
     #[classattr]
     fn edge_momentum() -> PythonExpression {
@@ -42,7 +42,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.denominator
     #[classattr]
     fn denominator() -> PythonExpression {
@@ -53,7 +53,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.dimension
     #[classattr]
     fn dimension() -> PythonExpression {
@@ -64,7 +64,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.half_edge
     #[classattr]
     fn half_edge() -> PythonExpression {
@@ -75,7 +75,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.polarization
     #[classattr]
     fn polarization() -> PythonExpression {
@@ -86,7 +86,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.polarization_conjugate
     #[classattr]
     fn polarization_conjugate() -> PythonExpression {
@@ -97,7 +97,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.ufo_metric
     #[classattr]
     fn ufo_metric() -> PythonExpression {
@@ -108,7 +108,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.ufo_index
     #[classattr]
     fn ufo_index() -> PythonExpression {
@@ -119,7 +119,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> reference = hep.Symbols.ufo_momentum
     #[classattr]
     fn ufo_momentum() -> PythonExpression {
@@ -129,7 +129,7 @@ impl PySymbols {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hep
+    /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
     /// >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
     #[classattr]

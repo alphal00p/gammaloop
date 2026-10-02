@@ -1,13 +1,10 @@
 """Exercise native Linnest highlights in an installed FeynKit host with typst-py."""
 
-import importlib
-import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
     model.process(

@@ -4,14 +4,9 @@ Reference algebra: https://feyncalc.github.io/FeynCalcBookDev/ApartFF.html
 Momentum shifts and scaleless-integral removal are deliberately separate steps.
 """
 
-import importlib
-import sys
-
 from symbolica import E, S
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
 
 k, p, s = S("apart_check::k", "apart_check::p", "s")
 kin = fk.Kinematics(momenta=[k, p]).with_scalar_product(p, p, s)

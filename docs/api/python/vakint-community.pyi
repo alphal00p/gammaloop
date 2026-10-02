@@ -20,7 +20,7 @@ class Vakint:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> vakint is not None
         True
@@ -69,7 +69,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> result = vakint.numerical_result_from_expression(
         ...     E("vakint::ε^-2 + 1 + 0.12*vakint::ε^-1")
@@ -91,7 +91,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> evaluated = E(
         ...     "muvsq*vakint::ε^-1 + mursq",
@@ -123,7 +123,7 @@ class Vakint:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import Vakint, VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintNumericalResult
         >>> vakint = Vakint(evaluation_order=[])
         >>> result = VakintNumericalResult([
         ...     (-1, (2.0, 0.0)),
@@ -141,7 +141,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> integral = E(
         ...     "topo(prop(18,edge(7,7),k(99),muvsq,1))",
@@ -167,7 +167,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> integral = E(
         ...     "k(1,101)*k(1,102)*topo(prop(1,edge(1,1),k(1),muvsq,1))",
@@ -191,7 +191,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint, VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
         >>> vakint = Vakint(
         ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
         ... )
@@ -221,7 +221,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import Vakint, VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
         >>> vakint = Vakint(
         ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
         ... )
@@ -262,7 +262,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> alphaloop_method = VakintEvaluationMethod.new_alphaloop_method()
         >>> "AlphaLoop" in str(alphaloop_method)
         True
@@ -275,7 +275,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> matad_method = VakintEvaluationMethod.new_matad_method(
         ...     expand_masters=True,
         ...     susbstitute_masters=True,
@@ -311,7 +311,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> fmft_method = VakintEvaluationMethod.new_fmft_method(
         ...     expand_masters=True,
         ...     susbstitute_masters=True,
@@ -340,7 +340,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(
         ...     quiet=True,
         ...     relative_precision=1e-7,
@@ -398,7 +398,7 @@ class VakintExpression:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import VakintExpression
+        >>> from symbolica.community.hepkit.vakint import VakintExpression
         >>> integral = VakintExpression(E('''
         ...     k(1,11)*k(1,11)
         ...     *topo(prop(1,edge(1,1),k(1),muvsq,1))
@@ -414,7 +414,7 @@ class VakintExpression:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.hep.vakint import VakintExpression
+        >>> from symbolica.community.hepkit.vakint import VakintExpression
         >>> integral = E('''
         ...     (
         ...         k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -452,7 +452,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -472,7 +472,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -491,7 +491,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -516,7 +516,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.hep.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result1 = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ... ])

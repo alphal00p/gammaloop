@@ -4,7 +4,7 @@ import json
 from typing_extensions import assert_type
 
 from symbolica import E, Expression, S
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 model = hep.Model.standard_model()

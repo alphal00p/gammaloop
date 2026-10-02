@@ -1,14 +1,10 @@
 """Exercise constructor selectors against an installed community extension."""
 
-import importlib
-import sys
-
 from symbolica import E, S
 from symbolica.community.tensor import Representation, TensorName
 
-fk = importlib.import_module(
-    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
-)
+from symbolica.community import hepkit as fk
+
 D, mu = S("selector_test::D", "selector_test::mu")
 mink, dot = S("spenso::mink", "spenso::dot")
 lorentz = Representation.mink(D)

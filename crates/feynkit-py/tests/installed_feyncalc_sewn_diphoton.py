@@ -6,7 +6,7 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa
 """
 
 from symbolica import E, Replacement, S
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()

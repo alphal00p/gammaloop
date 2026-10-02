@@ -72,7 +72,7 @@ examples. Compact cross-sections pair initial-state legs with `is_cut` and speci
 `final_state="mu-,mu+"` to select matching physical cuts.
 
 For a native session, use a Python environment with Marimo, Linnet, and the Symbolica host
-containing `symbolica.community.feynkit`:
+containing `symbolica.community.hepkit`:
 
 ```console
 python -m marimo edit crates/linnet-py/examples/physics_render_settings.py

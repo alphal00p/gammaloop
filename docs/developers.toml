@@ -711,7 +711,7 @@ anchor = "pub struct VakintWrapper {"
 # No runtime impact 2026-09-16: generated API prose now distinguishes native
 # tensor reduction from backend evaluation and its deferred tool validation.
 # Reviewed 2026-09-23: Native FeynKit reduction remains the default and FORM remains an explicit backend; external evaluation ownership is unchanged.
-# Reviewed 2026-09-29: the note records the hep.vakint namespace and cumulative
+# Reviewed 2026-09-29: the note records the symbolica.community.hepkit.vakint namespace and cumulative
 # citation hook; wrappers still delegate evaluation and error conversion to Rust.
 digest = "8c4ae30cd8255b79da4f501833c84e8a16e6de59"
 

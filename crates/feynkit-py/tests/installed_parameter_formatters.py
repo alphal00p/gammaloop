@@ -5,7 +5,8 @@ import xml.etree.ElementTree as ET
 
 import typst
 from symbolica import E
-from symbolica.community import feynkit as hep, tensor as spenso
+from symbolica.community import hepkit as hep
+from symbolica.community import tensor as spenso
 
 model = hep.Model.standard_model()
 mass = model.particle("e-").mass

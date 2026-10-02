@@ -166,7 +166,7 @@ prevents a partially substituted expression from being mistaken for a fully nume
 ])
 
 #boundary("Python is an embedded community module", [
-  `symbolica.community.hep.vakint` is registered into a Symbolica installation; it is not a
+  `symbolica.community.hepkit.vakint` is registered into a Symbolica installation; it is not a
   standalone PyPI package. Constructing its `Vakint` class validates the configured backends.
   Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec.
 ])
@@ -208,7 +208,7 @@ projector tables cover ranks through 10:
 // docs-example: compile
 ```python
 from symbolica import E
-from symbolica.community.hep.vakint import Vakint
+from symbolica.community.hepkit.vakint import Vakint
 
 vakint = Vakint()
 integral = E(

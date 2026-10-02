@@ -126,7 +126,7 @@ for c in sm.all_couplings:
 print("Parameter and coupling expressions also agree at nonzero CKM/Yukawa inputs.")
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 
 builtin = fk.Model.standard_model()
 disk = fk.Model(ROOT / "assets/models/json/sm/sm.json")

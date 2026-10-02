@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 from symbolica import E, S, Symbol
-from symbolica.community import feynkit as hep
+from symbolica.community import hepkit as hep
 from symbolica.community.tensor import Representation, TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")

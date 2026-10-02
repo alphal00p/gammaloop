@@ -150,7 +150,7 @@ class FactorizedContractionTests(unittest.TestCase):
         )
 
     def test_fk0032_reduces_color_and_lorentz_components_without_expansion(self):
-        from symbolica.community.hep import Model
+        from symbolica.community.hepkit import Model
 
         # Register the generated momentum and compound-index heads. The saved
         # original numerator avoids generating all 4970 four-loop diagrams.
