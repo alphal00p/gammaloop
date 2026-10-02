@@ -54,25 +54,13 @@ The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
 
-Generation supplies all requested three-dimensional representations in
-their configured order to one orchestrator call. Each backend unfolds its
-forest once and computes the requested local four-dimensional Taylor terms and
-integrated Vakint counterterms during the first representation pass.
-Subsequent passes reuse those values and rebuild the cut-dependent 3D
-projection and final integrand for the selected representation. Each
-completed result is extracted before the next pass replaces the transient
-cut store. `compare` performs this shared preparation independently for
-each backend and compares the result for every requested representation.
-
-One bounded projection cache remains local to the graph and backend across
-all requested representations, so equal canonical Taylor sectors are reused.
-Exact source and native-generation cache identities retain the full generation
-options, including the representation and occurrence-local bounds. Each pass
-reports only its own additional shared preparation time. Cached
-payloads retain their certified numerator assignment; reuse never turns
-independent Taylor sources into one capacity or coefficient sum. An LTD
-source contributes its complete residue sum once, with its own numerator
-maps, rather than once per possible production-orientation host.
+Comparison normalization sets the Lorentz dimension to four, reversibly cooks
+index syntax for checked `SymbolicTensor` admission, reduces colour identities,
+and contracts metrics and vector connections with chain and trace collection
+disabled. It then converts scalar-product notation, resolves aliases, and
+restores the original index encoding. Admission and normalization errors
+propagate to the comparison caller. No Dirac or epsilon identity is enabled by
+this normalization, and coefficient factorization is retained.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>

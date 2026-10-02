@@ -1,16 +1,18 @@
-= Network simplification status
+= Historical network simplification investigation
 <network-based-symbolic-simplification-status>
 #quote(block: true)[
 #strong[Reviewed:] 2026-08-17 against `c9f4e32acd2c`
 
-#strong[Lifecycle:] Investigation record. Measurements remain
-point-in-time evidence; the settings and tracing controls below were
-rechecked against the current implementation.
+#strong[Lifecycle:] Archived investigation of the retired network-based
+symbolic simplifier. The measurements, commands, settings and tracing controls
+below describe the August implementation; they are not available in the
+consolidated API. The replacement is documented in
+#link("schoonschip-net-parsing.typ")[the shared tensor contraction architecture].
 ]
 
 == Scope
 <scope>
-This note summarizes the current state of the `idenso` network-based
+This note records the August 2026 state of the former `idenso` network-based
 Schoonschip-style symbolic simplification path, with emphasis on vertex
 algebra benchmarks and the knobs available for further investigation.
 
@@ -22,7 +24,7 @@ The relevant implementation is mainly in:
 - `crates/idenso/src/shorthands/schoonschip/utils.rs`
 - `crates/idenso/benches/vertex_algebra_once.rs`
 
-== Current Model
+== Historical Model
 <current-model>
 The network simplifier parses a Symbolica expression into a tensor
 network of `SymbolicTensor`s, executes contractions in a configurable
@@ -49,7 +51,7 @@ because the network already knows the contracted slot and can rewrite
 the target side directly. These are not optional shortcuts; they are the
 mechanism that lets the network path avoid expanding one-sided sums.
 
-== Current Direct Sum Contraction Path
+== Historical Direct Sum Contraction Path
 <current-direct-sum-contraction-path>
 For sum-by-sum contractions, the current path is:
 
@@ -74,7 +76,7 @@ The fallback is the expensive path. It explicitly distributes the
 smaller sum side, then runs network simplification again on the expanded
 boundary.
 
-== Current Findings
+== Findings at the Recorded Revision
 <current-findings>
 The direct replacement path works for genuinely local boundaries. A
 small MWE where compact cleanup leaves `mu2` but full expansion removes

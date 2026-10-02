@@ -37,7 +37,6 @@
     amplitude-mode: amplitude-mode,
     cross-section-mode: cross-section-mode,
     additional-data: (
-      steps: 1200,
       seed: 42,
     ),
   )
