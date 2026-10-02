@@ -74,8 +74,8 @@ Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second nati
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
 Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
-source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
-another Spynso binary.
+source revision. Typst, its fonts, and offline packages are embedded in the Rust
+extension. No Python compiler package is required.
 
 === Pyodide builds
 
@@ -173,7 +173,7 @@ current executable graph in notebooks, using Linnest's operator and typed-leaf s
 The renderer passes native node, edge, and half-edge identities directly to Linnest's
 graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
-Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
+Typst entrypoint; both accept configuration dictionaries or optional standalone `linnet.RenderConfig` values, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 Its execution summary uses `network.status` to show remaining nodes, operations,
 contractions, and ready operations. “Graph reduced” means no graph work remains;
@@ -811,12 +811,7 @@ pslash = indexed.contract()
 pslash.formatted()
 ```
 
-Install the optional compiler to render HTML and SVG:
-
-// docs-example: syntax
-```sh
-pip install 'gammaloop[typst-display]'
-```
+HTML and SVG rendering use the embedded compiler:
 
 // docs-example: compile
 ```python
@@ -830,9 +825,8 @@ rich = trace.formatted(settings=compact)
 ```
 
 Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
-when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
-LaTeX or text. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+Wasm plugin. Explicit `to_html` and `to_svg` calls report compilation errors.
+Notebook `_repr_html_` and `formatted()` retain their LaTeX or text fallback on rendering errors. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
 the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
 rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
 needed instead of tensor-aware notation.

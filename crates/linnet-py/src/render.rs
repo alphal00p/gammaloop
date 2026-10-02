@@ -5,13 +5,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use linnest::{
-    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
+    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec, encode_graph_spec_bytes,
 };
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
+use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
 use rust_embed::RustEmbed;
 use walkdir::WalkDir;
 
@@ -20,8 +20,8 @@ use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
 use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 use crate::typst::{
-    default_render_config, evaluate_selector, render_config_transport, typst_string,
-    RenderConfigTransport, SelectorCallbacks, TypstModuleSource,
+    RenderConfigTransport, SelectorCallbacks, TypstModuleSource, default_render_config,
+    evaluate_selector, render_config_transport, typst_string,
 };
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
@@ -780,7 +780,13 @@ impl PreparedRender {
             fs::write(&output, self.svg(py)?)
                 .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         } else {
-            compile_typst(py, self, Some(&output), format)?;
+            let pages = self.compile(format)?;
+            let [page] = pages.as_slice() else {
+                return Err(PyValueError::new_err(
+                    "file output requires exactly one page",
+                ));
+            };
+            fs::write(&output, page).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         }
         Ok(output)
     }
@@ -798,28 +804,20 @@ impl PreparedRender {
     }
 
     /// Compile the prepared project to one SVG document per page.
-    pub fn svg_pages(&self, py: Python<'_>) -> PyResult<Vec<String>> {
-        let rendered = compile_typst(py, self, None, "svg")?;
-        let pages = if let Ok(bytes) = rendered.cast::<PyBytes>() {
-            vec![bytes.as_bytes().to_vec()]
-        } else if let Ok(pages) = rendered.cast::<PyList>() {
-            pages
-                .iter()
-                .map(|page| Ok(page.cast_into::<PyBytes>()?.as_bytes().to_vec()))
-                .collect::<PyResult<_>>()?
-        } else {
-            return Err(PyRuntimeError::new_err(
-                "typst.compile(format='svg') did not return SVG bytes",
-            ));
-        };
-        pages
+    pub fn svg_pages(&self, _py: Python<'_>) -> PyResult<Vec<String>> {
+        self.compile("svg")?
             .into_iter()
             .map(|bytes| {
-                String::from_utf8(bytes).map_err(|error| {
-                    PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
-                })
+                String::from_utf8(bytes).map_err(|error| PyRuntimeError::new_err(error.to_string()))
             })
             .collect()
+    }
+
+    /// Compile with the embedded Rust compiler and offline package store.
+    pub fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
+        typst_renderer::Document::new(&self.root, &self.package_store, &self.files)
+            .compile(format)
+            .map_err(PyRuntimeError::new_err)
     }
 }
 
@@ -834,7 +832,7 @@ impl PreparedRender {
     /// A template or selectors require Graph.prepare_render instead.
     #[staticmethod]
     #[pyo3(name = "from_sources", signature = (sources, *, config=None))]
-    fn from_source_files(
+    pub fn from_source_files(
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "builtins.dict[builtins.str, builtins.bytes]", imports=("builtins")))]
         sources: BTreeMap<String, Vec<u8>>,
@@ -843,7 +841,15 @@ impl PreparedRender {
         >,
     ) -> PyResult<Self> {
         let base = default_render_config(py)?;
-        let transport = render_config_transport(py, &base, config, &PyDict::new(py))?;
+        let config = config
+            .map(|config| Bound::new(py, crate::RenderConfig::from_authored_config(config)?))
+            .transpose()?;
+        let transport = render_config_transport(
+            py,
+            &base,
+            config.as_ref().map(Bound::as_any),
+            &PyDict::new(py),
+        )?;
         if transport.template.is_some()
             || transport.selectors.node.is_some()
             || transport.selectors.edge.is_some()
@@ -911,33 +917,6 @@ fn output_format(output: &Path) -> PyResult<&'static str> {
     }
 }
 
-fn compile_typst<'py>(
-    py: Python<'py>,
-    prepared: &PreparedRender,
-    output: Option<&Path>,
-    format: &str,
-) -> PyResult<Bound<'py, PyAny>> {
-    let kwargs = PyDict::new(py);
-    let input = PyDict::new(py);
-    for (path, contents) in &prepared.files {
-        input.set_item(path, PyBytes::new(py, contents))?;
-    }
-    kwargs.set_item("input", input)?;
-    kwargs.set_item("root", &prepared.root)?;
-    kwargs.set_item("format", format)?;
-    if let Some(output) = output {
-        kwargs.set_item("output", output.to_path_buf())?;
-    }
-    kwargs.set_item("package_path", &prepared.package_store)?;
-    kwargs.set_item("package_cache_path", &prepared.package_store)?;
-    if let Some(paths) = env::var_os("TYPST_FONT_PATHS") {
-        kwargs.set_item("font_paths", env::split_paths(&paths).collect::<Vec<_>>())?;
-    }
-    PyModule::import(py, "typst")?
-        .getattr("compile")?
-        .call((), Some(&kwargs))
-}
-
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
@@ -994,20 +973,73 @@ mod tests {
     use super::*;
 
     #[test]
+    fn compiled_graph_inspection_preserves_native_drawing() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let linnet = PyModule::new(py, "linnet")?;
+            crate::linnet_py(&linnet)?;
+            py.import("sys")?
+                .getattr("modules")?
+                .set_item("linnet", &linnet)?;
+            let source =
+                std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
+            let fixture = PyModule::from_code(
+                py,
+                &source,
+                c"test_svg_interaction.py",
+                c"test_svg_interaction",
+            )?;
+            let case = fixture.getattr("SvgInteractionTests")?.call0()?;
+            case.call_method0("setUp")?;
+            let prepared = case.getattr("graph")?.call_method0("prepare_render")?;
+            let prepared = prepared.extract::<PyRef<'_, PreparedRender>>()?;
+            let pages = prepared.svg_pages(py)?;
+            assert_eq!(pages.len(), 1);
+            case.call_method1(
+                "assert_native_drawing_unchanged",
+                (&pages[0], prepared.svg(py)?),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn compiles_bundled_mitex_without_python_or_downloads() {
+        let sources = BTreeMap::from([(
+            "main.typ".to_owned(),
+            br##"#set page(width: auto, height: auto)
+#import "@preview/mitex:0.2.6": mi
+#mi("\\frac{x^2}{1+y}")"##
+                .to_vec(),
+        )]);
+        let prepared = PreparedRender::from_sources(sources).unwrap();
+        let pages = prepared.compile("svg").unwrap();
+        assert_eq!(pages.len(), 1);
+        assert!(std::str::from_utf8(&pages[0]).unwrap().contains("<svg"));
+        assert!(prepared.compile("pdf").unwrap()[0].starts_with(b"%PDF"));
+        assert!(prepared.compile("png").unwrap()[0].starts_with(b"\x89PNG"));
+    }
+
+    #[test]
     fn extracts_typst_packages_for_offline_rendering() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(prepared
-            .package_store
-            .join("preview/cetz/0.5.1/typst.toml")
-            .is_file());
+        assert!(
+            prepared
+                .package_store
+                .join("preview/cetz/0.5.1/typst.toml")
+                .is_file()
+        );
     }
 
     #[test]
     fn embeds_linnest_and_kurvst_with_their_wasm_modules() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(prepared
-            .files
-            .contains_key("crates/linnest/typst/src/graph.typ"));
+        assert!(
+            prepared
+                .files
+                .contains_key("crates/linnest/typst/src/graph.typ")
+        );
         assert!(
             fs::metadata(prepared.root.join("crates/linnest/typst/linnest.wasm"))
                 .unwrap()
@@ -1020,9 +1052,11 @@ mod tests {
                 .len()
                 > 0
         );
-        assert!(prepared
-            .files
-            .contains_key("crates/kurvst/typst/src/lib.typ"));
+        assert!(
+            prepared
+                .files
+                .contains_key("crates/kurvst/typst/src/lib.typ")
+        );
         assert!(
             fs::metadata(prepared.root.join("crates/kurvst/typst/kurvst.wasm"))
                 .unwrap()

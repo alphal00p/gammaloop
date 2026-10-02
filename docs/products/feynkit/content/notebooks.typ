@@ -29,8 +29,9 @@ preserve these labels; parameters without labels keep their ordinary names.
 
 Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
 `to_linnest()` method returns complete Typst source; it does not compile a figure. `render()`,
-`to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.
-Rendering uses Linnet’s Python preparation and compilation pipeline. `render()` replaces
+`to_html()`, `_repr_svg_()`, and `_repr_html_()` use the embedded Rust Typst compiler. Rendering needs no Python Linnet or Typst
+package. The compiler, fonts, MiTeX, and graph templates ship inside the extension;
+NumPy is the combined notebook wheel’s only Python dependency. `render()` replaces
 the earlier diagram `to_svg()` method and returns SVG text, including hover information.
 SVG figures have a transparent background. Their palette follows the browser's
 light/dark preference when opened separately; inline figures also follow explicit
@@ -66,11 +67,6 @@ Linnest exposes `internal-label-length-scale` and `external-label-length-scale`
 For example, `just draw --input internal-label-length-scale=0.8` increases only
 internal spacing; `--input external-label-length-scale=0.6` controls external labels.
 
-// docs-example: syntax
-```sh
-python -m pip install "linnet==0.1.0" "typst>=0.15,<0.16"
-```
-
 Save the resulting SVG or leave the diagram as the last value in a notebook cell:
 
 // docs-example: compile
@@ -82,7 +78,8 @@ Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
 diagram
 ```
 
-Rendering controls use Linnet's existing typed groups. `layouts` contains solver and
+Rendering controls accept nested Python dictionaries. Standalone Linnet configurations
+remain usable when that optional package is installed. `layouts` contains solver and
 spacing settings, `drawing` controls the canvas and geometry, and `style` supplies
 node/edge styling. Physics controls belong in `template_options`, using the same
 hyphenated names as `just draw --input`: `show-particle`, `show-edge-index`,
@@ -96,9 +93,7 @@ To distinguish the source and sink halves by colour:
 
 // docs-example: compile
 ```python
-from linnet import RenderConfig
-
-settings = RenderConfig(template_options={"orientation-split": True})
+settings = {"template_options": {"orientation-split": True}}
 svg = diagram.render(config=settings)
 ```
 
@@ -107,20 +102,18 @@ Typst and `just draw --input orientation-split=true`.
 
 // docs-example: compile
 ```python
-from linnet import DrawOptions, LayoutOptions, RenderConfig
-
-settings = RenderConfig(
-    layouts=LayoutOptions(
-        seed=42,
-        steps=100,
-        epochs=30,
-        external_centroid_bias=1.5,
-        internal_label_length_scale=0.8,
-        external_label_length_scale=0.7,
-    ),
-    drawing=DrawOptions(unit=1.5),
-    template_options={"show-particle": False},
-)
+settings = {
+    "layouts": {
+        "seed": 42,
+        "steps": 100,
+        "epochs": 30,
+        "external_centroid_bias": 1.5,
+        "internal_label_length_scale": 0.8,
+        "external_label_length_scale": 0.7,
+    },
+    "drawing": {"unit": 1.5},
+    "template_options": {"show-particle": False},
+}
 Path("momenta.svg").write_text(
     diagram.render(momenta=True, config=settings), encoding="utf-8"
 )

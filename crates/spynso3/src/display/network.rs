@@ -7,7 +7,7 @@ use crate::{
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
     prelude::*,
-    types::{PyBytes, PyDict, PyList},
+    types::{PyDict, PyList},
 };
 use spenso::{
     network::{
@@ -374,32 +374,29 @@ impl SpensoNet {
         py: Python<'py>,
         config: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let linnet = py.import("linnet")?;
         let options = PyDict::new(py);
         options.set_item("network", self.render_snapshot(py)?)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("template_options", options)?;
-        let mut effective = linnet.getattr("RenderConfig")?.call((), Some(&kwargs))?;
+        let mut effective = linnet_py::RenderConfig::new(Some(&kwargs))?;
         if let Some(config) = config {
-            effective = config.call_method1("overlay", (effective,))?;
+            effective = linnet_py::RenderConfig::from_authored_config(config)?.merged(&effective);
         }
-        let sources = PyDict::new(py);
-        sources.set_item(
-            "main.typ",
-            PyBytes::new(
-                py,
-                concat!(
-                    "#import \"crates/linnest/typst/src/render/network.typ\": render-network\n",
-                    "#render-network(_linnet_config.options.at(\"network\"), config: _linnet_config)\n",
-                )
-                .as_bytes(),
-            ),
-        )?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("config", effective)?;
-        linnet
-            .getattr("PreparedRender")?
-            .call_method("from_sources", (sources,), Some(&kwargs))
+        let effective = Bound::new(py, effective)?.into_any();
+        let sources = std::collections::BTreeMap::from([(
+            "main.typ".to_owned(),
+            concat!(
+                "#import \"crates/linnest/typst/src/render/network.typ\": render-network\n",
+                "#render-network(_linnet_config.options.at(\"network\"), config: _linnet_config)\n",
+            )
+            .as_bytes()
+            .to_vec(),
+        )]);
+        Ok(Bound::new(
+            py,
+            linnet_py::PreparedRender::from_source_files(py, sources, Some(&effective))?,
+        )?
+        .into_any())
     }
 }
 

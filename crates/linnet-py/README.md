@@ -4,11 +4,10 @@
 topology editing, subgraphs, algorithms, arbitrary Python element data, and
 typed drawing configuration as a standalone Python package.
 
-Rendering is in-process through `typst` 0.15.0. The wheel embeds Linnest,
-Kurvst, CeTZ, and oxifmt, while the source distribution carries their build
+Rendering uses the embedded Rust Typst compiler and fonts. The wheel embeds Linnest,
+Kurvst, CeTZ, MiTeX, and oxifmt, while the source distribution carries their build
 inputs. Rendering converts graph topology to a versioned CBOR graph spec and
-never serializes arbitrary Python `.data`. Clinnet and a Typst executable are
-not runtime dependencies.
+never serializes arbitrary Python `.data`. No Python Typst package, Clinnet, or Typst executable is required.
 
 The linnet, Linnest, and Kurvst sources are MIT-licensed under `LICENSE`;
 the distribution also carries the licenses and provenance of its vendored

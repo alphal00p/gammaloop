@@ -9,6 +9,7 @@ mod mutations;
 mod native_graph;
 mod render;
 pub use render::PreparedRender;
+pub use typst::{PyAuto as Auto, PyRenderConfig as RenderConfig};
 mod streaming;
 mod svg;
 mod topology;

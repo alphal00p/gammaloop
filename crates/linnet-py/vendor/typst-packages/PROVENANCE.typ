@@ -1,6 +1,6 @@
 = Bundled Typst packages
 
-These packages are embedded in the `linnet` wheel so rendering
+These packages are embedded in the graph renderer and Symbolica community wheel so rendering
 does not depend on a network connection or an installed Typst package cache.
 
 - CeTZ 0.5.1 (`preview/cetz/0.5.1`), LGPL-3.0-or-later
@@ -9,6 +9,9 @@ does not depend on a network connection or an installed Typst package cache.
 - oxifmt 1.0.0 (`preview/oxifmt/1.0.0`), MIT OR Apache-2.0
   - Source: `https://packages.typst.org/preview/oxifmt-1.0.0.tar.gz`
   - Nix recursive hash: `sha256-RtGKdyiX2kJbUjChPohSGNeYOKVlI2VM0k1uFaEqDC8=`
+
+- MiTeX 0.2.6 (`preview/mitex/0.2.6`), Apache-2.0
+  - Source: `https://packages.typst.org/preview/mitex-0.2.6.tar.gz`
 
 The corresponding license files and package manifests remain in each package
 directory.

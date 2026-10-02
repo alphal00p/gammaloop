@@ -2,10 +2,7 @@ use feynkit_graph::{FeynmanDiagram, SceneOptions};
 use feynkit_model::{Model, ParticleId};
 use linnest::svg::Scene;
 use linnet_py::PreparedRender;
-use pyo3::{
-    prelude::*,
-    types::{PyBytes, PyDict},
-};
+use pyo3::{prelude::*, types::PyDict};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -27,45 +24,32 @@ pub(crate) fn escape_html(value: &str) -> String {
     escaped
 }
 
-/// typst-py is required to compile diagrams and typeset their labels.
-fn require_typst(py: Python<'_>) -> PyResult<()> {
-    py.import("typst").map_err(|error| {
-        if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
-            pyo3::exceptions::PyImportError::new_err(format!(
-                "diagram rendering requires typst-py: {error}"
-            ))
-        } else {
-            error
-        }
-    })?;
-    Ok(())
-}
-
-/// Compile a diagram's Linnest source with typst-py and return its SVG page.
-pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) -> PyResult<String> {
-    require_typst(py)?;
+/// Compile a diagram with the embedded Typst compiler.
+pub(crate) fn render_diagram_svg(prepared: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(themed_svg(prepared.call_method0("to_svg")?.extract()?))
 }
 
 /// The physics options of a render configuration a native drawing honours,
 /// or `None` when the configuration needs the Typst renderer.
 pub(crate) fn native_scene_options(config: &Bound<'_, PyAny>) -> PyResult<Option<SceneOptions>> {
-    // The config comes from the separate `linnet` extension, so read it through Python.
     let native = config.call_method0("native_drawing_options")?;
     if native.is_none() {
         return Ok(None);
     }
     let (options, layout): (Bound<'_, PyDict>, Bound<'_, PyDict>) = native.extract()?;
-    let auto = config.py().import("linnet")?.getattr("AUTO")?;
     let mut scene = SceneOptions::default();
     for (key, value) in options.iter() {
         let flag = value.extract::<bool>().ok();
         match (key.extract::<String>()?.as_str(), flag) {
             ("momentum-arrows", Some(flag)) => scene.momentum_arrows = flag,
             ("show-momentum", Some(flag)) => scene.show_momentum = Some(flag),
-            ("show-momentum", None) if value.is(&auto) => scene.show_momentum = None,
+            ("show-momentum", None) if value.is_instance_of::<linnet_py::Auto>() => {
+                scene.show_momentum = None
+            }
             ("show-particle", Some(flag)) => scene.show_particle = flag,
-            ("show-particle", None) if value.is(&auto) => scene.show_particle = true,
+            ("show-particle", None) if value.is_instance_of::<linnet_py::Auto>() => {
+                scene.show_particle = true
+            }
             ("show-edge-index", Some(flag)) => scene.show_edge_index = flag,
             // Amplitudes have no initial states to open.
             ("split-initial-state", _) => {}
@@ -92,10 +76,9 @@ pub(crate) fn native_scene_options(config: &Bound<'_, PyAny>) -> PyResult<Option
     Ok(Some(scene))
 }
 
-/// Typeset a scene's labels with typst-py, then lay out and draw it natively.
+/// Typeset a scene's labels with embedded Typst, then lay out and draw it natively.
 pub(crate) fn render_scene(py: Python<'_>, scene: &Scene) -> PyResult<String> {
     let runtime = |error: String| pyo3::exceptions::PyRuntimeError::new_err(error);
-    require_typst(py)?;
     let mut sources = physics_sources();
     sources.insert("main.typ".to_owned(), scene.label_document().into_bytes());
     let pages = PreparedRender::from_sources(sources)?.svg_pages(py)?;
@@ -251,18 +234,9 @@ pub(crate) fn prepare_physics_render<'py>(
     source: &str,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let sources = PyDict::new(py);
-    sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
-    for (path, source) in physics_sources() {
-        sources.set_item(path, PyBytes::new(py, &source))?;
-    }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("config", config)?;
-    py.import("linnet")?.getattr("PreparedRender")?.call_method(
-        "from_sources",
-        (sources,),
-        Some(&kwargs),
-    )
+    let mut sources = physics_sources();
+    sources.insert("main.typ".to_owned(), source.as_bytes().to_vec());
+    Ok(Bound::new(py, PreparedRender::from_source_files(py, sources, config)?)?.into_any())
 }
 
 /// A process schematic uses the same particle labels, arrows and lines as diagrams.
@@ -394,7 +368,7 @@ pub(crate) fn process_svg(
     }
     source.push_str(") }");
     let prepared = prepare_physics_render(py, &source, config)?;
-    render_diagram_svg(py, &prepared)
+    render_diagram_svg(&prepared)
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.
