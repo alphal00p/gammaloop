@@ -667,7 +667,7 @@ provide interface-aware rewriting. Dirac matrices, color tensors, and their
 simplifiers are specialized helpers built on these generic tensor operations.
 
 AUTO (also exported as _) leaves a tensor axis unresolved during indexing.
-Nc is the registered real Symbolica color-count symbol: its built-in numerical
+Nc() returns the registered real Symbolica color-count symbol: its built-in numerical
 value is 3. Use your own dimension symbol for formal SU(N) calculations
 when that default numerical value is not appropriate.
 

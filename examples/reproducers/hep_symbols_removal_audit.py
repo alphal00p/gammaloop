@@ -52,8 +52,8 @@ def main():
     assert mink.to_expression().get_head() == S("spenso::mink")
     assert fundamental.casimir().get_head() == S("spenso::cas")
     assert fundamental.dynkin_index().get_head() == S("spenso::idx")
-    assert Nc == S("spenso::Nc")
-    assert Nc.evaluate({}) == 3
+    assert Nc() == S("spenso::Nc")
+    assert Nc().evaluate({}) == 3
 
     p = TensorName.vector("removal_audit::p")(mink)
     slash = (

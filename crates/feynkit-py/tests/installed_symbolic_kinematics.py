@@ -4,10 +4,10 @@ from symbolica import E, Expression, S
 from symbolica.community import hepkit as fk
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
-P = fk.Kinematics.external_momentum
-K = fk.Kinematics.loop_momentum
+P = fk.Kinematics.external_momentum()
+K = fk.Kinematics.loop_momentum()
 p1, p2, p3, p4 = [P(i) for i in range(4)]
-s, t, u = fk.Kinematics.s, fk.Kinematics.t, fk.Kinematics.u
+s, t, u = fk.Kinematics.s(), fk.Kinematics.t(), fk.Kinematics.u()
 a = S("a")
 assert not hasattr(fk.Symbols, "external_momentum")
 assert not hasattr(fk.Symbols, "loop_momentum")
