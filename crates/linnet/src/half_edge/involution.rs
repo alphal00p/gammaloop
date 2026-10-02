@@ -2320,7 +2320,13 @@ impl<E> Iterator for DrainingInvolutionIter<E> {
     fn next(&mut self) -> Option<Self::Item> {
         self.into.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.into.size_hint()
+    }
 }
+
+impl<E> ExactSizeIterator for DrainingInvolutionIter<E> {}
+impl<E> std::iter::FusedIterator for DrainingInvolutionIter<E> {}
 
 impl<E> IntoIterator for Involution<E> {
     type Item = (Hedge, InvolutiveMapping<E>);
@@ -2341,7 +2347,13 @@ impl<'a, E> Iterator for InvolutionIter<'a, E> {
     fn next(&mut self) -> Option<Self::Item> {
         self.into.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.into.size_hint()
+    }
 }
+
+impl<'a, E> ExactSizeIterator for InvolutionIter<'a, E> {}
+impl<'a, E> std::iter::FusedIterator for InvolutionIter<'a, E> {}
 
 impl<'a, E> IntoIterator for &'a Involution<E> {
     type Item = (Hedge, &'a InvolutiveMapping<E>);
@@ -2362,7 +2374,13 @@ impl<'a, E> Iterator for InvolutionIterMut<'a, E> {
     fn next(&mut self) -> Option<Self::Item> {
         self.into.next()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.into.size_hint()
+    }
 }
+
+impl<'a, E> ExactSizeIterator for InvolutionIterMut<'a, E> {}
+impl<'a, E> std::iter::FusedIterator for InvolutionIterMut<'a, E> {}
 
 impl<'a, E> IntoIterator for &'a mut Involution<E> {
     type Item = (Hedge, &'a mut InvolutiveMapping<E>);

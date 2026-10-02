@@ -1,0 +1,535 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write,
+};
+
+use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
+use linnet::half_edge::{
+    EdgeAccessors,
+    involution::{EdgeIndex, Flow, Orientation},
+    subgraph::{SuBitGraph, SubSetLike},
+};
+use symbolica::atom::AtomCore;
+
+pub(crate) fn typst_string(value: &str) -> String {
+    let mut output = String::with_capacity(value.len() + 2);
+    output.push('"');
+    for character in value.chars() {
+        match character {
+            '\\' => output.push_str("\\\\"),
+            '"' => output.push_str("\\\""),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            character if character.is_control() => {
+                write!(output, "\\u{{{:x}}}", character as u32)
+                    .expect("writing to a string cannot fail");
+            }
+            character => output.push(character),
+        }
+    }
+    output.push('"');
+    output
+}
+
+impl FeynmanDiagram {
+    /// The `particle-map` binding of the shared physics styles for this diagram's particles.
+    pub(crate) fn typst_particle_map(&self) -> String {
+        let mut output = String::from("#let particle-map = (\n");
+        let particles = self
+            .edges()
+            .map(|(_, _, edge)| edge.particle)
+            .collect::<BTreeSet<_>>();
+        if particles.is_empty() {
+            output.push(':');
+        }
+        for particle in particles {
+            let particle = self
+                .model()
+                .particle_by_id(particle)
+                .expect("validated particle ID");
+            writeln!(
+                output,
+                "  {}: {},",
+                typst_string(&particle.name),
+                particle.generate_edge_typst_dict(self.model())
+            )
+            .expect("writing to a string cannot fail");
+        }
+        output.push_str(")\n");
+        output
+    }
+
+    /// Emit a complete Typst document that renders this diagram with Linnest.
+    ///
+    /// The document imports the canonical Linnest package tree at
+    /// `crates/linnest/typst`, which must be available below the Typst project
+    /// root together with its sibling Kurvst package and the shared physics
+    /// styles in `assets/embedded/drawing/templates`. Particle spin, color,
+    /// charge, mass, and TeX names select line patterns, arrows, and labels.
+    /// Interaction vertices retain their native identifiers. Amplitude external
+    /// legs are dangling half-edges and retain their names, indices, and
+    /// incoming/outgoing states as edge data.
+    ///
+    /// GammaLoop's shared physics layout owns particle styling, label measurement,
+    /// force settings, and left/right amplitude placement. Finalized cross sections
+    /// contain paired initial-state edges, opened for drawing by default. Set
+    /// `options.split-initial-state` to false to retain their sewn appearance.
+    /// Inspection and highlighting always refer to the original diagram.
+    ///
+    /// A native half-edge selection highlights the corresponding structural
+    /// halves while retaining the complete graph and its particle styles.
+    /// The complement is faded and dotted; an empty selection fades everything.
+    /// Selected isolated vertices are supplied separately from the half-edges.
+    /// `config` is a trusted native Typst configuration expression, serialized by
+    /// Linnet at the Python boundary. The optional basis is validated against this
+    /// graph; its signatures supply momentum labels and SVG inspection metadata.
+    pub fn to_linnest(
+        &self,
+        highlight: Option<&SuBitGraph>,
+        isolated: &BTreeSet<usize>,
+        lmb: Option<&LoopMomentumBasis>,
+        config: &str,
+    ) -> Result<String, DiagramError> {
+        let basis = lmb.unwrap_or_else(|| self.loop_momentum_basis());
+        if lmb.is_some() {
+            basis.validate(self)?;
+        }
+        let internal_vertices: Vec<_> = self.vertices().collect();
+        let internal_ids: BTreeMap<_, _> = internal_vertices
+            .iter()
+            .map(|(id, _)| (*id, id.0))
+            .collect();
+
+        let mut output = String::from(
+            r##"#set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm), fill: none)
+#set text(size: 9pt)
+#import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/subgraph.typ" as subgraph
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
+#import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
+#import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
+#import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
+#import graph: build, edge, node, sink, source
+#set text(fill: palette.ink)
+
+"##,
+        );
+        output.push_str(&self.typst_particle_map());
+        output.push_str("\n#context {\n  let raw = build({\n");
+
+        for (id, vertex) in &internal_vertices {
+            let dense_id = internal_ids[id];
+            let interaction = vertex
+                .interaction
+                .and_then(|rule| self.model().vertex_rule_by_id(rule).ok())
+                .map(|rule| typst_string(&rule.name))
+                .unwrap_or_else(|| "none".to_owned());
+            let incident = self
+                .edges()
+                .filter(|(_, endpoints, _)| {
+                    endpoints.source == Some(*id) || endpoints.target == Some(*id)
+                })
+                .map(|(edge, _, _)| format!("{},", edge.0))
+                .collect::<String>();
+            writeln!(
+                output,
+                "    node(<v{dense_id}>, id: {dense_id}, inspection: (node: {}, edges: ({incident})), feynkit-name: {}, interaction: {}, numerator: {})",
+                id.0,
+                typst_string(&vertex.name),
+                interaction,
+                typst_string(&vertex.numerator.to_canonical_string()),
+            )
+            .expect("writing to a string cannot fail");
+        }
+
+        for (id, endpoints, edge) in self.edges() {
+            let particle = self
+                .model()
+                .particle_by_id(edge.particle)
+                .expect("validated diagram particle IDs resolve in the owned model");
+            let source_internal = endpoints.source.map(|vertex| internal_ids[&vertex]);
+            let target_internal = endpoints.target.map(|vertex| internal_ids[&vertex]);
+            let orientation = match self.underlying().orientation(EdgeIndex(id.0)) {
+                Orientation::Default => "default",
+                Orientation::Reversed => "reversed",
+                Orientation::Undirected => "undirected",
+            };
+            let endpoint_spec = match (source_internal, target_internal) {
+                (Some(source), Some(target)) => {
+                    format!("source(<v{source}>), <e{}>, sink(<v{target}>)", id.0)
+                }
+                (Some(source), None) => format!("source(<v{source}>), <e{}>", id.0),
+                (None, Some(target)) => format!("<e{}>, sink(<v{target}>)", id.0),
+                (None, None) => unreachable!("every native edge has an incident interaction"),
+            };
+            let external_metadata = edge.external.as_ref().map(|external| format!(
+                ", external-state: {:?}, external-index: {}, external-name: {}, external-connection: {}",
+                external.state.as_str(), external.index, typst_string(&external.name), external.connection,
+            )).unwrap_or_default();
+            let cut_metadata = edge
+                .external
+                .as_ref()
+                .filter(|_| endpoints.source.is_some() && endpoints.target.is_some())
+                .map(|external| format!(", is_cut: {}", external.connection))
+                .unwrap_or_default();
+            let momentum = &basis.edge_signatures[&id];
+            let (loops, external) = momentum.integer_coefficients();
+            let loops = loops
+                .iter()
+                .map(|value| format!("{value},"))
+                .collect::<String>();
+            let external = external
+                .iter()
+                .map(|value| format!("{value},"))
+                .collect::<String>();
+            writeln!(
+                output,
+                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, inspection: (edge: {edge_id}, source: {}, sink: {}), momentum: {}, momentum-signature: (loops: ({loops}), external: ({external})){external_metadata}{cut_metadata})",
+                id.0,
+                typst_string(&particle.name),
+                particle.pdg_code,
+                edge.directed,
+                typst_string(&edge.numerator.to_canonical_string()),
+                endpoints.source.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
+                endpoints.target.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
+                typst_string(&momentum.format_momentum()),
+                edge_id = id.0,
+            )
+            .expect("writing to a string cannot fail");
+        }
+
+        writeln!(
+            output,
+            "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
+            typst_string(self.name()),
+            self.symmetry_factor(),
+            typst_string(&self.overall_factor().to_canonical_string()),
+            typst_string(&self.numerator().to_canonical_string()),
+            self.loop_count(),
+        )
+        .expect("writing to a string cannot fail");
+        // Match the edge-ordered public Linnet view before any display-only cuts.
+        output.push_str(
+            r#"  raw = graph.map(raw, edge: e => (inspection: e.data.inspection + (
+    source-hedge: if e.source == none { none } else { e.source.hedge },
+    sink-hedge: if e.sink == none { none } else { e.sink.hedge },
+  )))
+"#,
+        );
+        let (highlight_options, node_style) = if let Some(highlight) = highlight {
+            let mut source = String::new();
+            let mut sink = String::new();
+            let mut nodes = isolated.clone();
+            for hedge in highlight.included_iter() {
+                nodes.insert(self.graph.node_id(hedge).0);
+                let selected = match self.graph.flow(hedge) {
+                    Flow::Source => &mut source,
+                    Flow::Sink => &mut sink,
+                };
+                write!(selected, "{}, ", self.graph[&hedge].0)
+                    .expect("writing to a string cannot fail");
+            }
+            // Typst rebuilds the graph in edge order. Structural edge halves
+            // preserve selection identity even when native hedge IDs differ.
+            writeln!(
+                output,
+                "  let highlighted = subgraph.select(raw, source: ({source}), sink: ({sink}))"
+            )
+            .expect("writing to a string cannot fail");
+            let nodes = nodes
+                .into_iter()
+                .map(|node| format!("{node}, "))
+                .collect::<String>();
+            writeln!(
+                output,
+                r##"  let selected-nodes = ({nodes})
+  let selected-stroke = rgb("#ffd166") + 1.2pt
+  let selected-edge-style = edge => (stroke: physics.source-style(edge, map: particle-map).stroke + (paint: rgb("#ffd166")))
+  let outside-stroke = (paint: rgb("#777777").transparentize(55%), thickness: 0.6pt, dash: "dotted")"##
+            )
+            .expect("writing to a string cannot fail");
+            (
+                "    draw: (subgraph: ((subgraph: subgraph.complement(raw, highlighted), edge-style: (stroke: outside-stroke)), (subgraph: highlighted, edge-style: selected-edge-style)), subgraph-edge-underlay: false),\n",
+                "node-style: node => physics.node-style + if node.vid in selected-nodes { (stroke: selected-stroke) } else { (stroke: outside-stroke) }",
+            )
+        } else {
+            ("    :\n", ":")
+        };
+        write!(
+            output,
+            r##"
+  let config = {config}
+  let options = config.at("options", default: (:))
+  let options = (label-fill: palette.ink) + if options == none {{ (:) }} else {{ options }}
+  if not ("mode", "amplitude-mode", "cross-section-mode").any(key => options.keys().contains(key)) {{
+    options += (mode: "{}",)
+  }}
+  // Open only the sewn initial-state connections; final-state cut edges remain paired.
+  if options.at("split-initial-state", default: true) {{
+    let initial = graph.edges(raw).filter(e => e.source != none and e.sink != none and e.data.at("is_cut", default: none) != none).map(e => e.edge)
+    if initial.len() > 0 {{
+      raw = graph.cut(raw, left: subgraph.select(raw, sink: initial), right: subgraph.select(raw, source: initial))
+{remap_highlight}    }}
+  }}
+  let style = config.at("style", default: (:))
+  let node-label-default = if options.at("show-node-index", default: false) or options.at("debug", default: false) {{ (:) }} else {{ (node-label: none) }}
+  let style = node-label-default + ({node_style}) + if style == none {{ (:) }} else {{ style }}
+  let draw = config.at("draw", default: (:))
+  let draw = if draw == none {{ (:) }} else {{ draw }}
+  let drawing = (
+{highlight_options}  )
+  physics-layout.render-layout(
+    config + (options: options, style: style, draw: drawing.at("draw", default: (:)) + draw),
+    input: raw,
+    graph: graph,
+    renderer: renderer,
+    physics: physics,
+    edge-style: (map: particle-map, default-edge: physics.default-edge),
+  )
+}}
+"##,
+            if self.cuts().is_empty() { "amplitude" } else { "cross-section" },
+            remap_highlight = if highlight.is_some() {
+                "      highlighted = subgraph.select(raw, hedges: graph.edges(raw).map(e => (e.source, e.sink).filter(h => h != none and subgraph.contains(highlighted, h.origin)).map(h => h.hedge)).flatten())\n"
+            } else { "" },
+        )
+        .expect("writing to a string cannot fail");
+        Ok(output)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::{collections::BTreeSet, sync::Arc};
+
+    use linnet::half_edge::{
+        involution::Hedge,
+        subgraph::{ModifySubSet, SuBitGraph},
+    };
+
+    use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
+    use feynkit_model::Model;
+
+    fn display_model() -> Arc<Model> {
+        Arc::new(Model::from_json(
+            r#"{
+                "name":"display","restriction":null,"orders":[],
+                "parameters":[
+                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+                    {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+                ],
+                "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
+                "propagators":[{"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}],
+                "lorentz_structures":[
+                    {"name":"L3","spins":[1,1,1],"structure":"1"},
+                    {"name":"L1","spins":[1],"structure":"1"}
+                ],
+                "couplings":[],
+                "vertex_rules":[
+                    {"name":"V_1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L3"],"couplings":[[null]]},
+                    {"name":"V_3","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L3"],"couplings":[[null]]},
+                    {"name":"V\"1","particles":["phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]}
+                ]
+            }"#,
+        ).unwrap())
+    }
+
+    pub(crate) fn one_loop() -> FeynmanDiagram {
+        let model = display_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "bubble");
+        let mut incoming = DiagramEdge::new(particle, false);
+        incoming.external = Some(ExternalLeg {
+            name: "p1".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
+        let mut outgoing = DiagramEdge::new(particle, false);
+        outgoing.external = Some(ExternalLeg {
+            name: "p2".into(),
+            index: 1,
+            state: ExternalState::Outgoing,
+            connection: 1,
+        });
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let scalar = || DiagramEdge::new(particle, false);
+        builder.add_edge(None, left, incoming).unwrap();
+        builder.add_edge(left, right, scalar()).unwrap();
+        builder.add_edge(left, right, scalar()).unwrap();
+        builder.add_edge(right, None, outgoing).unwrap();
+        builder.build().unwrap()
+    }
+
+    #[test]
+    fn emits_deterministic_complete_linnest_source_for_a_loop() {
+        let diagram = one_loop();
+        let source = diagram
+            .to_linnest(None, &BTreeSet::new(), None, "(:)")
+            .unwrap();
+
+        assert_eq!(
+            source,
+            diagram
+                .to_linnest(None, &BTreeSet::new(), None, "(:)")
+                .unwrap()
+        );
+        assert!(source.starts_with("#set page(width: auto"));
+        assert!(source.contains("#import \"crates/linnest/typst/src/graph.typ\" as graph"));
+        assert_eq!(source.matches("    node(").count(), 2);
+        assert!(source.contains("node(<v0>, id: 0"));
+        assert!(source.contains("node(<v1>, id: 1"));
+        assert!(source.contains("edge(<e0>, sink(<v0>), id: 0"));
+        assert!(source.contains("edge(source(<v1>), <e3>, id: 3"));
+        assert_eq!(source.matches("edge(source(<v0>), <e").count(), 2);
+        assert!(source.contains("physics-layout.render-layout("));
+        assert!(source.contains("mode: \"amplitude\""));
+        assert!(!source.contains("is_cut:"));
+        assert!(!source.contains("pos: graph.pos"));
+        assert!(source.contains("dash: dashed"));
+        assert!(source.ends_with("}\n"));
+    }
+
+    #[test]
+    fn focuses_exact_native_halves_without_changing_graph_or_layout() {
+        let diagram = one_loop();
+        let baseline = diagram
+            .to_linnest(None, &BTreeSet::new(), None, "(:)")
+            .unwrap();
+        let empty = diagram.graph.empty_subgraph::<SuBitGraph>();
+        let empty_source = diagram
+            .to_linnest(Some(&empty), &BTreeSet::new(), None, "(:)")
+            .unwrap();
+        assert_ne!(empty_source, baseline);
+        assert!(
+            empty_source
+                .contains("  let highlighted = subgraph.select(raw, source: (), sink: ())\n")
+        );
+        assert!(empty_source.contains("  let selected-nodes = ()\n"));
+
+        // Select the incoming and outgoing dangling legs, plus opposite halves
+        // of the two parallel internal edges. Their partners stay unselected.
+        let mut selected = empty;
+        for hedge in [Hedge(0), Hedge(1), Hedge(4), Hedge(5)] {
+            selected.add(hedge);
+        }
+        let source = diagram
+            .to_linnest(Some(&selected), &BTreeSet::new(), None, "(:)")
+            .unwrap();
+        let selection =
+            "  let highlighted = subgraph.select(raw, source: (1, 3, ), sink: (0, 2, ))\n";
+        assert!(source.contains(selection));
+        assert!(source.contains("  let selected-nodes = (0, 1, )\n"));
+        assert!(source.contains("subgraph.complement(raw, highlighted)"));
+        assert!(source.contains("subgraph-edge-underlay: false"));
+        assert!(source.contains("transparentize(55%)"));
+        assert!(source.contains("dash: \"dotted\""));
+        assert!(source.contains("physics.source-style(edge, map: particle-map).stroke"));
+
+        // The complete topology and particle styles precede the selection
+        // decoration; the same layout settings follow it.
+        let (graph_source, _) = baseline.split_once("  let config = ").unwrap();
+        assert!(source.starts_with(graph_source.trim_end()));
+        assert!(source.contains("input: raw"));
+        assert!(source.contains("config.at(\"draw\", default: (:))"));
+        assert_eq!(
+            diagram
+                .to_linnest(None, &BTreeSet::new(), None, "(:)")
+                .unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn focuses_selected_isolated_vertices_in_the_complete_graph() {
+        let mut builder = FeynmanDiagram::builder(display_model(), "isolated");
+        for name in ["selected", "outside"] {
+            builder.add_vertex(DiagramVertex {
+                name: name.to_owned(),
+                interaction: None,
+                numerator: symbolica::atom::Atom::one(),
+            });
+        }
+        let diagram = builder.build().unwrap();
+        let empty = diagram.graph.empty_subgraph::<SuBitGraph>();
+        let selected = diagram
+            .to_linnest(Some(&empty), &BTreeSet::from([0]), None, "(:)")
+            .unwrap();
+        assert_eq!(selected.matches("    node(").count(), 2);
+        assert!(selected.contains("  let selected-nodes = (0, )\n"));
+        assert!(selected.contains("node.vid in selected-nodes"));
+        assert!(selected.contains("else { (stroke: outside-stroke) }"));
+    }
+
+    #[test]
+    fn delegates_external_placement_without_reordering_edges() {
+        let model = display_model();
+        let rule = model.vertex_rule_id("V_3").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "one-to-two");
+        let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
+        for (name, index, state) in [
+            ("in", 0, ExternalState::Incoming),
+            ("out-high", 2, ExternalState::Outgoing),
+            ("out-low", 1, ExternalState::Outgoing),
+        ] {
+            let mut edge = DiagramEdge::new(particle, false);
+            edge.external = Some(ExternalLeg {
+                name: name.into(),
+                index,
+                state,
+                connection: index,
+            });
+            match state {
+                ExternalState::Incoming => builder.add_edge(None, interaction, edge),
+                ExternalState::Outgoing => builder.add_edge(interaction, None, edge),
+            }
+            .unwrap();
+        }
+        let source = builder
+            .build()
+            .unwrap()
+            .to_linnest(None, &BTreeSet::new(), None, "(:)")
+            .unwrap();
+
+        let low = source.find("external-name: \"out-low\"").unwrap();
+        let high = source.find("external-name: \"out-high\"").unwrap();
+        assert!(low > high, "edge emission remains stable by edge id");
+        assert!(source.contains("mode: \"amplitude\""));
+        assert!(!source.contains("pos: graph.pos"));
+    }
+
+    #[test]
+    fn escapes_typst_strings_and_preserves_directed_orientation() {
+        let model = display_model();
+        let rule = model.vertex_rule_id("V\"1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "quote \" and \\ slash");
+        let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
+        let mut incoming = DiagramEdge::new(particle, true);
+        incoming.external = Some(ExternalLeg {
+            name: "p\n1".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
+        builder.add_edge(None, interaction, incoming).unwrap();
+        builder.edge_orientations =
+            Some(vec![linnet::half_edge::involution::Orientation::Reversed]);
+        let source = builder
+            .build()
+            .unwrap()
+            .to_linnest(None, &BTreeSet::new(), None, "(:)")
+            .unwrap();
+
+        assert!(source.contains("name: \"quote \\\" and \\\\ slash\""));
+        assert!(source.contains("feynkit-name: \"v\""));
+        assert!(source.contains("interaction: \"V\\\"1\""));
+        assert!(source.contains("external-name: \"p\\n1\""));
+        assert!(source.contains("orientation: \"reversed\""));
+        assert!(!source.contains("p\n1"));
+    }
+}
