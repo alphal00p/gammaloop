@@ -148,6 +148,8 @@ pub enum UfoLoadError {
     },
 }
 
+type DisplayNames = (Option<String>, Option<String>);
+
 fn load_model(
     py: Python<'_>,
     path: &Path,
@@ -159,7 +161,7 @@ fn load_model(
     // The Python loader creates symbols while parsing parameter expressions.
     // Declare their printers first, before even a forward reference can do so.
     let label_source = CString::new(include_str!("parameter_labels.py")).unwrap();
-    let labels = (|| -> Result<Vec<(String, Option<String>)>, PyErr> {
+    let labels = (|| -> Result<Vec<(String, DisplayNames)>, PyErr> {
         PyModule::from_code(
             py,
             &label_source,
@@ -172,8 +174,8 @@ fn load_model(
     })()
     .map_err(|source| UfoLoadError::Load { source })?;
     let labels: BTreeMap<_, _> = labels.into_iter().collect();
-    for (name, texname) in &labels {
-        Model::register_parameter_symbol(name, texname.as_deref())
+    for (name, (texname, typstname)) in &labels {
+        Model::register_parameter_symbol(name, texname.as_deref(), typstname.as_deref())
             .map_err(|source| UfoLoadError::ModelJson { source })?;
     }
     let commands = PyModule::import(py, "ufo_model_loader.commands")
@@ -238,6 +240,11 @@ fn load_model(
             for particle in module.getattr("all_particles")?.try_iter()? {
                 let particle = particle?;
                 let numbers = PyDict::new(py);
+                for field in ["typstname", "antitypstname"] {
+                    if particle.hasattr(field)? {
+                        numbers.set_item(field, particle.getattr(field)?)?;
+                    }
+                }
                 for (field, attribute) in [
                     ("charge", "charge"),
                     ("y_charge", "Y"),
@@ -281,16 +288,27 @@ fn load_model(
                 if let Some(numbers) =
                     metadata["particles"].get(particle["name"].as_str().unwrap_or_default())
                 {
-                    for field in ["charge", "y_charge", "y_charge_right"] {
-                        particle[field] = numbers[field].clone();
+                    for field in [
+                        "charge",
+                        "y_charge",
+                        "y_charge_right",
+                        "typstname",
+                        "antitypstname",
+                    ] {
+                        if let Some(value) = numbers.get(field) {
+                            particle[field] = value.clone();
+                        }
                     }
                 }
             }
         }
         if let Some(parameters) = serialized["parameters"].as_array_mut() {
             for parameter in parameters {
-                if let Some(texname) = labels.get(parameter["name"].as_str().unwrap_or_default()) {
+                if let Some((texname, typstname)) =
+                    labels.get(parameter["name"].as_str().unwrap_or_default())
+                {
                     parameter["texname"] = serde_json::to_value(texname)?;
+                    parameter["typstname"] = serde_json::to_value(typstname)?;
                 }
             }
         }

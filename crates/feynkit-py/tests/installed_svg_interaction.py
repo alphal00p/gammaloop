@@ -5,9 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
-import linnet
 from marimo._output.formatting import try_format
-
 from symbolica.community import hepkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
@@ -115,7 +113,7 @@ for options in (
     {"split-initial-state": False},
 ):
     split = options.get("split-initial-state", True)
-    config = linnet.RenderConfig(template_options=options)
+    config = {"template_options": options}
     for value in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.data.is_external),

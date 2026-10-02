@@ -1465,13 +1465,13 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
- "linnet-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "serde_json",
  "spenso-macros",
  "spynso3",
  "symbolica",
+ "typst-renderer",
 ]
 
 [[package]]
@@ -2642,6 +2642,7 @@ dependencies = [
  "linnet",
  "rand 0.8.8",
  "rkyv",
+ "roxmltree 0.21.1",
  "self_cell",
  "serde",
  "serde_json",
@@ -2676,27 +2677,6 @@ dependencies = [
  "symbolica-utils",
  "thiserror 2.0.20",
  "twofloat",
-]
-
-[[package]]
-name = "linnet-py"
-version = "0.1.0"
-dependencies = [
- "ciborium",
- "dot-parser",
- "kurvst",
- "linnest",
- "linnet",
- "pyo3",
- "pyo3-build-config",
- "pyo3-stub-gen-derive",
- "roxmltree 0.21.1",
- "rust-embed",
- "serde",
- "serde_json",
- "tempfile",
- "typst-renderer",
- "walkdir",
 ]
 
 [[package]]
@@ -2823,22 +2803,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "mime"
-version = "0.3.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
-
-[[package]]
-name = "mime_guess"
-version = "2.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
-dependencies = [
- "mime",
- "unicase",
 ]
 
 [[package]]
@@ -3940,32 +3904,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-embed"
-version = "8.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e7760e252aaba7b09f4be00e36476cf585bdb68a53552ac954cdf504ab4bc9"
-dependencies = [
- "rust-embed-impl",
- "rust-embed-utils",
- "walkdir",
-]
-
-[[package]]
-name = "rust-embed-impl"
-version = "8.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bcfc4d6f53af43755f7a723e4b6b8794fcce052a178dd8c6c1dadc5f5343097"
-dependencies = [
- "mime_guess",
- "proc-macro2",
- "quote",
- "rust-embed-utils",
- "shellexpand",
- "syn 2.0.119",
- "walkdir",
-]
-
-[[package]]
 name = "rust-embed-utils"
 version = "8.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4306,15 +4244,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shellexpand"
-version = "3.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32824fab5e16e6c4d86dc1ba84489390419a39f97699852b66480bb87d297ed8"
-dependencies = [
- "dirs",
-]
-
-[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4526,11 +4455,12 @@ dependencies = [
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnest",
  "linnet",
- "linnet-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
  "spenso-macros",
@@ -4538,6 +4468,7 @@ dependencies = [
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.20",
+ "typst-renderer",
  "xpct",
 ]
 
@@ -5512,6 +5443,7 @@ name = "typst-renderer"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "tempfile",
  "typst",
  "typst-html",
  "typst-kit",

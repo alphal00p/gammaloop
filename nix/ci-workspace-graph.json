@@ -96,9 +96,9 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso-macros",
-      "spynso3"
+      "spynso3",
+      "typst-renderer"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -196,11 +196,12 @@
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-macros",
+      "typst-renderer"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
@@ -361,9 +362,9 @@
         "svg"
       ],
       "linnet": [],
-      "linnet-py": [],
       "spenso-macros": [],
-      "spynso3": []
+      "spynso3": [],
+      "typst-renderer": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
@@ -498,7 +499,9 @@
     },
     "linnet-py": {
       "kurvst": [],
-      "linnest": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [
         "nodestore-vec",
         "serde"
@@ -525,15 +528,18 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [],
-      "linnet-py": [],
       "spenso": [
         "portable-payload",
         "python",
         "shadowing"
       ],
       "spenso-hep-lib": [],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "typst-renderer": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {
@@ -748,7 +754,6 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -887,7 +892,6 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1037,7 +1041,6 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1176,7 +1179,6 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1354,9 +1356,9 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
-      "linnet-py",
       "spenso-macros",
-      "spynso3"
+      "spynso3",
+      "typst-renderer"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -1456,11 +1458,12 @@
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnest",
       "linnet",
-      "linnet-py",
       "spenso",
       "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-macros",
+      "typst-renderer"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
@@ -1624,9 +1627,9 @@
         "svg"
       ],
       "linnet": [],
-      "linnet-py": [],
       "spenso-macros": [],
-      "spynso3": []
+      "spynso3": [],
+      "typst-renderer": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
@@ -1767,7 +1770,9 @@
     },
     "linnet-py": {
       "kurvst": [],
-      "linnest": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [
         "nodestore-vec",
         "serde"
@@ -1796,15 +1801,18 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [],
-      "linnet-py": [],
       "spenso": [
         "portable-payload",
         "python",
         "shadowing"
       ],
       "spenso-hep-lib": [],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "typst-renderer": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {

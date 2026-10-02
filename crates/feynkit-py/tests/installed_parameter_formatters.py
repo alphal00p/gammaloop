@@ -3,7 +3,6 @@
 import json
 import xml.etree.ElementTree as ET
 
-import typst
 from symbolica import E
 from symbolica.community import hepkit as hep
 from symbolica.community import tensor as spenso
@@ -23,17 +22,13 @@ plain = expression.format_plain()
 assert E(plain) == expression
 assert "Me" in plain and "MM" in plain
 assert "m_e" in expression.to_latex() and r"m_{\mu}" in expression.to_latex()
-ET.fromstring(typst.compile(f"$ {expression.to_typst()} $".encode(), format="svg"))
+ET.fromstring(spenso.TensorExpression(expression).to_svg())
 assert "m_e" in spenso.TensorExpression(expression).to_latex()
 
 phi4 = hep.Model.phi4()
 assert "m" in phi4.parameter("mass").symbol.to_latex()
 assert r"\lambda" in phi4.parameter("lam").symbol.to_latex()
-ET.fromstring(
-    typst.compile(
-        f"$ {phi4.parameter('lam').symbol.to_typst()} $".encode(), format="svg"
-    )
-)
+ET.fromstring(spenso.TensorExpression(phi4.parameter("lam").symbol).to_svg())
 
 # A forward reference must receive its printer before any expressions are parsed.
 definition = {
@@ -80,11 +75,13 @@ assert reference.format_plain() == plain
 
 # Labels can also be added to parameters initially declared without a texname.
 definition["parameters"][0]["texname"] = r"\gamma"
+definition["parameters"][0]["typstname"] = "gamma"
 definition["parameters"][1]["texname"] = r"\gamma"
+definition["parameters"][1]["typstname"] = "gamma"
 custom = hep.Model.from_json(json.dumps(definition))
 distinct = custom.parameter("printForward").symbol + reference
 assert distinct.to_latex().count(r"\gamma") == 2
-assert distinct.to_typst().count("mi(") == 2
+assert distinct.to_typst().count("gamma") == 2
 assert len(distinct.get_all_symbols()) == 2
 
 print(

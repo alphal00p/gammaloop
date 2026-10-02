@@ -161,7 +161,7 @@ representations, and duality remain part of the value.
 #source-link("examples/notebooks/spenso_api_tour.py", label: "The complete Python API tour")
 is a marimo notebook with one executed example for every declared type. Each entry shows its
 construction, live display, Python representation, and declared members. Run it in a native
-community-module environment with marimo, Typst, and a C++ compiler on `PATH`:
+community-module environment with marimo and a C++ compiler on `PATH`:
 
 // docs-example: syntax
 ```sh
@@ -173,7 +173,9 @@ current executable graph in notebooks, using Linnest's operator and typed-leaf s
 The renderer passes native node, edge, and half-edge identities directly to Linnest's
 graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
-Typst entrypoint; both accept configuration dictionaries or optional standalone `linnet.RenderConfig` values, like Feynman diagrams.
+self-contained Typst document embedding that SVG. Both accept native configuration
+dictionaries, like Feynman diagrams. Rust draws the graph directly and the embedded
+Typst compiler typesets labels without graph plugins or MiTeX.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 Its execution summary uses `network.status` to show remaining nodes, operations,
 contractions, and ready operations. “Graph reduced” means no graph work remains;

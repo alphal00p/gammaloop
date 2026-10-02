@@ -1973,7 +1973,6 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
- "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -1982,6 +1981,7 @@ dependencies = [
  "spynso3",
  "symbolica",
  "tempfile",
+ "typst-renderer",
 ]
 
 [[package]]
@@ -3731,6 +3731,7 @@ dependencies = [
  "linnet",
  "rand 0.8.6",
  "rkyv",
+ "roxmltree 0.21.1",
  "self_cell",
  "serde",
  "serde_json",
@@ -6364,12 +6365,13 @@ dependencies = [
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnest",
  "linnet",
- "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
  "spenso-macros",
@@ -6377,6 +6379,7 @@ dependencies = [
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
+ "typst-renderer",
  "xpct",
 ]
 
