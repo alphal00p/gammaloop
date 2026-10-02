@@ -53,6 +53,14 @@ The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
 
+Comparison normalization sets the Lorentz dimension to four, reversibly cooks
+index syntax for checked `SymbolicTensor` admission, reduces colour identities,
+and contracts metrics and vector connections with chain and trace collection
+disabled. It then converts scalar-product notation, resolves aliases, and
+restores the original index encoding. Admission and normalization errors
+propagate to the comparison caller. No Dirac or epsilon identity is enabled by
+this normalization, and coefficient factorization is retained.
+
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
 The renormalization prescription belongs to the `Spinney`. A compute

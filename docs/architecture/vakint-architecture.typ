@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-10-04.
+2026-09-16.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -18,10 +18,10 @@ Rust crate owns five boundaries:
   canonicalization, tensor reduction, parametric evaluation, and numerical evaluation;
 - `VakintExpression` and `VakintTerm`: the structured numerator/topology representation used
   between stages;
-- `VakintSettings`, `EvaluationOrder`, and `EvaluationMethod`: precision, normalization,
-  dependency, and backend-selection policy;
+- `VakintSettings`, `TensorReductionMethod`, `EvaluationOrder`, and `EvaluationMethod`:
+  precision, normalization, dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
-- the optional `symbolica.community.vakint` module: Python classes that own a Rust engine and
+- the optional `symbolica.community.hep.vakint` module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
 
 The modules `alphaloop_numerics`, `matad`, `matad_numerics`, `fmft`, and `fmft_numerics` contain
@@ -51,9 +51,9 @@ ephemeral transformation plan, not a persisted cache.
 
 `VakintSettings` controls epsilon and scale symbols, executable paths, input rationalization and
 runtime precision, numerator verification, normalization, unknown-integral policy, temporary
-files, epsilon depth, dot-product notation, and `EvaluationOrder`. A `Vakint` engine is reusable;
-settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
-and settings together for convenience.
+files, epsilon depth, dot-product notation, `TensorReductionMethod`, and `EvaluationOrder`.
+A `Vakint` engine is reusable; settings are passed explicitly to Rust operations. The Python
+`Vakint` wrapper stores the engine and settings together for convenience.
 
 == Main control flow
 
@@ -64,7 +64,7 @@ AtomView
   -> validate selected settings and external dependencies
   -> split into VakintExpression terms
   -> match and canonicalize topology plus numerator
-  -> tensor-reduce each numerator through FORM
+  -> tensor-reduce each numerator with the selected TensorReductionMethod
   -> choose the first supported EvaluationMethod for each term
   -> run the backend and decode its Symbolica expression
   -> combine the transformed terms into an Atom
@@ -72,52 +72,33 @@ AtomView
 
 `to_canonical`, `tensor_reduce`, and `evaluate_integral` expose narrower stages. Canonicalization
 tries registered topologies in order, derives replacement rules, normalizes momentum routing,
-and can emit the short topology form. Tensor reduction converts compact dot notation if needed,
-maps vectors and indices into FORM syntax, runs the embedded reduction program, and maps the
-result back to Symbolica.
+and can emit the short topology form. Tensor reduction defaults to the native FeynKit projector,
+which converts the numerator to FeynKit tensor syntax and returns a scalar-product expression
+without requiring FORM. Selecting `TensorReductionMethod::AlphaLoop` uses the historical FORM
+projector: it expands compact dot notation, translates vectors and indices, runs the embedded
+reduction program, and maps the result back to Symbolica.
 
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,
 and requested epsilon depth are supported. AlphaLoop is limited to its registered topologies,
 at most three loops, and at most four requested terms; MATAD covers its registered topologies up
-to three loops and normally five terms; FMFT covers registered four-loop topologies up to five terms;
+to three loops and five terms; FMFT covers registered four-loop topologies up to five terms;
 pySecDec covers topologies registered for that numerical path. Failure to find a method is an
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
-
-MATAD also accepts exactly six terms for a certified product of at most
-three independent tadpoles with the same nonzero mass. Each line must be
-a self-loop carrying a distinct loop momentum with coefficient `+1` or
-`-1`. These products need only the existing Gamma series through epsilon
-degree five. Connected master tables retain their original depth limit;
-mixed masses, scaled loop momenta and seven-term requests do not qualify.
-The FORM remainder check still rejects unavailable coefficients.
-
-The registered one-scale two-loop sunsets include the MM0 and M00 mass patterns.
-Canonical masses accept either zero or `msq(index)`, and scale extraction chooses
-a nonzero mass. These partially massless topologies use MATAD: AlphaLoop's
-`uvprop` representation has no mass slot and cannot preserve which lines are
-massless, so that representation is withheld for any topology with a zero mass.
 
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. Numerical parameters and optional external momenta are converted to the configured
 binary precision, and `NumericalEvaluationResult` represents the result and optional error as
 Laurent coefficients `(epsilon power, complex value)`.
-Laurent extraction reads the actual epsilon atom and its integer powers,
-preserving its namespace and display registrations. A malformed monomial
-or a coefficient that still depends on epsilon returns an evaluation error.
 
 == External tools and feature boundaries
 
 AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM and pySecDec through
 the configured Python executable. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
-4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
-
-Backend expression serialization follows the exact atom tree and symbol identities,
-independently of display callbacks. A complex numeric atom is written from its
-explicit real and imaginary coefficients, including a unit imaginary numerator;
-the FORM adapter then maps the imaginary unit to `i_`. This preserves valid
-syntax for coefficients such as `i/16` without changing their value.
+4.2.1 and pySecDec >= 1.6.4 when those tools are selected. `evaluate` and `evaluate_integral`
+perform this validation; the narrower `tensor_reduce` stage does not validate scalar-evaluation
+dependencies. Native FeynKit tensor reduction can therefore run without those external tools.
 
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
 For each run, Vakint renders those resources into a uniquely named temporary directory, launches
@@ -130,12 +111,19 @@ The Cargo build script has one platform-specific boundary: on macOS, setting
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC` opts into linking `gcc_s.1.1` from MacPorts' libgcc directory when
 that library exists. This affects native linking only; it does not select an evaluation backend.
 
-The core Rust API has no feature requirement. `python` enables the PyO3
+The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
 wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on `symbolica.community.vakint`. `python-stubs` adds stub metadata and
-implies `python`, including Symbolica's Python export. The wrapper delegates transformations to the Rust engine
+`VakintNumericalResult` on `symbolica.community.hep.vakint`. `python_stubgen` adds stub metadata and
+also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
-pipeline.
+pipeline. Construction stores the selected tensor-reduction and evaluation settings without
+checking external executables; the evaluation entry points validate dependencies when needed.
+
+The community-module citation hook reports cumulative process-wide usage.
+Constructing the engine or using its Python wrappers records Vakint; backend
+boundaries separately record the tools they invoke. Repeated queries do not
+clear other callers' usage or duplicate a citation. This bookkeeping does not
+choose the tensor-reduction or scalar-evaluation backend.
 
 == Persistence and reproducibility
 
@@ -146,9 +134,9 @@ workspaces are implementation artifacts unless cleanup is disabled or a reuse di
 explicitly supplied.
 
 A reproducible result therefore depends on more than the input expression: record the topology
-form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
-options, numerical masses and external momenta, executable versions, and whether a pySecDec
-workspace was reused.
+form, numerator, normalization convention, epsilon depth, decimal precision, tensor-reduction
+method, backend order and options, numerical masses and external momenta, executable versions,
+and whether a pySecDec workspace was reused.
 
 == Maintained invariants
 
@@ -188,13 +176,27 @@ Rust signatures are in the
 
 The default tensor-projection path reduces universal loop-momentum kernels while preserving graph
 coefficients as factorized expressions. Temporary coefficient aliases are restored after analytic
-integration. `project_onto_tensor_integrals = false` instead reduces each complete numerator through
-FORM. Both modes retain separate denominator topologies and validate Lorentz domains.
+integration. The native FeynKit backend uses its existing tensor reducer; the
+`project_onto_tensor_integrals` choice selects the factorized projection or complete-numerator
+FORM route when the AlphaLoop backend is requested. Both backends retain separate denominator
+topologies and validate Lorentz domains.
 
-Opaque spin tensors declare their Lorentz slots with `vakint::tensor(body, slot, ...)`. Projection
-may introduce `vakint::tensor_index` slots, which the caller translates before completing spin algebra.
-Vakint does not evaluate that algebra. Numerator and normalization poles increase the required epsilon
-order; positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
+The native adapter selects raw `k`, `p`, and `g` leaves and Lorentz tensors with
+the existing filtered collector. Scalar coefficient subtrees remain opaque.
+A selected indexed power stays intact until the checked reducer can allocate
+independent dummy scopes for its copies. Branch-local Lorentz metadata is
+attached before that lowering, preserving distinct original dimensions when
+sum branches reuse the same written index. External-vector syntax is retained
+inside `pure_scalar` metadata, so it does not add an extra tensor port and can
+be restored after projection.
+
+GammaLoop passes its actual spin tensors through the existing opaque-slot bridge. Their Lorentz
+ports stay connected to the projected metrics, and GammaLoop completes the d-dimensional Dirac
+algebra before Laurent truncation. Duplicating a tensor body and its port list in a frontend wrapper
+would allow the two copies to diverge during projection; dropping that wrapper afterward would
+restore stale indices. The bridge requires no such duplicate representation. Vakint itself does not
+evaluate spin algebra. Numerator and normalization poles increase the required epsilon order;
+positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
 
 The Python adapter accepts complex mass/numerator substitutions as `numerical_parameters`; the
 PySecDec boundary requires real pole masses and external momenta, with complex numerator coefficients

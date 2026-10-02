@@ -6,22 +6,15 @@
   workspaceRoot,
   cargoSources,
   nonCargoBuildSources,
-  ciArgs,
-  ciCargoProfile,
-  nativeCargoArtifacts,
+  commonArgs,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
   workspacePackageSrcFor,
   workspaceMissingCargoTargetsScript,
-  workspaceAnchorCargoTomlFor,
-  workspacePrebuildDependencyPackages,
-  workspacePrebuildPackage,
-  workspacePrebuildPackageDir,
-  craneCiFeaturesFor,
 }:
 let
   inherit (pkgs) lib;
-  docsCargoProfile = ciCargoProfile;
+  docsCargoProfile = "docs";
   documentationRevision = self.dirtyRev or (self.rev or (self.narHash or "local"));
   typst015 =
     assert lib.assertMsg (docsPkgs.typst.version == "0.15.1")
@@ -105,10 +98,9 @@ let
         (workspaceRoot + "/docs")
         (workspaceRoot + "/scripts/check-docs-html.py")
         (workspaceRoot + "/scripts/render-docs-svg-assets.sh")
-        # The GammaLoop marks import the logo geometry from this Kurvst example.
-        (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
+        (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL08.dot")
         (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot")
@@ -120,12 +112,9 @@ let
           + "/examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym"
         )
         (workspaceRoot + "/examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt")
-        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
-        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
         (workspaceRoot + "/examples/cli/gg_hhh/3L/3L_graph.dot")
         (workspaceRoot + "/tests/resources/graphs/double_triangle.dot")
         (workspaceRoot + "/tests/resources/graphs/gghhh.dot")
-        (workspaceRoot + "/tests/resources/graphs/massive_kite.dot")
         (workspaceRoot + "/tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot")
         (workspaceRoot + "/tests/resources/graphs/raised_cut_numerator_cancellation.dot")
         (workspaceRoot + "/tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot")
@@ -136,7 +125,13 @@ let
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/uv.lock")
-        (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/linnet.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.py")
+        (
+          workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
+        )
+        (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
@@ -170,63 +165,18 @@ let
   );
   alphal00pDocsCargoTargetRoot = "target/alphal00p-docs-rustdoc";
   alphal00pDocsCargoTarget = "${alphal00pDocsCargoTargetRoot}/cargo-target-v1";
-  alphal00pDocsCargoArgs = ciArgs // {
+  alphal00pDocsCargoArgs = commonArgs // {
     buildType = docsCargoProfile;
     CARGO_PROFILE = docsCargoProfile;
     CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
+    PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+    PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
     # Symbolica 3 needs no compile-time key in either the reusable producer or
     # the documentation consumer; the build below supplies its runtime license.
   };
   alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
-    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
-      install -D -m 0644 ${documentationNativeCargoToml} ${workspacePrebuildPackageDir}/Cargo.toml
-      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/src/lib.rs
-      # Cargo separates build-script features from target features. Match the
-      # native workspace-hack's Symbolica build dependency on the host too.
-      cat >> ${workspacePrebuildPackageDir}/Cargo.toml <<'EOF'
-      [build-dependencies.symbolica]
-      workspace = true
-      features = ["tracing_max_level_info"]
-      EOF
-      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/build.rs
-      touch -d @0 ${workspacePrebuildPackageDir}/Cargo.toml ${workspacePrebuildPackageDir}/src/lib.rs ${workspacePrebuildPackageDir}/build.rs
-      ${lib.concatMapStringsSep "\n" (package: ''
-        cat >> crates/${package}/Cargo.toml <<'EOF'
-        [dependencies.${workspacePrebuildPackage}]
-        path = "../${workspacePrebuildPackage}"
-        EOF
-        touch -d @0 crates/${package}/Cargo.toml
-      '') ["alphal00p-docs-builder" "alphal00p-docs-examples" "alphal00p-docs-python-exporter"]}
-      install -D -m 0644 ${documentationCatalogCargoToml} crates/alphal00p-docs-catalogs/Cargo.toml
-      touch -d @0 crates/alphal00p-docs-catalogs/Cargo.toml
-    '';
-    # Cargo's vendor configuration is installed during configurePhase.
-    preBuild = (alphal00pDocsCargoArgs.preBuild or "") + ''
-      cargo update --offline --workspace
-    '';
+    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript;
   };
-  documentationNativeCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage
-    (lib.filter (package:
-      !lib.hasPrefix "alphal00p-docs-" package
-      && package != "gammaloop-integration-tests"
-      && package != "clinnet") workspacePrebuildDependencyPackages)
-    craneCiFeaturesFor;
-  # The examples build script uses neutral catalogs. Keep the native anchor
-  # out of that host dependency graph until a reference exporter needs it.
-  documentationCatalogCargoToml =
-    let
-      manifest = builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/Cargo.toml"));
-    in
-    (pkgs.formats.toml {}).generate "alphal00p-docs-catalogs-Cargo.toml" (manifest // {
-      dependencies = manifest.dependencies // {
-        ${workspacePrebuildPackage} = {
-          path = "../${workspacePrebuildPackage}";
-          optional = true;
-        };
-      };
-      features = manifest.features // lib.genAttrs ["gammaloop-reference" "vakint-reference"]
-        (feature: manifest.features.${feature} ++ ["dep:${workspacePrebuildPackage}"]);
-    });
   documentationRustComponents = lib.concatMap (
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
@@ -253,14 +203,13 @@ let
   alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation (
     alphal00pDocsRealCargoArgs
     // {
-      # Reuse the same optimized native libraries as unit/integration tests.
-      cargoArtifacts = nativeCargoArtifacts;
+      cargoArtifacts = null;
       doInstallCargoArtifacts = true;
       pname = "alphal00p-docs-cargo";
       src = documentationWorkspaceBuildSrc;
       # Prime content-sensitive test dependency contexts without adding
       # authored documentation to this reusable source boundary.
-      postPatch = alphal00pDocsRealCargoArgs.postPatch + ''
+      postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/build.rs
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/src/lib.rs
       '';
@@ -270,7 +219,7 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3
+        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -284,14 +233,14 @@ let
   );
 
   # Exercise the embedded Typst watcher behind its opt-in feature without
-  # adding the file watcher, live server or Typst compiler to ordinary builds.
-  watchArgs = ciArgs // {
-    pname = "alphal00p-docs-watch";
+  # adding Typst's compiler crates to normal workspace or Pages artifacts.
+  persistentTypstArgs = commonArgs // {
+    pname = "alphal00p-docs-persistent-typst";
     src = workspacePackageSrcFor "alphal00p-docs-builder";
     buildType = "docs-watch";
     CARGO_PROFILE = "docs-watch";
-    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features watch";
-    nativeBuildInputs = (ciArgs.nativeBuildInputs or [ ]) ++ [
+    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features persistent-typst";
+    nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
       docsTypst
       pkgs.roboto
     ];
@@ -299,22 +248,20 @@ let
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
   };
 
-  watchCargoArtifacts = craneLib.buildDepsOnly watchArgs;
+  persistentTypstCargoArtifacts = craneLib.buildDepsOnly persistentTypstArgs;
 
-  watchCheck = craneLib.mkCargoDerivation (
-    watchArgs
+  persistentTypstCheck = craneLib.mkCargoDerivation (
+    persistentTypstArgs
     // {
-      cargoArtifacts = watchCargoArtifacts;
+      cargoArtifacts = persistentTypstCargoArtifacts;
       doNotLinkInheritedArtifacts = true;
       doInstallCargoArtifacts = false;
       postPatch = workspaceMissingCargoTargetsScript;
       buildPhaseCargoCommand = ''
         mkdir -p "$out"
-        cargoWithProfile check ${watchArgs.cargoExtraArgs} --all-targets
-        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib typst_render::persistent::tests
-        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib watch::tests
-        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib server::tests
-        cargoWithProfile clippy ${watchArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
+        cargoWithProfile check ${persistentTypstArgs.cargoExtraArgs} --all-targets
+        cargoWithProfile test ${persistentTypstArgs.cargoExtraArgs} typst_render::persistent::tests
+        cargoWithProfile clippy ${persistentTypstArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
       '';
       checkPhaseCargoCommand = "";
       doCheck = false;
@@ -379,12 +326,12 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-python docs/api/python/linnet-python.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
@@ -397,11 +344,11 @@ let
       --interpreter "$linnet_python/bin/python" \
       --out "$linnet_wheels" \
       --manifest-path crates/linnet-py/Cargo.toml \
-      --features extension-module,abi3
+      --features extension-module,abi3-py310
     # Python imports the pinned Typst from Nix; uv does not discover those
     # inherited packages when resolving dependencies.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
-      "$linnet_wheels"/linnet_py-*.whl
+      "$linnet_wheels"/linnet-*.whl
     "$linnet_python/bin/python" -m unittest \
       crates/linnet-py/tests/test_basic.py \
       crates/linnet-py/tests/test_wasm.py \
@@ -413,7 +360,6 @@ let
       docs/assets/about-*.svg
       docs/assets/graphs/portal-*.svg
       docs/assets/local-unitarity-*.svg
-      docs/assets/gammaloop-construction-*.svg
       docs/assets/spensologo.svg
       assets/gammalooplogo*.svg
     )
@@ -421,12 +367,11 @@ let
       "$svg_assets"/docs/assets/about-*.svg
       "$svg_assets"/docs/assets/graphs/portal-*.svg
       "$svg_assets"/docs/assets/local-unitarity-*.svg
-      "$svg_assets"/docs/assets/gammaloop-construction-*.svg
       "$svg_assets"/docs/assets/spensologo.svg
       "$svg_assets"/assets/gammalooplogo*.svg
     )
-    test "''${#checked_assets[@]}" -eq 34
-    test "''${#generated_assets[@]}" -eq 34
+    test "''${#checked_assets[@]}" -eq 32
+    test "''${#generated_assets[@]}" -eq 32
     for checked_asset in "''${checked_assets[@]}"; do
       cmp "$checked_asset" "$svg_assets/$checked_asset"
     done
@@ -490,7 +435,7 @@ let
           "$out/products/gammaloop/index.html"
         python3 scripts/check-docs-html.py "$out"
 
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$out/products/$product/snapshots/v0.3.4/.note"
         done
       '';
@@ -551,7 +496,7 @@ let
         cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
         cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
         cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
         done
 
@@ -573,7 +518,7 @@ let
         test -s "$out/developers/assets/site.js"
         test -s "$out/developers/architecture/gammaloop-architecture/index.html"
         ${alphal00pDocsDeveloperAssertions "$out"}
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           product_root="$out/products/$product"
           test -s "$product_root/index.html"
           test -s "$product_root/latest/index.html"
@@ -584,12 +529,6 @@ let
           test -s "$product_root/latest/tutorial/index.html"
           test -s "$product_root/latest/reference/interfaces/index.html"
           test -s "$product_root/latest/version-history/index.html"
-          test -s "$product_root/latest/manual/interfaces/index.html"
-          test -s "$product_root/latest/manual/releases/index.html"
-          grep -Fq 'url=../../reference/interfaces/' \
-            "$product_root/latest/manual/interfaces/index.html"
-          grep -Fq 'url=../../version-history/' \
-            "$product_root/latest/manual/releases/index.html"
           test -s "$product_root/latest/assets/site.css"
           test -s "$product_root/latest/assets/site.js"
           test -s "$product_root/latest/assets/local-unitarity-light.svg"
@@ -603,6 +542,15 @@ let
           ! grep -q "Rustdoc generation was skipped" \
             "$product_root/latest/reference/rust/index.html"
         done
+        for product in gammaloop linnet spenso idenso vakint; do
+          product_root="$out/products/$product"
+          test -s "$product_root/latest/manual/interfaces/index.html"
+          test -s "$product_root/latest/manual/releases/index.html"
+          grep -Fq 'url=../../reference/interfaces/' \
+            "$product_root/latest/manual/interfaces/index.html"
+          grep -Fq 'url=../../version-history/' \
+            "$product_root/latest/manual/releases/index.html"
+        done
         test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
         test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
@@ -611,6 +559,10 @@ let
         test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
         test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
         test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+        for component in feynkit feynkit_amplitude feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
+          test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
+        done
+        test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
         grep -Fq 'href="../theme.css"' \
           "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
@@ -677,6 +629,6 @@ in
     alphal00pDocsPages
     alphal00pDocsSnapshotFixture
     alphal00pDocsCheck
-    watchCheck
+    persistentTypstCheck
     ;
 }
