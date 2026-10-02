@@ -218,18 +218,8 @@ impl RegionObservation {
                     // owner opens a composite dot, so retain those candidates.
                     let mut ports = Vec::new();
                     for argument in function.iter() {
-                        let endpoint = match slots.classify(argument) {
-                            SlotMatch::Explicit(port) => slots
-                                .representation(port)
-                                .ok()
-                                .map(|rep| (rep, port.dimension())),
-                            _ => slots.compact_representation(argument).and_then(|port| {
-                                slots
-                                    .parse_representation::<LibraryRep>(argument)
-                                    .ok()
-                                    .map(|rep| (rep.rep, port.dimension()))
-                            }),
-                        };
+                        // Supplied rank-one tensors still occupy matrix endpoints.
+                        let endpoint = slots.port_representation(argument);
                         let Some((representation, dimension)) = endpoint else {
                             continue;
                         };

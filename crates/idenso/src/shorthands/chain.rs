@@ -112,7 +112,9 @@ pub(crate) trait Chain {
     /// and single length chains back into the corresponding tensor
     fn undo_single_length(&self) -> Atom;
 
-    /// turns tensors with two indices of the representation into chain expressions, for collecting using [`Atom::join_chains`]
+    /// Turn two compatible argument positions into a chain for [`Atom::join_chains`].
+    /// A position may be an explicit slot, an unresolved representation, or a
+    /// supplied compact rank-one tensor; supplied endpoints remain bound.
     ///
     /// `A(..,rep(d,i),rep(d,j),...)` becomes `chain(rep(d,i),rep(d,j),A(..,in,out...))`
     ///
@@ -209,10 +211,25 @@ impl<'a> Chain for AtomView<'a> {
             return source;
         }
 
-        let in_index = representation.to_symbolic([W_.d_, W_.i_]);
+        let in_index = Atom::var(W_.i_);
         let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
         let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
-        let out_index = representation.dual().to_symbolic([W_.d_, W_.k_]);
+        let out_index = Atom::var(W_.k_);
+        let endpoints = W_.i_.filter_cmp(W_.d_, move |endpoint, dimension| {
+            let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
+                return false;
+            };
+            SlotMatcher::default()
+                .port_representation(*endpoint)
+                .is_some_and(|(rep, dim)| rep == representation && dim == *dimension)
+        }) & W_.k_.filter_cmp(W_.d_, move |endpoint, dimension| {
+            let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
+                return false;
+            };
+            SlotMatcher::default()
+                .port_representation(*endpoint)
+                .is_some_and(|(rep, dim)| rep == representation.dual() && dim == *dimension)
+        });
 
         let mut joins = vec![(
             chain!(&in_index, &dummy_out, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
@@ -246,6 +263,7 @@ impl<'a> Chain for AtomView<'a> {
                 let transpose_right = *transpose_right;
                 result = result
                     .replace(product.to_pattern())
+                    .when(endpoints.clone())
                     .repeat()
                     .with_map(move |matches| {
                         let mut collected = FunctionBuilder::new(T.chain)
@@ -350,9 +368,21 @@ impl<'a> Chain for AtomView<'a> {
             return self.to_owned();
         }
 
-        let in_index = representation.to_symbolic([W_.d_, W_.i_]);
-
-        let out_index = representation.dual().to_symbolic([W_.d_, W_.j_]);
+        let in_index = Atom::var(W_.i_);
+        let out_index = Atom::var(W_.j_);
+        let endpoints = W_.i_.filter_cmp(W_.j_, move |left, right| {
+            let (Match::Single(left), Match::Single(right)) = (left, right) else {
+                return false;
+            };
+            let mut slots = SlotMatcher::default();
+            let Some(left) = slots.port_representation(*left) else {
+                return false;
+            };
+            let Some(right) = slots.port_representation(*right) else {
+                return false;
+            };
+            left.0 == representation && right.0 == representation.dual() && left.1 == right.1
+        });
 
         // Existing ports belong to an enclosing chain. A second representation
         // must retain its explicit slots rather than reuse those untyped ports.
@@ -389,10 +419,12 @@ impl<'a> Chain for AtomView<'a> {
             ),
         )
         .when(
-            W_.a_.filter_match(move |a| {
-                matches!(a, Match::FunctionName(a)
+            endpoints.clone()
+                & W_.a_.filter_match(move |a| {
+                    matches!(a, Match::FunctionName(a)
                     if *a != T.chain && *a != T.trace && *a != ETS.metric)
-            }) & W_.a___.filter_match(no_ports)
+                })
+                & W_.a___.filter_match(no_ports)
                 & W_.b___.filter_match(no_ports)
                 & W_.c___.filter_match(no_ports),
         )
@@ -482,7 +514,7 @@ impl<'a> Chain for AtomView<'a> {
                         .next()
                         .is_some()
                         || operand
-                            .pattern_match(&existing_chain, None, None)
+                            .pattern_match(&existing_chain, Some(&endpoints), None)
                             .next()
                             .is_some()
                 });
@@ -515,15 +547,9 @@ impl<'a> Chain for AtomView<'a> {
             let start = factors.next().unwrap();
             let end = factors.next().unwrap();
             if let Some(representation) = representation {
-                use spenso::structure::{
-                    representation::Representation,
-                    slot::{IsAbstractSlot, SlotMatcher},
-                };
                 let selected = SlotMatcher::default()
-                    .parse::<LibraryRep, AbstractIndex>(start)
-                    .map(|slot| slot.rep().rep)
-                    .ok()
-                    .or_else(|| Representation::<LibraryRep>::try_from(start).ok().map(|rep| rep.rep));
+                    .port_representation(start)
+                    .map(|(rep, _)| rep);
                 if selected.is_none_or(|selected| selected.base() != representation.base()) {
                     return;
                 }
