@@ -1455,6 +1455,13 @@ process-wide inventory. The catalogue helper enables its native feature anchor
 only for reference generation, so its use as a build dependency does not pull
 GammaLoop into a separate host-library build.
 
+The terminal source set also carries Spenso's packaged tensor stub alongside
+its documentation snapshot, so the isolated exporter validates both copies.
+FeynKit's amplitude Rust reference is included in the terminal route assertions;
+its compile-time tests receive the existing model fixture directory through the
+per-package extra-source map. These inputs extend their owning package and
+documentation closures without changing the reusable producer partition.
+
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
 same relative Cargo target, compile-time Symbolica setting and workspace-hack

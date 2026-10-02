@@ -119,8 +119,12 @@ fn render(
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<String, Box<dyn Error>> {
     match component {
+        #[cfg(feature = "spenso")]
+        "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
+        #[cfg(feature = "feynkit")]
+        "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(linnet_py::canonical_stub_from_module(module)),
+        "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -154,24 +158,6 @@ fn validate_spenso_stub_surface(
     .into())
 }
 
-#[cfg(feature = "idenso")]
-fn validate_idenso_stub_surface(
-    module: &pyo3_stub_gen::generate::Module,
-) -> Result<(), Box<dyn Error>> {
-    use symbolica::api::python::SymbolicaCommunityModule;
-
-    let expected = idenso::python::PYTHON_STUB_SURFACE
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect::<BTreeSet<_>>();
-    let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.idenso")?;
-        idenso::python::IdensoModule::register_module(&module)?;
-        public_module_names(&module)
-    })?;
-    validate_exact_surface("Idenso", &expected, &stub_names(module), &runtime)
-}
-
 #[cfg(feature = "vakint")]
 fn validate_vakint_stub_surface(
     module: &pyo3_stub_gen::generate::Module,
@@ -183,7 +169,7 @@ fn validate_vakint_stub_surface(
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.vakint")?;
+        let module = pyo3::types::PyModule::new(py, "symbolica.community.hepkit.vakint")?;
         vakint::symbolica_community_module::VakintWrapper::register_module(&module)?;
         public_module_names(&module)
     })?;
@@ -191,9 +177,10 @@ fn validate_vakint_stub_surface(
 }
 
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
-    feature = "idenso",
     feature = "spenso",
+    feature = "linnet",
     feature = "vakint"
 ))]
 fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
@@ -203,11 +190,29 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
         .map(|class| class.name.to_owned())
         .chain(module.enum_.values().map(|enum_| enum_.name.to_owned()))
         .chain(module.function.keys().map(|name| (*name).to_owned()))
-        .chain(module.variables.keys().map(|name| (*name).to_owned()))
+        .chain(
+            module
+                .variables
+                .values()
+                // Private typing helpers describe annotations, not runtime exports.
+                .filter(|variable| {
+                    !(variable.name.starts_with('_')
+                        && matches!(
+                            variable.type_.name.as_str(),
+                            "typing.TypeAlias" | "typing.TypeVar"
+                        ))
+                })
+                .map(|variable| variable.name.to_owned()),
+        )
         .collect()
 }
 
-#[cfg(any(feature = "gammaloop", feature = "idenso", feature = "vakint"))]
+#[cfg(any(
+    feature = "feynkit",
+    feature = "gammaloop",
+    feature = "vakint",
+    feature = "linnet"
+))]
 fn public_module_names(
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
 ) -> pyo3::PyResult<BTreeSet<String>> {
@@ -220,7 +225,7 @@ fn public_module_names(
         .collect()
 }
 
-#[cfg(any(feature = "idenso", feature = "vakint"))]
+#[cfg(feature = "vakint")]
 fn validate_exact_surface(
     product: &str,
     expected: &BTreeSet<String>,
@@ -687,8 +692,52 @@ def validate(runtime_module, stub_source):
         assert!(rendered.contains("class TensorFunctionLibrary:"));
         assert!(!rendered.contains("LibraryTensor"));
         assert!(!rendered.contains("TensorIndices"));
-        assert!(!rendered.contains("TensorStructure"));
+        assert!(rendered.contains("class TensorStructure:"));
+        assert!(rendered.contains("class RepresentationName:"));
         assert!(!rendered.contains("TensorNamespace"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_distinguishes_typing_aliases_from_runtime_variables() {
+        let (module_name, mut stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get_mut(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("_ScalarInput: typing.TypeAlias")
+        );
+        super::validate_spenso_stub_surface(module)
+            .expect("typing aliases are not runtime exports");
+
+        module.variables.insert(
+            "_unexpected_runtime_value",
+            pyo3_stub_gen::generate::VariableDef {
+                name: "_unexpected_runtime_value",
+                type_: pyo3_stub_gen::TypeInfo::builtin("int"),
+                default: None,
+            },
+        );
+        let error = super::validate_spenso_stub_surface(module).unwrap_err();
+        assert!(error.to_string().contains("_unexpected_runtime_value"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_preserves_expression_inheritance() {
+        let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("class TensorExpression(Expression):")
+        );
     }
 
     #[cfg(feature = "spenso")]
@@ -703,16 +752,26 @@ def validate(runtime_module, stub_source):
 
         for signature in [
             "def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
         ] {
             assert!(rendered.contains(signature), "missing `{signature}`");
         }
+        assert!(rendered.contains("def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:"));
+        for retired in [
+            "CookSettings",
+            "CookMode",
+            "CookSourceFilter",
+            "CookTagFilter",
+            "cook_indices",
+        ] {
+            assert!(!rendered.contains(retired), "retired Python API {retired}");
+        }
         assert!(rendered.contains(
-            "Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+            "Single: typing.ClassVar[ExecutionMode]\n    r\"\"\"\n    Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains\n    \"\"\""
         ));
-        assert!(!rendered.contains("Single : Execute one contraction at a time"));
+        assert!(!rendered.contains("Execute one contraction at a time"));
     }
 }

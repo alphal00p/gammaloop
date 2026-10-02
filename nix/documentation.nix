@@ -109,6 +109,7 @@ let
         (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
+        (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL08.dot")
         (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot")
@@ -134,9 +135,15 @@ let
         (workspaceRoot + "/tests/resources/graphs/uv_tests/scalar_mirrored_cubic_exact_uv_rewrite.dot")
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/uv.lock")
-        (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.py")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.py")
+        (
+          workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
+        )
+        (workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
@@ -270,7 +277,6 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -490,7 +496,7 @@ let
           "$out/products/gammaloop/index.html"
         python3 scripts/check-docs-html.py "$out"
 
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$out/products/$product/snapshots/v0.3.4/.note"
         done
       '';
