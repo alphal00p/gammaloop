@@ -401,7 +401,7 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
   -> trace(cof(Nc),
        t(coad(Nc^2-1,a),in,out),
        t(coad(Nc^2-1,b),in,out))
-  -> TR * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
+  -> idx(2,cof(Nc)) * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
 ```
 
 === C3. Fundamental Casimir and adjacent contractions
@@ -427,7 +427,7 @@ Pattern:
 chain(cof(Nc,i),dind(cof(Nc,k)),
   t(coad(Nc^2-1,a),in,out),
   t(coad(Nc^2-1,a),in,out))
-  -> C_F * g(cof(Nc,i),dind(cof(Nc,k)))
+  -> cas(2,cof(Nc)) * g(cof(Nc,i),dind(cof(Nc,k)))
 ```
 Assumptions: `color.h` keeps `C_F` as `cR`, not automatically as $(N_c^2 - 1) / (2 N_c)$.
 
@@ -443,7 +443,7 @@ $ #anchor("eq-color-fierz")
 This identity is not written in this explicit form in `color.h`, whose main algorithm uses trace joining and invariant reductions. It is implemented directly in GammaLoop/idenso:
 ```rs
 t(e,a,b) * t(e,c,d)
-  -> TR * (id(a,d) * id(c,b) - id(a,b) * id(c,d) / Nc)
+  -> idx(2,cof(Nc)) * (id(a,d) * id(c,b) - id(a,b) * id(c,d) / Nc)
 ```
 Source: #source(color-rs + "#L407-L414"). Symbolica documentation for replacement mechanics: #source(sym-pattern).
 
@@ -451,7 +451,7 @@ Pattern:
 ```rs
 t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
 * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))
-  -> TR * (
+  -> idx(2,cof(Nc)) * (
        g(cof(Nc,i),dind(cof(Nc,l)))
        * g(cof(Nc,k),dind(cof(Nc,j)))
        - g(cof(Nc,i),dind(cof(Nc,j)))
@@ -753,14 +753,14 @@ trace(cof(nc_),t(coad(na_,a_),in,out))
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out))
-  -> TR * g(coad(na_,a_),coad(na_,b_))
+  -> idx(2,cof(nc_)) * g(coad(na_,a_),coad(na_,b_))
 
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out),
   t(coad(na_,c_),in,out))
   -> dR(coad(na_,a_),coad(na_,b_),coad(na_,c_))
-     + i_ / 2 * TR * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
+     + i_ / 2 * idx(2,cof(nc_)) * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
 ```
 
 Casimir and separated-generator shortcuts:
@@ -770,14 +770,14 @@ chain(cof(nc_,i_),dind(cof(nc_,k_)),
   t(coad(na_,a_),in,out),
   t(coad(na_,a_),in,out),
   ys___)
-  -> CF * chain(cof(nc_,i_),dind(cof(nc_,k_)),xs___,ys___)
+  -> cas(2,cof(nc_)) * chain(cof(nc_,i_),dind(cof(nc_,k_)),xs___,ys___)
 
 trace(cof(nc_),
   t(coad(na_,a_),in,out),
   t(coad(na_,b_),in,out),
   t(coad(na_,a_),in,out),
   xs___)
-  -> (CF - CA / 2) * trace(cof(nc_),t(coad(na_,b_),in,out),xs___)
+  -> (cas(2,cof(nc_)) - cas(2,coad(na_)) / 2) * trace(cof(nc_),t(coad(na_,b_),in,out),xs___)
 ```
 
 Source: `color.h` selected-trace terminal rules at lines 459--464 and easy contraction rules at lines 108--111 and 173--175.
@@ -788,12 +788,12 @@ Structure-constant contractions:
 ```rs
 f(coad(na_,a_),coad(na_,c_),coad(na_,d_))
 * f(coad(na_,b_),coad(na_,c_),coad(na_,d_))
-  -> CA * g(coad(na_,a_),coad(na_,b_))
+  -> cas(2,coad(na_)) * g(coad(na_,a_),coad(na_,b_))
 
 f(coad(na_,a_),coad(na_,b_),coad(na_,e_))
 * f(coad(na_,b_),coad(na_,c_),coad(na_,f_))
 * f(coad(na_,c_),coad(na_,a_),coad(na_,g_))
-  -> CA / 2 * f(coad(na_,e_),coad(na_,f_),coad(na_,g_))
+  -> cas(2,coad(na_)) / 2 * f(coad(na_,e_),coad(na_,f_),coad(na_,g_))
 ```
 
 Trace--structure shortcut:
@@ -803,7 +803,7 @@ trace(cof(nc_),
   t(coad(na_,b_),in,out),
   xs___)
 * f(coad(na_,a_),coad(na_,b_),coad(na_,c_))
-  -> i_ * CA / 2 * trace(cof(nc_),t(coad(na_,c_),in,out),xs___)
+  -> i_ * cas(2,coad(na_)) / 2 * trace(cof(nc_),t(coad(na_,c_),in,out),xs___)
 ```
 
 Symmetric-invariant contraction:
@@ -843,7 +843,7 @@ Rust implementation note: implement the short-circuit order as ordered passes, n
 
 == FORM-side test cases in Symbolica/Spenso syntax
 
-This section translates the compact FORM-side rule tests and the package example cases into the `chain`/`trace` notation used above. Expected values are written in the same symbolic convention: `TR` for `I2R`, `CA` for `cA`, `CF` for `cR`, and `NA` for adjoint dimension. The local validation used FORM 4.3.1 for the explicitly listed compact values.
+This section translates the compact FORM-side rule tests and the package example cases into the `chain`/`trace` notation used above. The FORM comparison tables below use the abbreviations `TR = idx(2,cof(Nc))`, `CA = cas(2,coad(NA))`, and `CF = cas(2,cof(Nc))` for `I2R`, `cA`, and `cR`; `NA` is the adjoint dimension. In Symbolica these are representation-dependent invariants, not standalone scalar symbols. The local validation used FORM 4.3.1 for the explicitly listed compact values.
 
 === Gamma trace tests
 
@@ -948,7 +948,7 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
 chain(cof(Nc,i),dind(cof(Nc,i)),
   t(coad(NA,a),in,out),
   t(coad(NA,b),in,out))
-  -> TR * g(coad(NA,a),coad(NA,b))
+  -> idx(2,cof(Nc)) * g(coad(NA,a),coad(NA,b))
 
 // FORM: T(i1,i1,a,b,c)
 chain(cof(Nc,i),dind(cof(Nc,i)),
@@ -1289,9 +1289,10 @@ adjoint slots must carry the registered representations and compatible dimension
 or unsupported structures remain in the expression rather than acquiring tensor meaning from
 their names.
 
-The public Python entry points use the default `GammaSimplifySettings` and
-`ColorSimplifySettings`. Rust callers can choose other settings, so record those settings when a
-normal form is part of a reproducible result.
+The comparisons below use native default gamma and color conventions. Python
+selects these with `simplify_algebra(gamma=True, color=True)`; Rust retains typed
+settings in `AlgebraSettings`. Both Rust and Python callers
+can choose other settings; record them when a normal form is part of a reproducible result.
 
 == Dirac convention
 
@@ -1338,6 +1339,84 @@ and
   label: "the dimension-gating tests",
 ).
 
+== Charge conjugation and matrix orientation
+
+The registered tensor `spenso::charge_conjugation` uses the
+#link("https://raw.githubusercontent.com/mg5amcnlo/mg5amcnlo/3.x/aloha/aloha_object.py")[ALOHA Weyl convention]
+
+$ C = -i γ^2 γ^0, quad C^2 = -1, quad C^T = -C, quad C^"*" = C. $
+
+In Rust, its symbol is `AGS.charge_conjugation`; the existing
+`spinor_matrix_structure` constructor supplies its ordered bispinor ports.
+`spenso-hep-lib` owns the component data reused by both HEP libraries and
+numeric generator grouping. UFO `C(i,j)` is lowered to this symbol in the shared
+generator and GammaLoop reindexer.
+
+Explicit-index contractions and compact chains enter the existing
+`simplify_algebra` path. The generic Python expression boundary already supports
+this tensor; no separate reduction API is needed:
+
+// docs-example: compile
+```python
+from symbolica import S
+from symbolica.community.tensor import Representation, TensorExpression
+
+spin = Representation.bis(4)
+i, j, k, mu = S("c_example::i", "c_example::j", "c_example::k", "c_example::mu")
+C = S("spenso::charge_conjugation")
+ci, cj, ck = (spin(index).to_expression() for index in (i, j, k))
+charge = TensorExpression(C(ci, cj))
+square = TensorExpression(C(ci, ck) * C(ck, cj))
+assert square.simplify_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False).to_expression() == -spin.g(i, j).to_expression()
+gamma, chain_head, incoming, outgoing = S(
+    "spenso::gamma", "spenso::chain", "spenso::in", "spenso::out"
+)
+factor = gamma(incoming, outgoing, Representation.mink(4)(mu).to_expression())
+c_factor = C(incoming, outgoing)
+sandwich = TensorExpression(chain_head(ci, cj, c_factor, factor, c_factor))
+transposed_gamma = sandwich.simplify_algebra(gamma=True, epsilon=True).contract(collect_chains=False, collect_traces=False)
+```
+
+The compact chain declares its external endpoints once; each matrix uses the
+reserved `in` and `out` markers. The separate `chain()` convenience builder
+requires any explicit neighboring matrix ports to carry matching index labels.
+
+For four-dimensional bispinor endpoints and explicitly four-dimensional gamma
+arguments, the local rules include
+
+$ C γ^μ C = (γ^μ)^T, quad C (γ^μ)^T C = γ^μ. $
+
+For a supported matrix word, insertion of $C^(-1) C$ between factors gives
+
+$ C A_1 dots A_n C = -(product_(r=1)^n σ_r) A_1^T dots A_n^T, $
+
+where $σ_r = -1$ for ordinary gamma and gamma-zero matrices, and $σ_r = 1$
+for gamma five and either chiral projector. Each matrix is transposed in place;
+the order of these factors is preserved and scalar coefficients are not
+conjugated. The nearest closing $C$ is used only when every intervening factor
+is supported. Unknown matrices leave that sandwich opaque.
+
+The dimension check also recognizes compact slash arguments such as
+`p(mink(4))` and `P(label,mink(4))`. It reads a direct Minkowski annotation or
+one among the immediate momentum-function arguments. A symbolic dimension does
+not specify a charge-conjugation convention and is left untouched. These rules
+do not provide a gamma-five prescription for dimensional regularization.
+
+In self-dual representation spaces, `collect_chains` can join two chains with
+a common start or common end. It transposes the necessary word by reversing its
+factors and simultaneously exchanging their `in`/`out` markers, retaining the
+representation's contraction convention. Dualizable spaces keep their directed
+end-to-start joins. Outside a supported $C$ sandwich, reversed gamma factors
+remain excluded from ordinary forward-matrix Clifford reductions.
+
+Focused Rust identities and an independent nonsymmetric complex-matrix check
+cover these transformations. The installed public-host regression
+`installed_charge_conjugation.py` passes its initial symbolic identities in
+the rebuilt host; full installed-host validation awaits fixture setup
+corrections. Supporting this tensor and its algebra does not implement
+general Majorana or fermion-number-violating diagram generation, whose external
+fermion-flow normalization still requires particle/antiparticle pairs.
+
 == Color convention
 
 Fundamental generators are written $(T^a)_i^j$. Idenso keeps the trace normalization $T_R$ and
@@ -1359,7 +1438,7 @@ $ sum_(c,d) f^(a c d) f^(b c d) = C_A δ^(a b). $
 
 For the conventional fundamental representation of $"SU"(N_c)$, one may subsequently choose
 $T_R = 1 / 2$, $C_A = N_c$, and $C_F = (N_c^2 - 1) / (2 N_c)$. Those substitutions are a
-specialization, not assumptions imposed on every expression by `simplify_color`.
+specialization, not assumptions imposed on every expression by `simplify_algebra`.
 
 The default color pass evaluates supported closed traces and expands supported cross-chain
 fundamental Fierz contractions. Open lines, higher invariant tensors, or unsupported structures
@@ -1377,6 +1456,7 @@ normalization and free/dummy-index placement above are locked by
   table.header([Rule family], [Status], [Boundary]),
   [Ordinary Clifford chains and traces], [Shipped], [Compatible dimensions; default Python path.],
   [Chisholm, gamma zero, projectors, and gamma five], [Shipped], [Explicit four-dimensional representations only.],
+  [Charge-conjugation matrix and sandwiches], [Implemented], [ALOHA Weyl convention; explicit 4D gamma/slash guards. Full installed-host validation awaits fixture setup corrections.],
   [Three-gamma epsilon expansion], [Opt-in], [Rust `GammaSimplifySettings`; disabled by the Python default.],
   [Color traces, Casimirs, structure contractions, and fundamental Fierz], [Shipped], [Registered color representations; invariants remain symbolic by default.],
   [Every FORM `color.h` identity and high-order invariant], [Not implied], [Only rules represented in the current Idenso implementation and tests are public behavior.],

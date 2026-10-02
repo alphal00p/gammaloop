@@ -1,33 +1,15 @@
 mod common;
-
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use idenso::shorthands::schoonschip::SchoonschipSettings;
 
-fn bench_mode(
-    group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
-    name: &str,
-    settings: SchoonschipSettings,
-) {
-    group.bench_function(name, |bench| {
+fn contraction_time(criterion: &mut Criterion) {
+    common::assert_contraction_invariants();
+    criterion.bench_function("contract", |bench| {
         bench.iter_batched(
             common::nested_dot_expression,
-            |expr| common::run_schoonschip(expr, &settings),
+            common::run_contraction,
             BatchSize::SmallInput,
         );
     });
 }
-
-fn schoonschip_modes_time(criterion: &mut Criterion) {
-    common::assert_benchmark_outputs_match();
-
-    let mut group = criterion.benchmark_group("schoonschip_modes_time");
-
-    for (name, settings) in common::benchmark_settings() {
-        bench_mode(&mut group, name, settings);
-    }
-
-    group.finish();
-}
-
-criterion_group!(benches, schoonschip_modes_time);
+criterion_group!(benches, contraction_time);
 criterion_main!(benches);

@@ -95,6 +95,49 @@ impl<A: AtomCore> AtomPrintExt for A {
     }
 }
 
+pub trait PolynomialExpressionExt {
+    /// Emit a polynomial with custom expressions for its variables.
+    ///
+    /// The mapper is called once per declared variable, including temporary
+    /// variables. Returning `None` refuses the conversion. Mapped expressions
+    /// remain factorized: sums inside a variable are not distributed.
+    fn to_expression_with_variables(
+        &self,
+        variables: impl FnMut(&PolyVariable) -> Option<Atom>,
+    ) -> Option<Atom>;
+}
+
+impl<R: Ring, E: Exponent + Into<i64>, O: MonomialOrder> PolynomialExpressionExt
+    for MultivariatePolynomial<R, E, O>
+where
+    R::Element: CoefficientToExpression<R>,
+{
+    fn to_expression_with_variables(
+        &self,
+        variables: impl FnMut(&PolyVariable) -> Option<Atom>,
+    ) -> Option<Atom> {
+        let variables = self
+            .variables()
+            .iter()
+            .map(variables)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Atom::add_many(self.into_iter().map(|term| {
+            let mut coefficient = Atom::new();
+            term.coefficient
+                .coefficient_to_expression(self.ring(), &mut coefficient);
+            Atom::mul_many(
+                std::iter::once(coefficient).chain(
+                    variables
+                        .iter()
+                        .zip(term.exponents)
+                        .filter(|(_, exponent)| !exponent.is_zero())
+                        .map(|(variable, exponent)| variable.pow(Into::<i64>::into(*exponent))),
+                ),
+            )
+        })))
+    }
+}
+
 #[derive(
     Debug,
     Copy,
@@ -442,5 +485,81 @@ impl PatternReplacement for Atom {
 
     fn replace_map_mut<F: Fn(AtomView, &Context, &mut Settable<'_, Atom>)>(&mut self, m: &F) {
         *self = self.replace_map(m);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mapped_polynomial_variables_preserve_opaque_sums() {
+        let polynomial = MultivariatePolynomial::<_, u32>::from_coefficient_list(
+            vec![Rational::from(2), Rational::from(3)],
+            vec![2, 1, 0, 1],
+            vec![PolyVariable::Temporary(0), PolyVariable::Temporary(1)].into(),
+            &Q,
+        );
+        let sum = parse!("mapped_x + mapped_y");
+        let factor = parse!("mapped_z");
+        let mut calls = 0;
+        let expression = polynomial
+            .to_expression_with_variables(|variable| {
+                calls += 1;
+                match variable {
+                    PolyVariable::Temporary(0) => Some(sum.clone()),
+                    PolyVariable::Temporary(1) => Some(factor.clone()),
+                    _ => None,
+                }
+            })
+            .unwrap();
+        assert_eq!(calls, 2);
+        assert_eq!(
+            expression,
+            parse!("2*(mapped_x+mapped_y)^2*mapped_z+3*mapped_z")
+        );
+        assert_ne!(expression, expression.expand());
+    }
+
+    #[test]
+    fn mapped_polynomial_variables_require_a_mapping() {
+        let polynomial = MultivariatePolynomial::<_, u32>::from_coefficient_list(
+            vec![Rational::from(1)],
+            vec![1],
+            vec![PolyVariable::Temporary(0)].into(),
+            &Q,
+        );
+        assert!(polynomial.to_expression_with_variables(|_| None).is_none());
+    }
+
+    #[test]
+    fn mapped_polynomials_support_other_rings_and_signed_exponents() {
+        let polynomial = MultivariatePolynomial::<_, i16>::from_coefficient_list(
+            vec![Integer::from(3)],
+            vec![-2],
+            vec![PolyVariable::Temporary(0)].into(),
+            &Z,
+        );
+        assert_eq!(
+            polynomial.to_expression_with_variables(|_| Some(parse!("mapped_x"))),
+            Some(parse!("3/mapped_x^2")),
+        );
+    }
+
+    #[test]
+    fn mapped_polynomial_exponents_preserve_the_full_unsigned_range() {
+        let variable = parse!("mapped_large_power");
+        for exponent in [i32::MAX as u32 + 1, u32::MAX] {
+            let polynomial = MultivariatePolynomial::<_, u32>::from_coefficient_list(
+                vec![Rational::from(1)],
+                vec![exponent],
+                vec![PolyVariable::Temporary(0)].into(),
+                &Q,
+            );
+            assert_eq!(
+                polynomial.to_expression_with_variables(|_| Some(variable.clone())),
+                Some(variable.pow(i64::from(exponent))),
+            );
+        }
     }
 }

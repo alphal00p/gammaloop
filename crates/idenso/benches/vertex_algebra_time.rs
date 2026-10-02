@@ -29,33 +29,33 @@ fn vertex_algebra_time(criterion: &mut Criterion) {
         );
     });
 
-    group.bench_function("network_normalize_substituted_5", |bench| {
+    group.bench_function("network_admit_substituted_5", |bench| {
         bench.iter_batched(
             common::network_substituted_5,
-            common::network_normalize_substituted,
+            common::network_admit_substituted,
             BatchSize::SmallInput,
         );
     });
 
-    group.bench_function("network_normalize_substituted_8", |bench| {
+    group.bench_function("network_admit_substituted_8", |bench| {
         bench.iter_batched(
             common::network_substituted_8,
-            common::network_normalize_substituted,
+            common::network_admit_substituted,
             BatchSize::SmallInput,
         );
     });
 
-    group.bench_function("network_schoonschip_substituted_5", |bench| {
+    group.bench_function("network_contract_substituted_5", |bench| {
         bench.iter_batched(
             common::network_substituted_5,
-            common::network_schoonschip_substituted,
+            common::network_contract_substituted,
             BatchSize::SmallInput,
         );
     });
 
     group.bench_function("network_parse_normalized_5", |bench| {
         bench.iter_batched(
-            || common::network_normalize_substituted(common::network_substituted_5()),
+            || common::network_admit_substituted(common::network_substituted_5()),
             common::network_parse_normalized,
             BatchSize::SmallInput,
         );
@@ -63,7 +63,7 @@ fn vertex_algebra_time(criterion: &mut Criterion) {
 
     group.bench_function("network_parse_normalized_8", |bench| {
         bench.iter_batched(
-            || common::network_normalize_substituted(common::network_substituted_8()),
+            || common::network_admit_substituted(common::network_substituted_8()),
             common::network_parse_normalized,
             BatchSize::SmallInput,
         );

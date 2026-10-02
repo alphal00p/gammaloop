@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-10-01.
+2026-09-21.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -102,6 +102,15 @@ not a duplicate leaf cache. The graph never embeds the external library value. M
 occurs through the supplied `Library`, while opaque function nodes delegate to the supplied
 `FunctionLibrary`.
 
+`map_occurrences` materializes each graph occurrence against its current port
+bindings while reusing untouched stored aliases with the same logical layout.
+It checks surviving storage slots and records any storage permutation separately
+from the logical-position witness. `reindex_ports` applies simultaneous external
+port assignments through this boundary; it does not relabel unrelated internal
+contractions with matching labels. Concrete execution rejects unmaterialized
+bound ports. Network arithmetic refreshes its state from the resulting graph,
+and component execution invalidates logical layout observations it cannot retain.
+
 Execution follows one semantic path with interchangeable policies:
 
 ```text
@@ -125,9 +134,9 @@ is disabled or the contraction strategy performs partial graph rewrites.
 
 === Symbolic parallelism and optimized sums
 
-With `symbolica`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
-Symbolica atoms. `Auto` checks the Symbolica license once and uses a workload heuristic where an
-operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
+With `shadowing`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
+Symbolica atoms. `Auto` keeps WebAssembly kernels serial; on native targets it checks the
+Symbolica license once and uses a workload heuristic where an operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
 license safety check. Configure the policy before tensor work: changing it concurrently with an
 active operation is unsupported.
 
@@ -137,14 +146,11 @@ Separately, `FastTensorSum`, `FastTensorSumContractible`, balanced scalar/tensor
 contraction profiles, and pair estimates provide optional optimized paths inside the same
 network semantics. Unsupported shapes or unprofitable cases use the ordinary sum and
 contraction paths. Network counters and timers are opt-in diagnostic instrumentation; they do
-not change the execution result. `SPENSO_NETWORK_PROFILE` records cumulative
-counters and timers with periodic reports and slow-operation diagnostics.
-Per-operation starts, batch completion and merge-progress lines additionally
-require `SPENSO_NETWORK_PROFILE_VERBOSE`.
+not change the execution result.
 
 == Symbolica parsing boundary
 
-The `symbolica` feature enables `network::parsing`. `NetworkParse` and the more general
+The `shadowing` feature enables `network::parsing`. `NetworkParse` and the more general
 `Network::try_from_view` lower a Symbolica `AtomView` into the same graph and store used by
 programmatic construction. Dispatch recognizes addition, multiplication, integer powers, and
 functions before falling back to scalar or opaque-tensor construction.
@@ -159,11 +165,17 @@ Positive powers that lower shorthand with internal dummies reparse each copy fro
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.
 
-Scalar precontraction applies to both products and sums. For a mixed sum, parsing
-collects the pure-scalar terms and combines them in one n-ary addition; a fully
-scalar sum reuses the original normalized atom. It does not grow an intermediate
-scalar sum by repeated pairwise copying. Closed lazy tensor leaves are converted
-to their scalar entries before execution adds them, independently of leaf order.
+Trusted shallow planning uses `Network::try_from_admitted_view` with opaque
+shorthand and depth one. It shares the ordinary parser's construction and
+dispatch, while reusing established syntax and dummy-scope admission instead of
+validating and reserving the whole input again. `LeafInterfaceCache` stores exact
+boundary expressions' tensor classification and logical slots. Unchanged leaves
+reuse these facts across graph replacements, including scalar interfaces with
+internal contractions. The cache requires unchanged classification policy and
+admission facts; callbacks and materialized rewrites leave the trusted path.
+No live occurrence binding is stored in this cache: graph ports still own it.
+The profiler records misses, hits, actual syntactic visits, and uncached inference
+time separately from general structure-attempt time.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across
@@ -174,18 +186,18 @@ Spenso and Idenso are recorded in the
 
 The default `native` feature forwards GMP/MPFR support; `wasm` selects Symbolica's Wasm backend
 with default features disabled. Native code generation is a separate `native-code-generation`
-feature. `symbolica` enables Symbolica atoms,
+feature. `shadowing` enables Symbolica atoms,
 parametric tensors, parsing, state-aware decoding, and Linnet's Symbolica adapter. `python`
 only adds PyO3 extraction for Spenso's complex scalar type; the full Python tensor surface lives
-in `spynso3`. `python-stubs` adds stub metadata and implies `python`.
+in `spynso3`. `python_stubgen` adds stub metadata and implies `python`.
 
 Structures, dense and sparse tensors, `DataTensor`, `NetworkGraph`, `NetworkStore`, and
 `Network` derive Serde and bincode representations when their generic fields support them.
-Under `symbolica`, selected types also decode through Symbolica's state map. These are type-level
+Under `shadowing`, selected types also decode through Symbolica's state map. These are type-level
 encodings, not a versioned checkpoint protocol: Spenso provides no state directory, database,
 schema migration, or cross-version compatibility promise. The optional `portable-payload`
 module carries representation and math-display declarations beside native Atom bytes through
-`symbolica-typst-atom-payload`; Spenso-aware consumers validate and register these before Atom import.
+`symbolica-typst-plugin`; Spenso-aware consumers validate and register these before Atom import.
 The caller still owns byte storage, format versioning, Symbolica-state availability, and
 library-key reconstruction.
 
@@ -231,7 +243,7 @@ Unit and snapshot tests live beside structures, dense and sparse data, contracti
 network graph and store operations, libraries, execution strategies, symbolic parsing,
 parametric tensors, and serialization-sensitive types. The default typed boundary is exercised
 with `cargo test -p spenso`; parsing and symbolic execution require
-`cargo test -p spenso --features symbolica`. Rayon behavior also depends on the Symbolica
+`cargo test -p spenso --features shadowing`. Rayon behavior also depends on the Symbolica
 parallelism setting, so performance checks should record both the Cargo feature set and runtime
 thread configuration.
 

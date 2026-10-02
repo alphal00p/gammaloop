@@ -1,3 +1,7 @@
+pub mod metric_contraction_benchmark;
+#[cfg(feature = "reference-cases")]
+pub mod timing;
+
 use spenso::{
     chain, g, p, q, s, slot,
     structure::{
@@ -9,10 +13,19 @@ use spenso::{
 use symbolica::atom::Atom;
 
 use crate::{
-    color::{CS, ColorSimplifier},
-    dirac::{GammaSimplifier, GammaSimplifySettings},
+    color::{CS, ColorSimplifySettings},
+    dirac::GammaSimplifySettings,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, initialize},
+    tensor::SymbolicTensor,
 };
+
+/// Isolate the internal chain-notation primitive in the phase benchmark.
+/// Production callers select chain collection through `ContractSettings`.
+#[cfg(feature = "reference-cases")]
+pub fn chain_notation_phase(expression: symbolica::atom::AtomView<'_>) -> Atom {
+    use crate::shorthands::chain::Chain;
+    expression.chainify(Bispinor {}.into())
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReferenceDomain {
@@ -53,13 +66,38 @@ impl ReferenceCase {
     }
 
     pub fn simplify(&self, expression: &Atom) -> Atom {
-        match self.simplification {
-            ReferenceSimplification::GammaDefault => expression.simplify_gamma(),
-            ReferenceSimplification::GammaCanonical => {
-                expression.simplify_gamma_with(GammaSimplifySettings::canonical())
+        let tensor = SymbolicTensor::infer(expression.clone()).expect("valid reference tensor");
+        let result = match self.simplification {
+            ReferenceSimplification::GammaDefault => {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
             }
-            ReferenceSimplification::ColorDefault => expression.simplify_color(),
-        }
+            ReferenceSimplification::GammaCanonical => {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+            }
+            ReferenceSimplification::ColorDefault => {
+                tensor.simplify_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+            }
+        };
+        result
+            .expect("valid reference simplification")
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .expect("valid reference contractions")
+            .into_expression()
     }
 
     pub fn simplified(&self) -> Atom {

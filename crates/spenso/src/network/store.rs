@@ -23,6 +23,11 @@ pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
     fn n_tensors(&self) -> usize;
     fn n_scalars(&self) -> usize;
     fn extend(&mut self, other: Self);
+
+    /// Keep the specified payloads in the given order, moving each value once.
+    /// Indices must be unique and in bounds. Parser construction uses this to
+    /// discard evaluated scalar temporaries without cloning tensor payloads.
+    fn retain_in_order(self, tensors: &[usize], scalars: &[usize]) -> Self;
 }
 
 #[doc(hidden)]
@@ -329,6 +334,34 @@ impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
 }
 
 impl<T, S> TensorScalarStore for NetworkStore<T, S> {
+    fn retain_in_order(self, tensors: &[usize], scalars: &[usize]) -> Self {
+        let mut source_tensors = self.tensors.into_iter().map(Some).collect::<Vec<_>>();
+        let mut source_scalars = self.scalar.into_iter().map(Some).collect::<Vec<_>>();
+        let mut source_aliases = self.scalar_aliases;
+        Self {
+            tensors: tensors
+                .iter()
+                .map(|&index| {
+                    source_tensors[index]
+                        .take()
+                        .expect("unique retained tensor")
+                })
+                .collect(),
+            scalar: scalars
+                .iter()
+                .map(|&index| {
+                    source_scalars[index]
+                        .take()
+                        .expect("unique retained scalar")
+                })
+                .collect(),
+            scalar_aliases: scalars
+                .iter()
+                .map(|&index| source_aliases[index].take())
+                .collect(),
+        }
+    }
+
     fn n_tensors(&self) -> usize {
         self.tensors.len()
     }
@@ -648,6 +681,24 @@ mod tests {
         NetworkGraph, NetworkStore, NetworkStoreAccess, NetworkStoreOverlay, ScalarRef,
         TensorScalarStore,
     };
+
+    #[test]
+    fn ordered_retention_moves_payloads_and_keeps_scalar_alias_pairs() {
+        let store = NetworkStore {
+            tensors: (0..4).map(Mutex::new).collect(),
+            scalar: vec![11, 13, 17],
+            scalar_aliases: vec![Some(19), None, Some(23)],
+        };
+        let retained = store.retain_in_order(&[3, 1], &[2, 0]);
+        assert_eq!(*retained.tensors[0].lock().unwrap(), 3);
+        assert_eq!(*retained.tensors[1].lock().unwrap(), 1);
+        assert_eq!(retained.scalar, [17, 11]);
+        assert_eq!(retained.scalar_aliases, [Some(23), Some(19)]);
+        let empty = retained.retain_in_order(&[], &[]);
+        assert!(empty.tensors.is_empty());
+        assert!(empty.scalar.is_empty());
+        assert!(empty.scalar_aliases.is_empty());
+    }
 
     #[test]
     fn tensor_retention_moves_shared_payloads_and_preserves_every_leaf_variant() {

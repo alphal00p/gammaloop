@@ -21,6 +21,38 @@ use crate::{
     },
 };
 
+impl<T> FunctionLibrary<T, Atom> for SymbolLib<T, super::panicing::ErroringLibrary<Symbol>> {
+    type Key = Symbol;
+
+    fn apply(&self, key: &Symbol, tensor: T) -> Result<T, FunctionLibraryError<Symbol>> {
+        if let Some(function) = self.functions.get(key) {
+            function(tensor)
+        } else {
+            <super::panicing::ErroringLibrary<Symbol> as FunctionLibrary<T, Atom>>::apply(
+                &self._missing,
+                key,
+                tensor,
+            )
+        }
+    }
+
+    fn apply_scalar(
+        &self,
+        key: &Symbol,
+        scalar: Atom,
+    ) -> Result<Atom, FunctionLibraryError<Symbol>> {
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            <super::panicing::ErroringLibrary<Symbol> as FunctionLibrary<T, Atom>>::apply_scalar(
+                &self._missing,
+                key,
+                scalar,
+            )
+        }
+    }
+}
+
 pub struct Inbuilts {
     pub conj: Symbol,
 }
