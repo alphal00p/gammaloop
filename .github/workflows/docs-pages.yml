@@ -13,7 +13,6 @@ on:
       - 'gammaloop-api-v*'
       - 'gammaloop-python-v*'
       - 'linnet-v*'
-      - 'linnet-py-v*'
       - 'spenso-v*'
       - 'spenso-macros-v*'
       - 'spenso-hep-lib-v*'
@@ -259,8 +258,8 @@ jobs:
         if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
         uses: pypa/cibuildwheel@v4.2.0
         with:
-          package-dir: crates/linnet-py
-          output-dir: ${{ runner.temp }}/linnet-docs-wheel
+          package-dir: examples/notebooks/symbolica-host
+          output-dir: ${{ runner.temp }}/symbolica-docs-wheel
         env:
           CIBW_BUILD: cp314-pyodide_wasm32
           CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
@@ -271,6 +270,7 @@ jobs:
         name: Bundle live notebooks with the documentation
         env:
           NOTEBOOKS_ENABLED: ${{ steps.notebook_source.outputs.enabled }}
+          COMMUNITY_NOTEBOOKS: ${{ steps.notebook_source.outputs.community }}
           DOCS_PATH: ${{ steps.docs.outputs.path }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
@@ -297,10 +297,16 @@ jobs:
           fi
           exporter_help=$(python3 crates/linnet-py/examples/export_wasm.py --help)
           products=(linnet)
+          community_products=(spenso idenso feynkit)
           product_selection=false
           if [[ "$exporter_help" == *"--docs {"* ]]; then
-            products+=(gammaloop)
             product_selection=true
+            physics_package=$(python3 -c 'import runpy; notebooks = runpy.run_path("crates/linnet-py/examples/export_wasm.py")["NOTEBOOKS"]; print(next(getattr(notebook, "package", "linnet") for notebook in notebooks if notebook.docs_product == "gammaloop"))')
+            if [ "$physics_package" = symbolica ]; then
+              community_products+=(gammaloop)
+            else
+              products+=(gammaloop)
+            fi
           fi
           for product in "${products[@]}"; do
             # Manual snapshots use the exporter from the selected historical
@@ -316,6 +322,29 @@ jobs:
               --wheel "${wheels[0]}" \
               --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
           done
+          if [ "$COMMUNITY_NOTEBOOKS" = true ]; then
+            community_wheels=("$RUNNER_TEMP/symbolica-docs-wheel/"*.whl)
+            if [ "${#community_wheels[@]}" -ne 1 ]; then
+              echo "Expected exactly one shared Symbolica browser wheel" >&2
+              exit 2
+            fi
+            nix develop --command just notebook-ufo-wheel "$RUNNER_TEMP/ufo-docs-wheel"
+            ufo_wheels=("$RUNNER_TEMP/ufo-docs-wheel/"*.whl)
+            if [ "${#ufo_wheels[@]}" -ne 1 ]; then
+              echo "Expected exactly one pinned UFO loader wheel" >&2
+              exit 2
+            fi
+            for product in "${community_products[@]}"; do
+              dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
+              if [ "$product" != feynkit ]; then
+                dependency_args=()
+              fi
+              "${notebook_export[@]}" \
+                --docs "$product" --wheel "${community_wheels[0]}" \
+                "${dependency_args[@]}" \
+                --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
+            done
+          fi
           echo "path=$staged_docs" >> "$GITHUB_OUTPUT"
 
       - name: Summarize documentation quality

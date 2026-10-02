@@ -290,7 +290,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, fmt, doc]
+        check: [clippy, fmt, doc, stubs]
     steps:
       - uses: actions/checkout@v4
 
@@ -332,6 +332,12 @@ jobs:
       - name: Run doc
         if: matrix.check == 'doc'
         run: just --unstable doc
+
+      - name: Check FeynKit Python stubs
+        if: matrix.check == 'stubs'
+        run: |
+          cargo run --locked -p feynkit-py --features python_stubgen --bin feynkit-stubgen
+          test -z "$(git status --porcelain -- crates/feynkit-py/python/symbolica)"
 
   checks:
     name: Checks

@@ -89,12 +89,21 @@ walkdir = "2.5.0"
 
 which = "8.0.0"
 
+# Consuming workspaces select the Typst payload through their own root patch.
 [patch.crates-io]
+# Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
 clarabel = { path = "vendor/clarabel" }
+# Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
+# Share the community kernel that supplies extension registration and resource budgets.
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
+
+# Reuse optimized Symbolica while keeping workspace debug builds inexpensive.
+[profile.dev.package.symbolica]
+opt-level = 2
+
 [profile.bench]
 opt-level = 3
 lto = "fat"
@@ -108,6 +117,9 @@ opt-level = 2
 # lto=true
 
 [profile.dev-optim.package."*"]
+opt-level = 3
+
+[profile.dev-optim.package.symbolica]
 opt-level = 3
 
 [profile.dev-optim.package.gammaloop-workspace-hack]

@@ -26,6 +26,19 @@
       "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-python-exporter"
       "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-schema"
     ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-feynkit"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-cff"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-generator"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-graph"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-model"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-py"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-tensor"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-ufo"
+    ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-integration" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
@@ -84,6 +97,36 @@
     ];
     "packages.x86_64-linux.crate-test-binaries-clinnet" = [
       "packages.x86_64-linux.crate-test-dependencies-clinnet"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-cff" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-generator" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-graph" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-kinematics" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-model" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-py" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-tensor" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-ufo" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
     ];
     "packages.x86_64-linux.crate-test-binaries-gammaloop-api" = [
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
@@ -155,6 +198,14 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-catalogs"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
@@ -172,8 +223,8 @@
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-python-exporter" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
-      "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
@@ -186,9 +237,112 @@
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-cff" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-notation"
+      "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-generator" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-graph" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-notation"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-model" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-py" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+      "packages.x86_64-linux.crate-test-dependencies-spynso3"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+    ];
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-api" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
       "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
@@ -199,8 +353,12 @@
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
@@ -219,6 +377,12 @@
     "packages.x86_64-linux.crate-test-dependencies-gammalooprs" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
@@ -243,6 +407,7 @@
     "packages.x86_64-linux.crate-test-dependencies-linnest" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-kurvst"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
     ];
     "packages.x86_64-linux.crate-test-dependencies-linnet" = [
@@ -280,6 +445,16 @@
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-notation"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-data" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-notation" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -293,6 +468,10 @@
     "packages.x86_64-linux.crate-test-dependencies-vakint" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     ];
     "packages.x86_64-linux.gammaloop-python-module" = [
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
@@ -353,6 +532,7 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
     "checks.x86_64-linux.gammaloop-nextest-binaries-core"
     "checks.x86_64-linux.gammaloop-nextest-binaries-docs"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit"
     "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
     "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
     "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
@@ -369,6 +549,16 @@
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-python-exporter"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-schema"
     "packages.x86_64-linux.crate-test-binaries-clinnet"
+    "packages.x86_64-linux.crate-test-binaries-feynkit"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-cff"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-generator"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-graph"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-kinematics"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-model"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-py"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-tensor"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-ufo"
     "packages.x86_64-linux.crate-test-binaries-gammaloop-api"
     "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
     "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter"
@@ -393,6 +583,16 @@
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-python-exporter"
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
     "packages.x86_64-linux.crate-test-dependencies-clinnet"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests"
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
@@ -417,6 +617,7 @@
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs"
+    "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-feynkit"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api"
@@ -463,6 +664,14 @@
     gammaloop-nextest-docs = {
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs";
+      secrets = [
+        "SYMBOLICA_LICENSE_SIGNED"
+      ];
+      system = "x86_64-linux";
+    };
+    gammaloop-nextest-feynkit = {
+      in-repo = true;
+      package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-feynkit";
       secrets = [
         "SYMBOLICA_LICENSE_SIGNED"
       ];
