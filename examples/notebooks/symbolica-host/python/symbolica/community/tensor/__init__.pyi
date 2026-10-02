@@ -10,7 +10,7 @@ provide interface-aware rewriting. Dirac matrices, color tensors, and their
 simplifiers are specialized helpers built on these generic tensor operations.
 
 AUTO (also exported as _) leaves a tensor axis unresolved during indexing.
-Nc is the registered real Symbolica color-count symbol: its built-in numerical
+Nc() returns the registered real Symbolica color-count symbol: its built-in numerical
 value is 3. Use your own dimension symbol for formal SU(N) calculations
 when that default numerical value is not appropriate.
 
@@ -32,7 +32,6 @@ from symbolica import ComplexFloat, Float
 from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
-Nc: Expression
 _: _AutoIndex
 _Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
 _IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
@@ -10780,6 +10779,21 @@ class _AutoIndex:
     2
     """
     ...
+
+def Nc() -> Expression:
+    r"""
+    Return the canonical real color-count symbol, whose default numerical value is 3.
+
+    Construct it on demand so importing Symbolica leaves time to set a license key.
+    Use a separate dimension symbol for formal SU(N) calculations when the default
+    numerical value is not appropriate.
+
+    Examples
+    --------
+    >>> from symbolica.community.tensor import Nc
+    >>> Nc().evaluate({})
+    3
+    """
 
 def as_tensor(expression: typing.Any) -> TensorExpression:
     r"""

@@ -5365,56 +5365,11 @@ class Kinematics:
     --------
     >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> P = hep.Kinematics.external_momentum
+    >>> P = hep.Kinematics.external_momentum()
     >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
-    >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
+    >>> s, t, u = hep.Kinematics.s(), hep.Kinematics.t(), hep.Kinematics.u()
     >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
-    """
-    s: Expression
-    r"""
-    Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> s = hep.Kinematics.s
-    """
-    t: Expression
-    r"""
-    Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> t = hep.Kinematics.t
-    """
-    u: Expression
-    r"""
-    Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> u = hep.Kinematics.u
-    """
-    external_momentum: Expression
-    r"""
-    External momentum family indexed by physical leg.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Kinematics.external_momentum
-    """
-    loop_momentum: Expression
-    r"""
-    Loop momentum family indexed by loop basis position.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Kinematics.loop_momentum
     """
     @property
     def dimension(self) -> Expression:
@@ -5426,6 +5381,56 @@ class Kinematics:
         Using the setup in the ``Kinematics`` class example:
 
         >>> assert hep.Kinematics(S("D")).dimension == S("D")
+        """
+    @staticmethod
+    def s() -> Expression:
+        r"""
+        Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> s = hep.Kinematics.s()
+        """
+    @staticmethod
+    def t() -> Expression:
+        r"""
+        Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> t = hep.Kinematics.t()
+        """
+    @staticmethod
+    def u() -> Expression:
+        r"""
+        Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> u = hep.Kinematics.u()
+        """
+    @staticmethod
+    def external_momentum() -> Expression:
+        r"""
+        External momentum family indexed by physical leg.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Kinematics.external_momentum()
+        """
+    @staticmethod
+    def loop_momentum() -> Expression:
+        r"""
+        Loop momentum family indexed by loop basis position.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Kinematics.loop_momentum()
         """
     def __new__(cls, dimension: typing.Optional[Expression] = None, *, momenta: typing.Optional[typing.Sequence[Expression]] = None) -> Kinematics:
         r"""
@@ -9204,6 +9209,7 @@ class Symbols:
     Canonical expression heads owned by diagrams and imported models.
 
     Tensor and representation vocabulary belongs to `symbolica.community.tensor`.
+    Symbols are constructed on demand so importing the module leaves time to set a license key.
     Use these references for diagram patterns and momentum construction without
     depending on internal namespaces. External and loop momenta belong to
     ``Kinematics``. Model parameters and couplings belong to
@@ -9213,101 +9219,111 @@ class Symbols:
     Examples
     --------
     >>> from symbolica.community import hepkit as hep
-    >>> Q = hep.Symbols.edge_momentum
+    >>> Q = hep.Symbols.edge_momentum()
     >>> edge_momentum = Q(0)
     >>> mass = hep.Model.standard_model().particle("e-").mass
     """
-    edge_momentum: Expression
-    r"""
-    Momentum family indexed by graph edge.
+    @staticmethod
+    def edge_momentum() -> Expression:
+        r"""
+        Momentum family indexed by graph edge.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.edge_momentum
-    """
-    denominator: Expression
-    r"""
-    Tagged propagator denominator head; its fourth argument is the inverse denominator.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.edge_momentum()
+        """
+    @staticmethod
+    def denominator() -> Expression:
+        r"""
+        Tagged propagator denominator head; its fourth argument is the inverse denominator.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.denominator
-    """
-    dimension: Expression
-    r"""
-    Lorentz dimension used by generated diagram expressions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.denominator()
+        """
+    @staticmethod
+    def dimension() -> Expression:
+        r"""
+        Lorentz dimension used by generated diagram expressions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.dimension
-    """
-    half_edge: Expression
-    r"""
-    Half-edge index family used to match external tensor slots.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.dimension()
+        """
+    @staticmethod
+    def half_edge() -> Expression:
+        r"""
+        Half-edge index family used to match external tensor slots.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.half_edge
-    """
-    polarization: Expression
-    r"""
-    Vector polarization wavefunction head.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.half_edge()
+        """
+    @staticmethod
+    def polarization() -> Expression:
+        r"""
+        Vector polarization wavefunction head.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.polarization
-    """
-    polarization_conjugate: Expression
-    r"""
-    Conjugated vector polarization wavefunction head.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.polarization()
+        """
+    @staticmethod
+    def polarization_conjugate() -> Expression:
+        r"""
+        Conjugated vector polarization wavefunction head.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.polarization_conjugate
-    """
-    ufo_metric: Expression
-    r"""
-    Metric head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.polarization_conjugate()
+        """
+    @staticmethod
+    def ufo_metric() -> Expression:
+        r"""
+        Metric head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_metric
-    """
-    ufo_index: Expression
-    r"""
-    Index placeholder head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_metric()
+        """
+    @staticmethod
+    def ufo_index() -> Expression:
+        r"""
+        Index placeholder head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_index
-    """
-    ufo_momentum: Expression
-    r"""
-    Momentum head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_index()
+        """
+    @staticmethod
+    def ufo_momentum() -> Expression:
+        r"""
+        Momentum head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_momentum
-    """
-    model_conjugate: Expression
-    r"""
-    Complex-conjugation helper used in imported model formulas.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_momentum()
+        """
+    @staticmethod
+    def model_conjugate() -> Expression:
+        r"""
+        Complex-conjugation helper used in imported model formulas.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.standard_model()
-    >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
-    """
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> model = hep.Model.standard_model()
+        >>> conjugate = hep.Symbols.model_conjugate()(model.parameter("CKM1x1").symbol)
+        """
 
 @typing.final
 class TadpoleFilterOptions:

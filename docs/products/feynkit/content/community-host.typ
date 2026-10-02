@@ -55,6 +55,10 @@ Copy the package containing
 #source-link("crates/feynkit-py/python/symbolica/community/hepkit/__init__.py", label: "the Python wrapper")
 into the host's `python/symbolica/community/hepkit` tree. Its wrapper imports the native module and
 calls the initializer. FeynKit itself must not declare another PyO3 extension entry point.
+Registration must not construct symbolic expressions: callers need to import Symbolica before
+calling `set_license_key`. Keep expression-valued constants as static methods. After rebuilding
+the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
+to check that importing `E` and `hepkit` defers the license banner until the first operation.
 Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
 Linnet or Typst dependency is needed. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
