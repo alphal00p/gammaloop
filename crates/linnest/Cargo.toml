@@ -23,9 +23,16 @@ figment = "0.10.19"
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 rand = "0.8.5"
 thiserror = { workspace = true }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-minimal-protocol = { version = "0.2.0", optional = true }
+wasm-minimal-protocol = "0.2.0"
+roxmltree = { version = "0.21.1", optional = true }
+kurbo = { version = "0.13", optional = true }
+# Native SVG drawing shares Kurvst's curve geometry with the Typst renderer.
+kurvst = { path = "../kurvst", optional = true }
 
 [features]
-typst-plugin = ["dep:wasm-minimal-protocol"]
+projection-service = []
+# Native SVG drawing of prepared graphs; Typst only typesets their labels.
+svg = ["dep:kurbo", "dep:kurvst", "dep:roxmltree"]
+custom = []
+typst-plugin = ["custom"]
+
