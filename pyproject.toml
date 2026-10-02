@@ -89,3 +89,7 @@ ignore_missing_imports = true
 
 [tool.uv]
 package = false
+
+# Match the native kernel and its Community extension/resource APIs.
+[tool.uv.sources]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "community" }

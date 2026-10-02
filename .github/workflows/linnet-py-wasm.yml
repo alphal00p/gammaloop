@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'linnet-py-v*'
   workflow_dispatch:
 
 permissions:

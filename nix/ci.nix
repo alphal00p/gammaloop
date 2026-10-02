@@ -15,7 +15,13 @@
   testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo-import"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
-  groups = [
+  # Nixpkgs Chromium is a Linux runtime; Darwin retains the ordinary native groups.
+  groups = builtins.filter (group: group.name != "browser" || system != "aarch64-darwin") [
+    {
+      name = "feynkit";
+      runtimeRenderData = true;
+      packages = ["feynkit" "feynkit-amplitude" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo"];
+    }
     {
       name = "core";
       runtimeUfoLoader = hasUfoWheel;
@@ -79,6 +85,7 @@
         "spenso-macros"
         "spynso3"
         "symbolica-utils"
+        "symbolica-data"
       ];
     }
     {

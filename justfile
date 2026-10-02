@@ -108,14 +108,19 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
-      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
-        package="${specification%:*}"
-        version="${specification#*:}"
-        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
+    symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' "$root/Cargo.lock")"
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+      exit 1
+    fi
+    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
+      for package in symbolica numerica graphica; do
+        source="$symbolica_source"
+        version="3.0.1"
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $version from $source; found ${resolved:-none}" >&2
           exit 1
         fi
       done
@@ -180,7 +185,7 @@ docs-svg-assets-check:
         cmp "$checked" "$check_root/$checked"
     done
 
-# Build one product documentation site, or all five sites.
+# Build one product documentation site, or all registered sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -218,24 +223,52 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
     just docs-check
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
-# Add executable cells to a product in a previously built documentation site.
-docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
-    uv run --no-project --with marimo==0.24.0 python \
-        crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
+# Generate executable cells consumed by docs-site and docs-watch, or a chosen site output.
+docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDENCY_WHEEL="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=()
+    dependency_wheel={{ quote(DEPENDENCY_WHEEL) }}
+    if [ -n "$dependency_wheel" ]; then
+        args+=(--dependency-wheel "$dependency_wheel")
+    fi
+    nix run .#alphal00p-docs-notebooks -- --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
-        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
+        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
+        "${args[@]}"
 
-# Validate the five-product documentation registry and generated inputs.
+# Edit a community showcase with an installed combined Symbolica host.
+notebook NAME="spenso_idenso_display" PYTHON="python":
+    {{ quote(PYTHON) }} -m marimo edit {{ quote("examples/notebooks/" + NAME + ".py") }}
+
+# Export the pinned pure Python UFO loader wheel from the Nix store.
+notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wheel=$(nix build --no-link --print-out-paths .#notebook-ufo-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheel/"*.whl {{ quote(OUTPUT) }}/
+
+# Build the shared Symbolica/FeynKit/Spenso/Idenso wheel for browser showcases.
+notebook-wheel OUTPUT="target/notebook-wheels":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wheels=$(nix build --no-link --print-out-paths .#notebook-wasm-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheels/"*.whl {{ quote(OUTPUT) }}/
+
+# Validate the documentation registry and generated inputs.
 docs-check:
+    cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
     just docs-svg-assets-check
