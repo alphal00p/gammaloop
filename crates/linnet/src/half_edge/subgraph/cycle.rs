@@ -29,7 +29,7 @@ pub struct SignedCycle {
 
 impl SignedCycle {
     pub fn from_cycle<V, E, H, N: NodeStorageOps<NodeData = V>>(
-        cycle: Cycle,
+        cycle: &Cycle,
         according_to: Hedge,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Option<Self> {
