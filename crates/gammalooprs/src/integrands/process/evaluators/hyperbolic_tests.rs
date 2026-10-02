@@ -1,4 +1,6 @@
 //! Numerical contracts for the production complex evaluator paths.
+//! The `hyperbolic_real_*` variants restrict every argument to the real axis
+//! while exercising the same backends and checking both output components.
 //!
 //! These tests intentionally expose numerical failures in upstream functions and
 //! composed derivative expressions. Runtime arguments prevent constant folding
@@ -32,6 +34,12 @@ use crate::{
 
 const REFERENCE_PRECISION: u32 = 2048;
 const FUNCTIONS: [&str; 6] = ["sinh", "cosh", "tanh", "coth", "sech", "csch"];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArgumentDomain {
+    Real,
+    Complex,
+}
 
 /// Independent MPC values and analytic derivatives, in function-major order.
 ///
@@ -88,7 +96,7 @@ fn reference_values(input: &Mpc, precision: u32) -> Vec<Mpc> {
     .collect()
 }
 
-fn cases() -> Vec<(&'static str, Mpc)> {
+fn cases(domain: ArgumentDomain) -> Vec<(&'static str, Mpc)> {
     let mut cases = Vec::new();
     let mut add = |regime, re, im| {
         // These are deliberately binary64 boundary inputs, lifted exactly to MPC.
@@ -167,7 +175,15 @@ fn cases() -> Vec<(&'static str, Mpc)> {
     for _ in 0..64 {
         let re = rng.random_range(-1.0..1.0) * 2.0_f64.powi(rng.random_range(-1074..=10));
         let im = rng.random_range(-1.0..1.0) * 2.0_f64.powi(rng.random_range(-40..=40));
-        add("seeded magnitudes", re, im);
+        add(
+            "seeded magnitudes",
+            re,
+            if domain == ArgumentDomain::Real {
+                0.0
+            } else {
+                im
+            },
+        );
     }
 
     // Construct pi and perturbations at reference precision, then round to each
@@ -202,10 +218,17 @@ fn cases() -> Vec<(&'static str, Mpc)> {
     for exponent in [80, 200, 900] {
         let offset = Float::with_val(REFERENCE_PRECISION, 1) >> exponent;
         let re = Float::with_val(REFERENCE_PRECISION, 1) + &offset;
-        cases.push((
-            "precision",
-            Mpc::with_val(REFERENCE_PRECISION, (re, offset)),
-        ));
+        let im = if domain == ArgumentDomain::Real {
+            Float::with_val(REFERENCE_PRECISION, 0)
+        } else {
+            offset
+        };
+        cases.push(("precision", Mpc::with_val(REFERENCE_PRECISION, (re, im))));
+    }
+    if domain == ArgumentDomain::Real {
+        // Retain the real-axis boundary and pole cases. Seeded and precision
+        // cases above have real variants so filtering preserves their coverage.
+        cases.retain(|(_, input)| input.imag().is_zero());
     }
     cases
 }
@@ -318,6 +341,7 @@ impl Checks {
 }
 
 fn check_backend<T: FloatLike>(
+    domain: ArgumentDomain,
     mode: FrozenCompilationMode,
     precision: u32,
     from_rug: impl Fn(&Float) -> F<T>,
@@ -344,12 +368,14 @@ fn check_backend<T: FloatLike>(
         &EvaluatorSettings::default(),
     )
     .unwrap();
-    let backend = format!("{mode}, {precision} bits");
+    let real_arguments = domain == ArgumentDomain::Real;
+    let arguments = if real_arguments { "real" } else { "complex" };
+    let backend = format!("{mode}, {precision} bits, {arguments} arguments");
     // Generate binary64 boundary values before loading fast-math code, which
     // may change the process floating-point environment on some platforms.
-    let cases = cases();
+    let cases = cases(domain);
     let directory = std::env::temp_dir().join(format!(
-        "gammaloop-hyperbolic-{}-{precision}-{}-{}",
+        "gammaloop-hyperbolic-{arguments}-{}-{precision}-{}-{}",
         mode.active_backend_name(),
         mode.external_options()
             .is_some_and(|options| options.fast_math),
@@ -377,6 +403,12 @@ fn check_backend<T: FloatLike>(
     };
     assert_eq!(evaluator.active_f64_backend(), expected_backend);
     let mut evaluate = |input: &Mpc| {
+        if real_arguments {
+            assert!(
+                input.imag().is_zero(),
+                "expected a real argument, got {input}"
+            );
+        }
         let argument = Complex::new(from_rug(input.real()), from_rug(input.imag()));
         let actual_input = to_mpc(argument.clone());
         let output = T::get_evaluator(&mut evaluator)(&[argument])
@@ -436,7 +468,11 @@ fn check_backend<T: FloatLike>(
 
     // Exact transformations avoid the conditioning problems of identities near
     // poles. A pi shift is tested only at these moderate, regular arguments.
-    for (re, im) in [(1, 1), (-1, 1), (1, -1), (-1, -1)] {
+    let symmetry_inputs: &[(i32, i32)] = match domain {
+        ArgumentDomain::Real => &[(1, 0), (-1, 0)],
+        ArgumentDomain::Complex => &[(1, 1), (-1, 1), (1, -1), (-1, -1)],
+    };
+    for &(re, im) in symmetry_inputs {
         let input = Mpc::with_val(REFERENCE_PRECISION, (re, im));
         let (_, base) = evaluate(&input);
         for (regime, transformed) in [
@@ -448,6 +484,9 @@ fn check_backend<T: FloatLike>(
                 shifted
             }),
         ] {
+            if real_arguments && regime == "periodicity" {
+                continue;
+            }
             let (argument, result) = evaluate(&transformed);
             for (index, actual) in result.iter().enumerate() {
                 let odd = [0, 2, 3, 5].contains(&(index / 3));
@@ -476,6 +515,9 @@ fn check_backend<T: FloatLike>(
             (f64::INFINITY, 1.0),
             (f64::NEG_INFINITY, -1.0),
         ] {
+            if real_arguments && im != 0.0 {
+                continue;
+            }
             let (input, result) = evaluate(&Mpc::with_val(REFERENCE_PRECISION, (re, im)));
             for (function, actual) in result.iter().step_by(3).enumerate() {
                 if re.is_nan() || im.is_nan() {
@@ -501,23 +543,25 @@ fn check_backend<T: FloatLike>(
                 }
             }
         }
-        for (re, im) in [(0.0, f64::INFINITY), (1.0, f64::NEG_INFINITY)] {
-            let (input, result) = evaluate(&Mpc::with_val(REFERENCE_PRECISION, (re, im)));
-            for (function, actual) in result.iter().step_by(3).enumerate() {
-                if !actual.real().is_nan() && !actual.imag().is_nan() {
-                    checks.record(
-                        "infinite imaginary part",
-                        function * 3,
-                        format!("z={input}, got {actual}"),
-                    );
+        if !real_arguments {
+            for (re, im) in [(0.0, f64::INFINITY), (1.0, f64::NEG_INFINITY)] {
+                let (input, result) = evaluate(&Mpc::with_val(REFERENCE_PRECISION, (re, im)));
+                for (function, actual) in result.iter().step_by(3).enumerate() {
+                    if !actual.real().is_nan() && !actual.imag().is_nan() {
+                        checks.record(
+                            "infinite imaginary part",
+                            function * 3,
+                            format!("z={input}, got {actual}"),
+                        );
+                    }
                 }
             }
-        }
-        // Mixed infinities/NaNs have no single analytic limiting direction.
-        // Exercise them for evaluation/ABI errors without prescribing a value.
-        for re in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
-            for im in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
-                let _ = evaluate(&Mpc::with_val(REFERENCE_PRECISION, (re, im)));
+            // Mixed infinities/NaNs have no single analytic limiting direction.
+            // Exercise them for evaluation/ABI errors without prescribing a value.
+            for re in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+                for im in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+                    let _ = evaluate(&Mpc::with_val(REFERENCE_PRECISION, (re, im)));
+                }
             }
         }
         if precision == 53 {
@@ -549,21 +593,32 @@ fn check_backend<T: FloatLike>(
 
 #[test]
 fn hyperbolic_eager_f64() {
-    check_backend(FrozenCompilationMode::Eager, 53, |x| F(x.to_f64()));
+    check_backend(
+        ArgumentDomain::Complex,
+        FrozenCompilationMode::Eager,
+        53,
+        |x| F(x.to_f64()),
+    );
 }
 
 #[test]
 fn hyperbolic_eager_quad() {
-    check_backend(FrozenCompilationMode::Eager, 106, |x| {
-        F(QuadFloat::from(x.clone()))
-    });
+    check_backend(
+        ArgumentDomain::Complex,
+        FrozenCompilationMode::Eager,
+        106,
+        |x| F(QuadFloat::from(x.clone())),
+    );
 }
 
 #[test]
 fn hyperbolic_eager_arb() {
-    check_backend(FrozenCompilationMode::Eager, 1000, |x| {
-        F(ArbPrec::from(x.clone()))
-    });
+    check_backend(
+        ArgumentDomain::Complex,
+        FrozenCompilationMode::Eager,
+        1000,
+        |x| F(ArbPrec::from(x.clone())),
+    );
 }
 
 #[test]
@@ -574,6 +629,7 @@ fn hyperbolic_cpp_strict() {
         ..Default::default()
     };
     check_backend(
+        ArgumentDomain::Complex,
         FrozenCompilationMode::Cpp(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
@@ -584,6 +640,7 @@ fn hyperbolic_cpp_strict() {
 fn hyperbolic_cpp_production() {
     let options = GammaloopCompileOptions::default();
     check_backend(
+        ArgumentDomain::Complex,
         FrozenCompilationMode::Cpp(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
@@ -598,6 +655,7 @@ fn hyperbolic_symjit_o0() {
         ..Default::default()
     };
     check_backend(
+        ArgumentDomain::Complex,
         FrozenCompilationMode::Symjit(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
@@ -612,6 +670,93 @@ fn hyperbolic_symjit_o2() {
         ..Default::default()
     };
     check_backend(
+        ArgumentDomain::Complex,
+        FrozenCompilationMode::Symjit(options.options_snapshot()),
+        53,
+        |x| F(x.to_f64()),
+    );
+}
+
+#[test]
+fn hyperbolic_real_eager_f64() {
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Eager,
+        53,
+        |x| F(x.to_f64()),
+    );
+}
+
+#[test]
+fn hyperbolic_real_eager_quad() {
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Eager,
+        106,
+        |x| F(QuadFloat::from(x.clone())),
+    );
+}
+
+#[test]
+fn hyperbolic_real_eager_arb() {
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Eager,
+        1000,
+        |x| F(ArbPrec::from(x.clone())),
+    );
+}
+
+#[test]
+fn hyperbolic_real_cpp_strict() {
+    let options = GammaloopCompileOptions {
+        fast_math: false,
+        unsafe_math: false,
+        ..Default::default()
+    };
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Cpp(options.options_snapshot()),
+        53,
+        |x| F(x.to_f64()),
+    );
+}
+
+#[test]
+fn hyperbolic_real_cpp_production() {
+    let options = GammaloopCompileOptions::default();
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Cpp(options.options_snapshot()),
+        53,
+        |x| F(x.to_f64()),
+    );
+}
+
+#[test]
+fn hyperbolic_real_symjit_o0() {
+    let options = GammaloopCompileOptions {
+        optimization_level: CompilationOptimizationLevel::O0,
+        jit_direct_translation: true,
+        ..Default::default()
+    };
+    check_backend(
+        ArgumentDomain::Real,
+        FrozenCompilationMode::Symjit(options.options_snapshot()),
+        53,
+        |x| F(x.to_f64()),
+    );
+}
+
+#[test]
+fn hyperbolic_real_symjit_o2() {
+    let options = GammaloopCompileOptions {
+        optimization_level: CompilationOptimizationLevel::O2,
+        jit_direct_translation: true,
+        ..Default::default()
+    };
+    check_backend(
+        ArgumentDomain::Real,
         FrozenCompilationMode::Symjit(options.options_snapshot()),
         53,
         |x| F(x.to_f64()),
