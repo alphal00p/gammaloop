@@ -1,0 +1,22 @@
+--- a/crates/spenso/src/symbolica_init.rs
++++ b/crates/spenso/src/symbolica_init.rs
+@@ -1,4 +1,6 @@
+ use std::{cell::Cell, ops::Deref, sync::LazyLock};
++
++use symbolica::state::State;
+ 
+ thread_local! {
+     static IN_SYMBOLICA_INITIALIZER: Cell<usize> = const { Cell::new(0) };
+@@ -30,8 +32,10 @@
+ }
+ 
+ fn ensure_symbolica_initialized() {
+-    if !is_in_symbolica_initializer() {
+-        let _ = symbolica::state::State::is_builtin("__spenso_symbolica_init_probe__");
++    // Reentrant probes may return before every initializer has run. Only
++    // Symbolica's global initializer can certify completion across threads.
++    if !State::is_initialized() && !is_in_symbolica_initializer() {
++        let _ = State::is_builtin("__spenso_symbolica_init_probe__");
+     }
+ }
+ 
