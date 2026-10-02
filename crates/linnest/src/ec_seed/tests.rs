@@ -374,6 +374,69 @@ fn seed_protocol_reads_edge_pairs_and_defaults() {
 }
 
 #[test]
+fn paired_rows_share_one_order_on_both_sides() {
+    // A forward box whose opened initial states pair opposite corners: rows
+    // can align only by crossing two internal lines.
+    let edge = |id: usize, source: Value, target: Value, state: Value, row: Value| json!({"id": id, "source": source, "target": target, "state": state, "row": row});
+    let request: SeedRequest = serde_json::from_value(json!({
+        "diagram": {
+            "vertices": [0, 1, 2, 3],
+            "edges": [
+                edge(0, json!(1), Value::Null, json!("outgoing"), json!("edge:0")),
+                edge(1, json!(0), Value::Null, json!("outgoing"), json!("edge:1")),
+                edge(2, json!(1), json!(0), Value::Null, Value::Null),
+                edge(3, json!(0), json!(3), Value::Null, Value::Null),
+                edge(4, json!(1), json!(2), Value::Null, Value::Null),
+                edge(5, json!(3), json!(2), Value::Null, Value::Null),
+                edge(6, Value::Null, json!(3), json!("incoming"), json!("edge:0")),
+                edge(7, Value::Null, json!(2), json!("incoming"), json!("edge:1")),
+            ],
+        },
+    }))
+    .unwrap();
+    let seed = serde_json::to_value(request.initialize().unwrap()).unwrap();
+    assert_eq!(seed["report"]["status"], "ec-planarized");
+    assert_eq!(seed["crossings"].as_array().unwrap().len(), 1);
+    // Partners keep the same vertical order on both sides.
+    let height = |id: &str| seed["positions"][format!("x:{id}")][1].as_f64().unwrap();
+    assert_eq!(height("0") > height("1"), height("6") > height("7"));
+    // Without rows the box stays planar, with its legs in opposite orders.
+    let mut unpaired = request.clone();
+    for edge in &mut unpaired.diagram.edges {
+        edge.row = None;
+    }
+    let seed = serde_json::to_value(unpaired.initialize().unwrap()).unwrap();
+    assert_eq!(seed["report"]["status"], "ec-planar");
+}
+
+#[test]
+fn rows_sharing_a_fan_follow_their_partners() {
+    // A crossed Compton forward graph: both outgoing legs fan from one vertex,
+    // so only the fan's spread can keep each row level.
+    let edge = |id: usize, source: Value, target: Value, state: Value, row: Value| json!({"id": id, "source": source, "target": target, "state": state, "row": row});
+    let request: SeedRequest = serde_json::from_value(json!({
+        "diagram": {
+            "vertices": [0, 1, 2, 3],
+            "edges": [
+                edge(0, json!(0), Value::Null, json!("outgoing"), json!("edge:0")),
+                edge(1, json!(0), Value::Null, json!("outgoing"), json!("edge:1")),
+                edge(2, json!(2), json!(0), Value::Null, Value::Null),
+                edge(3, json!(1), json!(2), Value::Null, Value::Null),
+                edge(4, json!(3), json!(1), Value::Null, Value::Null),
+                edge(5, json!(2), json!(3), Value::Null, Value::Null),
+                edge(6, Value::Null, json!(3), json!("incoming"), json!("edge:0")),
+                edge(7, Value::Null, json!(1), json!("incoming"), json!("edge:1")),
+            ],
+        },
+    }))
+    .unwrap();
+    let seed = serde_json::to_value(request.initialize().unwrap()).unwrap();
+    assert_eq!(seed["report"]["status"], "ec-planar");
+    let height = |id: &str| seed["positions"][format!("x:{id}")][1].as_f64().unwrap();
+    assert_eq!(height("0") > height("1"), height("6") > height("7"));
+}
+
+#[test]
 fn seed_protocol_rejects_invalid_requests() {
     let error = |request: Value| {
         serde_json::from_value::<SeedRequest>(request)

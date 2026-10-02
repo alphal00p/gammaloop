@@ -469,9 +469,20 @@ fn point(value: &Value) -> Result<Point2<f64>> {
 
 impl TypstGraph {
     /// Export physical incidence for the embedding-constrained initializer.
+    /// Legs sharing a grouped y coordinate share a `row`, as the two opened
+    /// halves of a cross-section initial state do.
     pub fn impred_diagram(&self) -> Result<Value> {
         let mut edges = Vec::new();
         for i in 0..self.n_edges() {
+            let row = match self.graph[EdgeIndex(i)].constraints.y {
+                crate::Constraint::Grouped(crate::LayoutPointIndex::Edge(edge), _) => {
+                    Some(format!("edge:{}", edge.0))
+                }
+                crate::Constraint::Grouped(crate::LayoutPointIndex::Node(node), _) => {
+                    Some(format!("node:{}", node.0))
+                }
+                _ => None,
+            };
             let (source, target, state) = match self[&EdgeIndex(i)].1 {
                 HedgePair::Paired { source, sink } => (
                     Some(self.node_id(source).0),
@@ -490,7 +501,11 @@ impl TypstGraph {
                     return Err("split edges must be separated before ImPrEd layout".into());
                 }
             };
-            edges.push(json!({"id":i,"source":source,"target":target,"state":state}));
+            let mut edge = json!({"id":i,"source":source,"target":target,"state":state});
+            if let (Some(row), Some(_)) = (row, state) {
+                edge["row"] = json!(row);
+            }
+            edges.push(edge);
         }
         Ok(json!({"vertices":(0..self.n_nodes()).collect::<Vec<_>>(), "edges":edges}))
     }
@@ -1367,10 +1382,16 @@ impl ProjectionSession {
         // becomes the label position whose side the search prefers.
         for edge in 0..graph.n_edges() {
             let paired = matches!(graph[&EdgeIndex(edge)].1, HedgePair::Paired { .. });
-            let center = layout.labels.get(edge).copied().flatten().and_then(|label| label.center);
+            let center = layout
+                .labels
+                .get(edge)
+                .copied()
+                .flatten()
+                .and_then(|label| label.center);
             let data = &mut graph.graph[EdgeIndex(edge)];
             if paired {
-                data.statements.insert("layout-label-gap".into(), "0".into());
+                data.statements
+                    .insert("layout-label-gap".into(), "0".into());
             } else {
                 data.statements.remove("layout-label-gap");
             }

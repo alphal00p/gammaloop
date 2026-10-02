@@ -11,7 +11,7 @@ mod tests;
 use coordinates::{Point, Positions, cross, distance, max, min, point_segment, subtract};
 use embedding::{
     ConstraintTree, Ends, Expansion, Graph, Id, Ids, InsertionRecord, OrderedMap, Planarization,
-    Result, Set, as_set, difference, replace, require,
+    Result, Set, as_set, replace, require,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -50,6 +50,8 @@ struct DiagramEdge {
     source: Value,
     target: Value,
     state: Value,
+    /// External legs sharing a row are drawn at one height on opposite sides.
+    row: Option<Id>,
 }
 
 impl TryFrom<Value> for Diagram {
@@ -121,6 +123,7 @@ impl DiagramEdge {
             source: endpoint("source")?,
             target: endpoint("target")?,
             state: e.get("state").cloned().unwrap_or(Value::Null),
+            row: e.get("row").filter(|row| !row.is_null()).map(json_key),
         })
     }
 }
@@ -131,6 +134,142 @@ struct Fan {
     owner: Id,
     spoke: Id,
     endpoints: Ids,
+    rows: Vec<Option<Id>>,
+}
+
+/// Top-to-bottom order of paired rows, with the spokes it visits down the
+/// incoming and the outgoing side.
+struct RowOrder {
+    rows: Vec<Id>,
+    sides: [Ids; 2],
+}
+
+impl RowOrder {
+    /// Rows in increasing height: the order runs the way its spokes already do
+    /// on a side with several, so fans spread consistently on both sides.
+    fn rising(self, fans: &[Fan], drawing: &Drawing) -> Result<Vec<Id>> {
+        let height = |spoke: &Id| -> Result<f64> {
+            let fan = fans
+                .iter()
+                .find(|f| f.spoke == *spoke)
+                .ok_or("Unknown exterior spoke")?;
+            Ok(drawing.at(&fan.endpoints[0])?[1])
+        };
+        let mut rows = self.rows;
+        if let Some([first, .., last]) = self
+            .sides
+            .iter()
+            .find(|side| side.len() > 1)
+            .map(Vec::as_slice)
+        {
+            if height(first)? > height(last)? {
+                rows.reverse();
+            }
+        }
+        Ok(rows)
+    }
+}
+
+impl Fan {
+    /// Incoming and outgoing spokes of each row, when every leg has a row and
+    /// rows pair exactly one incoming with one outgoing leg.
+    fn row_spokes(fans: &[Self]) -> Option<BTreeMap<&Id, [&Id; 2]>> {
+        let mut rows: BTreeMap<&Id, [Option<&Id>; 2]> = BTreeMap::new();
+        for fan in fans {
+            for row in &fan.rows {
+                let slot =
+                    &mut rows.entry(row.as_ref()?).or_default()[usize::from(fan.flow == OUTGOING)];
+                if slot.replace(&fan.spoke).is_some() {
+                    return None;
+                }
+            }
+        }
+        let rows = rows
+            .into_iter()
+            .map(|(row, [incoming, outgoing])| Some((row, [incoming?, outgoing?])))
+            .collect::<Option<BTreeMap<_, _>>>()?;
+        (rows.len() >= 2).then_some(rows)
+    }
+
+    /// Candidate top-to-bottom row orders, up to the mirror image, that keep the
+    /// rows of each fan together on both sides. Larger row sets keep their given
+    /// order.
+    fn row_orders(spokes: &BTreeMap<&Id, [&Id; 2]>) -> Vec<RowOrder> {
+        fn permutations(rest: Vec<usize>, prefix: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+            if rest.is_empty() {
+                out.push(prefix.clone());
+            }
+            for (i, &next) in rest.iter().enumerate() {
+                let mut remaining = rest.clone();
+                remaining.remove(i);
+                prefix.push(next);
+                permutations(remaining, prefix, out);
+                prefix.pop();
+            }
+        }
+        let rows: Vec<&Id> = spokes.keys().copied().collect();
+        let mut orders = Vec::new();
+        if rows.len() <= 5 {
+            permutations((0..rows.len()).collect(), &mut Vec::new(), &mut orders);
+            orders.retain(|order| order[0] < order[order.len() - 1]);
+        } else {
+            orders.push((0..rows.len()).collect());
+        }
+        orders
+            .into_iter()
+            .filter_map(|order| {
+                let mut sides: [Ids; 2] = Default::default();
+                for (side, visited) in sides.iter_mut().enumerate() {
+                    for &i in &order {
+                        let spoke = spokes[rows[i]][side];
+                        if visited.last() != Some(spoke) {
+                            if visited.contains(spoke) {
+                                return None;
+                            }
+                            visited.push(spoke.clone());
+                        }
+                    }
+                }
+                Some(RowOrder {
+                    rows: order.into_iter().map(|i| rows[i].clone()).collect(),
+                    sides,
+                })
+            })
+            .collect()
+    }
+}
+
+impl ConstraintTree {
+    /// Cyclic order of the exterior spokes: flows on two consecutive sides, or
+    /// all spokes in one free group. Paired rows run down one side and back up
+    /// the other, `i₁…iₖ oₖ…o₁`, so each pair can share a height.
+    fn exterior(
+        spokes: &BTreeMap<&'static str, Ids>,
+        side_mode: bool,
+        rows: Option<&RowOrder>,
+    ) -> Self {
+        let leaves = |ids: &Ids| ids.iter().cloned().map(Self::Leaf).collect::<Vec<_>>();
+        match (side_mode, rows) {
+            (
+                true,
+                Some(RowOrder {
+                    sides: [incoming, outgoing],
+                    ..
+                }),
+            ) => Self::group(vec![
+                Self::oriented(leaves(incoming)),
+                Self::oriented(outgoing.iter().rev().cloned().map(Self::Leaf).collect()),
+            ]),
+            (true, None) => Self::group(
+                spokes
+                    .values()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| Self::group(leaves(s)))
+                    .collect(),
+            ),
+            (false, _) => Self::group(spokes.values().flat_map(leaves).collect()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -401,8 +540,9 @@ impl Drawing {
     }
 
     /// Spread fans of several external legs vertically around their first
-    /// endpoint, within a radius clear of every other vertex and segment.
-    fn spread_fans(&mut self, groups: &[Fan]) -> Result<()> {
+    /// endpoint, within a radius clear of every other vertex and segment, with
+    /// paired legs in the order of the `rising` rows.
+    fn spread_fans(&mut self, groups: &[Fan], rising: &[Id]) -> Result<()> {
         if groups.iter().all(|f| f.endpoints.len() <= 1) {
             return Ok(());
         }
@@ -465,7 +605,12 @@ impl Drawing {
         for f in groups.iter().filter(|f| f.endpoints.len() > 1) {
             let p = self.at(&f.endpoints[0])?;
             let last = (f.endpoints.len() - 1) as f64;
-            for (i, endpoint) in f.endpoints.iter().enumerate() {
+            let mut order: Vec<usize> = (0..f.endpoints.len()).collect();
+            order.sort_by_key(|&i| {
+                let row = f.rows[i].as_ref();
+                row.and_then(|row| rising.iter().position(|r| r == row))
+            });
+            for (i, endpoint) in order.into_iter().map(|k| &f.endpoints[k]).enumerate() {
                 self.positions.insert(
                     endpoint.clone(),
                     [p[0], p[1] + radius * (2.0 * i as f64 / last - 1.0)],
@@ -627,9 +772,39 @@ impl Magnitude {
 }
 
 impl Graph {
+    /// Contract the wheel an ordered exterior side expanded to into its hub,
+    /// whose rotation keeps the side's order.
+    fn contract_wheel(&mut self, expansion: &Expansion, port: &Id) -> Result<Id> {
+        let members = expansion
+            .members
+            .get(EXTERIOR)
+            .ok_or("Exterior was not expanded")?;
+        let mut wheel = Set::from([port.clone()]);
+        let mut pending = vec![port.clone()];
+        while let Some(n) = pending.pop() {
+            for e in self.rotation_at(&n)?.clone() {
+                let other = self.other(&e, &n)?.clone();
+                if !expansion.tree_edges.contains(&e)
+                    && members.contains(&other)
+                    && wheel.insert(other.clone())
+                {
+                    pending.push(other);
+                }
+            }
+        }
+        let hub = wheel
+            .iter()
+            .find(|n| self.wheel_hubs.contains(*n))
+            .cloned()
+            .ok_or("Ordered exterior side has no wheel hub")?;
+        self.contract(&wheel, &hub)?;
+        Ok(hub)
+    }
+
     /// Replace the exterior group center by one protected bridge between the
     /// incoming and outgoing side hubs; a side with a single leg gets a metric
-    /// hub on its spoke. Returns the hub of each side.
+    /// hub on its spoke, and an ordered side its contracted wheel. Returns the
+    /// hub of each side.
     fn insert_side_hubs(
         &mut self,
         expansion: &Expansion,
@@ -670,8 +845,14 @@ impl Graph {
                 self.protected_edges.insert(reference);
                 node = hub;
             } else {
+                if spokes.iter().any(|s| port(s).is_ok_and(|p| *p != node)) {
+                    node = self.contract_wheel(expansion, &node)?;
+                }
                 for s in spokes {
-                    require(*port(s)? == node, "Side did not expand to one group")?;
+                    require(
+                        self.edges.at(s)?.contains(&node),
+                        "Side did not expand to one group",
+                    )?;
                 }
             }
             hubs.insert(side, node);
@@ -681,7 +862,11 @@ impl Graph {
             .members
             .get(EXTERIOR)
             .ok_or("Exterior was not expanded")?;
-        let centers = difference(members, &hub_ids);
+        let centers: Set = members
+            .iter()
+            .filter(|n| self.nodes.contains(*n) && !hub_ids.contains(*n))
+            .cloned()
+            .collect();
         let center = match &centers.into_iter().collect::<Vec<_>>()[..] {
             [center] => center.clone(),
             _ => return Err("Exterior has no unique center".into()),
@@ -806,7 +991,10 @@ impl SeedRequest {
                 external_ids.insert(id.clone(), endpoint.clone());
                 routes.insert(id.clone(), vec![a, b]);
                 match fans.iter_mut().find(|f| f.flow == flow && f.owner == owner) {
-                    Some(f) => f.endpoints.push(endpoint),
+                    Some(f) => {
+                        f.endpoints.push(endpoint);
+                        f.rows.push(e.row.clone());
+                    }
                     None => {
                         let spoke = format!("spoke:{flow}:{owner}");
                         spokes.entry(flow).or_default().push(spoke.clone());
@@ -816,6 +1004,7 @@ impl SeedRequest {
                             owner,
                             spoke,
                             endpoints: vec![endpoint],
+                            rows: vec![e.row.clone()],
                         });
                     }
                 }
@@ -835,41 +1024,61 @@ impl SeedRequest {
                 routes.insert(id.clone(), route);
             }
         }
-        let mut constraints = OrderedMap::default();
         let side_mode = *external_sides && !incoming.is_empty() && !outgoing.is_empty();
         if !fans.is_empty() {
             nodes.insert(EXTERIOR.to_owned());
-            let leaves = |spokes: &Ids| {
-                spokes
-                    .iter()
-                    .cloned()
-                    .map(ConstraintTree::Leaf)
-                    .collect::<Vec<_>>()
-            };
-            let tree = if side_mode {
-                ConstraintTree::group(
-                    spokes
-                        .values()
-                        .filter(|s| !s.is_empty())
-                        .map(|s| ConstraintTree::group(leaves(s)))
-                        .collect(),
-                )
-            } else {
-                ConstraintTree::group(spokes.values().flat_map(leaves).collect())
-            };
-            constraints.insert(EXTERIOR.to_owned(), tree);
         }
         let mut initial = Graph::new(nodes, edges)?;
         initial
             .protected_edges
             .extend(fans.iter().map(|f| f.spoke.clone()));
-        let expansion = Expansion::new(&initial, constraints.clone())?;
-        let Planarization {
-            embedding: mut embedded,
-            chains,
-            crossing_nodes,
-            insertions,
-        } = expansion.graph.planarize(spqr)?;
+        // Rows pairing the two sides fix one order down both of them; choose the
+        // order whose planarization needs the fewest crossings.
+        let mut orders: Vec<Option<RowOrder>> = match Fan::row_spokes(&fans) {
+            Some(rows) if side_mode => Fan::row_orders(&rows).into_iter().map(Some).collect(),
+            _ => Vec::new(),
+        };
+        if orders.is_empty() {
+            orders.push(None);
+        }
+        let mut best: Option<(
+            Expansion,
+            Planarization,
+            OrderedMap<ConstraintTree>,
+            Option<RowOrder>,
+        )> = None;
+        for rows in orders {
+            let mut constraints = OrderedMap::default();
+            if !fans.is_empty() {
+                constraints.insert(
+                    EXTERIOR.to_owned(),
+                    ConstraintTree::exterior(&spokes, side_mode, rows.as_ref()),
+                );
+            }
+            let expansion = Expansion::new(&initial, constraints.clone())?;
+            let planarization = expansion.graph.planarize(spqr)?;
+            let crossings = planarization.crossing_nodes.len();
+            if best
+                .as_ref()
+                .is_none_or(|(_, chosen, ..)| crossings < chosen.crossing_nodes.len())
+            {
+                best = Some((expansion, planarization, constraints, rows));
+                if crossings == 0 {
+                    break;
+                }
+            }
+        }
+        let (
+            expansion,
+            Planarization {
+                embedding: mut embedded,
+                chains,
+                crossing_nodes,
+                insertions,
+            },
+            constraints,
+            rows,
+        ) = best.ok_or("No exterior order")?;
         let mut hubs = BTreeMap::new();
         let mut outer = None;
         if side_mode {
@@ -939,7 +1148,11 @@ impl SeedRequest {
                 ],
             );
         }
-        drawing.spread_fans(&fans)?;
+        let rising = match rows {
+            Some(rows) => rows.rising(&fans, &drawing)?,
+            None => Vec::new(),
+        };
+        drawing.spread_fans(&fans, &rising)?;
         let mut crossings = drawing.open_crossings(&crossing_nodes.key_set())?;
         let center = drawing.positions.center();
         let mut lengths = drawing
