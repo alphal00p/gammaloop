@@ -795,14 +795,16 @@ display for those settings. Source-only methods reject unsupported settings rath
 silently ignoring them.
 
 
-A supplied rank-one tensor fills an argument position in the ports layout:
-the dotted circle `⊙` marks that contraction, while a hollow square `□` marks
-an unresolved axis. The supplied tensors appear as bras or kets according to
-their representation; this notation does not conjugate their components.
+A supplied rank-one tensor fills an argument position in the ports layout.
+A filled marker distinguishes it from an unresolved axis: inline-metric spaces
+use `■`, self-dual spaces use `●`, and a dualizable space and its dual use
+left- and right-pointing filled triangles. A hollow square `□`
+marks an unresolved axis. The supplied tensors appear as bras or kets according
+to their representation; this notation does not conjugate their components.
 
 A momentum contracted into a gamma matrix displays as a slash, with its two
 remaining bispinor positions. Gamma uses the same endpoint notation as generic
-tensors: a supplied row spinor becomes a bra and occupies a dotted position.
+tensors: a supplied row spinor becomes a bra and occupies a filled position.
 Explicit spinor indices remain visible; unresolved ones use hollow squares.
 The consumed Lorentz position has no placeholder because the slash encodes it.
 `contract()` collects connected matrix factors even after a rank-one tensor

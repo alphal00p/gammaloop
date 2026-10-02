@@ -289,9 +289,9 @@ class OpenPortDisplayTests(unittest.TestCase):
         g = TensorName.vector("supplied_ports::G4")(mink)
         generic = TensorName("supplied_ports::A")(spinor, spinor, mink)
         gamma = TensorExpression.dirac_gamma(4)
-        for head, expected, dotted in (
-            (generic, "i⟨Q2,G4|A⊙□⊙", 2),
-            (gamma, "i⟨Q2|G4⊙□", 1),
+        for head, expected, filled in (
+            (generic, "i⟨Q2,G4|A●□■", 2),
+            (gamma, "i⟨Q2|G4●□", 1),
         ):
             with self.subTest(head=head):
                 source = Symbol.I * head(1, AUTO, 1) * q(1) * g(1)
@@ -302,7 +302,11 @@ class OpenPortDisplayTests(unittest.TestCase):
                     sum("data-spenso-open-axis" in n.attrib for n in nodes), 1
                 )
                 self.assertEqual(
-                    visible(mathml(contracted.to_html())).count("⊙"), dotted
+                    sum(
+                        visible(mathml(contracted.to_html())).count(marker)
+                        for marker in ("●", "■")
+                    ),
+                    filled,
                 )
                 before, after = source.to_tensor(), contracted.to_tensor()
                 self.assertEqual(before.shape, after.shape)
@@ -316,11 +320,14 @@ class OpenPortDisplayTests(unittest.TestCase):
                 ).decode()
                 rich = contracted.to_html(settings=qualified)
                 self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
-                self.assertEqual(visible(mathml(rich)).count("⊙"), dotted)
+                self.assertEqual(
+                    sum(visible(mathml(rich)).count(marker) for marker in ("●", "■")),
+                    filled,
+                )
                 self.assertEqual(visible(mathml(rich)).count("□"), 1)
 
         self.assertIn(r"\langle Q2|", contracted.to_latex())
-        self.assertIn(r"\odot", contracted.to_latex())
+        self.assertIn(r"\bullet", contracted.to_latex())
         self.assertEqual(contracted.to_latex().count(r"\square"), 1)
         self.assertTrue(contracted.format_tensor().startswith("𝑖·⟨Q2|"))
 
@@ -333,7 +340,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         word = (
             q("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", AUTO, "nu") * r("nu")
         ).contract()
-        self.assert_renderers_agree(word, "⟨Q|[pr]⊙□")
+        self.assert_renderers_agree(word, "⟨Q|[pr]●□")
         self.assertEqual(word.rank, 1)
 
     def test_supplied_ports_keep_dual_rows_and_bra_ket_polarity(self):
@@ -342,9 +349,20 @@ class OpenPortDisplayTests(unittest.TestCase):
         ket = TensorName.vector("supplied_dual_ports::b")(rep)
         matrix = TensorName("supplied_dual_ports::M")
         value = matrix(bra.to_expression(), ket.to_expression(), rep)
-        nodes = self.assert_renderers_agree(value, "⟨a|M⊙⊙□|b⟩")
+        nodes = self.assert_renderers_agree(value, "⟨a|M▶︎◀︎□|b⟩")
         self.assertEqual(value.rank, 1)
         self.assertEqual(sum("data-spenso-open-axis" in n.attrib for n in nodes), 1)
+        qualified = DisplaySettings(show_dimensions=True)
+        native = typst.compile(
+            f"$ {value.to_typst(settings=qualified)} $".encode(), format="html"
+        ).decode()
+        rich = value.to_html(settings=qualified)
+        self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
+        for document in (native, rich):
+            text = visible(mathml(document))
+            self.assertEqual(text.count("◀"), 1)
+            self.assertEqual(text.count("▶"), 1)
+            self.assertEqual(text.count("□"), 1)
 
     def test_collected_supplied_words_preserve_components_and_are_idempotent(self):
         spinor, mink = Representation.bis(4), Representation.mink(4)
