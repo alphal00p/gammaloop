@@ -1,7 +1,10 @@
 """Community rendering uses no Python graph or Typst packages, including in WASM."""
 
 import builtins
+import itertools
 import json
+import math
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -31,6 +34,50 @@ try:
         assert float(figure.attrib["width"]) == float(
             figure.attrib["viewBox"].split()[2]
         )
+    # Process geometry must keep the large interaction blob and visible legs.
+    # Check the rendered SVG: seed-only checks miss pins lost during layout.
+    ns = "{http://www.w3.org/2000/svg}"
+    for incoming, outgoing, config in (
+        (["g"], ["g"], {}),
+        (["u", "u~"], ["u", "u~"], {}),
+        (["g", "g"], ["g", "g", "g"], {}),
+        (["u"] * 4, [], {}),
+        ([], ["u"] * 4, {}),
+        (["u", "u~"], ["u", "u~"], {"drawing": {"node_radius": 5}}),
+        (["u", "u~"], ["u", "u~"], {"style": {"node-style": {"radius": 6}}}),
+    ):
+        drawing = ET.fromstring(model.process(incoming, outgoing).render(config=config))
+        blob = drawing.find(ns + "circle")
+        cx, cy, radius = (float(blob.attrib[k]) for k in ("cx", "cy", "r"))
+        assert radius >= 45, radius
+        paths = [p for p in drawing.findall(ns + "path") if p.get("fill") == "none"]
+        # A straight particle line can be emitted as several cubic segments.
+        legs = []
+        for path in paths:
+            coords = list(map(float, re.findall(r"-?\d+(?:\.\d+)?", path.attrib["d"])))
+            start, end = coords[:2], coords[-2:]
+            if legs and math.dist(legs[-1][1], start) < 0.01:
+                legs[-1][1] = end
+            else:
+                legs.append([start, end])
+        assert len(legs) == len(incoming) + len(outgoing)
+        tips = []
+        for i, (start, end) in enumerate(legs):
+            tip, contact = (start, end) if i < len(incoming) else (end, start)
+            assert math.isclose(math.dist(contact, (cx, cy)), radius, abs_tol=0.01)
+            assert math.dist(tip, contact) > 0.5 * radius
+            tips.append(tip)
+        if incoming and outgoing:
+            left, right = tips[: len(incoming)], tips[len(incoming) :]
+            assert all(x < cx for x, y in left)
+            assert all(x > cx for x, y in right)
+            for side in (left, right):
+                assert all(a[1] < b[1] for a, b in itertools.pairwise(side))
+        else:
+            # One-sided processes surround the blob instead of occupying a side.
+            xs, ys = zip(*tips)
+            assert min(xs) < cx < max(xs) and min(ys) < cy < max(ys)
+    ET.fromstring(model.process([], []).render())
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
