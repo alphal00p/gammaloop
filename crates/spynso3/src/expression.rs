@@ -88,8 +88,6 @@ pub struct AutoIndex;
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "AUTO", AutoIndex);
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "_", AutoIndex);
-#[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("symbolica.community.tensor", "Nc", PythonExpression);
 
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
@@ -4807,9 +4805,30 @@ fn trace(
         .map(TensorDispatch::Expression)
 }
 
+/// Return the canonical real color-count symbol, whose default numerical value is 3.
+///
+/// Construct it on demand so importing Symbolica leaves time to set a license key.
+/// Use a separate dimension symbol for formal SU(N) calculations when the default
+/// numerical value is not appropriate.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import Nc
+/// >>> Nc().evaluate({})
+/// 3
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
+)]
+#[spenso_macros::track_usage(crate::record_usage)]
+#[pyfunction(name = "Nc")]
+fn nc() -> PythonExpression {
+    PythonExpression::from(Atom::var(CS.nc))
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     TensorExpression::init(m)?;
-    m.add("Nc", PythonExpression::from(Atom::var(CS.nc)))?;
+    m.add_function(wrap_pyfunction!(nc, m)?)?;
     m.add_class::<AutoIndex>()?;
     m.add_function(wrap_pyfunction!(as_tensor, m)?)?;
     m.add_function(wrap_pyfunction!(dot, m)?)?;

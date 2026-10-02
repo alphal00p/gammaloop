@@ -7,6 +7,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 /// Canonical expression heads owned by diagrams and imported models.
 ///
 /// Tensor and representation vocabulary belongs to `symbolica.community.tensor`.
+/// Symbols are constructed on demand so importing the module leaves time to set a license key.
 /// Use these references for diagram patterns and momentum construction without
 /// depending on internal namespaces. External and loop momenta belong to
 /// ``Kinematics``. Model parameters and couplings belong to
@@ -16,7 +17,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 /// Examples
 /// --------
 /// >>> from symbolica.community import hepkit as hep
-/// >>> Q = hep.Symbols.edge_momentum
+/// >>> Q = hep.Symbols.edge_momentum()
 /// >>> edge_momentum = Q(0)
 /// >>> mass = hep.Model.standard_model().particle("e-").mass
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -32,8 +33,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.edge_momentum
-    #[classattr]
+    /// >>> reference = hep.Symbols.edge_momentum()
+    #[staticmethod]
     fn edge_momentum() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::momentum()).into()
     }
@@ -43,8 +44,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.denominator
-    #[classattr]
+    /// >>> reference = hep.Symbols.denominator()
+    #[staticmethod]
     fn denominator() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::denominator()).into()
     }
@@ -54,8 +55,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.dimension
-    #[classattr]
+    /// >>> reference = hep.Symbols.dimension()
+    #[staticmethod]
     fn dimension() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::dimension()).into()
     }
@@ -65,8 +66,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.half_edge
-    #[classattr]
+    /// >>> reference = hep.Symbols.half_edge()
+    #[staticmethod]
     fn half_edge() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::hedge_index()).into()
     }
@@ -76,8 +77,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.polarization
-    #[classattr]
+    /// >>> reference = hep.Symbols.polarization()
+    #[staticmethod]
     fn polarization() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::epsilon()).into()
     }
@@ -87,8 +88,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.polarization_conjugate
-    #[classattr]
+    /// >>> reference = hep.Symbols.polarization_conjugate()
+    #[staticmethod]
     fn polarization_conjugate() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::epsilonbar()).into()
     }
@@ -98,8 +99,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.ufo_metric
-    #[classattr]
+    /// >>> reference = hep.Symbols.ufo_metric()
+    #[staticmethod]
     fn ufo_metric() -> PythonExpression {
         Atom::var(symbol!("UFO::Metric")).into()
     }
@@ -109,8 +110,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.ufo_index
-    #[classattr]
+    /// >>> reference = hep.Symbols.ufo_index()
+    #[staticmethod]
     fn ufo_index() -> PythonExpression {
         Atom::var(symbol!("UFO::idx")).into()
     }
@@ -120,8 +121,8 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Symbols.ufo_momentum
-    #[classattr]
+    /// >>> reference = hep.Symbols.ufo_momentum()
+    #[staticmethod]
     fn ufo_momentum() -> PythonExpression {
         Atom::var(symbol!("UFO::P")).into()
     }
@@ -131,8 +132,8 @@ impl PySymbols {
     /// --------
     /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
-    /// >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
-    #[classattr]
+    /// >>> conjugate = hep.Symbols.model_conjugate()(model.parameter("CKM1x1").symbol)
+    #[staticmethod]
     fn model_conjugate() -> PythonExpression {
         Atom::var(symbol!("UFO::complexconjugate")).into()
     }

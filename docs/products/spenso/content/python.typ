@@ -124,8 +124,9 @@ factories express distinct unresolved ports without changing that normalization.
 Use `TensorPattern.dot/chain/trace` for compact syntax with wildcard operands or
 factor sequences, and `PortPattern.chain_in/chain_out` for forward or reversed
 contextual matrix channels. `TensorPattern.casimir/dynkin_index` also accept
-arbitrary representation patterns. `Nc: Expression` exports the canonical real
-colour constant, including its default numerical value 3.
+arbitrary representation patterns. `Nc() -> Expression` constructs the canonical real
+colour constant on demand, including its default numerical value 3. Importing the native
+module therefore leaves time to call Symbolica's `set_license_key` before symbolic work.
 
 `FactorProjector.symmetric`, `.antisymmetric`, and `.cyclic` group compatible
 matrix factors for `chain` or `trace`. For example,
