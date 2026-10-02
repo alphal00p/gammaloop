@@ -484,6 +484,7 @@
     "spynso3" = [
       "crates/spynso3/tests/evaluator_horner.py"
       "crates/spynso3/tests/installed_symbolic_preview.py"
+      "crates/spynso3/tests/installed_tensor_paging.py"
     ];
     "idenso" = [
       "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
@@ -556,7 +557,10 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
-    "spynso3" = ["crates/spynso3/tests/browser_math_font.py"];
+    "spynso3" = [
+      "crates/spynso3/tests/browser_math_font.py"
+      "crates/spynso3/tests/browser_tensor_explorer.py"
+    ];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"

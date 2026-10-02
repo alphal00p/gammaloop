@@ -29,6 +29,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
+from symbolica.community.graph import DiagramView, RenderSettings
 from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
@@ -390,6 +391,8 @@ class DisplaySettings:
     Immutable presentation options for tensor notation and component displays.
 
     Formatting does not change indices, tensor algebra, or component order.
+    The defaults use representation-specific index alphabets and an interactive
+    component explorer. The direct MathML pager supports rich layouts and gaps;
     static Typst/plain source supports ports layout. HTML uses direct MathML;
     customizable Typst projects and SVG exports retain the Typst notation backend.
 
@@ -445,6 +448,22 @@ class DisplaySettings:
         --------
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().component_style
+        """
+    @property
+    def tensor_view(self) -> typing.Literal['interactive', 'matrix']:
+        r"""
+        Concrete-tensor HTML: "interactive" provides a component explorer with
+
+        Returns
+        -------
+        str
+            Concrete-tensor HTML: "interactive" provides a component explorer with
+            a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import DisplaySettings
+        >>> value = DisplaySettings().tensor_view
         """
     @property
     def invariant_style(self) -> typing.Literal['compact', 'explicit']:
@@ -557,7 +576,7 @@ class DisplaySettings:
         >>> from symbolica.community.tensor import DisplaySettings
         >>> value = DisplaySettings().factor_gap
         """
-    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
+    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive', invariant_style: typing.Literal['compact', 'explicit'] = 'compact') -> DisplaySettings:
         r"""
         Choose tensor notation, index labels, and component presentation.
 
@@ -587,6 +606,9 @@ class DisplaySettings:
         component_style : str, default "superscript"
             Concrete component labels: "superscript" for A(x,7)^{0,1},
             or "array" for A(x,7)[0,1]. Scalar arguments stay in parentheses.
+        tensor_view : str, default "interactive"
+            Concrete-tensor HTML: "interactive" provides a component explorer with
+            a Memory grid / Matrix toggle; "matrix" selects static mathematical output.
 
         invariant_style : {"compact", "explicit"}, default "compact"
             Compact quadratic color notation uses C_F, C_A and T_R. Explicit
@@ -602,11 +624,13 @@ class DisplaySettings:
 
         Notes
         -----
+        The tensor_view option affects concrete tensor HTML, not symbolic
+        TensorExpression algebra or TensorNetwork graph rendering.
 
         Examples
         --------
         >>> from symbolica.community.tensor import DisplaySettings
-        >>> settings = DisplaySettings(component_style="array")
+        >>> settings = DisplaySettings(component_style="array", tensor_view="matrix")
         """
     @staticmethod
     def ports() -> DisplaySettings:
@@ -1545,6 +1569,22 @@ class Representation:
         >>> isinstance(space(S("i")), Slot)
         True
         """
+    def _repr_html_(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render a compact HTML view of this tensor metadata.
+
+        Returns
+        -------
+        str
+            HTML fragment for display in a notebook or page.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation
+        >>> value = Representation.euc(3)
+        >>> html = value.to_html()
+        """
     def _repr_latex_(self) -> builtins.str: ...
     def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = True) -> Representation:
         r"""
@@ -2039,6 +2079,22 @@ class RepresentationName:
         >>> name = sp.Representation.mink(4).name
         >>> text = repr(name)
         """
+    def to_html(self) -> builtins.str:
+        r"""
+        Render a compact HTML view of this tensor metadata.
+
+        Returns
+        -------
+        str
+            HTML fragment for display in a notebook or page.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation
+        >>> value = Representation.mink(4).name
+        >>> html = value.to_html()
+        """
+    def _repr_html_(self) -> builtins.str: ...
 
 @typing.final
 class Slot:
@@ -2098,6 +2154,27 @@ class Slot:
         >>> r = sp.Representation.euc(2)
         >>> labels = {r("i"): "free index"}
         >>> assert labels[r("i")] == "free index"
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Render a compact HTML view of this tensor metadata.
+
+        Parameters
+        ----------
+        settings : DisplaySettings, optional
+            Index and tensor presentation choices; defaults to DisplaySettings().
+
+        Returns
+        -------
+        str
+            HTML fragment for display in a notebook or page.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation
+        >>> value = Representation.euc(3)("i")
+        >>> html = value.to_html()
         """
     def _repr_latex_(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str:
@@ -2226,6 +2303,8 @@ class Tensor:
     components; calling the tensor assigns abstract index labels and returns a
     lazy TensorNetwork. Arithmetic also builds networks, retaining component data.
 
+    The default notebook view is an interactive component explorer with a matrix
+    toggle. ``to_typst()`` provides static mathematical source.
 
     Examples
     --------
@@ -2848,6 +2927,11 @@ class Tensor:
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        The default is a responsive component explorer with a Memory grid /
+        Matrix toggle. Dark mode follows the surrounding page. The color scale
+        measures stored component payload bytes, not total process memory. Use
+        DisplaySettings(tensor_view="matrix") for static mathematical HTML.
 
         # Errors
 
@@ -3769,6 +3853,8 @@ class TensorExpression(Expression):
     Arithmetic with Tensor or TensorNetwork operands returns a TensorNetwork.
 
     Reductions preserve this tensor type and keep unrelated sums factorized.
+    Ordinary algebra, including ``expand_num()``, ``collect_factors()``, and
+    ``factor()``, also returns a tensor expression with its ordered interface.
     This is a Symbolica ``Expression`` subclass: inspection, matching, evaluators,
     and other unoverridden methods are inherited directly. Inherited transformations
     return ordinary expressions; the tensor-aware overrides retain the interface.
@@ -4665,6 +4751,238 @@ class TensorExpression(Expression):
         >>> expanded = ((x + 1)**2 * A("i", "j")).expand()
         >>> expanded.rank
         2
+        """
+    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorExpression:
+        r"""
+        Factor scalar algebra while retaining ordered tensor ports and data metadata.
+        Tensor leaves are treated as symbolic indeterminates; no tensor identity is applied.
+
+        Parameters
+        ----------
+        complex : bool, default False
+            Factor over the complex rationals rather than the rationals.
+        extension : list of Expression, optional
+            Algebraic numbers defining the coefficient field, as in Expression.factor.
+
+        Returns
+        -------
+        TensorExpression
+            Factored expression with the original tensor interface, including typed zeros.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> factored = ((x**2 + 2*x + 1) * A).factor()
+        >>> assert factored == (x + 1)**2 * A
+        """
+    def expand_num(self) -> TensorExpression:
+        r"""
+        Distribute numerical coefficients over sums without expanding symbolic products.
+        The result remains a TensorExpression with the same ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (2 * (x + y) * A).expand_num()
+        >>> assert result == (2*x + 2*y) * A
+        """
+    def collect(self, *x: symbolica.core.Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms in variables or functions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *x : Expression
+            Variables or functions to collect in, with Expression.collect semantics.
+        key_map, coeff_map : callable, optional
+            Map each collected key or coefficient. Callbacks receive and return ordinary
+            Expressions. Their results must preserve this tensor's ordered external ports;
+            otherwise the operation raises ValueError. Zero retains the original interface.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + x*y*A).collect(x)
+        >>> assert result.expand() == (x*(1+y)*A).expand()
+        """
+    def collect_num(self) -> TensorExpression:
+        r"""
+        Extract common numerical coefficients from sums, retaining ordered ports and metadata.
+        This reverses numerical distribution performed by expand_num().
+
+        Returns
+        -------
+        TensorExpression
+            Expression with common numerical coefficients extracted.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((2*x + 4*y)*A).collect_num() == 2*(x + 2*y)*A
+        """
+    def collect_factors(self) -> TensorExpression:
+        r"""
+        Collect common factors from nested sums without applying tensor identities.
+        Ordered ports, unresolved axes, tensor zeros, and data metadata are retained.
+
+        Returns
+        -------
+        TensorExpression
+            Rewritten scalar algebra with the original tensor interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, y = S("x", "y")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (x*A + y*A).collect_factors()
+        >>> assert result == (x+y)*A
+        """
+    def collect_by_coefficient(self) -> TensorExpression:
+        r"""
+        Group terms with equal numerical coefficients, retaining ordered ports and metadata.
+
+        Returns
+        -------
+        TensorExpression
+            Expression grouped by numerical coefficient with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(2*x + 2*y).collect_by_coefficient()
+        >>> assert result.to_expression() == 2*(x + y)
+        """
+    def collect_symbol(self, x: Expression, key_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, coeff_map: typing.Optional[typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None) -> TensorExpression:
+        r"""
+        Collect terms by powers of a variable or calls with the same function head.
+
+        Parameters
+        ----------
+        x : Expression
+            Variable or function symbol to collect in.
+        key_map, coeff_map : callable, optional
+            Map ordinary Expressions. As with collect(), the result is checked for
+            preservation of the tensor's ordered external ports.
+
+        Returns
+        -------
+        TensorExpression
+            Collected expression with the original interface and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x, f = S("x", "f")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> result = (f(x)*A + 2*f(x)*A).collect_symbol(f)
+        >>> assert result.expand() == (3*f(x)*A).expand()
+        """
+    def collect_horner(self, vars: typing.Optional[typing.Sequence[Expression]] = None) -> TensorExpression:
+        r"""
+        Rewrite polynomial algebra in Horner form, retaining ordered ports and metadata.
+
+        Parameters
+        ----------
+        vars : list of Expression, optional
+            Variable order. Omit it to use Symbolica's heuristic ordering.
+
+        Returns
+        -------
+        TensorExpression
+            Horner-form expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> result = TensorExpression(x**2 + x*y).collect_horner([x, y])
+        >>> assert result.to_expression() == x*(x + y)
+        """
+    def together(self) -> TensorExpression:
+        r"""
+        Combine scalar denominators into one fraction, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Single rational expression with the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> x, y = S("x", "y")
+        >>> assert TensorExpression(1/x + 1/y).together().to_expression() == (x + y)/(x*y)
+        """
+    def cancel(self) -> TensorExpression:
+        r"""
+        Cancel common numerator and denominator factors, retaining ordered ports and metadata.
+        This is ordinary rational algebra and performs no tensor contractions.
+
+        Returns
+        -------
+        TensorExpression
+            Rational expression with common factors cancelled and the original tensor interface.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert ((x**2 - 1)/(x - 1)*A).cancel() == (x + 1)*A
+        """
+    def apart(self, *variables: symbolica.core.Expression) -> TensorExpression:
+        r"""
+        Decompose scalar denominators into partial fractions, retaining the tensor interface.
+
+        Parameters
+        ----------
+        *variables : Expression
+            Variables for partial fractioning. Omit them to use all indeterminates,
+            as in Expression.apart().
+
+        Returns
+        -------
+        TensorExpression
+            Partial fractions with the original ordered ports and metadata.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName, Representation
+        >>> x = S("x")
+        >>> A = TensorName("A")(Representation.euc(3))("i")
+        >>> assert (A/(x*(x + 1))).apart(x) == A/x - A/(x + 1)
         """
     def __copy__(self) -> TensorExpression:
         r"""
@@ -5924,6 +6242,66 @@ class TensorExpression(Expression):
         >>> A = TensorName("M")(space, space)
         >>> output = A.formatted()
         """
+    def paged(self, page_size: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Create a bounded, interactive MathML viewer in marimo or Jupyter.
+
+        Only the current page is rendered. Nested expressions retain their
+        factorization, and omitted subexpressions can be opened independently.
+        Requires the optional notebook-display dependencies for live navigation.
+
+        Parameters
+        ----------
+        page_size : int, optional
+            None uses automatic previews: compact products may be shown completely,
+            with 25 entries per page otherwise. An explicit size sets the maximum
+            entries per page, between 1 and 500. Rendering budgets may show fewer.
+        settings : DisplaySettings, optional
+            Tensor notation, index labels, and other presentation preferences.
+        notation_source : str, optional
+            Unsupported by the direct MathML pager. Use to_typst_project() or to_svg()
+            for custom Typst notation; paging raises ValueError when supplied.
+
+        Returns
+        -------
+        object
+            Notebook viewer retaining the expression and rendering pages on demand.
+            Display it in marimo or Jupyter to navigate its widget.
+
+        # Errors
+
+        Returns ValueError for Typst notation or an invalid page size; viewer failures
+        propagate. Registered Python printer exceptions are logged and decline the
+        override, allowing native fallback.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> viewer = TensorExpression(1).paged()
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Return marimo's notebook presentation with bounded pages for large expressions.
+
+        Returns
+        -------
+        object
+            Rich notebook output or an interactive viewer, using default settings.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Return the rich representations requested by a Jupyter frontend.
+
+        Parameters
+        ----------
+        include, exclude : list of str, optional
+            MIME types to include or exclude from the returned representations.
+
+        Returns
+        -------
+        object
+            MIME bundle for the complete small expression or paged large expression.
+        """
     def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Render the tensor as an HTML fragment.
@@ -6889,6 +7267,39 @@ class TensorLibrary:
         >>> library.register(tensor)
         >>> text = repr(library)
         """
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Display stored tensors with on-demand component and construction details.
+
+        Parameters
+        ----------
+        settings : DisplaySettings, optional
+            Index and tensor presentation choices; defaults to DisplaySettings().
+
+        Returns
+        -------
+        str
+            HTML fragment for display in a notebook or page.
+
+        Notes
+        -----
+        Stored entries can be selected to inspect the same component explorer
+        as a standalone Tensor. On-demand factories are listed separately.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorLibrary
+        >>> library = TensorLibrary()
+        >>> library.register(tensor)
+        >>> value = library
+        >>> html = value.to_html()
+        """
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
     def __new__(cls) -> TensorLibrary:
         r"""
         Create an empty tensor component library.
@@ -8328,6 +8739,70 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> source = network.to_dot()
         """
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None) -> builtins.str:
+        r"""
+        Export a self-contained Typst document embedding the native SVG graph.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        str
+            Typst source containing the complete SVG and its typeset labels.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.to_linnest()
+        """
+    def render(self, *, config: typing.Optional[RenderSettings] = None) -> DiagramView:
+        r"""
+        Render a displayable snapshot of the current network graph.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        DiagramRender
+            Interactive graph snapshot with SVG/HTML exports and notebook display.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.render()
+        """
     def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
         Produce compact plain-text tensor notation.
@@ -8351,7 +8826,7 @@ class TensorNetwork:
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Examples
         --------
@@ -8387,7 +8862,7 @@ class TensorNetwork:
         format. Use to_html() or to_svg() for other layouts and custom gaps.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Static Typst output remains available independently of the HTML explorer.
 
@@ -8440,7 +8915,38 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Display the current network graph and execution status.
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Graph layout and rendering options. Omit for the standard network view.
+
+        Returns
+        -------
+        str
+            Interactive HTML graph with its progress summary.
+
+        Notes
+        -----
+        This depicts the current graph, including execution progress. For the
+        symbolic computation in tensor notation, use formatted() or to_svg().
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> from symbolica.community.tensor import Tensor
+        >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+        >>> from symbolica.community.tensor import TensorNetwork
+        >>> network = TensorNetwork(tensor)
+        >>> output = network.to_html()
+        """
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Render static mathematical tensor notation to SVG.
@@ -8471,7 +8977,7 @@ class TensorNetwork:
         if compilation fails.
 
         This formats the symbolic source expression, independent of execution
-        progress.
+        progress. Use render() or to_html() for the network graph.
 
         Examples
         --------
@@ -8484,7 +8990,8 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_svg()
         """
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _mime_(self) -> typing.Any: ...
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
     def expression(self) -> TensorExpression:
         r"""
         Return the symbolic source computation of this network.
@@ -10074,6 +10581,29 @@ class TensorStructure:
         >>> structure = sp.TensorStructure([r("i"), r("j")])
         >>> text = repr(structure)
         """
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Render a compact HTML view of this tensor metadata.
+
+        Parameters
+        ----------
+        settings : DisplaySettings, optional
+            Index and tensor presentation choices; defaults to DisplaySettings().
+
+        Returns
+        -------
+        str
+            HTML fragment for display in a notebook or page.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
+        >>> space = Representation.euc(2)
+        >>> A = TensorName("M")(space, space)
+        >>> value = A.structure
+        >>> html = value.to_html()
+        """
+    def _repr_html_(self) -> builtins.str: ...
 
 @typing.final
 class _AutoIndex:

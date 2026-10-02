@@ -308,6 +308,8 @@ define_spenso_python_surface! {
 /// components; calling the tensor assigns abstract index labels and returns a
 /// lazy TensorNetwork. Arithmetic also builds networks, retaining component data.
 ///
+/// The default notebook view is an interactive component explorer with a matrix
+/// toggle. ``to_typst()`` provides static mathematical source.
 ///
 /// Examples
 /// --------
@@ -1099,6 +1101,11 @@ impl Spensor {
     ///
     /// Components follow logical axis order. Large static displays show a
     /// bounded preview rather than every component.
+    ///
+    /// The default is a responsive component explorer with a Memory grid /
+    /// Matrix toggle. Dark mode follows the surrounding page. The color scale
+    /// measures stored component payload bytes, not total process memory. Use
+    /// DisplaySettings(tensor_view="matrix") for static mathematical HTML.
     ///
     /// # Errors
     ///
