@@ -18,10 +18,10 @@ Rust crate owns five boundaries:
   canonicalization, tensor reduction, parametric evaluation, and numerical evaluation;
 - `VakintExpression` and `VakintTerm`: the structured numerator/topology representation used
   between stages;
-- `VakintSettings`, `EvaluationOrder`, and `EvaluationMethod`: precision, normalization,
-  dependency, and backend-selection policy;
+- `VakintSettings`, `TensorReductionMethod`, `EvaluationOrder`, and `EvaluationMethod`:
+  precision, normalization, dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
-- the optional `symbolica.community.vakint` module: Python classes that own a Rust engine and
+- the optional `symbolica.community.hepkit.vakint` module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
 
 The modules `alphaloop_numerics`, `matad`, `matad_numerics`, `fmft`, and `fmft_numerics` contain
@@ -51,9 +51,9 @@ ephemeral transformation plan, not a persisted cache.
 
 `VakintSettings` controls epsilon and scale symbols, executable paths, input rationalization and
 runtime precision, numerator verification, normalization, unknown-integral policy, temporary
-files, epsilon depth, dot-product notation, and `EvaluationOrder`. A `Vakint` engine is reusable;
-settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
-and settings together for convenience.
+files, epsilon depth, dot-product notation, `TensorReductionMethod`, and `EvaluationOrder`.
+A `Vakint` engine is reusable; settings are passed explicitly to Rust operations. The Python
+`Vakint` wrapper stores the engine and settings together for convenience.
 
 == Main control flow
 
@@ -64,7 +64,7 @@ AtomView
   -> validate selected settings and external dependencies
   -> split into VakintExpression terms
   -> match and canonicalize topology plus numerator
-  -> tensor-reduce each numerator through FORM
+  -> tensor-reduce each numerator with the selected TensorReductionMethod
   -> choose the first supported EvaluationMethod for each term
   -> run the backend and decode its Symbolica expression
   -> combine the transformed terms into an Atom
@@ -111,7 +111,9 @@ or a coefficient that still depends on epsilon returns an evaluation error.
 AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM and pySecDec through
 the configured Python executable. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
-4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
+4.2.1 and pySecDec >= 1.6.4 when those tools are selected. `evaluate` and `evaluate_integral`
+perform this validation; the narrower `tensor_reduce` stage does not validate scalar-evaluation
+dependencies. Native FeynKit tensor reduction can therefore run without those external tools.
 
 Backend expression serialization follows the exact atom tree and symbol identities,
 independently of display callbacks. A complex numeric atom is written from its
@@ -130,12 +132,19 @@ The Cargo build script has one platform-specific boundary: on macOS, setting
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC` opts into linking `gcc_s.1.1` from MacPorts' libgcc directory when
 that library exists. This affects native linking only; it does not select an evaluation backend.
 
-The core Rust API has no feature requirement. `python` enables the PyO3
+The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
 wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on `symbolica.community.vakint`. `python-stubs` adds stub metadata and
-implies `python`, including Symbolica's Python export. The wrapper delegates transformations to the Rust engine
+`VakintNumericalResult` on `symbolica.community.hepkit.vakint`. `python_stubgen` adds stub metadata and
+also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
-pipeline.
+pipeline. Construction stores the selected tensor-reduction and evaluation settings without
+checking external executables; the evaluation entry points validate dependencies when needed.
+
+The community-module citation hook reports cumulative process-wide usage.
+Constructing the engine or using its Python wrappers records Vakint; backend
+boundaries separately record the tools they invoke. Repeated queries do not
+clear other callers' usage or duplicate a citation. This bookkeeping does not
+choose the tensor-reduction or scalar-evaluation backend.
 
 == Persistence and reproducibility
 
@@ -146,9 +155,9 @@ workspaces are implementation artifacts unless cleanup is disabled or a reuse di
 explicitly supplied.
 
 A reproducible result therefore depends on more than the input expression: record the topology
-form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
-options, numerical masses and external momenta, executable versions, and whether a pySecDec
-workspace was reused.
+form, numerator, normalization convention, epsilon depth, decimal precision, tensor-reduction
+method, backend order and options, numerical masses and external momenta, executable versions,
+and whether a pySecDec workspace was reused.
 
 == Maintained invariants
 
