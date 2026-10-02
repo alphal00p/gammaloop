@@ -513,13 +513,38 @@ fn representation_value(argument: AtomView<'_>) -> Option<RepresentationValue<'_
     })
 }
 
+fn supplied_port(
+    representation: RepresentationValue<'_>,
+    backend: SpensoPrintBackend,
+) -> &'static str {
+    // Filled shapes retain the representation and polarity of a supplied
+    // argument; unresolved AUTO positions use a hollow square instead.
+    match representation.class {
+        RepresentationClass::InlineMetric => match backend {
+            SpensoPrintBackend::Latex => r"\blacksquare",
+            _ => "■",
+        },
+        RepresentationClass::SelfDual => match backend {
+            SpensoPrintBackend::Latex => r"\bullet",
+            _ => "●",
+        },
+        RepresentationClass::Dualizable => match (backend, representation.polarity) {
+            (SpensoPrintBackend::Typst, CompactPolarity::Bra) => "triangle.filled.r",
+            (SpensoPrintBackend::Typst, CompactPolarity::Ket) => "triangle.filled.l",
+            (SpensoPrintBackend::Latex, CompactPolarity::Bra) => r"\blacktriangleright",
+            (SpensoPrintBackend::Latex, CompactPolarity::Ket) => r"\blacktriangleleft",
+            (SpensoPrintBackend::Plain, CompactPolarity::Bra) => "▶︎",
+            (SpensoPrintBackend::Plain, CompactPolarity::Ket) => "◀︎",
+        },
+    }
+}
+
 fn qualified_typst_port(
     representation: RepresentationValue<'_>,
     settings: SpensoPrintSettings,
     options: &PrintOptions,
 ) -> Option<String> {
-    // A filled argument is a contraction, unlike an unresolved AUTO square.
-    let port = "⊙";
+    let port = supplied_port(representation, SpensoPrintBackend::Typst);
     if !settings.with_dim {
         return Some(port.to_owned());
     }
@@ -1122,11 +1147,7 @@ fn gamma_print(
                 .ok()?;
             columns.push((source, slot.row));
         } else if let Some(compact) = compact_vector(argument, settings, options) {
-            let port = if backend == SpensoPrintBackend::Latex {
-                r"\odot"
-            } else {
-                "⊙"
-            };
+            let port = supplied_port(compact.representation, backend);
             columns.push((port.to_owned(), compact.representation.row));
             match compact.representation.polarity {
                 CompactPolarity::Bra => bras.push(compact.label),
@@ -2798,7 +2819,7 @@ mod tests {
     }
 
     #[test]
-    fn contracted_spinors_are_bras_with_dotted_positions_not_nested_indices() {
+    fn contracted_spinors_are_bras_with_filled_positions_not_nested_indices() {
         let spinor = function!(
             crate::vector_symbol!("supplied_gamma_print::Q"),
             bottom_representation(None)
@@ -2821,7 +2842,7 @@ mod tests {
         );
         assert!(printed.contains("cancel(p)"), "{printed}");
         // Each visible column has a hidden opposite-row copy for alignment.
-        assert_eq!(printed.matches('⊙').count(), 2, "{printed}");
+        assert_eq!(printed.matches('●').count(), 2, "{printed}");
         assert_eq!(printed.matches("square.stroked").count(), 2, "{printed}");
         assert!(!printed.contains("attach(#($Q$"), "{printed}");
         assert_eq!(contracted, original);
@@ -2839,7 +2860,8 @@ mod tests {
             printed.starts_with(r#"upright("⟨") Q,p upright("|")"#),
             "{printed}"
         );
-        assert_eq!(printed.matches('⊙').count(), 4, "{printed}");
+        assert_eq!(printed.matches('●').count(), 2, "{printed}");
+        assert_eq!(printed.matches('■').count(), 2, "{printed}");
         assert_eq!(printed.matches("square.stroked").count(), 2, "{printed}");
     }
 
@@ -2965,7 +2987,7 @@ mod tests {
             prepare_tensor_print(&chain)
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
-            "upright(\"⟨\") attach(#($u$,std.hide($zws$)).join(),t:std.hide(1),b:1) upright(\"|\") attach(#($lr([attach(#($gamma$,std.hide($zws$)).join(),t:mu,b:std.hide(mu))])$,std.hide($zws$)).join(),t:std.hide(⊙) std.hide(⊙),b:⊙ ⊙) upright(\"|\") attach(#($v$,std.hide($zws$)).join(),t:std.hide(2),b:2) upright(\"⟩\")"
+            "upright(\"⟨\") attach(#($u$,std.hide($zws$)).join(),t:std.hide(1),b:1) upright(\"|\") attach(#($lr([attach(#($gamma$,std.hide($zws$)).join(),t:mu,b:std.hide(mu))])$,std.hide($zws$)).join(),t:std.hide(●) std.hide(●),b:● ●) upright(\"|\") attach(#($v$,std.hide($zws$)).join(),t:std.hide(2),b:2) upright(\"⟩\")"
         );
     }
 

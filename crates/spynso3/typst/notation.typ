@@ -426,8 +426,17 @@
 }
 
 #let _qualified-port(rep, ctx, settings) = {
-  // The central dot distinguishes a supplied argument from an open AUTO port.
-  let port = $⊙$
+  // Filled positions retain representation shape and polarity. Unresolved
+  // AUTO positions use a hollow square instead.
+  let port = if rep.class == "inline-metric" {
+    sym.square.filled
+  } else if rep.class == "self-dual" {
+    sym.circle.filled
+  } else if rep.dual {
+    sym.triangle.filled.r
+  } else {
+    sym.triangle.filled.l
+  }
   if not settings.with-dim { return port }
   math.attach(
     port,
