@@ -9,19 +9,37 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
-use typst::{
-    Feature, Library, LibraryExt, World, WorldExt,
+use typst::LibraryExt;
+use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::utils::LazyHash;
+use typst_kit::fonts::FontStore;
+use typst_library::{
+    Feature, Library, World, WorldExt,
     diag::{FileError, FileResult, SourceDiagnostic},
     foundations::{Bytes, Datetime, Duration},
-    syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot},
     text::{Font, FontBook},
-    utils::LazyHash,
 };
-use typst_kit::fonts::FontStore;
 
 static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
     let mut fonts = FontStore::new();
+    #[cfg(feature = "full")]
     fonts.extend(typst_kit::fonts::embedded());
+    // Typst equations request weight 450 (Book), not the 400 Regular face.
+    #[cfg(not(feature = "full"))]
+    for data in [
+        include_bytes!("../fonts/LibertinusSerif-Regular.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-Bold.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-Italic.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-BoldItalic.otf").as_slice(),
+        include_bytes!("../fonts/NewCMMath-Book.otf").as_slice(),
+        include_bytes!("../fonts/NewCMMath-Bold.otf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono.ttf").as_slice(),
+    ] {
+        fonts.extend(Font::iter(Bytes::new(data)).map(|font| {
+            let info = font.info().clone();
+            (font, info)
+        }));
+    }
     fonts
 });
 
@@ -33,6 +51,7 @@ pub struct Document<'a> {
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
     library: LazyHash<Library>,
+    #[cfg(feature = "full")]
     fonts: Option<FontStore>,
 }
 
@@ -52,6 +71,7 @@ impl<'a> Document<'a> {
     }
 
     pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
+        #[cfg(feature = "full")]
         let fonts = std::env::var_os("TYPST_FONT_PATHS").map(|paths| {
             let mut fonts = FontStore::new();
             for path in std::env::split_paths(&paths) {
@@ -65,6 +85,7 @@ impl<'a> Document<'a> {
             packages,
             files,
             sources: Mutex::new(HashMap::new()),
+            #[cfg(feature = "full")]
             fonts,
             library: LazyHash::new(
                 Library::builder()
@@ -74,9 +95,12 @@ impl<'a> Document<'a> {
         }
     }
 
-    /// Compile HTML/PDF as one document, or SVG/PNG as one document per page.
+    /// Compile HTML as one document or SVG as one document per page.
+    /// The `full` feature additionally enables PDF and PNG output.
     pub fn compile(&self, format: &str) -> Result<Vec<Vec<u8>>, String> {
-        if !matches!(format, "html" | "svg" | "png" | "pdf") {
+        let supported = matches!(format, "html" | "svg")
+            || cfg!(feature = "full") && matches!(format, "png" | "pdf");
+        if !supported {
             return Err(format!("unsupported Typst output format {format:?}"));
         }
         if format == "html" {
@@ -96,6 +120,7 @@ impl<'a> Document<'a> {
                 .iter()
                 .map(|page| typst_svg::svg(page, &typst_svg::SvgOptions::default()).into_bytes())
                 .collect()),
+            #[cfg(feature = "full")]
             "png" => document
                 .pages()
                 .iter()
@@ -105,6 +130,7 @@ impl<'a> Document<'a> {
                         .map_err(|error| error.to_string())
                 })
                 .collect(),
+            #[cfg(feature = "full")]
             "pdf" => typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
                 .map(|pdf| vec![pdf])
                 .map_err(|errors| self.diagnostics(&errors)),
@@ -150,7 +176,11 @@ impl World for Document<'_> {
         &self.library
     }
     fn book(&self) -> &LazyHash<FontBook> {
-        self.fonts.as_ref().unwrap_or(&FONTS).book()
+        #[cfg(feature = "full")]
+        if let Some(fonts) = &self.fonts {
+            return fonts.book();
+        }
+        FONTS.book()
     }
     fn main(&self) -> FileId {
         RootedPath::new(VirtualRoot::Project, VirtualPath::new("main.typ").unwrap()).intern()
@@ -187,7 +217,11 @@ impl World for Document<'_> {
             .map_err(|error| FileError::from_io(error, &path))
     }
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.as_ref().unwrap_or(&FONTS).font(index)
+        #[cfg(feature = "full")]
+        if let Some(fonts) = &self.fonts {
+            return fonts.font(index);
+        }
+        FONTS.font(index)
     }
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
@@ -197,6 +231,26 @@ impl World for Document<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_fonts_match_default_math_and_text_variants() {
+        use typst_library::text::{FontStretch, FontStyle, FontVariant, FontWeight};
+        for (family, style, weight) in [
+            ("new computer modern math", FontStyle::Normal, 450),
+            ("new computer modern math", FontStyle::Normal, 700),
+            ("libertinus serif", FontStyle::Normal, 400),
+            ("libertinus serif", FontStyle::Normal, 700),
+            ("libertinus serif", FontStyle::Italic, 400),
+            ("libertinus serif", FontStyle::Italic, 700),
+            ("dejavu sans mono", FontStyle::Normal, 400),
+        ] {
+            let variant =
+                FontVariant::new(style, FontWeight::from_number(weight), FontStretch::NORMAL);
+            let index = FONTS.book().select(family, variant).unwrap();
+            let font = FONTS.font(index).unwrap();
+            assert_eq!(font.info().variant, variant, "{family}");
+        }
+    }
 
     #[test]
     fn native_svg_export_compiles_without_packages() {
@@ -227,6 +281,93 @@ mod tests {
             String::from_utf8(document.compile("html").unwrap().remove(0))
                 .unwrap()
                 .contains("<math")
+        );
+    }
+    #[test]
+    fn renders_math_styles_and_raw_text() {
+        let files = BTreeMap::from([(
+            "main.typ".into(),
+            br#"#set page(width: auto, height: auto, margin: 0pt)
+Regular *bold* _italic_ *_bold italic_* `raw <&>`
+$bold(x) + italic(y) + cal(L) + bb(R) + sum_(i=1)^n frac(alpha_i, sqrt(beta))$"#
+                .to_vec(),
+        )]);
+        for format in ["svg", "html"] {
+            let pages = Document::compile_sources(&files, format).unwrap();
+            assert_eq!(pages.len(), 1);
+            let rendered = String::from_utf8(pages[0].clone()).unwrap();
+            assert!(rendered.contains(if format == "svg" { "<path" } else { "<math" }));
+            assert!(!rendered.contains("@preview/"));
+        }
+    }
+
+    #[cfg(not(feature = "full"))]
+    #[test]
+    fn lean_compiler_excludes_document_only_features() {
+        for (source, expected) in [
+            ("#plugin(bytes(()))", "unknown variable: plugin"),
+            (
+                r#"#bibliography("refs.bib")"#,
+                "unknown variable: bibliography",
+            ),
+            (
+                r#"#image(bytes("%PDF-1.4"), format: "pdf")"#,
+                "PDF images are not enabled",
+            ),
+            (
+                r#"#raw("x", theme: bytes("theme"))"#,
+                "custom syntax highlighting is not enabled",
+            ),
+        ] {
+            let files = BTreeMap::from([("main.typ".into(), source.as_bytes().to_vec())]);
+            let error = Document::compile_sources(&files, "svg").unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
+        let files = BTreeMap::from([("main.typ".into(), b"$x$".to_vec())]);
+        for format in ["pdf", "png"] {
+            assert!(
+                Document::compile_sources(&files, format)
+                    .unwrap_err()
+                    .contains("unsupported Typst output format")
+            );
+        }
+    }
+
+    #[cfg(feature = "full")]
+    #[test]
+    fn full_compiler_keeps_exporters_and_document_features() {
+        let files = BTreeMap::from([
+            (
+                "main.typ".into(),
+                br#"#set page(width: 200pt, height: auto)
+#assert(type(plugin) == function)
+#raw("let x = 1;", lang: "rust")
+A citation @math.
+#bibliography("refs.bib")"#
+                    .to_vec(),
+            ),
+            (
+                "refs.bib".into(),
+                br#"@book{math, title={Mathematics}, author={Euler, Leonhard}, year={1748}}"#
+                    .to_vec(),
+            ),
+        ]);
+        let pdf = Document::compile_sources(&files, "pdf").unwrap().remove(0);
+        assert!(pdf.starts_with(b"%PDF-"));
+        let png = Document::compile_sources(&files, "png").unwrap().remove(0);
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+        // Check the PDF importer and SVG converter as well as the exporters.
+        let files = BTreeMap::from([
+            (
+                "main.typ".into(),
+                b"#set page(width: auto, height: auto)\n#image(\"page.pdf\")".to_vec(),
+            ),
+            ("page.pdf".into(), pdf),
+        ]);
+        assert!(
+            String::from_utf8(Document::compile_sources(&files, "svg").unwrap().remove(0))
+                .unwrap()
+                .contains("<svg")
         );
     }
 }

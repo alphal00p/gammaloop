@@ -24,6 +24,14 @@ Typst compiler typesets labels and formulas with bundled fonts; it does not load
 MiTeX, Linnest, or Kurvst Typst packages. NumPy is the host's only Python dependency
 for these notebook displays.
 
+The notebook compiler retains SVG output, HTML/MathML, text shaping, and math
+layout. It omits PDF/PNG export, PDF image import, WebAssembly plugins,
+syntax highlighting, bibliographies, JPEG/GIF/WebP decoding, and system font
+discovery. Labels can use normal Typst math and text, including bold and italic;
+raw text is displayed without syntax coloring. Fonts are bundled, so rendering
+works offline without Typst packages or a system installation. General document
+compilation remains available in the standalone tools.
+
 == Model labels
 
 Particles accept optional `typstname` and `antitypstname` fields; parameters accept
