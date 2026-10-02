@@ -109,7 +109,7 @@ impl FeynmanDiagram {
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
 #import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
-#import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
+#import physics: palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
 #import graph: build, edge, node, sink, source
 #set text(fill: palette.ink)
 

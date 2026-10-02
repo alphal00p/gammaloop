@@ -37,7 +37,7 @@ use pyo3_stub_gen::{
 
 use crate::{
     cff::{PyCffResult, PyCutPropagator, build_cff_for_diagram},
-    display::{escape_html, render_diagram_html, render_diagram_svg},
+    display::{escape_html, render_diagram_html},
     error,
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
@@ -3578,11 +3578,11 @@ impl PyFeynmanDiagram {
         self.inner.to_dot().map_err(error::diagram)
     }
 
-    /// Emit the exact Typst source used by ``render`` without compiling it.
+    /// Export a self-contained Typst document embedding the rendered SVG.
     ///
     /// Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
-    /// as ``render``. The shared Linnest/Kurvst and physics assets must be available
-    /// beneath the Typst project root when compiling this source separately.
+    /// as ``render``. Labels are already typeset; compiling the exported source
+    /// needs no Linnest, Kurvst, MiTeX, or model assets.
     ///
     /// Examples
     /// --------
@@ -3593,7 +3593,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : dict or linnet.RenderConfig or None, optional
+    /// config : dict or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -3605,43 +3605,40 @@ impl PyFeynmanDiagram {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        self.prepare_render(py, config, momenta, lmb, highlight)?
-            .getattr("typst_source")?
-            .extract()
+        Ok(typst_renderer::Document::svg_source(
+            &self.render_svg(py, config, momenta, lmb, highlight)?,
+        ))
     }
 
     /// Render an interactive, transparent SVG using the shared physics renderer.
     ///
-    /// Amplitudes are laid out and drawn natively, with Typst typesetting only
-    /// their labels. Templates, selectors, graph styles, drawing options,
-    /// titles and cross sections compile the complete Typst renderer instead.
-    /// ``LayoutOptions(impred_labels=True)`` refines the layout around the drawn
-    /// labels.
+    /// All graph geometry is drawn in Rust; the embedded Typst compiler typesets
+    /// labels and titles. ``layouts={"impred_labels": True}`` refines the layout
+    /// around the drawn labels. No Python renderer or Typst graph package is needed.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
     /// >>> svg = diagram.render(momenta=True, config={
-    /// ...     "layouts": {"external_label_length_scale": 0.7},
+    /// ...     "layouts": {"impred_steps": 100},
     /// ...     "template_options": {"show-particle": False},
     /// ... })
     /// >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
-    /// config : dict or linnet.RenderConfig or None, optional
-    ///     Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
-    ///     use ``template_options`` with the same names as ``just draw --input``:
-    ///     ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
-    ///     ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+    /// config : dict or None, optional
+    ///     Native ``layouts``, ``drawing`` and ``style`` dictionaries. Boolean physics
+    ///     controls in ``template_options`` include ``show-particle``, ``show-momentum``,
+    ///     ``show-edge-index``, ``show-node-index``, ``debug``, and ``momentum-arrows``.
     ///     Cross sections open their initial-state connections by default; set
     ///     ``split-initial-state`` to ``False`` to draw the sewn graph.
     /// momenta : bool, optional
@@ -3657,7 +3654,7 @@ impl PyFeynmanDiagram {
     pub(crate) fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -3678,7 +3675,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : dict or linnet.RenderConfig or None, optional
+    /// config : dict or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -3690,7 +3687,7 @@ impl PyFeynmanDiagram {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -4130,8 +4127,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 impl PyFeynmanDiagram {
-    /// Draw natively, or compile the shared Typst renderer when the
-    /// configuration needs it (templates, selectors, styles, cross sections).
+    /// Draw graph geometry natively, compiling only the label and title pages.
     fn render_svg(
         &self,
         py: Python<'_>,
@@ -4140,61 +4136,32 @@ impl PyFeynmanDiagram {
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let effective = self.render_config(py, config, momenta, lmb)?;
-        let region = self.render_region(py, highlight)?;
-        let isolated = region
-            .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let selected = region.as_ref().map(|region| &region.hedges);
-        let scene = match crate::display::native_scene_options(&effective)? {
-            Some(options) => self
-                .inner
-                .to_scene(selected, &isolated, lmb.map(|basis| &basis.inner), &options)
-                .map_err(error::diagram)?,
-            None => None,
-        };
-        match scene {
-            Some(scene) => crate::display::render_scene(py, &scene),
-            None => {
-                let source = self
-                    .inner
-                    .to_linnest(
-                        selected,
-                        &isolated,
-                        lmb.map(|basis| &basis.inner),
-                        "_linnet_config",
-                    )
-                    .map_err(error::diagram)?;
-                let prepared =
-                    crate::display::prepare_physics_render(py, &source, Some(&effective))?;
-                render_diagram_svg(&prepared)
-            }
+        if let Some(basis) = lmb
+            && !Arc::ptr_eq(&basis.owner, &self.owner)
+        {
+            return Err(error::DiagramError::new_err(
+                "momentum basis belongs to a different diagram",
+            ));
         }
-    }
-
-    fn prepare_render<'py>(
-        &self,
-        py: Python<'py>,
-        config: Option<&Bound<'_, PyAny>>,
-        momenta: bool,
-        lmb: Option<&PyLoopMomentumBasis>,
-        highlight: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let effective = self.render_config(py, config, momenta, lmb)?;
+        let config = crate::display::render_config(py, config)?;
+        let options = crate::display::scene_options(&config, momenta || lmb.is_some())?;
         let region = self.render_region(py, highlight)?;
         let isolated = region
             .as_ref()
-            .map_or_else(BTreeSet::new, |region| region.isolated.clone());
-        let source = self
+            .map_or_else(BTreeSet::new, |r| r.isolated.clone());
+        let mut scene = self
             .inner
-            .to_linnest(
-                region.as_ref().map(|region| &region.hedges),
+            .to_scene(
+                region.as_ref().map(|r| &r.hedges),
                 &isolated,
-                lmb.map(|basis| &basis.inner),
-                "_linnet_config",
+                lmb.map(|b| &b.inner),
+                &options,
             )
             .map_err(error::diagram)?;
-        crate::display::prepare_physics_render(py, &source, Some(&effective))
+        config
+            .apply(&mut scene)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        crate::display::render_scene(&scene)
     }
 
     /// The highlighted region: the argument, or this subgraph's own region.
@@ -4207,35 +4174,6 @@ impl PyFeynmanDiagram {
             .map(|value| self.region_argument(py, value))
             .transpose()?
             .or_else(|| self.selected_region.clone()))
-    }
-
-    /// The render configuration: momentum display defaults, then `config`.
-    fn render_config<'py>(
-        &self,
-        py: Python<'py>,
-        config: Option<&Bound<'py, PyAny>>,
-        momenta: bool,
-        lmb: Option<&PyLoopMomentumBasis>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(basis) = lmb
-            && !Arc::ptr_eq(&basis.owner, &self.owner)
-        {
-            return Err(error::DiagramError::new_err(
-                "momentum basis belongs to a different diagram",
-            ));
-        }
-        let options = PyDict::new(py);
-        if momenta || lmb.is_some() {
-            options.set_item("momentum-arrows", true)?;
-            options.set_item("show-momentum", true)?;
-        }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("template_options", options)?;
-        let mut effective = linnet_py::RenderConfig::new(Some(&kwargs))?;
-        if let Some(config) = config {
-            effective = effective.merged(&linnet_py::RenderConfig::from_authored_config(config)?);
-        }
-        Ok(Bound::new(py, effective)?.into_any())
     }
 }
 

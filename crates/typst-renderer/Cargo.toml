@@ -15,5 +15,4 @@ typst-pdf = "=0.15.1"
 typst-render = "=0.15.1"
 typst-svg = "=0.15.1"
 
-[dev-dependencies]
 tempfile = "3.8"

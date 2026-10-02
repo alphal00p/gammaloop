@@ -325,6 +325,30 @@ impl PyParticle {
             .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
+    /// Native Typst math label, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.qcd().particle("g").typstname
+    /// 'g'
+    #[getter]
+    fn typstname(&self) -> Option<&str> {
+        self.inner().typstname.as_deref()
+    }
+
+    /// Native Typst math label of the antiparticle, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.qcd().particle("u").antitypstname
+    /// 'overline(u)'
+    #[getter]
+    fn antitypstname(&self) -> Option<&str> {
+        self.inner().antitypstname.as_deref()
+    }
+
     /// Return the particle name used by the model.
     ///
     /// Examples
@@ -808,7 +832,7 @@ impl PyParameter {
 #[pymethods]
 impl PyParameter {
     /// Return the symbolic reference used by this model's expressions.
-    /// TeX and Typst output use the parameter's ``texname``. Plain output keeps
+    /// TeX and Typst output use ``texname`` and ``typstname``, respectively. Plain output keeps
     /// its symbolic name; no defining expression or numerical value is substituted.
     ///
     /// Examples
@@ -821,6 +845,18 @@ impl PyParameter {
     #[getter]
     fn symbol(&self) -> PythonExpression {
         Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
+    /// Native Typst math label, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.standard_model().parameter("aS").typstname
+    /// 'alpha_s'
+    #[getter]
+    fn typstname(&self) -> Option<&str> {
+        self.inner().typstname.as_deref()
     }
 
     /// Return the parameter name.
@@ -836,7 +872,7 @@ impl PyParameter {
     }
 
     /// The model's LaTeX display label, or None when no label was supplied.
-    /// MiTeX renders this label in Typst and notebook math output.
+    /// Native Typst output uses ``typstname`` independently.
     ///
     /// >>> hep.Model.standard_model().parameter("ee").texname
     /// 'e'
@@ -2736,9 +2772,10 @@ impl From<Model> for PyModel {
 impl From<Arc<Model>> for PyModel {
     fn from(inner: Arc<Model>) -> Self {
         for parameter in inner.parameters() {
-            DisplaySettings::register_latex_name(
+            DisplaySettings::register_names(
                 symbol!(&format!("UFO::{}", parameter.name)),
                 parameter.texname.as_deref().unwrap_or_default(),
+                parameter.typstname.as_deref().unwrap_or_default(),
             );
         }
         Self { inner }
