@@ -5,14 +5,27 @@ edition.workspace = true
 license = "MIT"
 description = "Offline in-process Typst compilation for notebook rendering"
 
+[features]
+default = []
+# Standalone document rendering retains export formats and font discovery.
+full = [
+    "typst-library/full",
+    "typst-svg/pdf",
+    "dep:typst-pdf",
+    "dep:typst-render",
+    "typst-kit/embedded-fonts",
+    "typst-kit/scan-fonts",
+]
+
 [dependencies]
 typst = "=0.15.1"
-typst-kit = { version = "=0.15.1", features = ["embedded-fonts", "scan-fonts"] }
+typst-library = "=0.15.1"
+typst-kit = { version = "=0.15.1", default-features = false }
 comemo = "0.5"
 typst-html = "=0.15.1"
 typst-layout = "=0.15.1"
-typst-pdf = "=0.15.1"
-typst-render = "=0.15.1"
+typst-pdf = { version = "=0.15.1", optional = true }
+typst-render = { version = "=0.15.1", optional = true }
 typst-svg = "=0.15.1"
 
 tempfile = "3.8"

@@ -506,7 +506,9 @@
         "nodestore-vec",
         "serde"
       ],
-      "typst-renderer": []
+      "typst-renderer": [
+        "full"
+      ]
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -1777,7 +1779,9 @@
         "nodestore-vec",
         "serde"
       ],
-      "typst-renderer": []
+      "typst-renderer": [
+        "full"
+      ]
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
