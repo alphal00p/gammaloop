@@ -1,0 +1,156 @@
+--- a/src/normalize.rs
++++ b/src/normalize.rs
+@@ -1,4 +1,8 @@
+-use std::{cmp::Ordering, collections::BinaryHeap, ops::DerefMut};
++use std::{
++    cmp::{Ordering, Reverse},
++    collections::BinaryHeap,
++    ops::DerefMut,
++};
+ 
+ use smallvec::SmallVec;
+ 
+@@ -1877,7 +1881,7 @@
+         }
+     }
+ 
+-    /// Add normalized atoms and normalize the result using an n-way merge over their terms.
++    /// Add normalized atoms, sorting singleton terms or merging existing sums.
+     pub(crate) fn add_normalized_slice<'a, T: AtomCore>(
+         args: &[T],
+         ws: &Workspace,
+@@ -1913,8 +1917,33 @@
+             }
+         }
+ 
+-        let mut heap = BinaryHeap::with_capacity(args.len());
++        struct MergedTerms<'a> {
++            heap: BinaryHeap<Reverse<(&'a [u8], usize)>>,
++            cursors: Vec<MergeCursor<'a>>,
++        }
++
++        impl<'a> Iterator for MergedTerms<'a> {
++            type Item = AtomView<'a>;
++
++            #[inline]
++            fn next(&mut self) -> Option<Self::Item> {
++                let Reverse((_, position)) = self.heap.pop()?;
++                let cursor = &mut self.cursors[position];
++                let atom = cursor.atom;
++                if let Some(rest) = cursor.rest.as_mut()
++                    && let Some(term) = rest.next()
++                {
++                    cursor.atom = term;
++                    self.heap
++                        .push(Reverse((term.get_term_cmp_slice(), position)));
++                }
++                Some(atom)
++            }
++        }
++
++        let mut cursors = Vec::with_capacity(args.len());
+         let mut byte_size = 0;
++        let mut has_sum = false;
+ 
+         for (index, arg) in args.iter().enumerate() {
+             let view = arg.as_atom_view();
+@@ -1922,9 +1951,10 @@
+ 
+             match view {
+                 AtomView::Add(a) => {
++                    has_sum = true;
+                     let mut iter = a.iter();
+                     if let Some(term) = iter.next() {
+-                        heap.push(MergeCursor {
++                        cursors.push(MergeCursor {
+                             atom: term,
+                             term: term.get_term_cmp_slice(),
+                             rest: Some(iter),
+@@ -1934,7 +1964,7 @@
+                 }
+                 AtomView::Num(n) if n.is_zero() => {}
+                 term => {
+-                    heap.push(MergeCursor {
++                    cursors.push(MergeCursor {
+                         atom: term,
+                         term: term.get_term_cmp_slice(),
+                         rest: None,
+@@ -1944,7 +1974,36 @@
+             }
+         }
+ 
+-        let Some(mut cursor) = heap.pop() else {
++        if has_sum {
++            // Cursor positions preserve input order, including gaps left by
++            // zero arguments. Move only comparison keys through the heap.
++            let heap = cursors
++                .iter()
++                .enumerate()
++                .map(|(position, cursor)| Reverse((cursor.term, position)))
++                .collect();
++            Self::add_sorted_terms(MergedTerms { heap, cursors }, byte_size, ws, out);
++        } else {
++            // Preserve input order for equal terms, including rounded
++            // coefficients, exactly as the merge cursor's heap ordering does.
++            cursors.sort_unstable_by(|a, b| b.cmp(a));
++            Self::add_sorted_terms(
++                cursors.into_iter().map(|cursor| cursor.atom),
++                byte_size,
++                ws,
++                out,
++            );
++        }
++    }
++
++    /// Merge normalized terms already ordered by their coefficient-free bytes.
++    fn add_sorted_terms<'a>(
++        mut terms: impl Iterator<Item = AtomView<'a>>,
++        byte_size: usize,
++        ws: &Workspace,
++        out: &mut Atom,
++    ) {
++        let Some(first) = terms.next() else {
+             out.to_num(Coefficient::zero());
+             return;
+         };
+@@ -1953,23 +2012,13 @@
+         out_add.grow_capacity(byte_size);
+ 
+         let mut last_buf = ws.new_atom();
+-        last_buf.set_from_view(&cursor.atom);
+-
+-        if let Some(rest) = cursor.rest.as_mut()
+-            && let Some(term) = rest.next()
+-        {
+-            cursor.atom = term;
+-            cursor.term = term.get_term_cmp_slice();
+-            heap.push(cursor);
+-        }
++        last_buf.set_from_view(&first);
+ 
+         let mut helper = ws.new_atom();
+         let mut cur_len = 0;
+         let mut second_pass = false;
+ 
+-        while let Some(mut cursor) = heap.pop() {
+-            let cur = cursor.atom;
+-
++        for cur in terms {
+             if !last_buf.merge_terms(cur, &mut helper) {
+                 let v = last_buf.as_view();
+                 if let AtomView::Num(n) = v {
+@@ -1994,14 +2043,6 @@
+                 last_buf.set_from_view(&cur);
+             } else if let AtomView::Add(_) = last_buf.as_view() {
+                 second_pass = true;
+-            }
+-
+-            if let Some(rest) = cursor.rest.as_mut()
+-                && let Some(term) = rest.next()
+-            {
+-                cursor.atom = term;
+-                cursor.term = term.get_term_cmp_slice();
+-                heap.push(cursor);
+             }
+         }
+ 
