@@ -32,6 +32,7 @@ roxmltree = "0.21.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = "3.8"
+typst-renderer = { path = "../typst-renderer" }
 walkdir = { workspace = true }
 
 [build-dependencies]

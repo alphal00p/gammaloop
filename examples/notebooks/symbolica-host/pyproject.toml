@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
-dependencies = ["linnet==0.1.0", "typst==0.15.0"]
+dependencies = ["numpy"]
 
 [tool.maturin]
 module-name = "symbolica.core"
@@ -18,3 +18,5 @@ build = "cp314-*"
 [tool.cibuildwheel.pyodide]
 repair-wheel-command = ""
 environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }
+test-sources = ["crates/feynkit-py/tests/installed_offline_rendering.py"]
+test-command = "python crates/feynkit-py/tests/installed_offline_rendering.py"

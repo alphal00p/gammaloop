@@ -3593,7 +3593,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig or None, optional
+    /// config : dict or linnet.RenderConfig or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -3605,7 +3605,7 @@ impl PyFeynmanDiagram {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -3629,16 +3629,15 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> import linnet as ln
-    /// >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
-    /// ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
-    /// ...     template_options={"show-particle": False},
-    /// ... ))
+    /// >>> svg = diagram.render(momenta=True, config={
+    /// ...     "layouts": {"external_label_length_scale": 0.7},
+    /// ...     "template_options": {"show-particle": False},
+    /// ... })
     /// >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig or None, optional
+    /// config : dict or linnet.RenderConfig or None, optional
     ///     Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
     ///     use ``template_options`` with the same names as ``just draw --input``:
     ///     ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
@@ -3658,7 +3657,7 @@ impl PyFeynmanDiagram {
     pub(crate) fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -3679,7 +3678,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig or None, optional
+    /// config : dict or linnet.RenderConfig or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -3691,7 +3690,7 @@ impl PyFeynmanDiagram {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports=("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -4168,7 +4167,7 @@ impl PyFeynmanDiagram {
                     .map_err(error::diagram)?;
                 let prepared =
                     crate::display::prepare_physics_render(py, &source, Some(&effective))?;
-                render_diagram_svg(py, &prepared)
+                render_diagram_svg(&prepared)
             }
         }
     }
@@ -4225,15 +4224,6 @@ impl PyFeynmanDiagram {
                 "momentum basis belongs to a different diagram",
             ));
         }
-        let linnet = py.import("linnet").map_err(|error| {
-            if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
-                pyo3::exceptions::PyImportError::new_err(format!(
-                    "diagram rendering requires linnet and typst-py: {error}"
-                ))
-            } else {
-                error
-            }
-        })?;
         let options = PyDict::new(py);
         if momenta || lmb.is_some() {
             options.set_item("momentum-arrows", true)?;
@@ -4241,11 +4231,11 @@ impl PyFeynmanDiagram {
         }
         let kwargs = PyDict::new(py);
         kwargs.set_item("template_options", options)?;
-        let mut effective = linnet.getattr("RenderConfig")?.call((), Some(&kwargs))?;
+        let mut effective = linnet_py::RenderConfig::new(Some(&kwargs))?;
         if let Some(config) = config {
-            effective = effective.call_method1("overlay", (config,))?;
+            effective = effective.merged(&linnet_py::RenderConfig::from_authored_config(config)?);
         }
-        Ok(effective)
+        Ok(Bound::new(py, effective)?.into_any())
     }
 }
 
