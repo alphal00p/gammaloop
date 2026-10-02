@@ -132,7 +132,7 @@ task = "Parse and inspect a DOT-backed Linnet graph from Python"
 audience = "beginner"
 source = "docs/products/linnet/content/quickstart-python.typ"
 route = "quickstart/python/"
-prerequisites = ["Python 3.10 or newer", "Source-built linnet_py extension"]
+prerequisites = ["Python 3.10 or newer", "Source-built linnet extension"]
 expected = "The graph has two nodes and one edge, and round-trips to DOT text."
 verification = "compile"
 tier = "pull-request"
@@ -282,7 +282,7 @@ task = "Simplify one representation-aware metric contraction in Rust"
 audience = "beginner"
 source = "docs/products/idenso/content/quickstart-rust.typ"
 route = "quickstart/rust/"
-prerequisites = ["Rust 1.89 or newer", "Current Git revision of Idenso", "Symbolica 3.0.0"]
+prerequisites = ["Rust 1.89 or newer", "Current Git revision of Idenso", "Symbolica 3.0.1"]
 expected = "Metric simplification returns exactly the vector with the remaining free Minkowski index."
 verification = "compile"
 tier = "pull-request"
@@ -342,7 +342,7 @@ task = "Canonicalize a one-loop vacuum integral through the current Rust API"
 audience = "beginner"
 source = "docs/products/vakint/content/quickstart-rust.typ"
 route = "quickstart/rust/"
-prerequisites = ["Rust 1.89 or newer", "Current Git revision of Vakint", "Symbolica 3.0.0"]
+prerequisites = ["Rust 1.89 or newer", "Current Git revision of Vakint", "Symbolica 3.0.1"]
 expected = "The matching-only engine recognizes the input as Vakint's canonical I1L topology without probing an external backend."
 verification = "compile"
 tier = "pull-request"
@@ -377,4 +377,199 @@ expected = "Matching, tensor reduction, and evaluation failures remain attributa
 verification = "compile"
 tier = "pull-request"
 owner = "Vakint maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-rust-quickstart"
+marker = "feynkit-rust-quickstart"
+product = "feynkit"
+task = "Generate and validate standalone scalar diagrams from Rust"
+audience = "beginner"
+source = "docs/products/feynkit/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Repository checkout", "Rust toolchain with compatible Symbolica dependencies"]
+expected = "The scalar fixture produces finalized tree diagrams that validate and export as DOT."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-community-quickstart"
+marker = "feynkit-community-quickstart"
+product = "feynkit"
+task = "Generate diagrams and construct a CFF expression in Python"
+audience = "beginner"
+source = "docs/products/feynkit/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Repository checkout", "Python with a combined Symbolica host registering FeynKit"]
+expected = "Generated scalar diagrams round-trip through model-aware JSON and expose a CFF expression."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-tensor-selectors"
+marker = "feynkit-tensor-selectors"
+product = "feynkit"
+task = "Reduce a rank-two vacuum numerator while preserving an external momentum"
+audience = "real-value"
+source = "docs/products/feynkit/content/tensor-reduction.typ"
+route = "guides/tensor-reduction/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "Selecting only k gives k squared times p squared divided by the symbolic dimension D."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-diagram-integral-family"
+marker = "feynkit-diagram-integral-family"
+product = "feynkit"
+task = "Extract a routed integral family from a generated diagram"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit and a repository checkout containing the scalar model fixture"]
+expected = "The massless bubble has U=x+y and F=-s*x*y after setting its external invariant."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-bubble"
+marker = "feynkit-integral-family-bubble"
+product = "feynkit"
+task = "Rewrite a massive bubble numerator in propagator variables"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The complete independent family rewrites the squared loop-external product into the exact quadratic polynomial in d1 and d2."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-partial-fractions"
+marker = "feynkit-integral-family-partial-fractions"
+product = "feynkit"
+task = "Partial-fraction dependent propagators without changing their labels"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The returned coefficient and exponent pairs reconstruct 1/(k squared times (k squared minus m squared)) exactly."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-mapping"
+marker = "feynkit-integral-family-mapping"
+product = "feynkit"
+task = "Verify a loop-momentum shift and map propagator powers"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The verified denominator permutation is [1, 0], and powers [2, -1] become [-1, 2]."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-symanzik"
+marker = "feynkit-integral-family-symanzik"
+product = "feynkit"
+task = "Construct Symanzik polynomials for a massive bubble"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The returned U and F equal the explicitly asserted massive bubble polynomials."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-parametric-mapping"
+marker = "feynkit-integral-family-parametric-mapping"
+product = "feynkit"
+task = "Compare families through their Symanzik polynomials"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "A parametric permutation equates U and F even when the fixed-external-momentum shift search finds no mapping."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-grouping"
+marker = "feynkit-integral-family-grouping"
+product = "feynkit"
+task = "Group equivalent loop-integral families"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "Both input families map to the first representative, with the second family exchanging its propagator powers."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-scaleless-sector"
+marker = "feynkit-integral-family-scaleless-sector"
+product = "feynkit"
+task = "Certify a scaleless selected sector"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The selected positive-power sector admits scaling weights satisfying the exact Euler identity for U+F."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-integral-family-transverse-sector"
+marker = "feynkit-integral-family-transverse-sector"
+product = "feynkit"
+task = "Find an unconstrained transverse loop direction"
+audience = "real-value"
+source = "docs/products/feynkit/content/integral-families.typ"
+route = "guides/integral-families/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The denominator system returns the real scaleless transverse direction [1, -1]."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "feynkit-tensor-external-basis"
+marker = "feynkit-tensor-external-basis"
+product = "feynkit"
+task = "Project a loop vector onto an external momentum basis"
+audience = "real-value"
+source = "docs/products/feynkit/content/tensor-reduction.typ"
+route = "guides/tensor-reduction/"
+prerequisites = ["Python with a combined Symbolica host registering FeynKit"]
+expected = "The projected vector equals (k dot p)/(p dot p) times p with its free index preserved."
+verification = "compile"
+tier = "pull-request"
+owner = "FeynKit maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"

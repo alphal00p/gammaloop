@@ -974,6 +974,50 @@ class GammaLoopAPI:
         api.run("display processes")
         ```
         """
+    def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:
+        r"""
+        Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+
+        Parameters
+        ----------
+        dot_string : str
+            Inline DOT graph using particles from the active model.
+        subgraph_nodes : Sequence[str]
+            Vertex names retained in the subgraph; an empty sequence selects all nodes.
+        reverse_dangling : Sequence[int]
+            Dangling edge ids whose orientation is reversed.
+        orientation_pattern : str, optional
+            Pattern restricting returned causal-flow orientations.
+
+        Returns
+        -------
+        list[tuple[dict[int, int], str]]
+            Edge-direction maps paired with their energy-denominator expressions.
+        """
+    def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Serialize a causal-flow expression and its surfaces as JSON.
+
+        This accepts the same graph, subgraph, and dangling-edge inputs as
+        ``generate_cff``. The current JSON representation is intended for GammaLoop
+        tooling and may contain internal structural details.
+
+        Parameters
+        ----------
+        dot_string : str
+            Inline DOT graph using particles from the active model.
+        subgraph_nodes : Sequence[str]
+            Vertex names retained in the subgraph; an empty sequence selects all nodes.
+        reverse_dangling : Sequence[int]
+            Dangling edge ids whose orientation is reversed.
+        orientation_pattern : str, optional
+            Pattern restricting returned causal-flow orientations.
+
+        Returns
+        -------
+        str
+            JSON representation of the causal-flow expression and E-surfaces.
+        """
 
 @typing.final
 class HistogramAccumulator:
@@ -1995,6 +2039,34 @@ def atom_to_canonical_string(atom_str: builtins.str) -> builtins.str:
     ```
     """
 
+def contract(atom_str: builtins.str) -> builtins.str:
+    r"""
+    Contract repeated tensor indices using Idenso's structural contraction.
+
+    Parameters
+    ----------
+    atom_str : str
+        Symbolica tensor expression whose repeated indices encode contractions.
+
+    Returns
+    -------
+    str
+        The contracted expression, with compatible vector pairs written as dots.
+
+    Raises
+    ------
+    Exception
+        If ``atom_str`` cannot be parsed or converted.
+
+    Examples
+    --------
+    Rewrite a contraction before passing it to an Idenso workflow:
+
+    ```python
+    contract("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
+    ```
+    """
+
 def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:
     r"""
     Evaluate a graph's symbolic overall factor and return its canonical form.
@@ -2024,32 +2096,3 @@ def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:
     )
     ```
     """
-
-def to_dots(atom_str: builtins.str) -> builtins.str:
-    r"""
-    Rewrite a Symbolica tensor expression into Idenso dot-product notation.
-
-    Parameters
-    ----------
-    atom_str : str
-        Symbolica tensor expression whose repeated indices encode contractions.
-
-    Returns
-    -------
-    str
-        The equivalent expression using Idenso dot-product notation.
-
-    Raises
-    ------
-    Exception
-        If ``atom_str`` cannot be parsed or converted.
-
-    Examples
-    --------
-    Rewrite a contraction before passing it to an Idenso workflow:
-
-    ```python
-    to_dots("p(mu) * q(mu)")
-    ```
-    """
-

@@ -91,7 +91,7 @@
       status.setAttribute("role", "status");
       status.setAttribute("aria-atomic", "true");
       status.dataset.state = "busy";
-      status.textContent = "Loading notebook and Python…";
+      status.textContent = "Downloading notebook…";
       container.append(status);
       const notebook = document.createElement("div");
       notebook.className = "live-notebook-cells";
@@ -104,24 +104,42 @@
         started ||= busy;
         if (!started) return;
         status.dataset.state = busy ? "busy" : "ready";
-        const message = busy ? "Running notebook…" : "Ready";
+        const running = [...notebook.querySelectorAll('marimo-island[data-status="running"]')];
+        let message = busy ? "Running notebook…" : "Ready";
+        if (running.some((island) => island.dataset.notebookPhase === "install")) {
+          message = "Downloading and installing Python packages…";
+        } else if (running.some((island) => island.dataset.notebookPhase === "activate")) {
+          message = "Activating Symbolica and loading its modules…";
+        }
         if (status.textContent !== message) status.textContent = message;
         notebook.setAttribute("aria-busy", String(busy));
       });
       executionObserver.observe(notebook, { subtree: true, attributes: true, attributeFilter: ["data-status"] });
       try {
-        const url = new URL(`${docsRoot}assets/notebooks/${container.dataset.linnetNotebook}.json`, document.baseURI);
+        const url = new URL(`${docsRoot}assets/notebooks/${container.dataset.notebook}.json`, document.baseURI);
         const response = await fetch(url);
         if (!response.ok) throw new Error("This documentation build does not include the browser notebook assets.");
         const payload = await response.json();
         // Islands run Python in a worker, whose URL can belong to the CDN.
         // Resolve our wheel against the version-local asset URL on this page.
         const wheel = new URL(payload.wheel, url).href;
-        notebook.innerHTML = payload.body.replaceAll("__LINNET_WHEEL_URL__", wheel);
+        let cells = payload.body.replaceAll("__NOTEBOOK_WHEEL_URL__", wheel);
+        if (payload.dependency_wheel) {
+          cells = cells.replaceAll("__DEPENDENCY_WHEEL_URL__", new URL(payload.dependency_wheel, url).href);
+        }
+        notebook.innerHTML = cells;
+        // Capture hidden bootstrap code before Marimo consumes its source elements.
+        notebook.querySelectorAll("marimo-island").forEach((island) => {
+          const code = decodeURIComponent(island.querySelector("marimo-cell-code")?.textContent || "")
+            || JSON.parse(island.querySelector("marimo-code-editor")?.dataset.initialValue || '""');
+          if (code.includes("_micropip.install(")) island.dataset.notebookPhase = "install";
+          else if (/^\s*(?:from|import) symbolica\b/m.test(code)) island.dataset.notebookPhase = "activate";
+        });
         notebook.querySelectorAll("marimo-code-editor").forEach((editor) => {
           editor.dataset.theme = JSON.stringify(root.dataset.theme === "dark" ? "dark" : "light");
-          if (container.dataset.linnetNotebook === "rendering_api") editor.dataset.maxHeight = "360";
+          if (container.dataset.notebook === "rendering_api") editor.dataset.maxHeight = "360";
         });
+        status.textContent = "Downloading notebook runtime…";
         container.append(notebook);
         if (!notebookRuntime) {
           const head = new DOMParser().parseFromString(payload.head, "text/html");
@@ -129,6 +147,7 @@
           notebookRuntime = import(head.querySelector('script[type="module"]').src);
         }
         await notebookRuntime;
+        if (!started) status.textContent = "Starting Python and loading its runtime…";
         container.dataset.notebookState = "active";
       } catch (error) {
         executionObserver.disconnect();
@@ -140,7 +159,7 @@
       }
     }
   }, { rootMargin: "200px" });
-  document.querySelectorAll("[data-linnet-notebook]").forEach((container) => notebookObserver.observe(container));
+  document.querySelectorAll("[data-notebook]").forEach((container) => notebookObserver.observe(container));
 
   let indexPromise;
   const getIndex = () => indexPromise ||= fetch(searchIndex)

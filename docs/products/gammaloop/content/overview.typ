@@ -94,6 +94,9 @@ versions, templates, and cache boundary.
 == Related crates
 
 #boundary("How the crates fit together", [
+  #product-link("feynkit", label: "FeynKit") owns reusable particle models, finalized diagrams,
+  deterministic generation, CFF, kinematics, and vacuum tensor reduction. Its Rust and Python
+  APIs also work independently of a GammaLoop state.
   #product-link("linnet", label: "Linnet") provides the half-edge graph model and graph
   algorithms. #product-link("spenso", label: "Spenso") provides typed tensors, tensor
   structures, and network execution. #product-link("idenso", label: "Idenso") handles symbolic

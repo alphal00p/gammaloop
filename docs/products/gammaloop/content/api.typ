@@ -291,7 +291,7 @@ The supported module-level helpers are
 for parsing and canonicalizing a Symbolica expression,
 #link("reference/python/gammaloop-python/evaluate_graph_overall_factor-function/")[`evaluate_graph_overall_factor`]
 for evaluating a graph's symbolic prefactor, and
-#link("reference/python/gammaloop-python/to_dots-function/")[`to_dots`] for rewriting tensor
+#link("reference/python/gammaloop-python/contract-function/")[`contract`] for rewriting tensor
 contractions into Idenso dot-product notation. Their generated entries document accepted strings,
 return values, failure modes, and task-oriented examples.
 

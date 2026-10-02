@@ -5,7 +5,7 @@
 
 #catalog-contract(
   rust-scope: "vakint",
-  python-scope: "symbolica.community.vakint",
+  python-scope: "symbolica.community.hep.vakint",
 )
 
 == Rust package
@@ -43,14 +43,14 @@ supported external-tool versions for this release.
 == Python community module
 
 #boundary("Python availability", [
-  Python users import `symbolica.community.vakint`; Vakint is not distributed as a standalone
+  Python users import `symbolica.community.hep.vakint`; Vakint is not distributed as a standalone
   Python package. Check that the installed Symbolica distribution includes the Vakint community
   module before relying on this interface.
 ])
 
 Install and verify the published assembly with
 `python -m pip install --upgrade symbolica` and
-`python -c "import symbolica.community.vakint"`. Custom Symbolica builds can add Vakint to the
+`python -c "import symbolica.community.hep.vakint"`. Custom Symbolica builds can add Vakint to the
 #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly, enable the
 `symbolica_community_module` feature, and register `VakintWrapper` while building the extension.
 
@@ -61,7 +61,7 @@ backends:
 
 ```python
 from symbolica import E
-from symbolica.community.vakint import Vakint
+from symbolica.community.hep.vakint import Vakint
 
 vakint = Vakint(evaluation_order=[])
 expr = E(

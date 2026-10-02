@@ -5,18 +5,40 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-09-21 against `11fe63d8`.
+#strong[Audit status:] reviewed 2026-09-29 against the unified reduction and admitted-parser implementation.
 Lifecycle: current implementation architecture.
 
 == Entry Points
 <entry-points>
-Parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
+External parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
 The parser first rejects chains or traces nested inside another chain or
 trace, because they share one global `in`/`out` placeholder scope. It then
 creates a fresh `ParseState`, reserves the serialized names of input slot
 indices, and calls `try_from_view_impl` on the input `AtomView`. Parser
 clones share both the allocator and reservation set, so newly generated
 dummies cannot collide with written indices or each other.
+
+`Network::try_from_admitted_view` enters the same construction and dispatch path
+for an already validated expression. Its supported settings are
+`ShorthandParsing::Opaque` and `depth_limit = Some(1)`. The caller must retain
+valid facts about syntax, sum interfaces, index scopes, and chain nesting. This
+entry skips repeated admission and index reservation because its opaque graph
+does not allocate shorthand dummies.
+
+`LeafInterfaceCache` retains each exact boundary expression's tensorial
+classification and slots in logical order, including empty tensor interfaces.
+A borrowed Atom key reuses those observations when another graph region changes;
+only cache misses walk the boundary's syntax. Reconstructing the canonical
+storage layout from cached logical slots preserves open and unresolved port
+identities. Cache reuse requires unchanged admission facts and classification
+settings (`strict_tensor_filter` and `parse_composite_scalars_as_tensors`).
+Callbacks, uncontrolled rewrites, and materialization clear the affected trusted
+path. The caller owns validity; the cache does not infer that arbitrary
+replacement syntax has been admitted.
+
+The existing network profiler distinguishes cache hits and misses, syntactic
+node visits, and time spent in uncached structure inference. Its general
+structure-attempt timer also includes cache lookup and slot reconstruction.
 
 #table(
     columns: 2,
@@ -45,10 +67,8 @@ dummies cannot collide with written indices or each other.
     mainly for structure discovery when all summands are expected to
     expose the same slots.],
     [`depth_limit`], [Turns composite expressions into leaves once the
-    parser reaches the configured depth. The current checks live on add,
-    mul, and pow parsing.],
-    [`depth_is_product_depth`], [When true, only products increment
-    depth. When false, sums and powers increment depth too.],
+    parser reaches the configured depth. Products, sums, and powers each
+    consume one level.],
     [`shorthand_parsing`], [`Expand { schoonschip, trace, chain }`
     independently controls the shorthand families lowered into explicit
     graph structure. `Opaque` keeps recognized shorthand roots as tensor
@@ -74,13 +94,10 @@ dummies cannot collide with written indices or each other.
     rewritten before generic leaf parsing as
     `F(mink(D,d), mink(D,i)) * p(mink(D,d))`, where `d` is a fresh
     dummy.],
-    [`ShorthandParsing::Opaque { inference: Fast }`], [`chain(bis(D,i), bis(D,j), F(in,out))`
+    [`ShorthandParsing::Opaque`], [`chain(bis(D,i), bis(D,j), F(in,out))`
     becomes one tensor leaf. Its visible structure is inferred
     syntactically as the two endpoints `bis(D,i)` and `bis(D,j)`, then
     `TensorFromExpression` realizes the leaf.],
-    [`ShorthandParsing::Opaque { inference: Expanded }`], [The same
-    expression is expanded in a temporary network only to read dangling
-    slots. The final parse still stores one opaque leaf.],
     [`pure_scalar(...)`], [This wrapper is a hard scalar escape hatch.
     Tensorial-syntax classification rejects the wrapper, then the scalar
     parser unwraps its single argument, so opaque mode never sees it as
@@ -98,9 +115,6 @@ dummies cannot collide with written indices or each other.
     opaque tensor-expression boundary as a leaf instead of recursively
     expanding every child. This is the same boundary used by opaque
     parsing.],
-    [`depth_is_product_depth = false`], [Sums and powers count toward
-    the depth limit too. With the default `true`, only product nesting
-    increases parse depth.],
 )
 
 == Main Dispatch
@@ -234,8 +248,7 @@ Yes
 ==== Opaque tensor leaf
 <opaque-tensor-leaf>
 + Infer exposed structure from the original atom.
-+ `Fast`: syntactic structure inference.
-+ `Expanded`: expanded net dangling slots.
++ Use syntactic structure inference, or reusable admitted boundary observations.
 + Call `TensorFromExpression`.
 
 No
@@ -270,7 +283,7 @@ Fixed point
 ==== Ordinary tensor leaf
 <ordinary-tensor-leaf>
 + If the Schoonschip atom rewriter makes no change, do not recurse.
-+ Run `S::parse` for fast structure inference.
++ Run `S::structure_from_parser` using the existing parser admission state.
 + Use a library tensor if a key exists.
 + Otherwise parse a rank-zero result as a scalar, or concretize the parsed tensor shell.
 
@@ -400,7 +413,7 @@ pub trait AtomStructureExt {
 #link("../../crates/spenso/src/network/parsing/mod.rs#L626")[crates/spenso/src/network/parsing/mod.rs:626]
 
 ```
-if let Some(inference) = settings.shorthand_parsing.opaque_inference()
+if settings.shorthand_parsing == ShorthandParsing::Opaque
     && Self::is_shorthand_function(value)
 {
     return Self::as_inferred_leaf(...);
@@ -449,9 +462,9 @@ separate leaf boundary described below.
 <opaque-leaf-boundary>
 Opaque shorthand parsing is split into two steps.
 
-+ `StructureFromAtom::structure_from_atom` determines the exposed slots.
-  `Fast` uses a syntactic walk. `Expanded` builds an expanded shorthand
-  network and reads dangling slots.
++ `StructureFromAtom::structure_from_parser` determines exposed slots using
+  syntactic inference and the established parser admission facts. The
+  admitted shallow entry can reuse exact cached boundary observations.
 + `TensorFromExpression::tensor_from_expression` turns the original atom
   plus inferred structure into a tensor. Symbolic tensors keep the
   original expression on a tensor with the inferred structure. Concrete
@@ -462,10 +475,10 @@ Opaque shorthand parsing is split into two steps.
 #link("../../crates/spenso/src/network/parsing/structure_inference.rs#L162")[crates/spenso/src/network/parsing/structure\_inference.rs:162]
 
 ```
-match mode {
-    StructureInferenceMode::Fast => Self::leaf_structure_from_atom(value),
-    StructureInferenceMode::Expanded =>
-        Self::expanded_shorthand_structure_from_atom(value),
+if state.chain_scope_validated {
+    Self::leaf_structure_from_atom(value, &mut matcher)
+} else {
+    Self::structure_from_atom(value, &mut matcher)
 }
 ```
 
@@ -490,7 +503,7 @@ let mut network = Network::try_from_view_with_function_library(
     function_library,
     &expanded_settings,
 )?;
-network.execute::<Sequential, SmallestDegree, ...>(...)?;
+network.execute::<Sequential, MinIntermediateCost, ...>(...)?;
 ```
 
 #link("../../crates/idenso/src/tensor/mod.rs#L118")[crates/idenso/src/tensor/mod.rs:118]
@@ -559,7 +572,7 @@ fn materialize_shorthand(...)
         .materialize_shorthand(value.as_view());
     if materialized == value.as_view().to_owned() {
         if root_chain_disabled || root_trace_disabled || has_schoonschip_shorthand {
-            return Self::as_inferred_leaf(..., StructureInferenceMode::Fast, ...);
+            return Self::as_inferred_leaf(...);
         }
         return Self::parse_regular_function_leaf(...);
     }
@@ -784,9 +797,9 @@ restrictions still apply.
     [Nested chains and traces], [Rejected before parsing or structure
     inference because nested containers would share ambiguous `in`/`out`
     placeholders.],
-    [Opaque fast vs expanded inference], [Fast inference is cheap and
-    syntactic. Expanded inference builds an expanded network and reads
-    dangling slots, so it is a validation oracle but more expensive.],
+    [Opaque interface discovery], [Syntactic inference avoids a full arithmetic
+    network. Admitted boundary observations reuse unchanged leaf interfaces;
+    explicit component execution remains a separate correctness oracle.],
     [Opaque scalar result], [A recognized shorthand can infer tensorial
     structure and still finalize to a scalar tensor. Opaque mode sends
     that shorthand through `TensorFromExpression`; ordinary function
