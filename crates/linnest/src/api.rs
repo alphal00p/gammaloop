@@ -1,10 +1,10 @@
-use figment::{providers::Serialized, Figment, Profile};
+use figment::{Figment, Profile, providers::Serialized};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::parser::set::DotGraphSet;
 
 use crate::{
-    graph_api::{decode_graph_bytes_list, decode_typst_graph, encode_cbor},
     TypstGraph,
+    graph_api::{decode_graph_bytes_list, decode_typst_graph, encode_cbor},
 };
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
@@ -166,6 +166,34 @@ pub fn layout_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn graph_info(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_info_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn graph_layout_snapshot(arg: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_layout_snapshot_bytes(arg, options)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn graph_impred_diagram(snapshot: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_impred_diagram_bytes(snapshot)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn graph_impred_seed(request: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_impred_seed_bytes(request)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn graph_impred_layout(
+    snapshot: &[u8],
+    seed: &[u8],
+    options: &[u8],
+) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_impred_layout_bytes(snapshot, seed, options)
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]

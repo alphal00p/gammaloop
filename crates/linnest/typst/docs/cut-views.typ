@@ -4,11 +4,39 @@
 
 = Linnest directed cut views
 
-Implemented design for `examples/xbox.typ`. Each view opens *one weighted
+Implemented design for `examples/xbox-sum.typ`. Each view opens *one weighted
 directed cut* of a shared master graph. `left` and `right` describe its two
 drawing boundaries; repeated passages are hedge annotations, not separate named
 cut objects. The general API tutorial is in `docs/manual.typ`; the momentum
 algebra below is specific to this example.
+
+The example consists of three independent, single-page documents:
+- `examples/xbox-sum.typ`: the four directed openings and momentum identity.
+- `examples/thrown-out.typ`: the two manually built momentum routings, with
+  explicit endpoint groups for shading.
+- `examples/soft-triangle.typ`: the soft-discontinuity comparison with selected
+  external and loop momenta.
+
+`examples/xbox-common.typ` shares the renderer, layout presets, vertex builders,
+and drawing conventions; `examples/map-style.typ` supplies the Feynman styles.
+The edge maps hide internal momenta with `show-momentum: false`, leaving
+external momenta and $k$ visible, including on the through-gluon.
+`soft-triangle.typ` hides momenta through `default-edge-data` and explicitly
+shows the opened legs and the three momenta of the soft triangle. Visibility is
+ordinary edge data, not inferred by the renderer from topology or momentum text; the physical
+momentum values are retained even when their drawing layers are hidden.
+Each document sets its own page dimensions. The shared `math-font-size` sets
+surrounding equations to 10pt, while `diagram` scopes its measurement and drawing
+to `diagram-style.font-size` (6pt), including momentum labels. Ordinary text,
+arrow sizes, and graph units are unaffected by the equation font size.
+From the repository root, compile a document directly to its corresponding
+PDF, for example:
+
+```sh
+typst compile --root . crates/linnest/typst/examples/xbox-sum.typ
+```
+
+The other two documents compile the same way; no PDF-splitting step is needed.
 
 == One graph, four openings
 
@@ -157,8 +185,8 @@ zero-sized and unpainted automatically, but remain queryable and positionable.
 
 Each view explicitly builds from the shared master items, opens its directed cut
 with `graph.cut`, and applies geometry and depth pins with `graph.map`.
-`diagram(g, ...)` receives that prepared graph and only styles, lays out, and
-draws it, including the shared overlays. Boundary and hidden-node metadata
+`diagram(g, ...)` in `examples/xbox-common.typ` receives that prepared graph
+and only styles, lays out, and draws it, including the shared overlays. Boundary and hidden-node metadata
 exclude auxiliary nodes from the cut-line bounds without recognizing node names.
 
 Cut fragments reset old geometry rather than copying a paired edge's midpoint
@@ -203,4 +231,5 @@ Coverage is defined in the native weighted-cut tests and
 orientation combinations, sidecar content/callbacks, origins, selection
 ownership, repeated openings, current boundary positions, and invisible
 auxiliary nodes. Check semantic records before comparing rendered pictures,
-without overwriting the user's `xbox.pdf`.
+without overwriting the user's `xbox-sum.pdf`, `thrown-out.pdf`, or
+`soft-triangle.pdf`.

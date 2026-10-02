@@ -4,7 +4,21 @@
 #import "gamma-layout-core.typ": autogen-external-edge-fields, bind-layout
 #set page(width: auto, height: auto, margin: 0pt)
 
-#let input = read("epemttbar.dot")
+// This tests the renderer's compact DOT contract. The physics corpus uses
+// annotated FeynKit DOT, whose external-state metadata belongs to its own parser.
+#let input = ```dot
+digraph {
+  ext0 [style=invis, is_cut=10];
+  ext1 [style=invis, is_cut=20];
+  ext2 [style=invis, is_cut=20];
+  ext3 [style=invis, is_cut=10];
+  right -> ext0 [id=0, particle="e-"];
+  right -> ext1 [id=1, particle="e+"];
+  ext2 -> left [id=2, particle="e-"];
+  ext3 -> left [id=3, particle="e+"];
+  left -> right [id=4, particle="photon"];
+}
+```.text
 #let original = graph.parse(input).first()
 #let gamma-layout = bind-layout(
   graph: graph, renderer: renderer, physics: physics,
@@ -12,19 +26,22 @@
 )
 
 // Exercise the actual Gamma entrypoint: automatic cross-section detection must
-// enable placement, pair by inherited invisible-node cut tags, and pin each row.
+// enable placement, pair by inherited invisible-node cut tags, and freely group each row.
 #context gamma-layout(input, auto-mode: true,
   edge-style-options: (momentum-arrows: true, show-particle: false),
-  layout-passes: ((solver: (seed: 42, steps: 1200, depth-scale: 2), labels: (steps: 2)),),
+  layout-passes: ((solver: (seed: 42, depth-scale: 2), labels: (steps: 2)),),
   diagram-options: (title: none, draw-after: (g, _) => {
     let nodes = graph.nodes(g)
     let edges = graph.edges(g)
     let left = calc.min(..nodes.map(node => node.pos.x))
     let right = calc.max(..nodes.map(node => node.pos.x))
     let labels = graph.info(g).data.at("linnest-style").at("edge-label")
-    for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
+    for eid in range(4) {
       let edge = edges.at(eid)
-      assert(calc.abs(edge.pos.y - y) < 1e-9)
+      let edge-dot = graph.dot(g).split("\n").find(
+        line => line.contains("[id=" + str(eid) + " "),
+      )
+      assert(edge-dot.contains("y:@is_cut-"))
       assert(edge.statements.at("pos-z") == "0")
       assert(edge.statements.at("pos-z-mode") == "pin")
       if eid < 2 { assert(edge.pos.x > right) }
@@ -35,6 +52,8 @@
       assert(label.contains("base: [q]"))
       assert(label.contains("b: [" + str(eid) + "]"))
     }
+    assert(edges.at(0).pos.y == edges.at(3).pos.y)
+    assert(edges.at(1).pos.y == edges.at(2).pos.y)
     assert(edges.at(0).pos.x == edges.at(1).pos.x)
     assert(edges.at(2).pos.x == edges.at(3).pos.x)
     assert(edges.at(0).statements.at("is_cut") == edges.at(3).statements.at("is_cut"))
@@ -67,8 +86,13 @@
 #assert(edges.at(0).pos.x > 0)
 #assert(edges.at(1).pos == before.at(1).pos)
 #assert(edges.at(2).pos.x == -30)
-#assert(edges.at(2).pos.y == 5)
-#assert(edges.at(3).pos.y == -5)
+#for eid in (2, 3) {
+  let edge-dot = graph.dot(positioned).split("\n").find(
+    line => line.contains("[id=" + str(eid) + " "),
+  )
+  assert(edge-dot.contains("y:@is_cut-"))
+  assert(edges.at(eid).pos.y != prepared-edges.at(eid).pos.y)
+}
 #for eid in (0, 1, 2, 3) {
   assert(edges.at(eid).statements.at("pos-z") == "0")
   assert(edges.at(eid).statements.at("pos-z-mode") == "pin")
@@ -78,8 +102,7 @@
 #draw(positioned, title: none)
 
 // Public Gamma layout keeps outside labels close to the free endpoint, with
-// extra room only when momentum is shown (layout-core's label-length-scale of
-// 0.45 versus 0.30). Explicit layout distances still win.
+// extra room only when momentum is shown. Explicit layout distances still win.
 #let spacing-input = ```dot
 digraph {
   a [pos="0,0!"];
@@ -91,18 +114,18 @@ digraph {
 ```.text
 #for cross-section in (false, true) {
   for (arrows, momentum, distance, expected) in (
-    (true, auto, none, 0.45),
-    (true, false, none, 0.30),
-    (false, auto, none, 0.30),
-    (false, true, none, 0.45),
+    (true, auto, none, 0.60),
+    (true, false, none, 0.45),
+    (false, auto, none, 0.45),
+    (false, true, none, 0.60),
     (true, false, 0.6, 0.6),
   ) {
     context gamma-layout(spacing-input,
       amplitude-mode: not cross-section, cross-section-mode: cross-section,
       edge-style-options: (momentum-arrows: arrows, show-momentum: momentum),
       layout-passes: ((viewport-w: 1, viewport-h: 1, spring: (length: 1),
-        solver: (steps: 0), labels: (steps: 1, repulsion: 0,
-          ..if distance == none { (:) } else { (distance: distance) })),),
+        solver: (algorithm: "force", steps: 0), labels: (steps: 1, repulsion: 0,
+          ..if distance == none { (:) } else { (external-distance: distance) })),),
       diagram-options: (title: none, draw-after: (g, _) => {
         for edge in graph.edges(g) {
           let sign = if edge.source == none { -1 } else { 1 }

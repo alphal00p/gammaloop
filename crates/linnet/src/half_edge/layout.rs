@@ -6,6 +6,8 @@ pub mod simulatedanneale;
 
 pub mod force;
 
+pub mod impred;
+
 pub mod layered;
 
 impl<E, V, H> HedgeGraph<E, V, H, NodeStorageVec<V>> {

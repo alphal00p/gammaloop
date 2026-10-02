@@ -47,6 +47,11 @@ dangling edge is an `Identity` fixed point and records its underlying `Flow`. `O
 separate, superficial direction used by callers and serialization; it must not be confused with
 the source/sink flow that maintains the pairing.
 
+Owned, shared, and mutable involution iterators delegate traversal and size hints
+to the underlying half-edge vector. They implement `ExactSizeIterator` and
+`FusedIterator`, so their remaining length is exact and exhaustion is permanent.
+These iterator guarantees preserve the store's half-edge order.
+
 Subgraphs are views over half-edge sets. `SubGraphLike` combines subset membership with
 edge-pair inclusion semantics, so an edge crossing a subset boundary becomes a split edge rather
 than silently disappearing. Concrete forms such as `SuBitGraph`, `InternalSubGraph`,

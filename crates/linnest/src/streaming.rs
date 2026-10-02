@@ -36,6 +36,8 @@ pub struct ForceLayoutStream {
 pub struct LayoutFrame {
     pub nodes: Vec<TypstPoint>,
     pub edges: Vec<TypstPoint>,
+    /// Complete source-to-sink carriers, including vertices, bends and the edge anchor.
+    pub paths: Vec<Vec<TypstPoint>>,
     pub iteration: usize,
     pub done: bool,
     pub max_movement: f64,
@@ -55,6 +57,11 @@ impl ForceLayoutStream {
             .extract()
             .map_err(|error| format!("invalid layout settings: {error}"))?;
         let owner = TypstGraph::from_dot_with_layout_config(dot, config);
+        Self::from_graph(owner)
+    }
+
+    /// Continue the existing force solver from graph geometry, including route bends.
+    pub fn from_graph(owner: TypstGraph) -> Result<Self, String> {
         owner.validate_layout()?;
         if !matches!(owner.layout_config.layout_algo, LayoutAlgo::Force) {
             return Err("streaming currently supports only the force layout".to_owned());
@@ -74,7 +81,63 @@ impl ForceLayoutStream {
     pub fn step(&mut self, iterations: usize) -> LayoutFrame {
         self.cell.with_dependent_mut(|owner, session| {
             let snapshot = session.step(iterations);
+            let node_point = |index: NodeIndex| {
+                let point = snapshot.vertex_points[index]
+                    + owner[index].shift.unwrap_or_else(Vector2::zero);
+                TypstPoint {
+                    x: point.x,
+                    y: point.y,
+                }
+            };
+            let paths = owner
+                .graph
+                .iter_edges()
+                .map(|(pair, edge, _)| {
+                    let shift = owner[edge].shift.unwrap_or_else(Vector2::zero);
+                    let interior = |hedge| {
+                        snapshot.route_points[hedge]
+                            .iter()
+                            .map(|point| {
+                                let point = *point + shift;
+                                TypstPoint {
+                                    x: point.x,
+                                    y: point.y,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    };
+                    let anchor = snapshot.edge_points[edge] + shift;
+                    let anchor = TypstPoint {
+                        x: anchor.x,
+                        y: anchor.y,
+                    };
+                    let (source, sink) = match pair {
+                        HedgePair::Paired { source, sink }
+                        | HedgePair::Split { source, sink, .. } => (Some(source), Some(sink)),
+                        HedgePair::Unpaired {
+                            hedge,
+                            flow: Flow::Source,
+                        } => (Some(hedge), None),
+                        HedgePair::Unpaired {
+                            hedge,
+                            flow: Flow::Sink,
+                        } => (None, Some(hedge)),
+                    };
+                    let mut path = Vec::new();
+                    if let Some(hedge) = source {
+                        path.push(node_point(owner.node_id(hedge)));
+                        path.extend(interior(hedge));
+                    }
+                    path.push(anchor);
+                    if let Some(hedge) = sink {
+                        path.extend(interior(hedge).into_iter().rev());
+                        path.push(node_point(owner.node_id(hedge)));
+                    }
+                    path
+                })
+                .collect();
             LayoutFrame {
+                paths,
                 nodes: snapshot
                     .vertex_points
                     .into_iter()
@@ -198,6 +261,78 @@ mod tests {
             }
             assert_eq!(stream.step(every).nodes, frame.nodes);
             assert_eq!(initial.iteration, 0);
+        }
+    }
+
+    #[test]
+    fn routed_stream_paths_match_full_layout_in_both_directions() {
+        use cgmath::Point2;
+        use linnet::half_edge::involution::Hedge;
+
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+            ext [style=invis]
+            a [id=0 pos="0,0!"]
+            b [id=1 pos="4,0!"]
+            ext -> a:0 [id=0 pos="-2,0"]
+            a:1 -> b:2 [id=1 pos="2,0"]
+            b:3 -> ext [id=2 pos="6,0"]
+        }"#,
+        )
+        .unwrap();
+        for (hedge, points) in [
+            vec![Point2::new(-1.0, 1.0)],
+            vec![Point2::new(0.5, 1.0), Point2::new(1.5, 1.0)],
+            vec![Point2::new(3.0, -1.0)],
+            vec![Point2::new(5.0, 1.0)],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            graph.graph[Hedge(hedge)].route_points = points;
+        }
+        let settings = BTreeMap::from([
+            ("layout-algo", "force"),
+            ("steps", "10"),
+            ("epochs", "2"),
+            ("depth-scale", "0"),
+            ("early-tol", "0"),
+            ("label-steps", "0"),
+        ]);
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        let mut expected = graph.clone();
+        expected.layout();
+        for batch in [1, 7, 100] {
+            let mut stream = ForceLayoutStream::from_graph(graph.clone()).unwrap();
+            let initial = stream.step(0);
+            assert_eq!(
+                initial.paths.iter().map(Vec::len).collect::<Vec<_>>(),
+                [3, 6, 3]
+            );
+            assert_eq!(initial.paths[0][0], initial.edges[0]);
+            assert_eq!(initial.paths[0][2], initial.nodes[0]);
+            assert_eq!(initial.paths[1][0], initial.nodes[0]);
+            assert_eq!(initial.paths[1][5], initial.nodes[1]);
+            assert_eq!(initial.paths[2][0], initial.nodes[1]);
+            assert_eq!(initial.paths[2][2], initial.edges[2]);
+            let mut frame = initial.clone();
+            while !frame.done {
+                frame = stream.step(batch);
+            }
+            for (hedge, edge, path_index) in [(0, 0, 1), (1, 1, 1), (2, 1, 4), (3, 2, 1)] {
+                let point = expected.graph[Hedge(hedge)].route_points[0];
+                assert_eq!(
+                    frame.paths[edge][path_index],
+                    TypstPoint {
+                        x: point.x,
+                        y: point.y
+                    }
+                );
+            }
+            assert_ne!(frame.paths[1], initial.paths[1]);
         }
     }
 

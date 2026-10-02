@@ -156,6 +156,45 @@
 )
 #assert((generated.source-style)(sample).first().stroke == red + 0.5pt)
 
+// Momentum placement options reach one full-path annotation, with half-edge
+// overrides taking precedence over edge data and global template options.
+#let momentum-options = physics.style(
+  momentum-arrows: true,
+  momentum-arrow-side: "right",
+  momentum-arrow-shift: 0.3,
+  momentum-label-shift: -0.2,
+  momentum-label-slide: false,
+  momentum-label-gap: 0.4,
+)
+#for half in ("source", "sink") {
+  let callback = momentum-options.at(half + "-style")
+  let layers = callback(sample)
+  assert.eq(layers.len(), 2)
+  let annotation = layers.last()
+  assert.eq(annotation.label-side, "right")
+  assert.eq(annotation.label-slide, false)
+  assert.eq(annotation.label-gap, 0.4)
+  assert.eq(annotation.label-shift, -0.2)
+  assert.eq(annotation.label-path.shift, 0.3)
+  assert.eq((annotation.offset, annotation.length, annotation.shift), (0, none, 0))
+  let overridden = sample + (data: (
+    momentum-label-slide: "true", momentum-label-side: "left", momentum-label-gap: "0.25",
+  ))
+  let annotation = callback(overridden).last()
+  assert.eq(annotation.label-slide, true)
+  assert.eq(annotation.label-side, "left")
+  assert.eq(annotation.label-gap, 0.25)
+  overridden.insert(half + "-half-edge", (hedge: 0, data: (
+    momentum-label-slide: "false", momentum-label-side: "right", momentum-label-gap: "0.1",
+  )))
+  let annotation = callback(overridden).last()
+  assert.eq(annotation.label-slide, false)
+  assert.eq(annotation.label-side, "right")
+  assert.eq(annotation.label-gap, 0.1)
+}
+#assert.eq((callbacks.source-style)(sample).last().label-side, auto)
+#assert((callbacks.source-style)(sample).last().label-slide)
+
 #context {
   let styled = graph.style(
     prepared,

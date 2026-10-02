@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Layout playground · FeynKit</title>
+  <style>
+    :root{color-scheme:light;--canvas:#f9f6f0;--surface:#fff;--surface-soft:#f2ede5;--ink:#333;--ink-strong:#3d2645;--ink-muted:#625b63;--accent:#b893c7;--link:#745080;--hairline:#d9cfd9;--incoming:#4b69c6;--outgoing:#9b5e00;--error:#a62636;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    @media(prefers-color-scheme:dark){:root{color-scheme:dark;--canvas:#211a23;--surface:#2d2430;--surface-soft:#382d3b;--ink:#eee8ef;--ink-strong:#f8effa;--ink-muted:#c7bdc9;--accent:#b893c7;--link:#d8b9e3;--hairline:#57475b;--incoming:#9cb5ff;--outgoing:#e7b66f;--error:#ff8793}}
+    *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font-size:14px;line-height:1.5}
+    main{max-width:1500px;margin:auto;padding:28px 32px 40px}h1{font-size:28px;line-height:1.2;font-weight:500;letter-spacing:-.025em;margin:0;color:var(--ink-strong)}h2{font-size:17px;font-weight:500;line-height:1.4;margin:0 0 4px}p{margin:0}.intro{color:var(--ink-muted);margin-top:8px}.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:8px}
+    button,select,input{font:inherit}button,select{color:var(--ink)}button,select,input[type=number]{border:1px solid var(--hairline);border-radius:5px;background:var(--surface);min-height:38px}button{padding:7px 12px;cursor:pointer}button:disabled{cursor:wait;opacity:.6}button:hover{background:var(--surface-soft)}select{padding:6px 28px 6px 10px;width:100%;text-overflow:ellipsis}input{accent-color:var(--link)}:where(button,select,input,summary):focus-visible{outline:2px solid var(--link);outline-offset:3px}
+    .toolbar{display:grid;grid-template-columns:minmax(160px,1fr) minmax(160px,1fr) auto;align-items:end;gap:16px;max-width:940px;margin:24px 0 18px}.field{display:flex;flex-direction:column;gap:5px;min-width:0}.field>span{font-size:12px;color:var(--ink-muted)}.debug{display:flex;align-items:center;gap:8px;min-height:38px;white-space:nowrap}.debug input{width:16px;height:16px;margin:0}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px}.incoming{color:var(--incoming)}.outgoing{color:var(--outgoing)}.route{color:var(--ink-muted)}.constraints{font-size:12px;margin-top:6px}.constraint-note{color:var(--ink-muted);font-size:12px;margin-top:2px}
+    .workspace{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:32px;align-items:start;margin-top:24px}.visual{min-width:0}.status-row{display:flex;align-items:center;gap:10px;min-height:34px;margin-bottom:8px}.status{color:var(--ink-muted);font-size:12px}.status[data-state=error]{color:var(--error)}.status[data-state=running]::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent);margin-right:7px;animation:pulse 1s ease-in-out infinite alternate}@keyframes pulse{to{opacity:.3}}@media(prefers-reduced-motion:reduce){.status[data-state=running]::before{animation:none}}
+    .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.pair.single{grid-template-columns:minmax(0,1fr)}.pair section,.drawing{min-width:0}.stage-description{font-size:12px;color:var(--ink-muted);min-height:18px}.stage-svg{display:block;width:100%;overflow:visible}.measure,.footer{font-size:12px}.footer{color:var(--ink-muted);margin-top:12px}.unavailable{display:flex;align-items:center;justify-content:center;min-height:260px;color:var(--ink-muted);font-size:13px;text-align:center;padding:30px}
+    .carrier{fill:none;stroke:var(--ink);stroke-width:1.5}.carrier.is-muted{opacity:.22}.carrier.is-selected{stroke:var(--link);stroke-width:2}.edge-hit{cursor:pointer}.rail{stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:4 4;opacity:.65}.zero{stroke:var(--hairline);stroke-width:1}.guide-label{fill:var(--ink-muted);font-size:12px}.guide-name{fill:var(--ink);font-size:12px}.point{stroke:var(--canvas);stroke-width:1}.point[data-kind=incoming]{fill:var(--incoming)}.point[data-kind=outgoing]{fill:var(--outgoing)}.point[data-kind=vertex]{fill:var(--ink)}.point[data-kind=route]{fill:var(--ink-muted)}
+    .parameters{border-left:1px solid var(--hairline);padding-left:22px;min-width:0}.parameter-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.parameter-heading h2{margin:0}.reset{font-size:12px;min-height:32px;padding:4px 9px}.parameters>.hint{font-size:12px;color:var(--ink-muted);margin-bottom:14px}.parameter-group{border-top:1px solid var(--hairline)}.parameter-group:last-child{border-bottom:1px solid var(--hairline)}summary{cursor:pointer;padding:12px 0;font-weight:500;color:var(--ink-strong)}.parameter-body{padding-bottom:14px}.parameter{display:block;margin:0 0 18px}.parameter:last-child{margin-bottom:0}.parameter-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}.parameter-top output{font-variant-numeric:tabular-nums;color:var(--ink-strong)}input[type=range]{display:block;width:100%;margin:8px 0 5px;min-height:22px;cursor:ew-resize}.parameter-description,.fixed-seed{font-size:12px;color:var(--ink-muted)}[hidden]{display:none!important}
+    @media(max-width:1050px){main{padding:24px}.workspace{grid-template-columns:minmax(0,1fr) 230px;gap:22px}.parameters{padding-left:18px}}
+    @media(max-width:900px){.pair{grid-template-columns:minmax(0,1fr);gap:24px}}
+    @media(max-width:700px){main{padding:20px 16px 32px}h1{font-size:24px}.toolbar{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:20px}.toolbar select{min-height:42px}.debug{min-height:32px}.workspace{display:flex;flex-direction:column;gap:26px;margin-top:18px}.visual,.parameters{width:100%}.parameters{border-left:0;padding-left:0}.pair{gap:22px}.parameter-heading{margin-bottom:8px}.parameter{margin-bottom:20px}.parameter-top,.parameter-description{font-size:13px}input[type=range]{min-height:32px}.parameter-group summary{padding:14px 0}.status-row{align-items:flex-start}.legend{gap:12px}}
+    @media(pointer:coarse){button,summary,select{min-height:44px}input[type=range]{min-height:36px}.debug{min-height:44px}}
+  </style>
+</head>
+<body>
+<main id="playground">
+  <header><div class="eyebrow">FeynKit · Live layout</div><h1>Layout playground</h1><p class="intro">Tune ImPrEd and compare its result with the EC seed.</p></header>
+  <div class="toolbar">
+    <label class="field"><span>Diagram</span><select id="diagram" aria-label="Diagram" disabled></select></label>
+    <label class="field"><span>Stage</span><select id="stage" aria-label="Layout stage" disabled><option value="seed">1 · EC seed</option><option value="impred">2 · ImPrEd</option></select></label>
+    <label class="debug"><input id="debug" type="checkbox" disabled>Debug points</label>
+  </div>
+  <div class="legend"><span><span class="incoming">●</span> Incoming</span><span><span class="outgoing">◆</span> Outgoing</span><span>■ Vertex</span><span id="debug-key" hidden><span class="route">●</span> Route point · × Crossing</span></div>
+  <p class="constraints" id="constraints"></p><p class="constraint-note" id="constraint-note"></p><p class="constraint-note" id="seed-note"></p>
+  <div class="workspace">
+    <div class="visual">
+      <div class="status-row"><p class="status" id="status" data-state="loading" role="status" aria-live="polite">Loading saved layouts…</p><button id="retry" type="button" hidden>Retry</button></div>
+      <div class="pair" id="pair" aria-busy="false">
+        <section id="left-panel" aria-labelledby="left-title"><h2 id="left-title"></h2><p class="stage-description" id="left-description"></p><div class="drawing" id="left-drawing"></div><p class="measure" id="left-measure"></p></section>
+        <section id="right-panel" aria-labelledby="right-title"><h2 id="right-title"></h2><p class="stage-description" id="right-description"></p><div class="drawing" id="right-drawing"></div><p class="measure" id="right-measure"></p></section>
+      </div>
+      <p class="footer" id="footer" hidden>Raw edge paths · same scale</p>
+    </div>
+    <aside class="parameters" aria-label="Layout parameters"><div class="parameter-heading"><h2>Parameters</h2><button class="reset" id="reset" type="button" disabled>Reset all</button></div><p class="hint">Release a slider to rerun ImPrEd from the fixed EC seed.</p><div id="parameter-groups"></div></aside>
+  </div>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id), ns = 'http://www.w3.org/2000/svg';
+  const order = ['seed', 'impred'];
+  const names = {seed:'EC seed', impred:'ImPrEd'};
+  const storageKey = 'feynkit-layout-playground-v1';
+  let config, displayed, diagram = 'crossed-higgs-double-box', stage = 'impred', debug = false;
+  let parameters = {}, selectedEdge = null, revision = 0, requestNumber = Date.now(), timer, active, ready = false;
+  let clientId;
+  try { clientId = sessionStorage.getItem(storageKey+'-client'); } catch {}
+  if (!clientId) clientId = globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  try { sessionStorage.setItem(storageKey+'-client', clientId); } catch {}
+
+  function status(message, state='ready') {
+    $('status').textContent = message; $('status').dataset.state = state;
+    $('retry').hidden = state !== 'error'; $('pair').setAttribute('aria-busy', String(state === 'running'));
+  }
+  function save() {
+    try { localStorage.setItem(storageKey, JSON.stringify({diagram, stage, debug, parameters, forceDefaultsVersion: 1, layoutDefaultsVersion: 3})); } catch {}
+    const url = new URL(location.href); url.searchParams.set('diagram', diagram); url.searchParams.set('stage', stage);
+    for (const key of Object.keys(config.defaults)) {
+      if (parameters[key] === config.defaults[key]) url.searchParams.delete(key);
+      else url.searchParams.set(key, parameters[key]);
+    }
+    history.replaceState(null, '', url);
+  }
+  function number(value) { return value !== 0 && Math.abs(value) < .01 ? value.toExponential(1) : String(Number(value.toFixed(3))); }
+  function svgElement(tag, attrs={}) {
+    const node = document.createElementNS(ns, tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+    return node;
+  }
+  function svgTitle(node, text) { const title = svgElement('title'); title.textContent = text; node.append(title); }
+  function selectedTitle(item, data) { return data.id === 'seed' ? (item.seed_label || data.label || '1. EC seed') : data.label || (order.indexOf(data.id)+1)+'. '+names[data.id]; }
+  function render() {
+    if (!displayed || displayed.id !== diagram) return;
+    const seed = displayed.stages.find(s => s.id === 'seed');
+    const selected = displayed.stages.find(s => s.id === stage) || {id:stage, available:false};
+    const single = stage === 'seed', stages = single ? [seed] : [seed, selected];
+    $('pair').classList.toggle('single', single); $('right-panel').hidden = single;
+    $('right-drawing').replaceChildren(); $('debug-key').hidden = !debug;
+    $('constraints').textContent = displayed.constraints_summary || '';
+    $('constraint-note').textContent = displayed.constraints_note || '';
+    $('seed-note').textContent = displayed.seed_note || '';
+    const available = stages.filter(s => s?.positions && s?.routes);
+    const points = available.flatMap(s => [...new Set(Object.values(s.routes).flat())].map(k => s.positions[k]));
+    const width = $('left-drawing').getBoundingClientRect().width;
+    if (width <= 0 || !points.length) return;
+    const mx = Math.max(.5, ...points.map(p => Math.abs(p[0]))), my = Math.max(.5, ...points.map(p => Math.abs(p[1])));
+    const scale = Math.min(Math.max(1, width-80)/(2*mx), 300/(2*my));
+    const height = Math.ceil(Math.max(260, 2*my*scale+88)), cy = (height+32)/2;
+    const project = point => [width/2+point[0]*scale, cy-point[1]*scale];
+    stages.forEach((data, index) => {
+      const side = index ? 'right' : 'left', container = $(side+'-drawing'); container.replaceChildren();
+      $(side+'-title').textContent = selectedTitle(displayed, data);
+      $(side+'-description').textContent = data.description || '';
+      $(side+'-measure').textContent = '';
+      if (!data.positions || !data.routes) {
+        const empty = document.createElement('p'); empty.className = 'unavailable';
+        empty.textContent = 'Waiting for '+names[data.id]+'…'; container.append(empty); return;
+      }
+      const svg = svgElement('svg', {class:'stage-svg', viewBox:`0 0 ${width} ${height}`, width, height, role:'img', 'aria-label':displayed.title+' · '+selectedTitle(displayed, data), 'data-stage':data.id, 'data-scale':scale, 'data-origin-x':width/2, 'data-origin-y':cy});
+      svgTitle(svg, displayed.constraints_summary+'. '+displayed.constraints_note);
+      const incoming = new Set(data.incoming_ids), outgoing = new Set(data.outgoing_ids), vertices = new Set(Object.values(data.node_ids));
+      if (incoming.size && outgoing.size) {
+        svg.append(svgElement('line', {class:'zero', x1:width/2, x2:width/2, y1:44, y2:height-18}));
+        const zeroLabel = svgElement('text', {class:'guide-label', x:width/2, y:height-4, 'text-anchor':'middle'}); zeroLabel.textContent = 'x = 0'; svg.append(zeroLabel);
+      }
+      for (const [kind, keys] of [['incoming', [...incoming]], ['outgoing', [...outgoing]]]) {
+        const rail = data.constraints?.[kind]?.x;
+        if (!keys.length || rail === null || rail === undefined || !incoming.size || !outgoing.size) continue;
+        const xs = [rail];
+        for (const x of xs) { const px = project([x,0])[0]; svg.append(svgElement('line', {class:'rail', x1:px, x2:px, y1:44, y2:height-14, 'data-side':kind, 'data-source-x':x})); }
+        const px = xs.reduce((sum,x) => sum+project([x,0])[0],0)/xs.length;
+        const x = kind === 'incoming' ? Math.max(12, Math.min(px,width/2-65)) : Math.min(width-12, Math.max(px,width/2+65));
+        const anchor = kind === 'incoming' ? 'start' : 'end';
+        const label = svgElement('text', {class:'guide-name', x, y:18, 'text-anchor':anchor}); label.textContent = kind === 'incoming' ? 'Incoming' : 'Outgoing'; svg.append(label);
+        const value = svgElement('text', {class:'guide-label', x, y:34, 'text-anchor':anchor}); value.textContent = xs.length === 1 ? 'x = '+number(xs[0]) : 'shared x'; svg.append(value);
+      }
+      for (const [id, keys] of Object.entries(data.routes)) {
+        const coords = keys.map(k => project(data.positions[k]).join(',')).join(' ');
+        const path = svgElement('polyline', {class:'carrier'+(selectedEdge === null ? '' : selectedEdge === id ? ' is-selected' : ' is-muted'), points:coords, 'data-edge':id}); svg.append(path);
+        const hit = svgElement('polyline', {class:'edge-hit', points:coords, fill:'none', stroke:'transparent', 'stroke-width':16, 'data-edge':id}); svgTitle(hit, 'Edge '+id+' · '+keys.length+' points'); svg.append(hit);
+      }
+      for (const key of new Set(Object.values(data.routes).flat())) {
+        const kind = vertices.has(key) ? 'vertex' : incoming.has(key) ? 'incoming' : outgoing.has(key) ? 'outgoing' : 'route';
+        if (kind === 'route' && !debug) continue;
+        const [x,y] = project(data.positions[key]), r = kind === 'outgoing' ? 5 : kind === 'incoming' ? 4.5 : 3.5;
+        const group = svgElement('g', {'data-point-id':key, 'data-kind':kind, transform:`translate(${x} ${y})`});
+        svgTitle(group, kind+' · '+key+' · ('+data.positions[key].map(number).join(', ')+')');
+        const mark = kind === 'vertex' ? svgElement('rect', {x:-r,y:-r,width:r*2,height:r*2}) : kind === 'outgoing' ? svgElement('polygon', {points:`0,${-r} ${r},0 0,${r} ${-r},0`}) : svgElement('circle', {r});
+        mark.setAttribute('class','point'); mark.setAttribute('data-kind',kind); group.append(svgElement('circle',{r:10,fill:'transparent'}),mark); svg.append(group);
+      }
+      if (debug) {
+        for (const crossing of [...(data.crossings || []), ...(data.self_crossings || [])]) {
+          const [x,y] = project(crossing.point);
+          const mark = svgElement('path', {d:`M ${x-4} ${y-4} L ${x+4} ${y+4} M ${x-4} ${y+4} L ${x+4} ${y-4}`,fill:'none',stroke:'var(--ink-strong)','stroke-width':1.5,'data-crossing':true});
+          svgTitle(mark, crossing.edges ? 'Crossing · edges '+crossing.edges.join(' and ') : 'Self-crossing · edge '+crossing.edge);
+          svg.append(mark);
+        }
+      }
+      container.append(svg);
+      const counts = data.counts;
+      $(side+'-measure').textContent = counts ? 'Edge crossings '+counts.edge+' · Self-crossings '+counts.self+(counts.overlaps ? ' · Overlaps '+counts.overlaps : '') : '';
+    });
+    $('footer').hidden = false;
+  }
+  function openStageGroup() {
+    document.querySelectorAll('.parameter-group').forEach(group => { group.open = group.dataset.stage === stage; });
+  }
+  function buildParameters() {
+    $('parameter-groups').replaceChildren();
+    for (const [index, id] of order.entries()) {
+      const group = document.createElement('details'); group.className = 'parameter-group'; group.dataset.stage = id;
+      const summary = document.createElement('summary'); summary.textContent = (index+1)+' · '+names[id]; group.append(summary);
+      const body = document.createElement('div'); body.className = 'parameter-body'; group.append(body);
+      const fields = config.parameters.filter(p => p.stage === id);
+      if (!fields.length) { const note = document.createElement('p'); note.className = 'fixed-seed'; note.textContent = 'Fixed seed with the graph’s incoming and outgoing constraints.'; body.append(note); }
+      fields.forEach((field, i) => {
+        const key = field.key, inputId = 'parameter-'+id+'-'+i;
+        const label = document.createElement('label'); label.className = 'parameter'; label.htmlFor = inputId;
+        const top = document.createElement('span'); top.className = 'parameter-top';
+        const name = document.createElement('span'); name.textContent = field.label;
+        const output = document.createElement('output'); output.htmlFor = inputId; output.dataset.key = key; output.textContent = number(parameters[key]); top.append(name, output);
+        const input = document.createElement('input'); input.type = 'range'; input.id = inputId; input.min = field.min; input.max = field.max; input.step = field.step; input.value = parameters[key]; input.dataset.key = key; input.setAttribute('aria-describedby', inputId+'-description');
+        const description = document.createElement('span'); description.className = 'parameter-description'; description.id = inputId+'-description'; description.textContent = field.description;
+        input.addEventListener('input', () => {
+          parameters[key] = Number(input.value); output.textContent = number(parameters[key]);
+          if (order.indexOf(id) > order.indexOf(stage)) { stage = id; $('stage').value = stage; render(); }
+          schedule(450); save();
+        });
+        input.addEventListener('change', () => schedule(0));
+        label.append(top,input,description); body.append(label);
+      });
+      $('parameter-groups').append(group);
+    }
+    openStageGroup();
+  }
+  async function json(url, options={}) {
+    const response = await fetch(url, options);
+    let result;
+    try { result = await response.json(); } catch { throw new Error('The layout server returned an invalid response.'); }
+    if (!response.ok) throw new Error(result.error || 'The layout server could not complete this request.');
+    return result;
+  }
+  function cancelActive() {
+    if (!active) return;
+    active.controller.abort();
+    if (active.job) fetch('/api/jobs/'+encodeURIComponent(active.job), {method:'DELETE'}).catch(() => {});
+    active = null;
+  }
+  function schedule(delay) {
+    const token = ++revision; clearTimeout(timer); cancelActive();
+    status('Updating '+names[stage]+'… previous result shown.', 'running');
+    timer = setTimeout(() => run(token), delay);
+  }
+  function pause(ms, signal) {
+    return new Promise((resolve,reject) => {
+      const stop = () => { clearTimeout(timeout); reject(new DOMException('Cancelled','AbortError')); };
+      const timeout = setTimeout(() => { signal.removeEventListener('abort',stop); resolve(); }, ms);
+      signal.addEventListener('abort',stop,{once:true});
+    });
+  }
+  async function run(token) {
+    if (token !== revision) return;
+    const controller = new AbortController(), jobState = {controller,job:null}; active = jobState;
+    const requested = {diagram,stage,parameters:{...parameters},client_id:clientId,request_id:++requestNumber};
+    try {
+      const started = await json('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(requested), signal:controller.signal});
+      jobState.job = started.job_id;
+      while (token === revision) {
+        const reply = await json('/api/jobs/'+encodeURIComponent(jobState.job), {signal:controller.signal});
+        if (token !== revision) return;
+        if (reply.status === 'complete') {
+          if (reply.result.case.id !== requested.diagram) throw new Error('The solver returned a different diagram.');
+          displayed = reply.result.case;
+          render(); status('Updated · '+number(reply.result.elapsed)+' s'); return;
+        }
+        if (reply.status === 'error') throw new Error(reply.error || 'The solver could not produce this layout.');
+        if (reply.status === 'cancelled') throw new Error('This run was cancelled. Retry to run it again.');
+        status((reply.status === 'queued' ? 'Queued' : 'Running')+' · '+names[requested.stage]+' · previous result shown.', 'running');
+        await pause(200, controller.signal);
+      }
+    } catch (error) {
+      if (token === revision && error.name !== 'AbortError') status(error.message+' Previous result remains.', 'error');
+    } finally { if (active === jobState) active = null; }
+  }
+  async function initialize() {
+    status('Loading saved layouts…','loading');
+    try {
+      config = await json('/api/config'); parameters = {...config.defaults};
+      let saved; try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch {}
+      const query = new URLSearchParams(location.search);
+      const previousDefaults = {...config.defaults, 'impred.pull_attachment':16, 'impred.split_length_ratio':3, 'impred.contract_chord_ratio':2};
+      delete previousDefaults['impred.parallel_attraction_balance'];
+      const previousParallelDefaults = {...config.defaults, 'impred.parallel_attraction_balance':0.5};
+      const migratePreviousPreset = (saved?.layoutDefaultsVersion !== 2 && Object.entries(previousDefaults).every(([key,value]) => saved?.parameters?.[key] === value)) || (saved?.layoutDefaultsVersion !== 3 && Object.entries(previousParallelDefaults).every(([key,value]) => saved?.parameters?.[key] === value));
+      const wantedDiagram = query.get('diagram') || saved?.diagram || diagram;
+      diagram = config.cases.some(c => c.id === wantedDiagram) ? wantedDiagram : config.cases[0].id;
+      const wantedStage = query.get('stage') || saved?.stage || stage; stage = order.includes(wantedStage) ? wantedStage : 'impred';
+      debug = saved?.debug === true;
+      for (const field of config.parameters) {
+        const queryValue = query.get(field.key);
+        const value = queryValue === null ? (migratePreviousPreset ? undefined : saved?.parameters?.[field.key]) : queryValue.trim() ? Number(queryValue) : NaN;
+        const oldForceDefault = queryValue === null && !saved?.forceDefaultsVersion && ['impred.repulsion', 'impred.attraction'].includes(field.key) && value === 1;
+        if (!oldForceDefault && typeof value === 'number' && Number.isFinite(value) && value >= field.min && value <= field.max && (!Number.isInteger(field.step) || Number.isInteger(value))) parameters[field.key] = value;
+      }
+      $('diagram').replaceChildren(); for (const item of config.cases) $('diagram').append(new Option(item.letter+' · '+item.title,item.id));
+      $('diagram').value = diagram; $('stage').value = stage; $('debug').checked = debug;
+      ['diagram','stage','debug','reset'].forEach(id => { $(id).disabled = false; });
+      displayed = config.cases.find(c => c.id === diagram); ready = true; buildParameters(); render();
+      save();
+      status('Saved default layout');
+      if (stage !== 'seed') schedule(0);
+    } catch (error) { status(error.message,'error'); }
+  }
+  $('diagram').addEventListener('change', () => { diagram = $('diagram').value; selectedEdge = null; displayed = config.cases.find(c => c.id === diagram); render(); save(); schedule(0); });
+  $('stage').addEventListener('change', () => { stage = $('stage').value; selectedEdge = null; openStageGroup(); render(); save(); schedule(0); });
+  $('debug').addEventListener('change', () => { debug = $('debug').checked; render(); save(); });
+  $('reset').addEventListener('click', () => { parameters = {...config.defaults}; buildParameters(); save(); schedule(0); });
+  $('retry').addEventListener('click', () => { if (ready) schedule(0); else initialize(); });
+  $('pair').addEventListener('click', event => { const path = event.target.closest('[data-edge]'); if (path) { const id = path.dataset.edge; selectedEdge = selectedEdge === id ? null : id; render(); } });
+  let resizeFrame; new ResizeObserver(() => { cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(render); }).observe($('left-drawing'));
+  window.addEventListener('pagehide', () => { clearTimeout(timer); cancelActive(); });
+  initialize();
+})();
+</script>
+</body>
+</html>

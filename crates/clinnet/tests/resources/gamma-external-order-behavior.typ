@@ -70,8 +70,8 @@
 }
 #assert(graph.nodes(positioned).all(node => node.statements.at("pos-z") == "2"))
 
-// Numeric cut tags, not their spelling, incoming edge IDs, or incoming half-edge
-// IDs, determine cross-section rows. Both halves of each cut occupy the same row.
+// Both modes start in half-edge order. Numeric cut tags, independent of spelling,
+// group cross-section Y coordinates without fixing either half to its start.
 #let cross-section = (
   graph
     .parse(
@@ -81,7 +81,7 @@
         a [pos="-2,0!"]; b [pos="2,0!"];
         ext -> a:0 [id=0 is_cut=10 particle=fermion];
         ext -> a:6 [id=1 is_cut=2 particle=fermion];
-        b:1 -> ext [id=2 is_cut=2 particle=fermion];
+        b:1 -> ext [id=2 is_cut="02" particle=fermion];
         b:4 -> ext [id=3 is_cut=10 particle=fermion];
         b:5 -> ext [id=4 is_cut=99 particle=fermion];
         a -> b [id=5 particle=fermion];
@@ -96,12 +96,17 @@
   match-field: "is_cut",
 )
 #let edges = graph.edges(cross-section)
-#for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
+#for (eid, y) in ((0, 5), (1, -5), (2, 10), (3, 0), (4, -10)) {
   assert(edges.at(eid).pos.y == y)
+  // Layout constraints are exposed by canonical DOT, not public statements.
+  let edge-dot = graph.dot(cross-section).split("\n").find(
+    line => line.contains("[id=" + str(eid) + " "),
+  )
+  assert(edge-dot.contains("y:@is_cut-"))
 }
-// A cut tag without an incoming counterpart does not acquire automatic XY
-// placement. The unconditional external depth pin still applies.
-#assert(not edges.at(4).at("pos-x-set") and not edges.at(4).at("pos-y-set"))
+// A cut tag without an incoming counterpart still joins its side's X group
+// and starts in half-edge order. The external depth pin still applies.
+#assert(edges.at(4).at("pos-x-set") and edges.at(4).at("pos-y-set"))
 #for eid in range(5) {
   assert(edges.at(eid).statements.at("pos-z") == "0")
   assert(edges.at(eid).statements.at("pos-z-mode") == "pin")
@@ -111,9 +116,12 @@
   solver: (algorithm: "force", seed: 42, steps: 8, epochs: 1, depth-scale: 2),
   labels: (steps: 0),
 )
-#for (eid, y) in ((0, -5), (1, 5), (2, 5), (3, -5)) {
-  assert(graph.edges(cross-section).at(eid).pos.y == y)
-}
+#let solved = graph.edges(cross-section)
+#assert(solved.at(0).pos.y == solved.at(3).pos.y)
+#assert(solved.at(1).pos.y == solved.at(2).pos.y)
+#assert(solved.at(0).pos.x == solved.at(1).pos.x)
+#assert(solved.at(2).pos.x == solved.at(3).pos.x and solved.at(3).pos.x == solved.at(4).pos.x)
+#assert(solved.at(0).pos.y != edges.at(0).pos.y)
 
 // Placement ranks never renumber q_(eid), including paired and unmatched cuts.
 #let styles = physics.style(momentum-arrows: true, show-particle: false)
@@ -124,4 +132,77 @@
     assert(label.contains("b: [" + str(edge.edge) + "]"))
   }
   context draw(graph.style(g, ..styles), title: none)
+}
+
+
+// FeynKit supplies native graphs to the same pipeline as DOT. Amplitudes use
+// half-edge starts in both modes; cross sections also group native sewing IDs.
+#import "gamma-layout-core.typ" as physics-layout
+#import "crates/linnest/typst/src/render/layout.typ" as renderer
+#context for is-cross-section in (false, true) {
+  let native = graph.build({
+    graph.node(<a>)
+    graph.node(<b>)
+    graph.edge(<in0>, graph.sink(<a>), particle: "fermion", is_cut: 10)
+    graph.edge(<in1>, graph.sink(<a>), particle: "fermion", is_cut: 2)
+    graph.edge(graph.source(<b>), <out0>, particle: "fermion", is_cut: 2)
+    graph.edge(graph.source(<b>), <out1>, particle: "fermion", is_cut: 10)
+    graph.edge(graph.source(<a>), <internal>, graph.sink(<b>), particle: "photon")
+  })
+  physics-layout.layout(
+    native,
+    graph: graph,
+    renderer: (
+      attach-elements: renderer.attach-elements,
+      layout-graph: (config, g) => {
+        let edges = graph.edges(g)
+        assert(config.layout-defaults.at("gamma-dangling-centroid") == 1.25)
+        assert(config.layout-defaults.at("external-pull") == 1.0)
+        assert(config.layout-defaults.at("spring-length-scale") == 0.75)
+        assert(config.layout-defaults.at("initial-repulsion") == 0.15)
+        assert(config.layout-defaults.at("repulsion-growth") == 0.7)
+        for (i, y) in (5, -5, 5, -5).enumerate() {
+          assert(edges.at(i).pos.y == y)
+          let edge-dot = graph.dot(g).split("\n").find(
+            line => line.contains("[id=" + str(i) + " "),
+          )
+          assert(edge-dot.contains("x:@"))
+          assert(edge-dot.contains("y:") == is-cross-section)
+          if is-cross-section { assert(edge-dot.contains("y:@is_cut-")) }
+          assert(edges.at(i).statements.at("pos-z-mode") == "pin")
+          assert(edges.at(i).statements.at("pos-z") == "0")
+        }
+        renderer.layout-graph(config, g)
+      },
+    ),
+    physics: physics,
+    edge-style: (map: (:), default-edge: physics.default-edge),
+    amplitude-mode: not is-cross-section,
+    cross-section-mode: is-cross-section,
+  )
+}
+
+// One external momentum direction has no left/right partition. The shared
+// physics pipeline must not leave the free endpoints in a single side group.
+#for incoming in (false, true) {
+  let radial = graph.build({
+    graph.node(<center>)
+    for index in range(4) {
+      if incoming {
+        graph.edge(label("radial-" + str(index)), graph.sink(<center>), particle: "photon")
+      } else {
+        graph.edge(graph.source(<center>), label("radial-" + str(index)), particle: "photon")
+      }
+    }
+  })
+  let radial = autogen-external-edge-fields(radial, graph: graph)
+  for edge in graph.edges(radial) {
+    let edge-dot = graph.dot(radial).split("\n").find(
+      line => line.contains("[id=" + str(edge.edge) + " "),
+    )
+    assert(not edge-dot.contains("x:@"))
+    assert(not edge.at("pos-x-set", default: false))
+    assert(not edge.at("pos-y-set", default: false))
+    assert(edge.statements.at("pos-z-mode") == "pin")
+  }
 }
