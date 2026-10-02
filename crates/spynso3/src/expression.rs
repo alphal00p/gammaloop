@@ -3739,7 +3739,9 @@ impl TensorExpression {
     ///     matrix without applying a gamma identity. False retains those connections.
     /// collect_chains : bool, default True
     ///     Represent connected matrix products as ordered chains without evaluating
-    ///     their matrices. False retains the indexed factors for open products.
+    ///     their matrices, including words with supplied rank-one endpoints.
+    ///     Supplied endpoints do not add external axes. False retains the indexed
+    ///     factors for open products.
     /// collect_traces : bool, default True
     ///     Represent compatible closed matrix products as unevaluated traces.
     ///     False retains indexed closure, including when collect_chains=True.
@@ -3851,6 +3853,16 @@ impl TensorExpression {
     /// >>> assert collected.undo_trace().undo_chain().contract() == collected
     /// >>> uncollected = word.contract(collect_traces=False)
     /// >>> assert uncollected.contract() == collected
+    ///
+    /// A supplied spinor remains attached when collecting an open gamma word.
+    /// Only the unresolved spinor slot remains an external axis.
+    ///
+    /// >>> spinor = sp.Representation.bis(4)
+    /// >>> psi = sp.TensorName.vector("contract_docs::psi")(spinor)
+    /// >>> word = psi("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", sp.AUTO, "nu") * p("nu")
+    /// >>> collected = word.contract()
+    /// >>> assert collected.rank == 1
+    /// >>> assert collected.contract() == collected
     ///
     /// A closed color delta gives N_c without any color-algebra identity. An empty
     /// filter retains this product, and an unrelated scalar power remains factored.

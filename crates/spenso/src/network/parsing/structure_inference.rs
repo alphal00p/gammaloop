@@ -727,10 +727,18 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             return Err(StructureError::WrongNumberOfArguments(args.len(), 2));
         }
 
-        let mut slots = vec![
-            matcher.parse::<LibraryRep, Aind>(args[0])?,
-            matcher.parse::<LibraryRep, Aind>(args[1])?,
-        ];
+        let mut slots = Vec::new();
+        for &endpoint in &args[..2] {
+            if matches!(endpoint, AtomView::Fun(vector)
+                if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
+                && matcher.port_representation(endpoint).is_some()
+            {
+                // Supplied endpoints bind the channel; only explicit endpoints
+                // and spectator slots belong to the external interface.
+                continue;
+            }
+            slots.push(matcher.parse::<LibraryRep, Aind>(endpoint)?);
+        }
         for factor in &args[2..] {
             Self::append_syntactic_slots(*factor, &mut slots, matcher)?;
         }

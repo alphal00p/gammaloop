@@ -6,12 +6,14 @@ import unittest
 import xml.etree.ElementTree as ET
 
 import typst
-from symbolica import S
+from symbolica import E, S, Symbol
 from symbolica.community.tensor import (
     AUTO,
     DisplaySettings,
     Representation,
+    Tensor,
     TensorExpression,
+    TensorLibrary,
     TensorName,
     dot,
     trace,
@@ -280,6 +282,158 @@ class OpenPortDisplayTests(unittest.TestCase):
                     self.assertEqual(value.rank, 1)
                     self.assertEqual(value.to_expression(), original)
                     self.assertEqual(value.structure, structure)
+
+    def test_generic_and_gamma_share_supplied_spinor_and_open_port_notation(self):
+        spinor, mink = Representation.bis(4), Representation.mink(4)
+        q = TensorName.vector("supplied_ports::Q2")(spinor)
+        g = TensorName.vector("supplied_ports::G4")(mink)
+        generic = TensorName("supplied_ports::A")(spinor, spinor, mink)
+        gamma = TensorExpression.dirac_gamma(4)
+        for head, expected, dotted in (
+            (generic, "i⟨Q2,G4|A⊙□⊙", 2),
+            (gamma, "i⟨Q2|G4⊙□", 1),
+        ):
+            with self.subTest(head=head):
+                source = Symbol.I * head(1, AUTO, 1) * q(1) * g(1)
+                contracted = source.contract()
+                nodes = self.assert_renderers_agree(contracted, expected)
+                self.assertEqual(contracted.rank, 1)
+                self.assertEqual(
+                    sum("data-spenso-open-axis" in n.attrib for n in nodes), 1
+                )
+                self.assertEqual(
+                    visible(mathml(contracted.to_html())).count("⊙"), dotted
+                )
+                before, after = source.to_tensor(), contracted.to_tensor()
+                self.assertEqual(before.shape, after.shape)
+                for component in range(4):
+                    self.assertEqual((before[component] - after[component]).expand(), 0)
+
+                qualified = DisplaySettings(show_dimensions=True)
+                native = typst.compile(
+                    f"$ {contracted.to_typst(settings=qualified)} $".encode(),
+                    format="html",
+                ).decode()
+                rich = contracted.to_html(settings=qualified)
+                self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
+                self.assertEqual(visible(mathml(rich)).count("⊙"), dotted)
+                self.assertEqual(visible(mathml(rich)).count("□"), 1)
+
+        self.assertIn(r"\langle Q2|", contracted.to_latex())
+        self.assertIn(r"\odot", contracted.to_latex())
+        self.assertEqual(contracted.to_latex().count(r"\square"), 1)
+        self.assertTrue(contracted.format_tensor().startswith("𝑖·⟨Q2|"))
+
+    def test_collected_chains_mark_their_supplied_endpoints(self):
+        spinor, mink = Representation.bis(4), Representation.mink(4)
+        q = TensorName.vector("supplied_chain_ports::Q")(spinor)
+        p = TensorName.vector("supplied_chain_ports::p")(mink)
+        r = TensorName.vector("supplied_chain_ports::r")(mink)
+        gamma = TensorExpression.dirac_gamma(4)
+        word = (
+            q("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", AUTO, "nu") * r("nu")
+        ).contract()
+        self.assert_renderers_agree(word, "⟨Q|[pr]⊙□")
+        self.assertEqual(word.rank, 1)
+
+    def test_supplied_ports_keep_dual_rows_and_bra_ket_polarity(self):
+        rep = Representation("supplied_dual_ports::V", 3, is_self_dual=False)
+        bra = TensorName.vector("supplied_dual_ports::a")(rep.dual())
+        ket = TensorName.vector("supplied_dual_ports::b")(rep)
+        matrix = TensorName("supplied_dual_ports::M")
+        value = matrix(bra.to_expression(), ket.to_expression(), rep)
+        nodes = self.assert_renderers_agree(value, "⟨a|M⊙⊙□|b⟩")
+        self.assertEqual(value.rank, 1)
+        self.assertEqual(sum("data-spenso-open-axis" in n.attrib for n in nodes), 1)
+
+    def test_collected_supplied_words_preserve_components_and_are_idempotent(self):
+        spinor, mink = Representation.bis(4), Representation.mink(4)
+        q = TensorName.vector("supplied_word_components::Q")(spinor)
+        p = TensorName.vector("supplied_word_components::p")(mink)
+        r = TensorName.vector("supplied_word_components::r")(mink)
+        heads = (
+            TensorExpression.dirac_gamma(4),
+            TensorName("supplied_word_components::A")(spinor, spinor, mink),
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                source = (
+                    Symbol.I
+                    * q("a")
+                    * head("a", "b", "mu")
+                    * p("mu")
+                    * head("b", AUTO, "nu")
+                    * r("nu")
+                )
+                collected = source.contract()
+                self.assertEqual(collected.rank, 1)
+                self.assertEqual(collected.contract(), collected)
+                self.assertEqual(collected.structure, source.structure)
+                self.assertEqual(collected.undo_chain().contract(), collected)
+                before, after = source.to_tensor(), collected.to_tensor()
+                self.assertEqual(before.shape, after.shape)
+                for component in range(4):
+                    self.assertEqual((before[component] - after[component]).expand(), 0)
+
+    def test_supplied_spinor_survives_gamma_word_simplification(self):
+        spinor, mink = Representation.bis(4), Representation.mink(4)
+        q = TensorName.vector("supplied_word_identity::Q")(spinor)
+        p = TensorName.vector("supplied_word_identity::p")(mink)
+        gamma = TensorExpression.dirac_gamma(4)
+        source = (
+            q("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", AUTO, "nu") * p("nu")
+        )
+        reduced = source.contract().simplify_algebra(color=False)
+        self.assertEqual(reduced.rank, 1)
+        self.assertNotIn("chain", reduced.to_expression().format_plain())
+        expected = dot(p, p) * q
+        for actual, component in zip(reduced.components(), expected.components()):
+            self.assertEqual((actual - component).expand(), 0)
+
+    def test_supplied_transposed_words_match_explicit_complex_components(self):
+        mink = Representation.mink(4)
+        p = TensorName.vector("supplied_transpose_components::p")(mink)
+        t = TensorName("supplied_transpose_components::T")(mink, mink)
+        u = TensorName("supplied_transpose_components::U")(mink, mink)
+        primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53)
+        p_data = [
+            E(str(value)) + Symbol.I * (axis + 1)
+            for axis, value in enumerate(primes[:4])
+        ]
+        t_data = [
+            E(str(value)) + Symbol.I * (axis + 2) for axis, value in enumerate(primes)
+        ]
+        u_data = [
+            E(str(value)) + Symbol.I * (axis + 3) ** 2
+            for axis, value in enumerate(reversed(primes))
+        ]
+        library = TensorLibrary()
+        for expression, data in ((p, p_data), (t, t_data), (u, u_data)):
+            library.register(Tensor.dense(expression, data))
+        signs = (1, -1, -1, -1)
+        for source, common_start in (
+            (p("a") * t("a", "b") * u("c", "b"), False),
+            (p("a") * t("b", "a") * u("b", "c"), True),
+        ):
+            with self.subTest(common_start=common_start):
+                collected = source.contract()
+                self.assertEqual(collected.rank, 1)
+                self.assertEqual(collected.structure, source.structure)
+                self.assertEqual(collected.contract(), collected)
+                self.assertEqual(collected.undo_chain().contract(), collected)
+                before, after = source.to_tensor(library), collected.to_tensor(library)
+                for c in range(4):
+                    expected = sum(
+                        signs[a]
+                        * signs[b]
+                        * p_data[a]
+                        * t_data[4 * b + a if common_start else 4 * a + b]
+                        * u_data[4 * b + c if common_start else 4 * c + b]
+                        for a in range(4)
+                        for b in range(4)
+                    )
+                    self.assertEqual((before[c] - expected).expand(), 0)
+                    self.assertEqual((after[c] - expected).expand(), 0)
 
 
 if __name__ == "__main__":

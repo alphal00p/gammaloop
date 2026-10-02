@@ -2309,26 +2309,41 @@ impl InterfaceInference {
             }
 
             if symbol == SPENSO_TAG.chain {
+                let mut exposed = Vec::new();
                 let endpoints = arguments[..2]
                     .iter()
                     .map(|argument| {
                         if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
-                            Ok(slot
+                            let slot = slot
                                 .rep()
-                                .slot(Self::partial_index(slot.aind(), self.leaf_inference)))
+                                .slot(Self::partial_index(slot.aind(), self.leaf_inference));
+                            exposed.push(slot);
+                            Ok(slot.rep())
                         } else if let Ok(representation) =
                             self.slots.parse_representation::<LibraryRep>(*argument)
                         {
-                            Ok(representation.slot(PartialIndex::open(0)))
+                            exposed.push(representation.slot(PartialIndex::open(0)));
+                            Ok(representation)
+                        } else if let AtomView::Fun(vector) = *argument
+                            && self.compact_vector_port(*argument)
+                        {
+                            self.validate_tensor_metadata(vector)?;
+                            let (rep, dimension) = self.slots.port_representation(*argument).unwrap();
+                            Ok(Representation {
+                                rep,
+                                dim: Dimension::try_from(dimension).map_err(|error| {
+                                    TensorInferenceError::invalid(error.to_string())
+                                })?,
+                            })
                         } else {
                             Err(TensorInferenceError::invalid(
-                                "chain endpoints must be Spenso slots or representations",
+                                "chain endpoints must be Spenso slots, representations, or compact rank-one tensors",
                             ))
                         }
                     })
                     .collect::<InferenceResult<Vec<_>>>()?;
-                let input = endpoints[0].rep();
-                let output = endpoints[1].rep();
+                let input = endpoints[0];
+                let output = endpoints[1];
                 if !input.matches(&output)
                     || !(input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual()))
                 {
@@ -2348,7 +2363,7 @@ impl InterfaceInference {
                 }
                 let spectators = Self::merge_explicit_interface_sequence(&interfaces)?;
                 return Ok(PartialStructure::from_logical_slots(
-                    endpoints.into_iter().chain(spectators.logical_slots()),
+                    exposed.into_iter().chain(spectators.logical_slots()),
                 ));
             } else if symbol == SPENSO_TAG.trace {
                 let representation = self

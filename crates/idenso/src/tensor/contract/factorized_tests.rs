@@ -4,7 +4,10 @@ use crate::{
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::partial::{PartialStructure, PartialStructureExt},
+    structure::{
+        TensorStructure,
+        partial::{PartialStructure, PartialStructureExt},
+    },
 };
 use std::sync::{Arc, Mutex};
 use symbolica::{
@@ -152,6 +155,99 @@ fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
         "(x+y)^7*(spenso::trace(spenso::mink(4),spenso::cyclic(t(spenso::in,spenso::out),u(spenso::in,spenso::out)))+z)^2",
     );
     assert_eq!(traced.expression, expected);
+}
+
+#[test]
+fn contraction_collects_matrix_words_with_supplied_endpoints() {
+    use crate::tensor::ContractSettings;
+    setup();
+    for (source, expected, reversed, rank) in [
+        (
+            "t(p(spenso::mink(4)),spenso::mink(4,b))*u(spenso::mink(4,b),spenso::mink(4,c))",
+            "spenso::chain(p(spenso::mink(4)),spenso::mink(4,c),t(spenso::in,spenso::out),u(spenso::in,spenso::out))",
+            None,
+            1,
+        ),
+        (
+            "t(spenso::mink(4,a),spenso::mink(4,b))*u(spenso::mink(4,b),q(spenso::mink(4)))",
+            "spenso::chain(spenso::mink(4,a),q(spenso::mink(4)),t(spenso::in,spenso::out),u(spenso::in,spenso::out))",
+            None,
+            1,
+        ),
+        (
+            "t(p(spenso::mink(4)),spenso::mink(4,b))*u(spenso::mink(4,b),q(spenso::mink(4)))",
+            "spenso::chain(p(spenso::mink(4)),q(spenso::mink(4)),t(spenso::in,spenso::out),u(spenso::in,spenso::out))",
+            None,
+            0,
+        ),
+        (
+            "t(p(spenso::mink(4)),spenso::mink(4,b))*u(spenso::mink(4,c),spenso::mink(4,b))",
+            "spenso::chain(p(spenso::mink(4)),spenso::mink(4,c),t(spenso::in,spenso::out),u(spenso::out,spenso::in))",
+            Some(
+                "spenso::chain(spenso::mink(4,c),p(spenso::mink(4)),u(spenso::in,spenso::out),t(spenso::out,spenso::in))",
+            ),
+            1,
+        ),
+        (
+            "t(spenso::mink(4,b),p(spenso::mink(4)))*u(spenso::mink(4,b),spenso::mink(4,c))",
+            "spenso::chain(p(spenso::mink(4)),spenso::mink(4,c),t(spenso::out,spenso::in),u(spenso::in,spenso::out))",
+            Some(
+                "spenso::chain(spenso::mink(4,c),p(spenso::mink(4)),u(spenso::out,spenso::in),t(spenso::in,spenso::out))",
+            ),
+            1,
+        ),
+    ] {
+        let source = SymbolicTensor::infer(input(source)).unwrap();
+        let result = source.contract(Default::default()).unwrap();
+        // Self-dual common-start/end contractions may traverse the word in
+        // either direction. Reversing the word must also transpose its factors.
+        assert!(
+            result.expression == input(expected)
+                || reversed.is_some_and(|expected| result.expression == input(expected)),
+            "unexpected chain orientation: {}",
+            result.expression,
+        );
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(result.structure.canonical().order(), rank);
+        assert_eq!(result.contract(Default::default()).unwrap(), result);
+        let indexed = source
+            .contract(ContractSettings {
+                collect_chains: false,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(indexed.expression, source.expression);
+        assert_eq!(indexed.structure, source.structure);
+    }
+}
+
+#[test]
+fn supplied_chain_endpoints_are_validated_and_do_not_expose_ports() {
+    setup();
+    for (expression, rank) in [
+        (
+            "spenso::chain(p(spenso::mink(4)),spenso::mink(4,c),t(spenso::in,spenso::out))",
+            1,
+        ),
+        (
+            "spenso::chain(p(spenso::mink(4)),q(spenso::mink(4)),t(spenso::in,spenso::out))",
+            0,
+        ),
+    ] {
+        let tensor = SymbolicTensor::infer(input(expression)).unwrap();
+        assert_eq!(tensor.structure.canonical().order(), rank);
+    }
+    for expression in [
+        "spenso::chain(p(spenso::mink(3)),spenso::mink(4,c),t(spenso::in,spenso::out))",
+        "spenso::chain(p(spenso::mink(4,a)),spenso::mink(4,c),t(spenso::in,spenso::out))",
+        "spenso::chain(t(spenso::mink(4)),spenso::mink(4,c),t(spenso::in,spenso::out))",
+        "spenso::chain(p(t(spenso::mink(4,a)),spenso::mink(4)),spenso::mink(4,c),t(spenso::in,spenso::out))",
+    ] {
+        assert!(
+            SymbolicTensor::infer(input(expression)).is_err(),
+            "{expression}"
+        );
+    }
 }
 
 #[test]

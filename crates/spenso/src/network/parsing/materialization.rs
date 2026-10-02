@@ -710,47 +710,127 @@ impl SlotMatcher {
 }
 
 impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
+    fn materialize_chain_endpoint(
+        &self,
+        value: AtomView<'_>,
+        label: &str,
+        mode: SchoonschipExpansionMode,
+    ) -> Result<ChainEndpoint<Aind>, String> {
+        let slot_error = match self.matcher.borrow_mut().parse::<LibraryRep, Aind>(value) {
+            Ok(slot) => {
+                return Ok(ChainEndpoint {
+                    slot,
+                    additional_factors: Vec::new(),
+                });
+            }
+            Err(error) => error,
+        };
+        if let Ok(rep) = self
+            .matcher
+            .borrow_mut()
+            .parse_representation::<LibraryRep>(value)
+        {
+            return Ok(ChainEndpoint {
+                slot: self.slot(&rep),
+                additional_factors: Vec::new(),
+            });
+        }
+        if mode.any()
+            && let Some(materialized) =
+                SchoonschipMaterializer::with_mode(self, mode).materialize_shorthand_arg(value)
+        {
+            let slot = self
+                .matcher
+                .borrow_mut()
+                .parse::<LibraryRep, Aind>(materialized.current.as_view())
+                .map_err(|error| {
+                    format!(
+                        "invalid materialized chain {label} `{}` from `{value}`: {error}",
+                        materialized.current
+                    )
+                })?;
+            return Ok(ChainEndpoint {
+                slot,
+                additional_factors: materialized.additional_factors,
+            });
+        }
+        Err(format!("invalid chain {label} `{value}`: {slot_error}"))
+    }
+
     /// Unfold one indexed chain using the same placeholder substitution as the
-    /// network parser. Fresh names remain disjoint across separate conversions.
+    /// network parser, including supplied rank-one endpoints. Fresh names
+    /// remain disjoint across separate conversions.
     /// Unrelated arithmetic and compact spectator ports stay opaque.
     pub fn materialize_indexed_chain(&self, value: FunView<'_>) -> Result<Atom, String> {
         let mut arguments = value.iter();
         let start = arguments.next().ok_or("chain requires two endpoints")?;
         let end = arguments.next().ok_or("chain requires two endpoints")?;
-        let mut matcher = self.matcher.borrow_mut();
-        let mut left = matcher
-            .parse::<LibraryRep, Aind>(start)
-            .map_err(|error| error.to_string())?;
-        let end = matcher
-            .parse::<LibraryRep, Aind>(end)
-            .map_err(|error| error.to_string())?;
-        drop(matcher);
-        if !left.rep.matches(&end.rep) {
+        let ChainEndpoint {
+            slot: mut left,
+            additional_factors: start_factors,
+        } = self.materialize_chain_endpoint(start, "start", SchoonschipExpansionMode::full())?;
+        let ChainEndpoint {
+            slot: end_slot,
+            additional_factors: end_factors,
+        } = self.materialize_chain_endpoint(end, "end", SchoonschipExpansionMode::full())?;
+        // Bare representations remain unresolved public ports when unfolding.
+        // Their temporary slots only establish the channel and internal wiring.
+        let start_atom = if self
+            .matcher
+            .borrow_mut()
+            .compact_representation(start)
+            .is_some()
+        {
+            start.to_owned()
+        } else {
+            left.to_atom()
+        };
+        let end_atom = if self
+            .matcher
+            .borrow_mut()
+            .compact_representation(end)
+            .is_some()
+        {
+            end.to_owned()
+        } else {
+            end_slot.to_atom()
+        };
+        let endpoints = start_factors.into_iter().chain(end_factors);
+        if !left.rep.matches(&end_slot.rep) {
             return Err("incompatible chain endpoints".into());
         }
         if arguments.len() == 0 {
-            return Ok(FunctionBuilder::new(ETS.metric)
-                .add_arg(start)
-                .add_arg(end.to_atom())
-                .finish());
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_arg(start_atom)
+                .add_arg(end_atom)
+                .finish();
+            return Ok(Atom::mul_many(endpoints.chain([metric])));
         }
         let count = arguments.len();
         let factors = arguments.enumerate().map(|(position, factor)| {
             let right = if position + 1 == count {
-                end.dual()
+                end_slot.dual()
             } else {
                 left.rep.slot(self.fresh_index())
             };
             let factor = ChainExpansion::replace_placeholders(
                 factor,
-                &left.to_atom(),
-                &right.dual().to_atom(),
+                &if position == 0 {
+                    start_atom.clone()
+                } else {
+                    left.to_atom()
+                },
+                &if position + 1 == count {
+                    end_atom.clone()
+                } else {
+                    right.dual().to_atom()
+                },
                 &mut self.matcher.borrow_mut(),
             );
             left = right;
             factor
         });
-        Ok(Atom::mul_many(factors))
+        Ok(Atom::mul_many(endpoints.chain(factors)))
     }
 
     /// Open only this compact inner product using the operation's reserved indices.
@@ -906,46 +986,6 @@ where
         )
     }
 
-    fn materialize_chain_endpoint(
-        value: AtomView<'_>,
-        label: &str,
-        state: &ParseState<Aind, AtomView<'_>>,
-        schoonschip_mode: SchoonschipExpansionMode,
-    ) -> Result<ChainEndpoint<Aind>, TensorNetworkError<K, Symbol>> {
-        match Slot::<LibraryRep, Aind>::try_from(value) {
-            Ok(slot) => Ok(ChainEndpoint {
-                slot,
-                additional_factors: Vec::new(),
-            }),
-            Err(slot_err) => {
-                if schoonschip_mode.any()
-                    && let Some(materialized) =
-                        SchoonschipMaterializer::<Aind, _>::with_mode(state, schoonschip_mode)
-                            .materialize_shorthand_arg(value)
-                {
-                    let slot =
-                        match Slot::<LibraryRep, Aind>::try_from(materialized.current.as_view()) {
-                            Ok(slot) => slot,
-                            Err(err) => {
-                                return Err(eyre!(
-                                    "invalid materialized chain {label} `{}` from `{}`: {err}",
-                                    materialized.current,
-                                    value
-                                )
-                                .into());
-                            }
-                        };
-                    return Ok(ChainEndpoint {
-                        slot,
-                        additional_factors: materialized.additional_factors,
-                    });
-                }
-
-                Err(eyre!("invalid chain {label} `{}`: {slot_err}", value).into())
-            }
-        }
-    }
-
     #[allow(clippy::result_large_err)]
     fn materialize_chain_shorthand<S, Lib, FunLib>(
         construction: &mut Construction<Str, K, Aind>,
@@ -977,11 +1017,15 @@ where
         let ChainEndpoint {
             slot: start,
             additional_factors: start_factors,
-        } = Self::materialize_chain_endpoint(args[0], "start", &state, schoonschip_mode)?;
+        } = state
+            .materialize_chain_endpoint(args[0], "start", schoonschip_mode)
+            .map_err(|error| eyre!(error))?;
         let ChainEndpoint {
             slot: end,
             additional_factors: end_factors,
-        } = Self::materialize_chain_endpoint(args[1], "end", &state, schoonschip_mode)?;
+        } = state
+            .materialize_chain_endpoint(args[1], "end", schoonschip_mode)
+            .map_err(|error| eyre!(error))?;
         let factors = &args[2..];
 
         let factor_schoonschip_mode = schoonschip_mode.for_chain_like_root();

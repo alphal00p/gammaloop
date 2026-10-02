@@ -518,7 +518,8 @@ fn qualified_typst_port(
     settings: SpensoPrintSettings,
     options: &PrintOptions,
 ) -> Option<String> {
-    let port = "○";
+    // A filled argument is a contraction, unlike an unresolved AUTO square.
+    let port = "⊙";
     if !settings.with_dim {
         return Some(port.to_owned());
     }
@@ -976,13 +977,24 @@ pub fn tensor_print(
         return None;
     }
 
+    typst_tensor_body(typst_tensor_head(symbol), &arguments, options, settings)
+}
+
+/// Share argument positions and bra/ket notation with specialized tensor heads.
+fn typst_tensor_body(
+    mut base: String,
+    arguments: &[AtomView<'_>],
+    options: &PrintOptions,
+    settings: SpensoPrintSettings,
+) -> Option<String> {
     let mut columns = Vec::new();
     let mut ordinary_arguments = Vec::new();
     let mut bras = Vec::new();
     let mut kets = Vec::new();
-    let markers = chain_markers(&arguments);
+    let markers = chain_markers(arguments);
+    let open_columns = open_port_columns(arguments, options)?;
 
-    for (position, argument) in arguments.into_iter().enumerate() {
+    for (position, argument) in arguments.iter().copied().enumerate() {
         if markers.is_some_and(|markers| position == markers.input || position == markers.output) {
             continue;
         }
@@ -1010,7 +1022,6 @@ pub fn tensor_print(
         }
     }
 
-    let mut base = typst_tensor_head(function.get_symbol());
     if !ordinary_arguments.is_empty() {
         let separator = if settings.commas { "," } else { " " };
         base.push('(');
@@ -1089,62 +1100,86 @@ fn gamma_print(
     } else {
         arguments
     };
+    if backend == SpensoPrintBackend::Typst {
+        let output = typst_tensor_body(base, &selected, options, settings)?;
+        return Some(if transposed {
+            format!("attach({output},t:upright(\"T\"))")
+        } else {
+            output
+        });
+    }
     let mut columns = Vec::new();
+    let mut bras = Vec::new();
+    let mut kets = Vec::new();
     let open_columns = open_port_columns(&selected, options)?;
     for (argument, open) in selected.into_iter().zip(open_columns) {
         if let Some(column) = open {
             columns.push(column);
         } else if let Some(slot) = tensor_slot(argument) {
-            let source = if backend == SpensoPrintBackend::Typst {
-                typst_index_source(slot.representation, slot.index, options)?
-            } else {
-                let mut source = String::new();
-                slot.index
-                    .format(&mut source, options, PrintState::new())
-                    .ok()?;
-                source
-            };
-            let source = if settings.with_dim && backend == SpensoPrintBackend::Typst {
-                qualified_typst_index(slot, source, options)?
-            } else {
-                source
-            };
+            let mut source = String::new();
+            slot.index
+                .format(&mut source, options, PrintState::new())
+                .ok()?;
             columns.push((source, slot.row));
+        } else if let Some(compact) = compact_vector(argument, settings, options) {
+            let port = if backend == SpensoPrintBackend::Latex {
+                r"\odot"
+            } else {
+                "⊙"
+            };
+            columns.push((port.to_owned(), compact.representation.row));
+            match compact.representation.polarity {
+                CompactPolarity::Bra => bras.push(compact.label),
+                CompactPolarity::Ket => kets.push(compact.label),
+            }
         } else {
             columns.push((typst_source(argument, options)?, IndexRow::Bottom));
         }
     }
-    let mut output = match backend {
-        SpensoPrintBackend::Typst => typst_attachment(base, columns),
-        SpensoPrintBackend::Latex => {
-            let mut output = base;
-            for (row, script) in [(IndexRow::Top, '^'), (IndexRow::Bottom, '_')] {
-                let indices = columns
-                    .iter()
-                    .filter(|(_, side)| *side == row)
-                    .map(|(source, _)| source.as_str())
-                    .collect::<Vec<_>>();
-                if !indices.is_empty() {
-                    output.push_str(&format!("{script}{{{}}}", indices.join(" ")));
-                }
+    let mut output = if backend == SpensoPrintBackend::Latex {
+        let mut output = base;
+        for (row, script) in [(IndexRow::Top, '^'), (IndexRow::Bottom, '_')] {
+            let indices = columns
+                .iter()
+                .filter(|(_, side)| *side == row)
+                .map(|(source, _)| source.as_str())
+                .collect::<Vec<_>>();
+            if !indices.is_empty() {
+                output.push_str(&format!("{script}{{{}}}", indices.join(" ")));
             }
-            output
         }
-        SpensoPrintBackend::Plain if columns.is_empty() => base,
-        SpensoPrintBackend::Plain => format!(
+        output
+    } else if columns.is_empty() {
+        base
+    } else {
+        format!(
             "{base}({})",
             columns
                 .into_iter()
                 .map(|(source, _)| source)
                 .collect::<Vec<_>>()
                 .join(",")
-        ),
+        )
     };
     if transposed {
-        output = match backend {
-            SpensoPrintBackend::Typst => format!("attach({output},t:upright(\"T\"))"),
-            SpensoPrintBackend::Latex => format!(r"{output}^{{\mathrm{{T}}}}"),
-            SpensoPrintBackend::Plain => format!("{output}^T"),
+        output = if backend == SpensoPrintBackend::Latex {
+            format!(r"{output}^{{\mathrm{{T}}}}")
+        } else {
+            format!("{output}^T")
+        };
+    }
+    if !bras.is_empty() {
+        output = if backend == SpensoPrintBackend::Latex {
+            format!(r"\langle {}|{output}", bras.join(","))
+        } else {
+            format!("⟨{}|{output}", bras.join(","))
+        };
+    }
+    if !kets.is_empty() {
+        output = if backend == SpensoPrintBackend::Latex {
+            format!(r"{output}|{}\rangle", kets.join(","))
+        } else {
+            format!("{output}|{}⟩", kets.join(","))
         };
     }
     Some(output)
@@ -1703,6 +1738,10 @@ impl SpensoTags {
             if is_reserved_marker(*start) {
                 // Internal wiring markers are never part of the rendered endpoint.
             } else if let Some(compact) = compact_vector(*start, settings, opt) {
+                columns.push((
+                    qualified_typst_port(compact.representation, settings, opt)?,
+                    compact.representation.row,
+                ));
                 prefix = Some(compact.label);
             } else if let Some(column) = &open_columns[0] {
                 columns.push(column.clone());
@@ -1721,6 +1760,10 @@ impl SpensoTags {
             if is_reserved_marker(*end) {
                 // Internal wiring markers are never part of the rendered endpoint.
             } else if let Some(compact) = compact_vector(*end, settings, opt) {
+                columns.push((
+                    qualified_typst_port(compact.representation, settings, opt)?,
+                    compact.representation.row,
+                ));
                 suffix = Some(compact.label);
             } else if let Some(column) = &open_columns[1] {
                 columns.push(column.clone());
@@ -2755,6 +2798,52 @@ mod tests {
     }
 
     #[test]
+    fn contracted_spinors_are_bras_with_dotted_positions_not_nested_indices() {
+        let spinor = function!(
+            crate::vector_symbol!("supplied_gamma_print::Q"),
+            bottom_representation(None)
+        );
+        let momentum = function!(crate::vector_symbol!("supplied_gamma_print::p"), mink!(4));
+        let contracted = function!(
+            gamma_symbol(),
+            &spinor,
+            bottom_representation(None),
+            &momentum
+        );
+        let original = contracted.clone();
+        let options = SpensoPrintSettings::typst_options();
+        let printed = prepare_tensor_print(&contracted)
+            .printer(options)
+            .to_string();
+        assert!(
+            printed.starts_with(r#"upright("⟨") Q upright("|")"#),
+            "{printed}"
+        );
+        assert!(printed.contains("cancel(p)"), "{printed}");
+        // Each visible column has a hidden opposite-row copy for alignment.
+        assert_eq!(printed.matches('⊙').count(), 2, "{printed}");
+        assert_eq!(printed.matches("square.stroked").count(), 2, "{printed}");
+        assert!(!printed.contains("attach(#($Q$"), "{printed}");
+        assert_eq!(contracted, original);
+
+        let generic = function!(
+            crate::tensor_symbol!("supplied_gamma_print::A"),
+            spinor,
+            bottom_representation(None),
+            momentum
+        );
+        let printed = prepare_tensor_print(&generic)
+            .printer(SpensoPrintSettings::typst_options())
+            .to_string();
+        assert!(
+            printed.starts_with(r#"upright("⟨") Q,p upright("|")"#),
+            "{printed}"
+        );
+        assert_eq!(printed.matches('⊙').count(), 4, "{printed}");
+        assert_eq!(printed.matches("square.stroked").count(), 2, "{printed}");
+    }
+
+    #[test]
     fn standalone_slashes_keep_only_their_actual_spinor_ports() {
         let p = function!(crate::vector_symbol!("slash_ports::p"), mink!(4));
         for (first, second, open) in [
@@ -2876,7 +2965,7 @@ mod tests {
             prepare_tensor_print(&chain)
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
-            "upright(\"⟨\") attach(#($u$,std.hide($zws$)).join(),t:std.hide(1),b:1) upright(\"|\") lr([attach(#($gamma$,std.hide($zws$)).join(),t:mu,b:std.hide(mu))]) upright(\"|\") attach(#($v$,std.hide($zws$)).join(),t:std.hide(2),b:2) upright(\"⟩\")"
+            "upright(\"⟨\") attach(#($u$,std.hide($zws$)).join(),t:std.hide(1),b:1) upright(\"|\") attach(#($lr([attach(#($gamma$,std.hide($zws$)).join(),t:mu,b:std.hide(mu))])$,std.hide($zws$)).join(),t:std.hide(⊙) std.hide(⊙),b:⊙ ⊙) upright(\"|\") attach(#($v$,std.hide($zws$)).join(),t:std.hide(2),b:2) upright(\"⟩\")"
         );
     }
 
