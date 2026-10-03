@@ -674,9 +674,12 @@ impl ProjectedComponent<'_> {
             {
                 return;
             }
-            let cost = (0..2)
-                .map(|i| 0.5 * self.quadratic[i] * point[i] * point[i] + self.linear[i] * point[i])
-                .sum::<f64>();
+            // This solver is always two-dimensional. Keep the sequential
+            // floating-point sum (including its -0.0 seed) without constructing
+            // iterators for every candidate and every feasibility row.
+            let cost = -0.0
+                + (0.5 * self.quadratic[0] * point[0] * point[0] + self.linear[0] * point[0])
+                + (0.5 * self.quadratic[1] * point[1] * point[1] + self.linear[1] * point[1]);
             if !cost.is_finite()
                 || best
                     .as_ref()
@@ -688,12 +691,10 @@ impl ProjectedComponent<'_> {
             // A roundoff allowance finds boundary candidates; it does not
             // relax acceptance, which uses the original wide certificate.
             if self.matrix.iter().zip(self.bounds).any(|(row, &bound)| {
-                let dot = row.iter().zip(point).map(|(&a, x)| a * x).sum::<f64>();
-                let magnitude = row
-                    .iter()
-                    .zip(point)
-                    .map(|(&a, x)| (a * x).abs())
-                    .sum::<f64>();
+                let x = row[0] * point[0];
+                let y = row[1] * point[1];
+                let dot = -0.0 + x + y;
+                let magnitude = -0.0 + x.abs() + y.abs();
                 dot - bound > 32.0 * f64::EPSILON * magnitude.max(bound.abs()).max(1.0)
             }) {
                 return;
@@ -705,12 +706,9 @@ impl ProjectedComponent<'_> {
             });
         };
         for (index, (row, &bound)) in self.matrix.iter().zip(self.bounds).enumerate() {
-            let distance = row.iter().zip(desired).map(|(&a, x)| a * x).sum::<f64>() - bound;
-            let denominator = row
-                .iter()
-                .zip(&self.quadratic)
-                .map(|(&a, &q)| a * a / q)
-                .sum::<f64>();
+            let distance = (-0.0 + row[0] * desired[0] + row[1] * desired[1]) - bound;
+            let denominator =
+                -0.0 + row[0] * row[0] / self.quadratic[0] + row[1] * row[1] / self.quadratic[1];
             let multiplier = distance / denominator;
             let point = [
                 desired[0] - multiplier * row[0] / self.quadratic[0],
@@ -1376,6 +1374,52 @@ mod tests {
     }
 
     #[test]
+    fn binary64_polygon_preserves_candidate_bits_at_small_scales_and_ties() {
+        // Frozen before specializing the two-coordinate sums. The repeated
+        // boundary also checks that equally good candidates keep their order.
+        let cases = [
+            (
+                vec![
+                    vec![1.0, 1e-150],
+                    vec![-1.0, 0.0],
+                    vec![1e-150, 1.0],
+                    vec![0.0, -1.0],
+                ],
+                vec![1e-150; 4],
+                vec![1.0, 2.0],
+                vec![-2e-150, 3e-150],
+                [0x20da2fe76a3f9475, 0xa0ca2fe76a3f9475],
+            ),
+            (
+                vec![
+                    vec![1.0, 1.0],
+                    vec![1.0, 1.0],
+                    vec![1.0, -1.0],
+                    vec![-1.0, 1.0],
+                    vec![-1.0, -1.0],
+                ],
+                vec![0.5; 5],
+                vec![0.1, 0.3],
+                vec![-1.0, -1.0],
+                [0x3fd8000000000000, 0x3fc0000000000000],
+            ),
+        ];
+        for (matrix, bounds, quadratic, linear, expected) in cases {
+            let problem = ProjectedComponent {
+                matrix: &matrix,
+                bounds: &bounds,
+                quadratic,
+                linear,
+            };
+            let (candidate, _) = problem.polygon_candidate().unwrap();
+            assert_eq!(
+                candidate.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn nearly_parallel_polygon_escalates_precision_for_amplified_duals() {
         let matrix = vec![vec![1.0, 1.0], vec![-1.0, -1.0 + 1e-10]];
         let problem = ProjectedComponent {
@@ -1385,6 +1429,8 @@ mod tests {
             linear: vec![-0.123, -1.0],
         };
         let (candidate, dual) = problem.polygon_candidate().unwrap();
+        assert_eq!(candidate[0].to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(candidate[1].to_bits(), 0.0_f64.to_bits());
         assert!(!ProjectedComponent::certified(
             problem.certify(&candidate, &dual)
         ));

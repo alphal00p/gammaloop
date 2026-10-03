@@ -1,6 +1,7 @@
 //! SVG output: painted layers, typeset labels, and the `#linnet-*` inspection
 //! links the interactive viewer decorates, as `draw.typ` emits them.
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
@@ -87,7 +88,7 @@ fn xml_escape(text: &str) -> String {
 /// Links of an edge: its four hover regions (source half-edge, source edge,
 /// sink edge, sink half-edge) and its label.
 pub(super) struct EdgeHrefs {
-    pub regions: [String; 4],
+    pub regions: [Arc<str>; 4],
     pub label: String,
 }
 
@@ -154,7 +155,7 @@ pub(super) fn edge_hrefs(edge: &TypstDotEdge, fields: &Details) -> EdgeHrefs {
     let [source_half, sink_half] = <[String; 2]>::try_from(halves).unwrap_or_default();
     let [source_edge, sink_edge] = <[String; 2]>::try_from(edges).unwrap_or_default();
     EdgeHrefs {
-        regions: [source_half, source_edge, sink_edge, sink_half],
+        regions: [source_half, source_edge, sink_edge, sink_half].map(Into::into),
         label: details.href(
             "edge",
             details
