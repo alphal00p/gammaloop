@@ -1,0 +1,104 @@
+# Independent reference for the UV-finite dotted sunset with unit local numerators:
+# D_b(k0-k1)^2 D_b(k0) D_H(k1)^2, m=3, mu=muB/3=5, M=2.
+# The input LMB uses the undotted fermion and scalar chain, so the raised
+# fermion is not aligned with either input loop momentum.
+#
+# Derive the vacuum-subtracted target using the finite-density cutting rules
+# of Ghisoiu et al., https://arxiv.org/pdf/1609.04339, section 2.1, followed
+# by a mass derivative. Let x=m^2, y=M^2, pF=sqrt(mu^2-x), E_p=sqrt(p^2+x):
+#
+# A(x)   = [mu*pF - x*acosh(mu/sqrt(x))]/(8*pi^2),
+# B(x,y) = integral_0^1 dz (1-z)/[x*z^2+y*(1-z)]/(16*pi^2),
+# C(x,y) = integral_0^pF dp dq
+#          p^2*q^2 / {E_p*E_q*[(y+2*(E_p*E_q-x))^2-4*p^2*q^2]}
+#          /(16*pi^4).
+#
+# The vacuum-subtracted Euclidean sunset with a squared scalar line is
+# -2*A*B+C: the first term contains the two possible single fermion cuts,
+# and the second the double cut. Differentiating with respect to the common
+# fermion mass squared produces twice the graph with one squared fermion line,
+# with a minus sign from differentiating Euclidean propagators. The physical
+# two-loop, five-propagator phase is i^2*(-1)^5=+1. Thus the target is
+# A'*B+A*B'-C'/2, real, with primes taken at fixed mu and y.
+#
+# Mapping p=pF*u, q=pF*v to the unit square before differentiation includes
+# the moving Fermi boundary without invoking the production delta localizer.
+# Gauss-Legendre quadrature with 24, 48 and 96 nodes per variable gives
+# -4.880698568451e-6; analytic differentiation and a complex-step derivative
+# agree to better than 2e-19 in absolute value. This value is derived from
+# the cut integrals, not fitted to a production integration result.
+
+commands = [
+  "import model sm-default.json",
+  "set model MB=3.0 MH=2.0 muB=15.0",
+  "import graphs ./tests/resources/graphs/fermi_dotted_sunset.dot",
+  "generate",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.medium]
+mode = "zero_temperature_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+softct = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile = false
+summed = false
+summed_function_map = false
+iterative_orientation_optimization = false
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+
+[default_runtime_settings.kinematics]
+# Radial sampling scale: mu_b = muB/3 = 5 (Fermi radius = 4).
+e_cm = 5.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = []
+helicities = []
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+sampling_channels = "monte_carlo"
+coordinate_system = "relative_spherical"
+mapping = "linear"
+
+[default_runtime_settings.h_function]
+function = "exponential"
+sigma = 1.0
+power = 0
+
+[default_runtime_settings.integrator]
+integrated_phase = "real"
+seed = 1337
+n_start = 5000
+n_increase = 0
+n_max = 100000

@@ -272,6 +272,10 @@ once. Distinct signed chemical-potential supports stay separate, and the
 ordinary bulk retains its existing evaluator path. Residual zero-temperature
 steps must be independent of the localized loop directions; unsupported moving
 step boundaries are rejected instead of differentiated pointwise.
+Basis completion first retains additional independent fermion routes before
+choosing arbitrary remaining graph chords. This keeps an untouched occupation
+step independent when the input basis mixes its momentum with a localized one,
+as in a dotted sunset with a boson and an undotted fermion as its input LMB.
 
 Each sector evaluates its masses and signed chemical potentials in the current
 numerical precision using the shared parameter builder. The runtime maps the
@@ -287,8 +291,28 @@ The tests cover analytic shell integrals, independent products, profile
 independence, the relation to raised-cut residue algebra, pointwise production
 orientation sums, model refresh and persistence. Symbolic reconstruction checks
 verify that vacuum subtraction and both UV contributions retain their Fermi
-sectors. Numerical integration convergence against literature values remains
-separate work.
+sectors. A generated one-loop double pole is checked against an independent
+contour derivative, including its phase and spatial normalization, at fixed
+momenta inside and outside a massive Fermi sphere. A factorized two-loop graph
+checks numerical composition with local and integrated UV terms against that
+analytic cycle factor times a separately generated scalar tadpole.
+
+The cold-dense inspection card includes the bare tennis ball and fixes its
+positive-scale profile explicitly. Its ordinary Fermi delta gives a pointwise
+value of the form `B(k) + A(k)*h(t*)`; inspection checks that dependence across
+profile widths. These local values are representation dependent and are not
+integrated reference values. A one-loop convergence test integrates a massive
+fermion triple pole, including both the delta and its derivative. With unit
+local numerators its vacuum-subtracted integral is
+`i*mu/(32*pi^2*m^2*sqrt(mu^2-m^2))`. Production Monte Carlo runs with fixed sample
+budgets check this analytic target, decreasing uncertainty and independence
+of the normalized localization profile. Numerical convergence against
+multi-loop literature values remains separate work.
+
+A genuine two-loop dotted-sunset convergence test covers a raised fermion
+whose momentum is not aligned with either input loop momentum. Its independent
+reference calculation is documented in comments in
+`tests/resources/run_cards/fermi_surface_2l_integration.toml`.
 
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 

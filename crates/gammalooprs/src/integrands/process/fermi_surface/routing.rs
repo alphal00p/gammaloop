@@ -84,8 +84,33 @@ impl FermiSurfaceProduct {
             .iter()
             .map(|factor| factor.edge_id)
             .collect::<Vec<_>>();
+        // Complete the active directions with independent fermion routes
+        // before choosing arbitrary spanning-tree chords. Otherwise an
+        // untouched occupation step can acquire an artificial dependence on
+        // a localized radius (e.g. the other fermion of a dotted sunset).
+        let mut basis_edges = selected_edges.clone();
+        for (pair, edge_id, edge) in graph.iter_edges() {
+            if basis_edges.len() == parent.loop_edges.len() {
+                break;
+            }
+            if !pair.is_paired() || !edge.data.is_fermion() {
+                continue;
+            }
+            rows.push(
+                parent.edge_signatures[edge_id]
+                    .internal
+                    .iter()
+                    .map(|sign| *sign * 1_i64)
+                    .collect(),
+            );
+            if rank_i64(&rows) == rows.len() {
+                basis_edges.push(edge_id);
+            } else {
+                rows.pop();
+            }
+        }
         let mut lmb = graph
-            .lmb_with_loop_edges(selected_edges.as_slice())
+            .lmb_with_loop_edges(basis_edges.as_slice())
             .wrap_err("Could not construct an independent Fermi-surface basis")?;
         graph.canonicalize_lmb_external_order(&mut lmb);
         ensure!(
@@ -219,6 +244,45 @@ mod tests {
         let partial = FermiSurfaceProduct::new(&graph, &factors[..1])?;
         assert_eq!(partial.lmb().loop_edges.len(), 2);
         assert_eq!(partial.lmb().loop_edges[LoopIndex(0)], EdgeIndex(3));
+        Ok(())
+    }
+
+    #[test]
+    fn fermi_basis_keeps_the_other_sunset_occupation_independent() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph nonaligned_dotted_sunset {
+            node [num=1]
+            edge [num=1]
+            A -> C [id=0 particle="b"]
+            C -> B [id=1 particle="b"]
+            B -> A [id=2 particle="b" lmb_id=0]
+            A -> D [id=3 particle="H" lmb_id=1]
+            D -> B [id=4 particle="H"]
+        })?;
+        let parent = &graph.loop_momentum_basis;
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            assert!(!parent.loop_edges.contains(&edge));
+            assert!(
+                parent.edge_signatures[edge]
+                    .internal
+                    .iter()
+                    .all(|sign| *sign != SignOrZero::Zero)
+            );
+            let product = FermiSurfaceProduct::new(
+                &graph,
+                &[ThermalDistributionFactor {
+                    edge_id: edge,
+                    sign: 1,
+                    derivative_order: 1,
+                }],
+            )?;
+            assert_eq!(product.lmb().loop_edges[LoopIndex(0)], edge);
+            assert_eq!(
+                product.lmb().edge_signatures[EdgeIndex(2)].internal[LoopIndex(0)],
+                SignOrZero::Zero,
+                "the other occupation step must not depend on the localized radius"
+            );
+        }
         Ok(())
     }
 

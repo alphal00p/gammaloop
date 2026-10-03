@@ -1,5 +1,187 @@
 use super::utils::*;
 use super::*;
+use gammaloop_api::commands::integrate::RendererOption;
+
+#[test]
+fn fermi_surface_one_loop_integration_converges_to_analytic_target() -> Result<()> {
+    let name = "fermi_surface_one_loop_integration";
+    let mut cli = get_test_cli(
+        Some("fermi_surface_1l_integration.toml".into()),
+        get_tests_workspace_path().join(name),
+        Some(name.to_string()),
+        true,
+    )?;
+    // For D=q0²-k²-m²+i0, the vacuum-subtracted double pole integrates to
+    // I2=-i acosh(mu/m)/(8pi²). Since D^-3 = (1/2) d(D^-2)/d(m²),
+    // I3=(1/2) dI2/d(m²)=i mu/(32pi² m² sqrt(mu²-m²)).
+    // At m=3, mu=muB/3=5, pF=4 this fixes the absolute normalization and
+    // phase independently of generated coefficients and h(t). Both delta
+    // and delta' contribute: dropping delta' alone shifts the result by 10%.
+    let expected = 5.0 / (32.0 * std::f64::consts::PI.powi(2) * 3.0_f64.powi(2) * 4.0);
+    for (profile, sigma) in [("exponential", 1.0), ("poly_exponential", 1.3)] {
+        cli.run_command(&format!(
+            "set process kv h_function.function=\"{profile}\" h_function.sigma={sigma}"
+        ))?;
+        let mut errors = Vec::new();
+        // Fixed seed and iteration size give identical initial samples in the
+        // two fresh runs. Check decreasing uncertainty, not monotonic central
+        // values: statistical fluctuations need not approach the target at
+        // every iteration. Early stopping is disabled in the run card.
+        for samples in [20_000, 100_000] {
+            cli.run_command(&format!("set process kv integrator.n_max={samples}"))?;
+            let started = std::time::Instant::now();
+            let output = Integrate {
+                renderer: RendererOption::Tabled,
+                show_max_weight_info: false,
+                no_stream_iterations: true,
+                no_stream_updates: true,
+                ..default_integrate_for(name)
+            }
+            .run(&mut cli.state, &cli.cli_settings)?;
+            let estimate = single_slot_integral(&output);
+            let (value, error) = (estimate.result.im.0, estimate.error.im.0);
+            info!(
+                profile,
+                sigma,
+                samples = estimate.neval,
+                value,
+                error,
+                expected,
+                elapsed = ?started.elapsed(),
+                "One-loop Fermi-surface integration convergence"
+            );
+            assert_eq!(estimate.neval, samples, "the sample budget must be fixed");
+            assert!(
+                [value, error, estimate.result.re.0, estimate.error.re.0]
+                    .into_iter()
+                    .all(f64::is_finite)
+                    && value > 0.0
+                    && error > 0.0
+                    && estimate.error.re.0 >= 0.0,
+                "{profile}, samples={samples}: {estimate}"
+            );
+            assert!(
+                estimate.result.re.0.abs() < 1.0e-12 * expected.abs()
+                    && estimate.error.re.0 < 1.0e-12 * expected.abs(),
+                "the real part must vanish: {estimate}"
+            );
+            assert!(
+                (value - expected).abs() <= 5.0 * error,
+                "{profile}, samples={samples}: {value:e} +/- {error:e}, target={expected:e}"
+            );
+            errors.push(error);
+        }
+        assert!(
+            errors[1] < 0.005 * expected.abs() && errors[1] < 0.7 * errors[0],
+            "{profile}: increased statistics must reduce uncertainty below 0.5%: {errors:?}"
+        );
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn fermi_surface_two_loop_integration_converges_in_nonaligned_basis() -> Result<()> {
+    use gammalooprs::{momentum::SignOrZero, processes::ProcessCollection};
+
+    let name = "fermi_surface_two_loop_integration";
+    let mut cli = get_test_cli(
+        Some("fermi_surface_2l_integration.toml".into()),
+        get_tests_workspace_path().join(name),
+        Some(name.to_string()),
+        true,
+    )?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected the dotted-sunset amplitude")
+    };
+    let [sunset] = amplitudes["default"].graphs.as_slice() else {
+        panic!("expected a single genuine two-loop graph")
+    };
+    let basis = &sunset.graph.loop_momentum_basis;
+    assert_eq!(
+        basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect::<Vec<_>>(),
+        [2, 3],
+        "the input basis must use the undotted fermion and the scalar chain"
+    );
+    for (edge, signature) in &basis.edge_signatures {
+        if edge.0 < 2 {
+            assert!(
+                signature
+                    .internal
+                    .iter()
+                    .all(|sign| *sign != SignOrZero::Zero),
+                "the raised fermion route must involve both input loop momenta"
+            );
+        }
+    }
+    // Independent finite-density cut integrals, differentiated with respect
+    // to the common fermion mass squared. The derivation and quadrature
+    // convergence are recorded in fermi_surface_2l_integration.toml. Parameters are
+    // m_b=3, mu_b=5, M_H=2; all UV subgraphs converge. Two loops and five
+    // propagator factors give Wick phase i²(-1)^5=+1, so this target is real.
+    let expected = -4.880_698_568_451e-6_f64;
+    for (profile, sigma) in [("exponential", 1.0), ("poly_exponential", 1.3)] {
+        cli.run_command(&format!(
+            "set process kv h_function.function=\"{profile}\" h_function.sigma={sigma}"
+        ))?;
+        let mut errors = Vec::new();
+        for samples in [20_000, 100_000] {
+            cli.run_command(&format!("set process kv integrator.n_max={samples}"))?;
+            let started = std::time::Instant::now();
+            let output = Integrate {
+                renderer: RendererOption::Tabled,
+                show_max_weight_info: false,
+                no_stream_iterations: true,
+                no_stream_updates: true,
+                ..default_integrate_for(name)
+            }
+            .run(&mut cli.state, &cli.cli_settings)?;
+            let estimate = single_slot_integral(&output);
+            let (value, error) = (estimate.result.re.0, estimate.error.re.0);
+            info!(
+                profile,
+                sigma,
+                samples = estimate.neval,
+                value,
+                error,
+                expected,
+                elapsed = ?started.elapsed(),
+                "Non-aligned two-loop Fermi-surface integration convergence"
+            );
+            assert_eq!(estimate.neval, samples, "the sample budget must be fixed");
+            assert!(
+                [value, error, estimate.result.im.0, estimate.error.im.0]
+                    .into_iter()
+                    .all(f64::is_finite)
+                    && value < 0.0
+                    && error > 0.0
+                    && estimate.error.im.0 >= 0.0,
+                "{profile}, samples={samples}: {estimate}"
+            );
+            assert!(
+                estimate.result.im.0.abs() < 1.0e-12 * expected.abs()
+                    && estimate.error.im.0 < 1.0e-12 * expected.abs(),
+                "the imaginary part must vanish: {estimate}"
+            );
+            assert!(
+                (value - expected).abs() <= 5.0 * error,
+                "{profile}, samples={samples}: {value:e} +/- {error:e}, target={expected:e}"
+            );
+            errors.push(error);
+        }
+        assert!(
+            errors[1] < 0.01 * expected.abs() && errors[1] < 0.7 * errors[0],
+            "{profile}: increased statistics must reduce uncertainty below 1%: {errors:?}"
+        );
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
 
 #[test]
 fn v_diag() -> Result<()> {

@@ -2,7 +2,7 @@ commands = [
   "import model sm-default.json",
   "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot",
   "import graphs ./tests/resources/graphs/mercedes_qcd_vacuum.dot",
-  # "import graphs ./tests/resources/graphs/tennis_ball_qcd_vacuum.dot",
+  "import graphs ./tests/resources/graphs/tennis_ball_qcd_vacuum.dot",
   "set model aS=1.0",
   "set model muB=3.0",
   "generate",
@@ -31,3 +31,10 @@ disable_threshold_subtraction = true
 
 [default_runtime_settings.general]
 inverse_temperature = 1.0
+
+# Fermi deltas are localized with this normalized positive-scale profile.
+# Pointwise tennis-ball values depend on it; the distribution action does not.
+[default_runtime_settings.h_function]
+function = "poly_exponential"
+sigma = 1.0
+power = 0

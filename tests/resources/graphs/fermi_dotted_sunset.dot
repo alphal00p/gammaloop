@@ -1,0 +1,12 @@
+digraph fermi_dotted_sunset {
+    // Genuine two-loop sunset: D_b(k0-k1)^2 D_b(k0) D_H(k1)^2.
+    // Neither edge of the raised fermion chain belongs to the input LMB.
+    // Unit local numerators; all UV subgraphs are convergent.
+    node [num=1];
+    edge [num=1];
+    A -> C [id=0 particle="b"];
+    C -> B [id=1 particle="b"];
+    B -> A [id=2 particle="b" lmb_id=0];
+    A -> D [id=3 particle="H" lmb_id=1];
+    D -> B [id=4 particle="H"];
+}

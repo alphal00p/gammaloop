@@ -1834,6 +1834,50 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         "cold dense mercedes inspect f64 benchmark at point 1 at muB=3.0",
     )?;
 
+    // The repeated massless quark momentum is k0 (edges 0 and 5).
+    // Its double pole produces an ordinary delta at |k0| = mu_u = muB/3 = 1.
+    // With UV subtraction disabled this is the only Fermi surface, so at a
+    // fixed point the localized result is B(k) + A(k) h(1/|k0|). Check this
+    // profile dependence without assigning a profile-independent local target.
+    for point in [
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        [1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+    ] {
+        let t = 1.0 / point[..3].iter().map(|x| x * x).sum::<f64>().sqrt();
+        let mut probes = Vec::new();
+        for sigma in [0.7, 1.0, 1.4] {
+            cli.run_command(&format!("set process -p 2 kv h_function.sigma={sigma}"))?;
+            let (_, value) = Inspect {
+                process: Some(ProcessRef::Id(2)),
+                graph_id: Some(0),
+                integrand_name: Some("default".to_string()),
+                point: point.to_vec(),
+                momentum_space: true,
+                use_arb_prec: true,
+                ..Default::default()
+            }
+            .run(&mut cli)?;
+            // Normalized power-zero poly-exponential, pinned in the run card.
+            let h = 2.0 / (std::f64::consts::PI.sqrt() * sigma)
+                * (2.0 - (t / sigma).powi(2) - (sigma / t).powi(2)).exp();
+            assert!(value.re.is_finite() && value.im.is_finite());
+            probes.push((h, value));
+        }
+        let [(h0, value0), (h1, value1), (h2, value2)] = probes.as_slice() else {
+            unreachable!()
+        };
+        assert!(
+            (value1.im - value0.im).abs() > 1e-8 * value0.im.abs().max(value1.im.abs()),
+            "tennis-ball Fermi contribution must respond to h(t): {probes:?}"
+        );
+        let expected = *value0 + (*value1 - *value0) * ((h2 - h0) / (h1 - h0));
+        assert_complex_approx_eq(
+            *value2,
+            expected,
+            format!("cold dense tennis ball profile dependence at {point:?}"),
+        );
+    }
+
     Ok(())
 }
 

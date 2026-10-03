@@ -1,0 +1,74 @@
+commands = [
+  "import model sm-default.json",
+  "set model MB=3.0 muB=15.0",
+  "import graphs ./tests/resources/graphs/fermi_triple_pole.dot",
+  "generate",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.medium]
+mode = "zero_temperature_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+softct = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile = false
+summed = false
+summed_function_map = false
+iterative_orientation_optimization = false
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+
+[default_runtime_settings.kinematics]
+# Radial sampling scale: mu_b = muB/3 = 5 (Fermi radius = 4).
+e_cm = 5.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = []
+helicities = []
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+sampling_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+
+[default_runtime_settings.h_function]
+function = "exponential"
+sigma = 1.0
+power = 0
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+seed = 1337
+n_start = 5000
+n_increase = 0
+n_max = 100000
