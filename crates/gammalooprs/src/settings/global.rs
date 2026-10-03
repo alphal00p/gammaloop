@@ -71,6 +71,8 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
+    /// Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction
+    /// and disabled threshold subtraction.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub medium: MediumSettings,
 }
@@ -950,8 +952,12 @@ impl Default for Parallelisation {
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct MediumSettings {
+    /// `vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its
+    /// `zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: MediumMode,
+    /// Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;
+    /// requires a non-vacuum mode.
     #[serde(skip_serializing_if = "is_false")]
     pub vacuum_subtraction: bool,
 }

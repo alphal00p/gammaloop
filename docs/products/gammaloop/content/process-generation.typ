@@ -142,6 +142,83 @@ the #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bu
   `save state -o` did not complete or the resumed `-s` path differs from `cli_settings.state.folder`.
 ])
 
+== Generate in a thermal or dense medium
+
+Amplitudes are generated in the vacuum by default. Set
+#link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-mode-aa98d46a871caf94")[`global.generation.medium.mode`]
+before `generate` to place every loop propagator in an equilibrium medium instead. Each CFF
+term then carries Fermi-Dirac distributions for fermions and Bose-Einstein distributions for
+bosons:
+
+- `thermodynamic_equilibrium` evaluates them at the inverse temperature `1/T` given by
+  #link("reference/cli/settings/runtime/general/#setting-runtime-general-inverse-temperature-fce360cba2a48bb2")[`runtime.general.inverse_temperature`]
+  (default `1`, in inverse model energy units);
+- `zero_temperature_equilibrium` takes their `T -> 0` limit: the inverse temperature is unused,
+  and the distributions become step functions at the chemical potentials.
+
+The mode is fixed at generation; changing it requires regenerating the integrand. The inverse
+temperature and the chemical potentials are runtime values that can change per integrand
+without regeneration.
+
+Chemical potentials are model parameters. Each particle may name one (`chemical_potential`
+in JSON models); a particle without one has zero chemical potential. In the bundled models,
+antiparticles use the negated `minus_<name>` parameter, and the
+`sm` model derives every particle's value from the external parameters `muB`, `muQ`, `muLe`,
+`muLmu`, and `muLtau` (LHA block `CHEMICALPOTENTIAL`) using its baryon number, electric
+charge, and lepton flavor. The `scalars` model has one `chemical_potential_scalar_<i>` per
+scalar. These defaults are nonzero (`muB = 3` and `1` per scalar), so set the values your
+calculation needs explicitly, for example with `set model muB=0.5` or in the run card:
+
+// docs-example: syntax
+```toml
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 10.0
+
+[default_runtime_settings.model]
+muB = [0.5, 0.0]
+```
+
+With
+#link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-vacuum-subtraction-622cb5e219356a31")[`vacuum_subtraction = true`],
+only the medium-dependent part is generated: each distribution weight is replaced by its
+difference from the vacuum limit, and the overall UV counterterm of the full graph is omitted.
+The maintained #source-link("examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml", label: "NLO cold quark matter run card")
+combines these settings for an integration.
+
+Several equal-mass propagators carrying the same loop momentum, as in self-energy insertions,
+produce energy derivatives of a distribution. In `zero_temperature_equilibrium`, those
+derivatives of a particle with a chemical potential are delta functions on its Fermi surface.
+GammaLoop localizes each one by rescaling the loop momentum and inserting the normalized
+positive-scale profile configured in
+#link("reference/cli/settings/runtime/h-function/")[`runtime.h_function`]. Integrated results do
+not depend on that profile, but pointwise values do, so fix it explicitly when comparing
+sampled values. The #source-link("tests/resources/run_cards/fermi_surface_1l_integration.toml", label: "one-loop Fermi-surface run card")
+integrates such a contribution.
+
+#callout("Medium-mode restrictions", [
+  - Only amplitudes are supported; `generate xs` is rejected in either medium mode or with
+    vacuum subtraction, and vacuum subtraction requires a medium mode.
+  - Threshold subtraction is rejected in either medium mode. Its
+    #link("reference/cli/settings/cli/global/generation/threshold-subtraction/#setting-cli-global-generation-threshold-subtraction-enable-thresholds-39fd8091d536c278")[`enable_thresholds`]
+    setting defaults to `true`, so set it to `false`.
+  - Local UV counterterms must be built in three dimensions;
+    #link("reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-local-uv-cts-from-expanded-4d-integrands-7def650172e108c5")[`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true`]
+    is rejected.
+  - Zero-temperature step functions whose boundaries move with a localized loop momentum are
+    rejected.
+  - Standalone evaluator export rejects processes with Fermi-surface localization; keep the
+    saved process state instead.
+  - The standalone evaluator of the diagnostic `3Drep` command rejects medium expressions;
+    evaluate generated integrands instead.
+])
+
 == From generation to evaluation
 
 A reproducible run keeps its stages explicit:

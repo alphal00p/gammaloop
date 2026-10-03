@@ -73,8 +73,11 @@ sample, adapt, copy descendants, or alter the production RNG sequence.
 
 The alternate screen is entered lazily on the first update. Before a canonical tabled summary
 is printed, the controller synchronously suspends the dashboard and waits until the dashboard
-thread has restored the terminal. Shutdown follows the same acknowledged path. Drop handlers
-attempt cleanup as a final safeguard, and the event loop disables raw mode on exit.
+thread has restored the terminal. Shutdown follows the same acknowledged path. A panic during
+integration is caught at the command boundary: the controller shuts the dashboard down through
+that path and returns the panic message as an ordinary command error, so the message is not
+lost on the alternate screen. Drop handlers attempt cleanup as a final safeguard, and the event
+loop disables raw mode on exit.
 
 `Ctrl-C` requests integration interruption; `x` requests aborting the current iteration. Other
 keys only mutate dashboard view state: tab and slot selection, discrete-row sorting, metric
@@ -87,7 +90,7 @@ The maintained checks cover command parsing, keyboard action mapping, overview/s
 global versus focused statistics, chart phase and history behavior, ETA display, discrete-bin
 detail, max-weight formatting, and narrow terminal layouts. Changes to status fields must update
 both renderers and their fixtures; changes to terminal lifecycle must retain cleanup on normal
-shutdown, suspension, interruption, and error paths.
+shutdown, suspension, interruption, error, and panic paths.
 
 The old plan proposed features and recorded intermediate states. It is available as the
 #link("ratatui-integration-dashboard-history.typ")[archived dashboard implementation history],

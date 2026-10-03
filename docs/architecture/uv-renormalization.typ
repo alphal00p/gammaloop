@@ -244,6 +244,11 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
+- The parametric orchestrator receives the full generation settings so
+  wood construction can see the medium. It rejects
+  `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
+  subtraction; their thermal-weight ownership is documented in
+  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

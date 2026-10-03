@@ -13,6 +13,9 @@ use symbolica::{
 
 use crate::symbols::{S, sign};
 
+/// The vacuum, or an equilibrium medium whose distribution functions weight CFF terms.
+/// Temperature and chemical potentials stay symbolic; `ZeroTemperatureEquilibrium`
+/// takes the zero-temperature limit of the distributions.
 #[derive(
     Debug,
     Clone,

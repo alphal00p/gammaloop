@@ -81,7 +81,8 @@ pub struct RuntimeSettings {
     /// Local and integrated threshold/ultraviolet subtraction controls.
     #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
-    /// Damping profile shared by Local Unitarity threshold terms.
+    /// Damping profile shared by Local Unitarity threshold terms; it also localizes
+    /// zero-temperature Fermi-surface distributions.
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
 }

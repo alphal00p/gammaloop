@@ -559,7 +559,9 @@ Every evaluator receives the auxiliary numerator sampling scale `M` as an input,
 
 Binary64 reporting may round exponentially suppressed, fully weighted components
 to zero. Numerical factors are combined before this rounding so a compensating
-factor cannot hide a meaningful contribution. For an averaged stability result,
+factor cannot hide a meaningful contribution. UV profiling applies its scaling
+measure after native evaluation, so stability bounds include that measure as part
+of the full weight. For an averaged stability result,
 the mean absolute fully weighted probe value can establish underflow below the
 smallest normal binary64 value. This bound stays separate for each component and
 observable; an imaginary scale cannot excuse a meaningful real discrepancy.

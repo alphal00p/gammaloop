@@ -42,7 +42,9 @@ anchor = "load_state_manifest(&save_path)?"
 # ownership are documented in architecture-current.typ.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
+# No architecture impact 2026-10-03: the state-load test also checks reloaded
+# model values and coupling slots; State::load and persistence are unchanged.
+digest = "a98ab8e49709e53d3c55b79ede6311f61b689a8a"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -54,7 +56,10 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-03: integration panics become command errors after dashboard
+# shutdown, as documented in ratatui-integration-dashboard.typ; workspace paths
+# and persistence are unchanged.
+digest = "2f53bfb849a91b886ed5895d270df0341689370c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -89,7 +94,12 @@ anchor = "pub fn warm_up(&mut self, model"
 # warm-up and numerical preparation retain their existing ownership.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "175b2d6e4d117b737887425692af2a433ff748b5"
+# Reviewed 2026-10-03: UV profile measures enter stability bounds, as documented
+# in architecture-current.typ, and LMB multichanneling accepts an empty external
+# basis; warm-up and numerical preparation ownership are unchanged.
+# Reviewed 2026-10-03: the module now declares process::fermi_surface, whose
+# zero-temperature localization is documented in architecture-current.typ.
+digest = "d34a4c6168d0b1678d4fee4c9b0c83a81e346fd1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -172,7 +182,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-03: a panic during integration shuts the dashboard down through
+# the acknowledged path before its message is returned; the event loop is unchanged.
+digest = "2f53bfb849a91b886ed5895d270df0341689370c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -214,7 +226,10 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
 # Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
-digest = "584255e4a7b014c585988265f946c730605e861a"
+# Reviewed 2026-10-03: the orchestrator takes full generation settings and rejects
+# expanded-4D local counterterms for medium modes and vacuum subtraction, as
+# documented in Current Boundaries; backend selection is unchanged.
+digest = "a573be12ef39e2ca9b4b5c89cad0ce9cf5a596ca"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -651,7 +666,7 @@ kind = "Correctness investigation"
 status = "Historical fix record"
 lifecycle = "archived"
 owner = "unassigned"
-evidence_revision = "2fde2185a5989b08f702083b5f58567a3dc3486f"
+evidence_revision = "5a1ece22b3a1d0dbc6f3dc7ac00579aea8ba9130"
 products = ["gammaloop", "spenso"]
 topics = ["thermal", "evaluation", "precision"]
 

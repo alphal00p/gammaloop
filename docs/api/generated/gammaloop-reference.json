@@ -15236,6 +15236,36 @@
           "possible_values": []
         },
         {
+          "id": "allow_vanishing_missing_fits",
+          "long": "allow-vanishing-missing-fits",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Accept missing power-law fits when the sampled limit vanishes",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
           "id": "seed",
           "long": "seed",
           "short": null,
@@ -16216,6 +16246,36 @@
           "value_required": false,
           "value_names": [],
           "help": "Suppress the formatted expression summary unless orientation details are requested",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "no_numerator",
+          "long": "no-numerator",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Hide the numerator in the CFF structure table",
           "required": false,
           "positional": false,
           "index": null,
@@ -17685,7 +17745,7 @@
       "value_type": "string",
       "description": "External C++ compiler executable used by C++ and assembly modes.",
       "required": false,
-      "default": "g++",
+      "default": "clang++",
       "possible_values": []
     },
     {
@@ -17700,6 +17760,14 @@
       "path": "cli.global.generation.compile.fast_math",
       "value_type": "boolean",
       "description": "Permit algebraic floating-point transformations that ignore strict IEEE ordering.",
+      "required": false,
+      "default": true,
+      "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.compile.jit_direct_translation",
+      "value_type": "boolean",
+      "description": "Translate Symbolica instructions directly to SymJIT IR during JIT compilation.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17907,6 +17975,26 @@
       "description": "Explicit particle-name sets forced to define graph cuts.",
       "required": false,
       "default": [],
+      "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.medium.mode",
+      "value_type": "MediumMode",
+      "description": "`vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its\n`zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.",
+      "required": false,
+      "default": "vacuum",
+      "possible_values": [
+        "thermodynamic_equilibrium",
+        "vacuum",
+        "zero_temperature_equilibrium"
+      ]
+    },
+    {
+      "path": "cli.global.generation.medium.vacuum_subtraction",
+      "value_type": "boolean",
+      "description": "Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;\nrequires a non-vacuum mode.",
+      "required": false,
+      "default": false,
       "possible_values": []
     },
     {
@@ -18528,6 +18616,14 @@
         "none",
         "picobarn"
       ]
+    },
+    {
+      "path": "runtime.general.inverse_temperature",
+      "value_type": "number",
+      "description": "Inverse temperature used to evaluate thermal distribution functions.",
+      "required": false,
+      "default": 1.0,
+      "possible_values": []
     },
     {
       "path": "runtime.general.load_compiled_cff",
