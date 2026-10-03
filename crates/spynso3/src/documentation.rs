@@ -454,12 +454,22 @@ pairs; equally preferred alternatives raise an ambiguity error. Established
 matrix channels retain their composition order. Use outer(), contract_ports(),
 or compose() to make the intended pairing explicit.
 
+Automatic dot notation requires both operands to be calls to rank-one-tagged
+heads, created with TensorName.vector(). Rank alone does not select a dot:
+generic rank-one tensors and composite expressions retain their indexed
+contractions. Use contract() to pack them into Schoonschip notation, or dot()
+to request a scalar-product notation explicitly.
+
 Examples
 --------
 >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
 >>> space = Representation.euc(2)
 >>> A = TensorName("M")(space, space)
->>> result = A * 2"###
+>>> result = A * 2
+>>> from symbolica.community.tensor import dot
+>>> p = TensorName.vector("product_p")(space)
+>>> q = TensorName.vector("product_q")(space)
+>>> assert p * q == dot(p, q)"###
     };
     ("TensorExpression.__rmul__") => {
         r###"Implement reflected multiplication.
@@ -483,6 +493,9 @@ pairings, unresolved-unresolved pairs take precedence over unresolved-named
 pairs; equally preferred alternatives raise an ambiguity error. Established
 matrix channels retain their composition order. Use outer(), contract_ports(),
 or compose() to make the intended pairing explicit.
+
+Automatic dot notation follows __mul__(): both operands must be calls to
+rank-one-tagged heads created with TensorName.vector().
 
 Examples
 --------

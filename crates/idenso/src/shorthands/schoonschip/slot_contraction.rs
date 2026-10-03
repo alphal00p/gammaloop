@@ -580,9 +580,6 @@ impl SlotContraction {
             }
             let result = match factor {
                 AtomView::Fun(function) => {
-                    if !self.metrics && function.get_symbol() == self.metric {
-                        continue;
-                    }
                     self.replace_function(function, source, replacement, chain_like, false, slots)
                 }
                 AtomView::Add(_) => {

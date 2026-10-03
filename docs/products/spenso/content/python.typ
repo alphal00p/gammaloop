@@ -32,6 +32,11 @@ indices, or `result.scalar()` when no free indices remain. Call `network.execute
 when you want to update the network itself and inspect its progress.
 
 For symbolic calculations, work with `p` before supplying component values.
+Multiplication automatically uses dot notation for two vector heads declared with
+`TensorName.vector()`. A generic tensor or composite expression with one free
+axis keeps its indexed contraction instead; `contract()` packs compatible vector
+contractions into Schoonschip notation. Choose `dot()` explicitly or use
+`to_dots()` to convert a compact scalar metric contraction.
 For reusable numerical definitions, register `vector` in a `TensorLibrary` and
 pass that library when evaluating an expression. Each method's reference entry
 includes a runnable example followed by its parameter descriptions. The same

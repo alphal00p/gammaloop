@@ -6189,7 +6189,9 @@ class TensorExpression(Expression):
             matrix without applying a gamma identity. False retains those connections.
         collect_chains : bool, default True
             Represent connected matrix products as ordered chains without evaluating
-            their matrices. False retains the indexed factors for open products.
+            their matrices, including words with supplied rank-one endpoints.
+            Supplied endpoints do not add external axes. False retains the indexed
+            factors for open products.
         collect_traces : bool, default True
             Represent compatible closed matrix products as unevaluated traces.
             False retains indexed closure, including when collect_chains=True.
@@ -6301,6 +6303,16 @@ class TensorExpression(Expression):
         >>> assert collected.undo_trace().undo_chain().contract() == collected
         >>> uncollected = word.contract(collect_traces=False)
         >>> assert uncollected.contract() == collected
+
+        A supplied spinor remains attached when collecting an open gamma word.
+        Only the unresolved spinor slot remains an external axis.
+
+        >>> spinor = sp.Representation.bis(4)
+        >>> psi = sp.TensorName.vector("contract_docs::psi")(spinor)
+        >>> word = psi("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", sp.AUTO, "nu") * p("nu")
+        >>> collected = word.contract()
+        >>> assert collected.rank == 1
+        >>> assert collected.contract() == collected
 
         A closed color delta gives N_c without any color-algebra identity. An empty
         filter retains this product, and an unrelated scalar power remains factored.
@@ -6900,12 +6912,22 @@ class TensorExpression(Expression):
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
+        Automatic dot notation requires both operands to be calls to rank-one-tagged
+        heads, created with TensorName.vector(). Rank alone does not select a dot:
+        generic rank-one tensors and composite expressions retain their indexed
+        contractions. Use contract() to pack them into Schoonschip notation, or dot()
+        to request a scalar-product notation explicitly.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> result = A * 2
+        >>> from symbolica.community.tensor import dot
+        >>> p = TensorName.vector("product_p")(space)
+        >>> q = TensorName.vector("product_q")(space)
+        >>> assert p * q == dot(p, q)
         """
     @typing.overload
     def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork:
@@ -6932,12 +6954,22 @@ class TensorExpression(Expression):
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
+        Automatic dot notation requires both operands to be calls to rank-one-tagged
+        heads, created with TensorName.vector(). Rank alone does not select a dot:
+        generic rank-one tensors and composite expressions retain their indexed
+        contractions. Use contract() to pack them into Schoonschip notation, or dot()
+        to request a scalar-product notation explicitly.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> result = A * 2
+        >>> from symbolica.community.tensor import dot
+        >>> p = TensorName.vector("product_p")(space)
+        >>> q = TensorName.vector("product_q")(space)
+        >>> assert p * q == dot(p, q)
         """
     @typing.overload
     def __rmul__(self, lhs: TensorExpression | _ScalarInput) -> TensorExpression:
@@ -6963,6 +6995,9 @@ class TensorExpression(Expression):
         pairs; equally preferred alternatives raise an ambiguity error. Established
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
+
+        Automatic dot notation follows __mul__(): both operands must be calls to
+        rank-one-tagged heads created with TensorName.vector().
 
         Examples
         --------
@@ -6995,6 +7030,9 @@ class TensorExpression(Expression):
         pairs; equally preferred alternatives raise an ambiguity error. Established
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
+
+        Automatic dot notation follows __mul__(): both operands must be calls to
+        rank-one-tagged heads created with TensorName.vector().
 
         Examples
         --------
