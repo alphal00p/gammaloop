@@ -1877,23 +1877,16 @@ impl SymbolicTensor<PartialStructure> {
         }
         let materialized_left = self.materialize_interface_ports(&left_indices)?;
         let materialized_right = right.materialize_interface_ports(&right_indices)?;
-        let atom = if self.rank() == 1 && right.rank() == 1 {
-            // Preserve the established compact dot spelling; the parser performs
-            // the same shared-dummy materialization represented above.
-            let compact_left = rewrite_interface_ports(
-                self,
-                &HashMap::from([(0, left_slots[0].rep().to_symbolic([]))]),
-                None,
-            )?;
-            let compact_right = rewrite_interface_ports(
-                right,
-                &HashMap::from([(0, right_slots[0].rep().to_symbolic([]))]),
-                None,
-            )?;
-            FunctionBuilder::new(SPENSO_TAG.dot)
-                .add_arg(compact_left)
-                .add_arg(compact_right)
-                .finish()
+        let atom = if self.rank() == 1
+            && right.rank() == 1
+            && [self, right].into_iter().all(|operand| {
+                matches!(operand.expression.as_view(), AtomView::Fun(vector)
+                    if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
+            }) {
+            // Only declared vector heads choose dot notation automatically.
+            // A composite with one surviving axis retains its indexed factors;
+            // the structural contractor can pack them into Schoonschip notation.
+            self.compact_dot_expression(right)?
         } else {
             SymbolicTensor::bracket_product(
                 materialized_left.as_view(),
@@ -1902,6 +1895,21 @@ impl SymbolicTensor<PartialStructure> {
         };
         validate_explicit_index_occurrences(&atom)?;
         SymbolicTensor::new(atom, interface).validate_rewrite(&[self, right])
+    }
+
+    fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
+        let compact = |operand: &Self| {
+            let slot = operand.structure.logical_slots()[0];
+            rewrite_interface_ports(
+                operand,
+                &HashMap::from([(0, slot.rep().to_symbolic([]))]),
+                None,
+            )
+        };
+        Ok(FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(compact(self)?)
+            .add_arg(compact(right)?)
+            .finish())
     }
 
     pub fn chain_factors(
@@ -2408,6 +2416,10 @@ mod tests {
         )
     }
 
+    fn vector(name: &str, port: PartialSlot) -> SymbolicTensor<PartialStructure> {
+        partial_tensor(SPENSO_TAG.rank_one_tensor_symbol(name), &[port], &[port])
+    }
+
     fn factor_slots(atom: &Atom, symbol: Symbol) -> Vec<Slot<LibraryRep, AbstractIndex>> {
         let factors = match atom.as_view() {
             AtomView::Fun(product) if product.get_symbol() == SPENSO_TAG.bracket => {
@@ -2832,8 +2844,8 @@ mod tests {
             assert!(result.is_scalar());
             assert_eq!(
                 *calls.lock().unwrap(),
-                [port_atom(right_port), rep().to_symbolic([])],
-                "only the actual port substitution and compact-dot construction invoke the callback"
+                [port_atom(right_port)],
+                "only the actual port substitution invokes the untagged tensor's callback"
             );
         }
     }
@@ -3482,9 +3494,97 @@ mod tests {
     }
 
     #[test]
+    fn automatic_dot_requires_tagged_vector_heads() {
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(68101)));
+        let tagged = vector("automatic_dot_tagged", port);
+        let other_tagged = vector("automatic_dot_other_tagged", port);
+        let untagged = partial_tensor(
+            SPENSO_TAG.tensor_symbol("automatic_dot_untagged"),
+            &[port],
+            &[port],
+        );
+        let other_untagged = partial_tensor(
+            SPENSO_TAG.tensor_symbol("automatic_dot_other_untagged"),
+            &[port],
+            &[port],
+        );
+        for (left, right, uses_dot) in [
+            (&tagged, &other_tagged, true),
+            (&tagged, &untagged, false),
+            (&untagged, &tagged, false),
+            (&untagged, &other_untagged, false),
+        ] {
+            let result = left.multiply(right).unwrap();
+            assert!(result.is_scalar());
+            assert_eq!(result.expression.contains_symbol(SPENSO_TAG.dot), uses_dot);
+            let network = result
+                .expression
+                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert!(network.state.is_scalar());
+            assert!(network.graph.dangling_indices().is_empty());
+            let explicit = left.dot(right).unwrap();
+            assert!(explicit.expression.contains_symbol(SPENSO_TAG.dot));
+            let network = explicit
+                .expression
+                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert!(network.state.is_scalar());
+        }
+    }
+
+    #[test]
+    fn metric_vector_multiplication_orders_keep_schoonschip_operands() {
+        let rep: Representation<LibraryRep> = crate::test_support::test_initialize().mink4.cast();
+        let mu = rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(68102)));
+        let nu = rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(68103)));
+        let p = vector("metric_order_tagged_p", mu);
+        let q = vector("metric_order_tagged_q", nu);
+        let metric = SymbolicTensor::infer(spenso::g!(port_atom(mu), port_atom(nu))).unwrap();
+        let compact_vector = |value: &SymbolicTensor<PartialStructure>| {
+            rewrite_interface_ports(value, &HashMap::from([(0, rep.to_symbolic([]))]), None)
+                .unwrap()
+        };
+        let expected = spenso::g!(compact_vector(&p), compact_vector(&q));
+        let factors = [&metric, &p, &q];
+        let mut common = None;
+        for [a, b, c] in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            let product = factors[a]
+                .multiply(factors[b])
+                .unwrap()
+                .multiply(factors[c])
+                .unwrap();
+            assert!(product.is_scalar());
+            assert!(!product.expression.contains_symbol(SPENSO_TAG.dot));
+            if let Some(common) = &common {
+                assert_eq!(&product, common);
+            } else {
+                common = Some(product.clone());
+            }
+            for metrics in [false, true] {
+                let settings = crate::tensor::ContractSettings {
+                    metrics,
+                    ..Default::default()
+                };
+                let result = product.contract(settings).unwrap();
+                assert_eq!(result.expression, expected);
+                assert!(result.is_scalar());
+                assert_eq!(result.contract(settings).unwrap(), result);
+            }
+        }
+    }
+
+    #[test]
     fn rank_one_product_uses_dot() {
-        let left = tensor("rank_one_product_left", &[rep()]);
-        let right = tensor("rank_one_product_right", &[rep()]);
+        let left = vector("rank_one_product_left", rep().slot(PartialIndex::open(0)));
+        let right = vector("rank_one_product_right", rep().slot(PartialIndex::open(0)));
         let result = SymbolicTensor::multiply(&left, &right).unwrap();
 
         assert!(result.is_scalar());
@@ -3497,8 +3597,8 @@ mod tests {
     fn explicit_rank_one_contraction_keeps_compact_dot_syntax() {
         let index = AbstractIndex::Normal(7);
         let port = rep().slot(PartialIndex::Explicit(index));
-        let left_symbol = SPENSO_TAG.tensor_symbol("explicit_dot_left");
-        let right_symbol = SPENSO_TAG.tensor_symbol("explicit_dot_right");
+        let left_symbol = SPENSO_TAG.rank_one_tensor_symbol("explicit_dot_left");
+        let right_symbol = SPENSO_TAG.rank_one_tensor_symbol("explicit_dot_right");
         let left = partial_tensor(left_symbol, &[port], &[port]);
         let right = partial_tensor(right_symbol, &[port], &[port]);
         let result =
@@ -3530,8 +3630,8 @@ mod tests {
     fn dual_rank_one_dot_materializes_with_opposite_orientations() {
         let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
         let dual = base.dual();
-        let left = tensor("dual_dot_left", &[base]);
-        let right = tensor("dual_dot_right", &[dual]);
+        let left = vector("dual_dot_left", base.slot(PartialIndex::open(0)));
+        let right = vector("dual_dot_right", dual.slot(PartialIndex::open(0)));
         let result = SymbolicTensor::multiply(&left, &right).unwrap();
 
         assert!(

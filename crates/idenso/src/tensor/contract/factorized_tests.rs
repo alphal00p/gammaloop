@@ -37,6 +37,36 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 }
 
 #[test]
+fn disabled_metric_elimination_preserves_supplied_vectors() {
+    use crate::tensor::ContractSettings;
+    setup();
+    let settings = ContractSettings {
+        metrics: false,
+        ..Default::default()
+    };
+    for (source, expected) in [
+        (
+            "spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))",
+            "spenso::g(p(spenso::mink(4)),spenso::mink(4,nu))",
+        ),
+        (
+            "spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))",
+            "spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))",
+        ),
+        (
+            "(x+y)^7*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))",
+            "(x+y)^7*spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))",
+        ),
+    ] {
+        let source = SymbolicTensor::infer(input(source)).unwrap();
+        let result = source.contract(settings).unwrap();
+        assert_eq!(result.expression, input(expected));
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(result.contract(settings).unwrap(), result);
+    }
+}
+
+#[test]
 fn contraction_forwards_observations_after_normalization_and_ordered_rewriting() {
     use crate::tensor::{ContractSettings, SELECTED_OPENS};
     setup();

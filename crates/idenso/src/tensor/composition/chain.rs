@@ -93,7 +93,8 @@ impl SymbolicTensor<PartialStructure> {
         value.validate_rewrite(&[self])
     }
 
-    /// Contract the sole port of two rank-one tensors.
+    /// Explicitly choose dot notation for the sole ports of two rank-one tensors.
+    /// Unlike automatic multiplication, this does not require rank-one head tags.
     pub fn dot(&self, right: &Self) -> Result<Self, TensorCompositionError> {
         if self.rank() != 1 || right.rank() != 1 {
             return Err(TensorCompositionError::InvalidResultInterface(format!(
@@ -102,7 +103,18 @@ impl SymbolicTensor<PartialStructure> {
                 right.rank()
             )));
         }
-        self.contract_ports(right, &[PortPair { left: 0, right: 0 }])
+        super::shared_index(
+            self.structure.logical_slots()[0],
+            right.structure.logical_slots()[0],
+            PortPair { left: 0, right: 0 },
+        )?;
+        let atom = if self.expression.is_zero() || right.expression.is_zero() {
+            Atom::Zero
+        } else {
+            self.compact_dot_expression(right)?
+        };
+        super::validate_explicit_index_occurrences(&atom)?;
+        Self::new(atom, PartialStructure::from_logical_slots([])).validate_rewrite(&[self, right])
     }
 
     /// Present one selected channel first while retaining spectator-port order.
