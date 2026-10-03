@@ -67,6 +67,15 @@
     let ancestor = svg.parentElement;
     while (ancestor) {
       if (ancestor.localName === 'iframe') frames.push(ancestor);
+      /* A notebook scrollbar must not change the width used to calculate
+         the graph's height: near the output limit that alternates forever
+         between a wide, overflowing graph and a narrow graph that fits. */
+      if (ancestor.ownerDocument !== document) {
+        const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+        if (['auto', 'scroll'].includes(style.overflowY) && style.scrollbarGutter === 'auto') {
+          ancestor.style.scrollbarGutter = 'stable';
+        }
+      }
       observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ['class', 'data-theme', 'data-jp-theme-light'] });
       if (ancestor.parentElement) ancestor = ancestor.parentElement;
       else {
@@ -80,13 +89,14 @@
         /* Measure content rather than the viewport: Marimo's own iframe
            observer grows outputs but deliberately does not shrink them. */
         document.documentElement.style.overflow = 'hidden';
+        frame.style.display = 'block';
         resizeFrame = () => {
           if (!svg.isConnected) { resize.disconnect(); return; }
           const style = getComputedStyle(document.body);
           const contents = document.createRange();
           contents.selectNodeContents(document.body);
           const bottom = contents.getBoundingClientRect().bottom + window.scrollY;
-          const height = Math.ceil(bottom + parseFloat(style.paddingBottom) + parseFloat(style.marginBottom) + 6);
+          const height = Math.ceil(bottom + parseFloat(style.paddingBottom) + parseFloat(style.marginBottom));
           frame.style.height = height + 'px';
         };
         resize = new ResizeObserver(resizeFrame);
