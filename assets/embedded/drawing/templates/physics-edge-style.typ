@@ -3,10 +3,8 @@
 // Keep documented defaults here. The implementation lives in
 // `impl/physics-edge-style.typ` and takes explicit values/options.
 
-#import "@preview/mitex:0.2.6" as mitex
 #import "impl/physics-edge-style.typ" as _impl
 
-#let mi = mitex.mi
 
 /// GammaLoop's default neutral and charged-particle paints.
 /// -> dictionary
@@ -121,28 +119,28 @@
 #let _photon = (
   source: source-stroke(c: palette.ink, thickness: massless) + wave,
   sink: sink-stroke(c: palette.ink, thickness: massless) + wave,
-  label: mi(`{\gamma}`),
+  label: $ gamma $,
 )
 #let _gluon = (
   source: source-stroke(c: palette.ink, thickness: massless) + coil,
   sink: sink-stroke(c: palette.ink, thickness: massless) + coil,
-  label: mi(`{g}`),
+  label: $ g $,
 )
 #let _fermion = (
   source: source-stroke(c: palette.accent, thickness: massless),
   sink: sink-stroke(c: palette.accent, thickness: massless),
   fermion-arrow: true,
-  label: mi(`{f}`),
+  label: $ f $,
 )
 #let _scalar = (
   source: source-stroke(c: palette.ink, thickness: massive, dash: dashed),
   sink: sink-stroke(c: palette.ink, thickness: massive, dash: dashed),
-  label: mi(`{\phi}`),
+  label: $ phi $,
 )
 #let _ghost = (
   source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
   sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
-  label: mi(`{c}`),
+  label: $ c $,
 )
 
 /// Small model-neutral particle map for standalone physics diagrams. Common
@@ -157,15 +155,15 @@
   "g": _gluon,
   "gluon": _gluon,
   "fermion": _fermion,
-  "anti-fermion": _fermion + (label: mi(`{\bar f}`)),
-  "e-": _fermion + (label: mi(`{e^-}`)),
-  "e+": _fermion + (label: mi(`{e^+}`)),
-  "mu-": _fermion + (label: mi(`{\mu^-}`)),
-  "mu+": _fermion + (label: mi(`{\mu^+}`)),
-  "tau-": _fermion + (label: mi(`{\tau^-}`)),
-  "tau+": _fermion + (label: mi(`{\tau^+}`)),
-  "q": _fermion + (label: mi(`{q}`)),
-  "qbar": _fermion + (label: mi(`{\bar q}`)),
+  "anti-fermion": _fermion + (label: $ overline(f) $),
+  "e-": _fermion + (label: $ e^(-) $),
+  "e+": _fermion + (label: $ e^(+) $),
+  "mu-": _fermion + (label: $ mu^(-) $),
+  "mu+": _fermion + (label: $ mu^(+) $),
+  "tau-": _fermion + (label: $ tau^(-) $),
+  "tau+": _fermion + (label: $ tau^(+) $),
+  "q": _fermion + (label: $ q $),
+  "qbar": _fermion + (label: $ overline(q) $),
   "scalar": _scalar,
   "ghost": _ghost,
 )
@@ -217,7 +215,6 @@
 #let text-value(value) = str(value).trim("\"")
 
 #let eval-scope(map: default-map) = (
-  mi: mi,
   palette: palette,
   node-style: node-style,
   massive: massive,

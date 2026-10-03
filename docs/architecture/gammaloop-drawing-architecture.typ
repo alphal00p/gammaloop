@@ -37,7 +37,7 @@ rendering run has these steps:
 + `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
    incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
    Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
-   and oxifmt 1.0.0, stages them with the graph spec, and invokes `typst-py` 0.15.0 directly. It has
+   oxifmt 1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst compiler. It has
    no Clinnet library dependency and does not discover or launch a Typst executable.
 + Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
    statically import the selected template and each referenced user module once, materialize the

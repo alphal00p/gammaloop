@@ -1298,17 +1298,40 @@ pub enum PolType {
     EpsilonBar,
 }
 
+impl From<PolType> for feynkit_kinematics::WavefunctionKind {
+    fn from(value: PolType) -> Self {
+        match value {
+            PolType::Scalar => Self::Scalar,
+            PolType::Epsilon => Self::Epsilon,
+            PolType::EpsilonBar => Self::EpsilonBar,
+            PolType::U => Self::U,
+            PolType::UBar => Self::UBar,
+            PolType::V => Self::V,
+            PolType::VBar => Self::VBar,
+        }
+    }
+}
+
+impl From<feynkit_kinematics::WavefunctionKind> for PolType {
+    fn from(value: feynkit_kinematics::WavefunctionKind) -> Self {
+        use feynkit_kinematics::WavefunctionKind as Kind;
+        match value {
+            Kind::Scalar => Self::Scalar,
+            Kind::Epsilon => Self::Epsilon,
+            Kind::EpsilonBar => Self::EpsilonBar,
+            Kind::U => Self::U,
+            Kind::UBar => Self::UBar,
+            Kind::V => Self::V,
+            Kind::VBar => Self::VBar,
+        }
+    }
+}
+
 impl PolType {
     pub(crate) fn bar(self) -> Self {
-        match self {
-            Self::Epsilon => Self::EpsilonBar,
-            Self::Scalar => Self::Scalar,
-            Self::U => Self::UBar,
-            Self::UBar => Self::U,
-            Self::EpsilonBar => Self::Epsilon,
-            Self::VBar => Self::V,
-            Self::V => Self::VBar,
-        }
+        feynkit_kinematics::WavefunctionKind::from(self)
+            .bar()
+            .into()
     }
 }
 
@@ -1829,108 +1852,42 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         }
     }
 
-    pub(crate) fn pol_one(&self) -> [F<T>; 4]
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
+    fn external_state_momentum(&self) -> feynkit_kinematics::FourMomentum<F<T>> {
+        feynkit_kinematics::FourMomentum::from_args(
+            self.temporal.value.clone(),
+            self.spatial.px.clone(),
+            self.spatial.py.clone(),
+            self.spatial.pz.clone(),
+        )
+    }
 
-        // debug!("pol_one in: {}", self);
+    pub(crate) fn pol_one(&self) -> [F<T>; 4] {
+        self.external_state_momentum().transverse_basis()[0].clone()
+    }
 
-        let pt = self.pt();
-        let p = self.spatial.norm();
+    pub(crate) fn pol_two(&self) -> [F<T>; 4] {
+        self.external_state_momentum().transverse_basis()[1].clone()
+    }
 
-        let (e1, e2, e3) = if pt.is_zero() {
-            (pt.one(), pt.zero(), pt.zero())
-        } else {
-            (
-                &self.spatial.px * &self.spatial.pz / (&pt * &p),
-                &self.spatial.py * &self.spatial.pz / (&pt * &p),
-                -(&pt / &p),
+    pub(crate) fn pol_three(&self) -> Polarization<F<T>> {
+        let state = self
+            .external_state_momentum()
+            .wavefunction(
+                feynkit_kinematics::WavefunctionKind::Epsilon,
+                feynkit_kinematics::Helicity::ZERO,
             )
-        };
-
-        // debug!(
-        //     " (pt.zero(), e1, e2, e3) {} {} {} {}",
-        //     pt.zero(),
-        //     e1,
-        //     e2,
-        //     e3
-        // );
-        [pt.zero(), e1, e2, e3]
-
-        // debug!("pol :{pol}");
-    }
-
-    pub(crate) fn pol_two(&self) -> [F<T>; 4]
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
-        let pt = self.pt();
-        let (e1, e2, e3) = if pt.is_zero() {
-            if self.spatial.pz.positive() {
-                (pt.zero(), pt.one(), pt.zero())
-            } else {
-                (pt.zero(), -pt.one(), pt.zero())
-            }
-        } else {
-            (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
-        };
-        [pt.zero(), e1, e2, e3]
-    }
-
-    pub(crate) fn pol_three(&self) -> Polarization<F<T>>
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
-        let m = self.norm();
-        let p = self.spatial.norm();
-        let emp = &self.temporal.value / (&m * &p);
-        let e0 = p / &m;
-        let e1 = &self.spatial.px * &emp;
-        let e2 = &self.spatial.py * &emp;
-        let e3 = &self.spatial.pz * &emp;
-
-        Polarization::lorentz([e0, e1, e2, e3])
+            .expect("undefined longitudinal external state");
+        Polarization::lorentz(std::array::from_fn(|i| state.components()[i].re.clone()))
     }
 
     pub(crate) fn eps_pol<Hel: Into<Helicity>>(&self, lambda: Hel) -> Polarization<Complex<F<T>>> {
         match lambda.into() {
-            Helicity::Signed(lambda) => {
-                if lambda.is_zero() {
-                    self.pol_three().cast()
-                } else {
-                    let one = self.temporal.value.one();
-                    let sqrt_2_inv: F<T> = (&one + &one).sqrt().inv();
-
-                    let [eone0, eone1, eone2, eone3] = self.pol_one();
-
-                    let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
-
-                    let components = [
-                        Complex {
-                            re: -lambda * eone0 * &sqrt_2_inv,
-                            im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
-                        },
-                        Complex {
-                            re: -lambda * eone1 * &sqrt_2_inv,
-                            im: -etwo1 * &sqrt_2_inv,
-                        },
-                        Complex {
-                            re: -lambda * eone2 * &sqrt_2_inv,
-                            im: -etwo2 * &sqrt_2_inv,
-                        },
-                        Complex {
-                            re: -lambda * eone3 * &sqrt_2_inv,
-                            im: -etwo3 * &sqrt_2_inv,
-                        },
-                    ];
-
-                    Polarization::lorentz(components)
-                }
-            }
+            Helicity::Signed(lambda) => Polarization::from_external_state(
+                self.external_state_momentum()
+                    .wavefunction(feynkit_kinematics::WavefunctionKind::Epsilon, lambda.into())
+                    .expect("invalid vector external state"),
+            ),
+            // Summation is a runtime policy; retain the existing zero placeholder.
             _ => {
                 let zero = self.temporal.value.zero();
                 let cmpz = Complex::new_re(zero);
@@ -1940,78 +1897,76 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     }
 
     pub(crate) fn omega(&self, lambda: Sign) -> Complex<F<T>> {
-        match lambda {
-            Sign::Positive => (&self.temporal.value + self.spatial.norm()).complex_sqrt(),
-            Sign::Negative => (&self.temporal.value - self.spatial.norm()).complex_sqrt(),
-        }
+        let value = self.external_state_momentum().spinor_energy_factor(lambda);
+        Complex::new(value.re, value.im)
     }
 
     pub(crate) fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let xi = self.xi(lambda);
-        Polarization::bispinor_u([
-            self.omega(-lambda) * &xi[0],
-            self.omega(-lambda) * &xi[1],
-            self.omega(lambda) * &xi[0],
-            self.omega(lambda) * &xi[1],
-        ])
+        Polarization::from_external_state(
+            self.external_state_momentum()
+                .wavefunction(feynkit_kinematics::WavefunctionKind::U, lambda.into())
+                .expect("invalid u external state"),
+        )
     }
 
     pub(crate) fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let xi = self.xi(-lambda);
-        Polarization::bispinor_v([
-            (-lambda) * self.omega(lambda) * &xi[0],
-            (-lambda) * self.omega(lambda) * &xi[1],
-            lambda * self.omega(-lambda) * &xi[0],
-            lambda * self.omega(-lambda) * &xi[1],
-        ])
+        Polarization::from_external_state(
+            self.external_state_momentum()
+                .wavefunction(feynkit_kinematics::WavefunctionKind::V, lambda.into())
+                .expect("invalid v external state"),
+        )
     }
 
     pub(crate) fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
-        if (self.spatial.pz < self.spatial.pz.zero()
-            && self.spatial.py.is_zero()
-            && self.spatial.px.is_zero())
-            || (self.spatial.pz == -self.spatial.norm())
-        {
-            let zero: Complex<F<T>> = self.temporal.value.zero().into();
-            let one = zero.one();
-            // We are defining using madgraph conventions not helas, taking py =0 and the limit px =0 from below
-            match lambda {
-                Sign::Positive => [zero, -one],
-                Sign::Negative => [one, zero],
-            }
-        } else {
-            let prefactor: F<T> = ((F::from_f64(2.)
-                * self.spatial.norm()
-                * (self.spatial.norm() + &self.spatial.pz))
-                .sqrt())
-            .inv();
-            let mut xi: [Complex<F<T>>; 2] = [
-                Complex::new_re(&prefactor * (self.spatial.norm() + &self.spatial.pz)),
-                Complex::new(self.spatial.px.clone(), self.spatial.py.clone()) * &prefactor,
-            ]; //plus
-
-            if matches!(lambda, Sign::Negative) {
-                xi.swap(0, 1);
-                xi[0].re = -xi[0].re.clone();
-            }
-            xi
-        }
+        self.external_state_momentum()
+            .helicity_spinor(lambda)
+            .map(|value| Complex::new(value.re, value.im))
     }
 }
 
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
-    pub(crate) fn bar(&self) -> Self {
-        let mut tensor = self.tensor.map_data_ref(Complex::conj);
-
-        if matches!(
-            self.pol_type,
-            PolType::U | PolType::V | PolType::UBar | PolType::VBar
-        ) {
-            tensor.data.swap(0, 2);
-            tensor.data.swap(1, 3);
+    /// Adapt the shared numerical state to GammaLoop's existing tensor storage.
+    fn from_external_state(state: feynkit_kinematics::Wavefunction<F<T>>) -> Self {
+        let kind = state.kind();
+        let data = state
+            .into_components()
+            .into_iter()
+            .map(|value| Complex::new(value.re, value.im))
+            .collect();
+        let structure = if kind == feynkit_kinematics::WavefunctionKind::Scalar {
+            IndexLess::new(vec![])
+        } else if kind.is_spinor() {
+            IndexLess::new(vec![GR.bis.new_rep(4)])
+        } else {
+            IndexLess::new(vec![Minkowski {}.new_rep(4).cast()])
+        };
+        Self {
+            tensor: DenseTensor { data, structure },
+            pol_type: kind.into(),
         }
-        Polarization {
-            tensor,
+    }
+
+    pub(crate) fn bar(&self) -> Self {
+        let state = feynkit_kinematics::Wavefunction::from_components(
+            self.pol_type.into(),
+            self.tensor
+                .data
+                .iter()
+                .map(|value| SymComplex::new(value.re.clone(), value.im.clone()))
+                .collect(),
+        )
+        .expect("invalid external wavefunction components")
+        .bar();
+        // Preserve the original tensor representation and serialized PolType layout.
+        Self {
+            tensor: DenseTensor {
+                data: state
+                    .into_components()
+                    .into_iter()
+                    .map(|value| Complex::new(value.re, value.im))
+                    .collect(),
+                structure: self.tensor.structure.clone(),
+            },
             pol_type: self.pol_type.bar(),
         }
     }
