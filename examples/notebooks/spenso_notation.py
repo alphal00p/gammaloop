@@ -47,16 +47,20 @@ def _(mo):
     mo.md(r"""
     # Reading Spenso tensor notation
 
-    A tensor has **axes in specified representations**, optionally with index
-    labels. Its display can keep those labels, expose unresolved ports, or show
-    vectors already contracted into its axes. This notebook uses the actual
-    Spenso printers throughout; the examples remain editable tensor expressions.
+    A tensor has **indices in specified vector spaces**, described by Spenso's
+    representations. The examples below explain ordinary index notation,
+    Schoonschip notation for vector contractions, scalar products and Dirac
+    matrices. They use the actual Spenso printers and remain editable expressions.
+
+    Spenso also has its own display conventions for unassigned and contracted
+    indices. In its API, a **port** is a tensor axis that can be connected to
+    another tensor. The shapes below indicate what has happened to that axis.
 
     **Reading key:** a letter is an index label; a hollow **□** is an unresolved
     port; a filled **●**, **■**, **◀︎** or **▶︎** marks a port supplied with a vector.
     Supplied ports are contracted and do not count towards the result's rank.
-    A slash denotes a Dirac contraction, brackets an ordered matrix word, and
-    `Tr` a closed matrix word.
+    A slash denotes a Dirac contraction, brackets an ordered matrix product, and
+    `Tr` a matrix trace.
 
     Display settings change presentation. Calling `contract()` changes the
     symbolic notation while preserving the represented tensor. Calling
@@ -202,20 +206,28 @@ def _(A, AUTO, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3. Alphabets, graph identities and scoped copies
+    ## 3. Index alphabets, graph-derived indices and independent copies
 
     The default alphabet display gives generated Lorentz indices Greek letters
     and bispinor indices Latin letters. These letters label axes; their position
     follows the representation's display convention. In particular, the two
     lower bispinor labels on a gamma matrix mean its row and column axes.
 
-    Graph mode exposes graph identities, and raw mode exposes the stored labels.
-    All three views below display the **same tensor**. Dimensions can be included
-    when the representation or its size needs to be visible.
+    A Feynman-diagram numerator can use **indices derived from its graph**.
+    For example, `hedge(2, 1)` identifies half-edge 2 and local index label 1.
+    A half-edge is one endpoint of an edge; the label records where an index
+    comes from, rather than a coordinate of a tensor component.
 
-    Primed labels distinguish indices wrapped in a separate scope. Scoping
-    prevents accidental contraction between independent copies, such as a
-    numerator and its conjugate; **a prime does not itself mean conjugation**.
+    `index_style="graph"` displays these graph-derived labels in an abbreviated
+    form. `index_style="raw"` displays the stored index expressions. The default
+    `index_style="alphabet"` gives them readable letters. All three views below
+    display the **same tensor**, with the same index connections. Dimensions can
+    be included when the vector space or its size needs to be visible.
+
+    `wrap_indices(scope)` gives a copy's indices a separate namespace. Primed
+    labels show this separation and prevent accidental contractions between
+    independent copies, such as a numerator and its conjugate.
+    **A prime does not itself mean conjugation.**
     """)
     return
 
@@ -233,13 +245,13 @@ def _(DisplaySettings, S, gamma, mo, notation, p):
                     mo.vstack([mo.md("**Alphabet**"), notation(_indexed)]),
                     mo.vstack(
                         [
-                            mo.md("**Graph**"),
+                            mo.md("**Graph-derived labels**"),
                             notation(_indexed, DisplaySettings(index_style="graph")),
                         ]
                     ),
                     mo.vstack(
                         [
-                            mo.md("**Raw**"),
+                            mo.md("**Stored index expressions**"),
                             notation(_indexed, DisplaySettings(index_style="raw")),
                         ]
                     ),
@@ -264,14 +276,30 @@ def _(DisplaySettings, S, gamma, mo, notation, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4. Dots and ordinary multiplication
+    ## 4. Scalar products in Schoonschip and dot notation
 
-    A dot is a **complete scalar contraction**. In Minkowski space,
-    $p\cdot q=g_{\mu\nu}p^\mu q^\nu$. Multiplying two unresolved vectors has
-    an unambiguous pairing and creates this scalar product. Assigning the same
-    explicit index requests the corresponding Einstein contraction.
+    **Schoonschip notation** writes a vector in the position of an index
+    contracted with that vector. For example,
+    $T(p,\nu)=\sum_\mu T_{\mu\nu}p^\mu$. This is the convention described in
+    [A. Heck, *FORM for Pedestrians*, §1.2.2, pp. 9–10](https://www.nikhef.nl/~form/maindir/documentation/tutorial/book.pdf#page=14).
 
-    Two dots next to one another mean a product of scalars,
+    Applying it to both indices of the Minkowski metric gives
+
+    $$g(p,q)=\sum_{\mu,\nu}g_{\mu\nu}p^\mu q^\nu=p\cdot q.$$
+
+    In the first live display below, Spenso shows the metric with both vectors
+    contracted into its indices: the vectors appear in a bra and markers keep
+    track of the contracted positions. The second live display shows that
+    expression after `to_dots()`, using $p\cdot q$. They mean the **same scalar
+    product**. The foldout compares explicit indices and the other display settings.
+
+    `contract(metrics=False)` retains the metric and substitutes the vectors
+    into its indices. `to_dots()` then changes $g(p,q)$ into $p\cdot q$.
+    Multiplying two unresolved vectors, `p * q`, directly creates this scalar
+    product too. Assigning the same explicit index requests its Einstein
+    contraction; it does not select a tensor component.
+
+    Two scalar products next to one another mean their ordinary product,
     $(p\cdot q)(p\cdot p)$. The small gap separates the factors; the dots
     inside them retain their ordinary spacing. Different free labels, as in
     $p^\mu q^\nu$, leave a rank-two tensor. They do not form a dot.
@@ -280,24 +308,75 @@ def _(mo):
 
 
 @app.cell
-def _(dot, mo, p, q):
+def _(DisplaySettings, TensorExpression, dot, lorentz, mo, notation, p, q):
     _scalar = p * q
     _explicit = (p("mu") * q("mu")).contract().to_dots()
+    _metric_product = (
+        TensorExpression.g(lorentz("mu"), lorentz("nu")) * p("mu") * q("nu")
+    ).contract(metrics=False)
+    _dotted = _metric_product.to_dots()
     _product = (p * q) * (p * p)
     _free = p("mu") * q("nu")
-    assert _scalar.rank == _explicit.rank == _product.rank == 0
+    assert _scalar.rank == _explicit.rank == _metric_product.rank == _product.rank == 0
     assert _free.rank == 2
-    assert _scalar == dot(p, q)
-    mo.hstack(
+    assert _scalar == _explicit == _dotted == dot(p, q)
+    assert (
+        _metric_product.to_tensor().scalar() - _dotted.to_tensor().scalar()
+    ).expand() == 0
+    mo.vstack(
         [
-            mo.vstack([mo.md("**`p * q`**"), _scalar]),
-            mo.vstack(
-                [mo.md('**`(p("mu") * q("mu")).contract().to_dots()`**'), _explicit]
+            mo.hstack(
+                [
+                    mo.vstack(
+                        [
+                            mo.md(
+                                "**Schoonschip contraction: Spenso's default display**"
+                            ),
+                            _metric_product,
+                        ]
+                    ),
+                    mo.vstack([mo.md("**Dot: `metric_product.to_dots()`**"), _dotted]),
+                ],
+                wrap=True,
+                align="start",
             ),
-            mo.vstack([mo.md("**`(p * q) * (p * p)`**"), _product]),
-            mo.vstack([mo.md('**`p("mu") * q("nu")`**'), _free]),
-        ],
-        wrap=True,
+            mo.accordion(
+                {
+                    "Explicit indices and alternative display settings": mo.hstack(
+                        [
+                            mo.vstack(
+                                [mo.md("**Explicit indices**"), _dotted.undo_dots()]
+                            ),
+                            mo.vstack(
+                                [
+                                    mo.md("**Schoonschip: vector arguments**"),
+                                    notation(_metric_product, DisplaySettings.call()),
+                                ]
+                            ),
+                            mo.vstack(
+                                [
+                                    mo.md("**Schoonschip: index positions**"),
+                                    notation(
+                                        _metric_product, DisplaySettings.schoonschip()
+                                    ),
+                                ]
+                            ),
+                        ],
+                        wrap=True,
+                        align="start",
+                    )
+                }
+            ),
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("**Product of scalar products**"), _product]),
+                    mo.vstack(
+                        [mo.md('**Two free indices: `p("mu") * q("nu")`**'), _free]
+                    ),
+                ],
+                wrap=True,
+            ),
+        ]
     )
     return
 
@@ -335,7 +414,7 @@ def _(TensorExpression, lorentz, mo, p):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 6. Supplied ports: filled shapes and bra/ket notation
+    ## 6. Vectors contracted into tensor indices
 
     Contracting a vector into an axis can be written as a tensor with that vector
     in its argument, or as a bra/ket around the tensor. For example,
@@ -343,12 +422,13 @@ def _(mo):
     A bra/ket here records which vectors supply ports; it does not by itself
     apply complex conjugation.
 
-    A filled marker keeps the occupied port's position visible:
+    Spenso uses a filled marker to keep the contracted index's position visible.
+    These shapes are display conventions of the library:
 
-    | Marker | Supplied axis |
+    | Spenso marker | Contracted index |
     | --- | --- |
-    | **●** | A self-dual representation, including the bispinor space |
-    | **■** | A representation with an inline metric, including Minkowski space |
+    | **●** | A space Spenso treats as self-dual, including its bispinor space |
+    | **■** | Minkowski space, whose metric is included in the contraction |
     | **◀︎** | The ket orientation of a dualizable representation |
     | **▶︎** | The bra orientation of a dualizable representation |
     | **□** | An unresolved external port; no vector has been supplied |
@@ -369,9 +449,9 @@ def _(A, AUTO, B, Q, Symbol, mo, p):
     assert generic_compact.rank == _bra.rank == 1
     mo.hstack(
         [
-            mo.vstack([mo.md("**Generic tensor, indexed**"), generic_source]),
-            mo.vstack([mo.md("**Generic tensor, supplied ports**"), generic_compact]),
-            mo.vstack([mo.md("**One supplied Minkowski vector**"), _bra]),
+            mo.vstack([mo.md("**Explicitly indexed factors**"), generic_source]),
+            mo.vstack([mo.md("**After vector contractions**"), generic_compact]),
+            mo.vstack([mo.md("**One contracted Minkowski vector**"), _bra]),
         ],
         wrap=True,
         align="start",
@@ -405,7 +485,7 @@ def _(AUTO, Q, Symbol, gamma, mo, p):
     mo.hstack(
         [
             mo.vstack([mo.md("**Slash, two open spinor ports**"), _slash]),
-            mo.vstack([mo.md("**Slash with a supplied row spinor**"), joined]),
+            mo.vstack([mo.md("**After contracting the row spinor Q**"), joined]),
         ],
         wrap=True,
     )
@@ -417,13 +497,14 @@ def _(mo):
     mo.md(r"""
     ## 8. Ordered chains and traces
 
-    $[\not p\,\not q]_{ac}$ is the matrix word
+    $[\not p\,\not q]_{ac}$ is the ordered matrix product
     $\sum_b(\not p)_{ab}(\not q)_{bc}$. Square brackets group the ordered
     factors. Swapping them generally changes the tensor. With a supplied row
     spinor, $\langle Q|[\not p\,\not q]$ retains one open spinor port.
 
-    `Tr` closes the matrix channel: $\operatorname{Tr}(\gamma^\mu\gamma^\nu)$
-    sums both spinor indices, while the two Lorentz indices remain free.
+    A trace sums the matrix product's row and column indices:
+    $\operatorname{Tr}(\gamma^\mu\gamma^\nu)$ sums the spinor indices,
+    while the two Lorentz indices remain free.
     **A matrix trace is not necessarily a scalar tensor.** `contract()` collects
     the trace; `simplify_algebra(color=False)` evaluates its Dirac identity,
     here $\operatorname{Tr}(\gamma^\mu\gamma^\nu)=4g^{\mu\nu}$.
@@ -443,8 +524,10 @@ def _(AUTO, Q, gamma, mo, p, q):
     assert _closed.rank == _evaluated.rank == 2
     mo.hstack(
         [
-            mo.vstack([mo.md("**Supplied open chain**"), chain_compact]),
-            mo.vstack([mo.md("**Collected trace**"), _closed]),
+            mo.vstack(
+                [mo.md("**Open matrix product with Q contracted**"), chain_compact]
+            ),
+            mo.vstack([mo.md("**Unevaluated trace**"), _closed]),
             mo.vstack([mo.md("**Evaluated trace**"), _evaluated]),
         ],
         wrap=True,
@@ -455,13 +538,16 @@ def _(AUTO, Q, gamma, mo, p, q):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 9. Ports, Schoonschip and call layouts
+    ## 9. Displaying contracted vectors
 
-    Ports layout is the default: supplied vectors appear in a bra/ket and
-    occupied axes have filled markers. Schoonschip layout writes supplied
-    vectors compactly as tensor arguments. Call layout shows the head and its
-    arguments explicitly. These are three presentations of the **same
-    contracted tensor**, with the same remaining external axis.
+    Schoonschip notation describes the contraction: a vector replaces the
+    index contracted with it. Spenso's display settings choose how to print it.
+
+    The default `ports` setting shows contracted vectors in a bra/ket, with
+    markers at their former index positions. `schoonschip` places bold vector
+    heads in those index positions. `call` writes the tensor with its index
+    labels and contracted vectors as function arguments. These are three
+    presentations of the **same tensor**, with the same remaining free index.
 
     Use `to_html(settings=...)` or `to_svg(settings=...)` for alternative layouts.
     `to_typst()` continues to provide pure Typst source for the ports layout.
@@ -473,15 +559,20 @@ def _(mo):
 def _(DisplaySettings, generic_compact, mo, notation):
     mo.hstack(
         [
-            mo.vstack([mo.md("**Ports**"), notation(generic_compact)]),
+            mo.vstack(
+                [mo.md("**Indices and bra/ket (`ports`)**"), notation(generic_compact)]
+            ),
             mo.vstack(
                 [
-                    mo.md("**Schoonschip**"),
+                    mo.md("**Vectors in index positions (`schoonschip`)**"),
                     notation(generic_compact, DisplaySettings.schoonschip()),
                 ]
             ),
             mo.vstack(
-                [mo.md("**Call**"), notation(generic_compact, DisplaySettings.call())]
+                [
+                    mo.md("**Vector arguments (`call`)**"),
+                    notation(generic_compact, DisplaySettings.call()),
+                ]
             ),
         ],
         wrap=True,
@@ -636,8 +727,8 @@ def _(mo):
     mo.md(r"""
     ## 13. Contraction changes notation, not components or tensor type
 
-    The checks below evaluate the generic tensor and the Dirac word before and
-    after `contract()`. Every component agrees. The contracted expressions
+    The checks below evaluate the generic tensor and the Dirac matrix product
+    before and after `contract()`. Every component agrees. The contracted expressions
     remain `TensorExpression` objects, so further tensor operations can be
     called directly.
 
