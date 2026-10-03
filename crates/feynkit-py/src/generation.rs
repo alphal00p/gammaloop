@@ -1744,9 +1744,9 @@ impl PySnailFilterOptions {
 /// ----------
 /// mode : {"none", "zeroes", "identical", "up_to_sign", "up_to_scalar"}
 ///     Disable parsing/grouping, detect only zeroes, or compare numerators
-///     exactly, up to a sign, or up to a scalar factor. The ``zeroes`` mode uses signed
-///     tensor symmetries and exact factor cancellation, retaining unproved zeros
-///     without expanding color traces or Lorentz numerators.
+///     exactly, up to a sign, or up to a scalar factor. The ``zeroes`` mode uses color
+///     algebra and exact factor cancellation, retaining unproved zeros
+///     without expanding Lorentz numerators or comparing diagram topologies.
 /// numerical_sample_seed : int, optional
 ///     Deterministic seed used to choose numerical substitution values.
 /// number_of_numerical_samples : int, optional
@@ -1787,9 +1787,9 @@ impl PyNumeratorGrouping {
     /// ----------
     /// mode : {"none", "zeroes", "identical", "up_to_sign", "up_to_scalar"}
     ///     Disable parsing/grouping, detect only zeroes, or compare numerators
-    ///     exactly, up to a sign, or up to a scalar factor. The ``zeroes`` mode uses signed
-    ///     tensor symmetries and exact factor cancellation, retaining unproved zeros
-    ///     without expanding color traces or Lorentz numerators.
+    ///     exactly, up to a sign, or up to a scalar factor. The ``zeroes`` mode uses color
+    ///     algebra and exact factor cancellation, retaining unproved zeros
+    ///     without expanding Lorentz numerators or comparing diagram topologies.
     /// numerical_sample_seed : int, optional
     ///     Deterministic seed used to choose numerical substitution values.
     /// number_of_numerical_samples : int, optional
