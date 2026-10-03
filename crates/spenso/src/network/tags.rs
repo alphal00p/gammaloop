@@ -471,12 +471,38 @@ fn representation_value(argument: AtomView<'_>) -> Option<RepresentationValue<'_
     })
 }
 
+fn supplied_port(
+    representation: RepresentationValue<'_>,
+    backend: SpensoPrintBackend,
+) -> &'static str {
+    // Filled shapes retain the representation and polarity of a supplied
+    // argument; unresolved AUTO positions use a hollow square instead.
+    match representation.class {
+        RepresentationClass::InlineMetric => match backend {
+            SpensoPrintBackend::Latex => r"\blacksquare",
+            _ => "■",
+        },
+        RepresentationClass::SelfDual => match backend {
+            SpensoPrintBackend::Latex => r"\bullet",
+            _ => "●",
+        },
+        RepresentationClass::Dualizable => match (backend, representation.polarity) {
+            (SpensoPrintBackend::Typst, CompactPolarity::Bra) => "triangle.filled.r",
+            (SpensoPrintBackend::Typst, CompactPolarity::Ket) => "triangle.filled.l",
+            (SpensoPrintBackend::Latex, CompactPolarity::Bra) => r"\blacktriangleright",
+            (SpensoPrintBackend::Latex, CompactPolarity::Ket) => r"\blacktriangleleft",
+            (SpensoPrintBackend::Plain, CompactPolarity::Bra) => "▶︎",
+            (SpensoPrintBackend::Plain, CompactPolarity::Ket) => "◀︎",
+        },
+    }
+}
+
 fn qualified_typst_port(
     representation: RepresentationValue<'_>,
     settings: SpensoPrintSettings,
     options: &PrintOptions,
 ) -> Option<String> {
-    let port = "○";
+    let port = supplied_port(representation, SpensoPrintBackend::Typst);
     if !settings.with_dim {
         return Some(port.to_owned());
     }

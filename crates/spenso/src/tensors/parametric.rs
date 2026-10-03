@@ -3196,7 +3196,7 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     where
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = Complex::new_zero();
 
         let mut elements = vec![zero; self.size];
         self.eval.evaluate(params, &mut elements);
@@ -3241,6 +3241,40 @@ pub mod test {
     };
 
     use super::MixedTensor;
+
+    #[test]
+    fn evaluate_components_restores_sparse_batched_outputs() {
+        use super::EvalTensor;
+        use crate::structure::representation::Euclidean;
+
+        let structure: OrderedStructure =
+            Canonicalized::from_iter([Euclidean {}.new_slot(4, 0)]).into_canonical();
+        let mut tensor = EvalTensor {
+            eval: (),
+            indexmap: Some(vec![2.into(), 0.into()]),
+            structure,
+        };
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| {
+            assert_eq!(out.len(), 2);
+            out[0] = vec![2.0, 3.0, 4.0];
+            out[1] = vec![5.0, 6.0, 7.0];
+        });
+        let DataTensor::Sparse(output) = output else {
+            panic!("sparse evaluator must preserve sparse output");
+        };
+        assert_eq!(output.zero, vec![0.0; 3]);
+        assert_eq!(output.elements[&2.into()], vec![2.0, 3.0, 4.0]);
+        assert_eq!(output.elements[&0.into()], vec![5.0, 6.0, 7.0]);
+        assert!(!output.elements.contains_key(&1.into()));
+
+        tensor.indexmap = Some(Vec::new());
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| assert!(out.is_empty()));
+        let DataTensor::Sparse(output) = output else {
+            panic!("empty sparse evaluator must remain sparse");
+        };
+        assert!(output.elements.is_empty());
+        assert_eq!(output.zero, vec![0.0; 3]);
+    }
 
     #[test]
     fn grouped_atom_multi_contraction_preserves_metric_permutations_and_factors() {
