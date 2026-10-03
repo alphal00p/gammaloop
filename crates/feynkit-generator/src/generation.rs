@@ -1753,24 +1753,25 @@ impl Generator {
             comparison_diagrams.push(pair.comparison);
             representatives.push((pair.representative, pair.reversed_edges));
         }
-        let grouped = if options.cancellation_requested() {
+        let grouping = if options.cancellation_requested() {
             completed = false;
-            grouping::group_diagrams(
-                comparison_diagrams,
-                &self.model,
-                &NumeratorGrouping::None,
-                options.symmetrizes_left_right(),
-                options,
-            )?
+            &NumeratorGrouping::None
         } else {
+            &options.numerator_grouping
+        };
+        let group = || {
             grouping::group_diagrams(
                 comparison_diagrams,
                 &self.model,
-                &options.numerator_grouping,
+                grouping,
                 options.symmetrizes_left_right(),
                 options,
-            )?
+            )
         };
+        #[cfg(target_arch = "wasm32")]
+        let grouped = group()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let grouped = pool.install(group)?;
         if options.cancellation_requested() {
             completed = false;
         }
@@ -5721,6 +5722,37 @@ mod tests {
                 assert_eq!(serial.ratio, parallel.ratio);
                 assert_eq!(serial.overall_factor, parallel.overall_factor);
             }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn zero_detection_uses_the_requested_generation_pool() {
+        for threads in [1, 4] {
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let sink = observed.clone();
+            let options = GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
+                .threads(threads)
+                .numerator_grouping(NumeratorGrouping::OnlyDetectZeroes)
+                .progress(move |progress| {
+                    if progress.stage == "grouping_preparation" && progress.completed > 0 {
+                        sink.lock().unwrap().push(rayon::current_num_threads());
+                    }
+                    crate::GenerationControl::Continue
+                });
+            let generated = Generator::new(Model::yang_mills())
+                .generate(
+                    &Process::new(["g"], ["g"]),
+                    &options,
+                    GenerationType::Amplitude,
+                )
+                .unwrap();
+            assert!(generated.report.completed);
+            let observed = observed.lock().unwrap();
+            assert!(!observed.is_empty());
+            assert!(observed.iter().all(|&actual| actual == threads));
         }
     }
 
