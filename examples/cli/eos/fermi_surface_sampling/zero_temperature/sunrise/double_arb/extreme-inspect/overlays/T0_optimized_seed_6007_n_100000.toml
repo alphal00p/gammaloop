@@ -1,0 +1,23 @@
+[general]
+inverse_temperature = 1.0
+[integrator]
+seed = 6007
+n_start = 10000
+n_increase = 0
+n_max = 100000
+[sampling]
+default_channel_selection = ["auto:optimized_lmb"]
+power = 2.0
+sampling_channel_weight = "map_density"
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1e-10
+required_precision_for_im = 1e-10
+escalate_for_large_weight_threshold = 0.9
+
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1e-05
+required_precision_for_im = 1e-05
+escalate_for_large_weight_threshold = -1.0

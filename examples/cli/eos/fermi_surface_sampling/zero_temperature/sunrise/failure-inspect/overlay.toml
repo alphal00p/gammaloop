@@ -1,0 +1,11 @@
+[general]
+inverse_temperature = 1.0
+[integrator]
+seed = 4517
+n_start = 10000
+n_increase = 0
+n_max = 100000
+[sampling]
+default_channel_selection = ["auto:optimized_lmb", "fermi_pair"]
+power = 2.0
+sampling_channel_weight = "map_density"

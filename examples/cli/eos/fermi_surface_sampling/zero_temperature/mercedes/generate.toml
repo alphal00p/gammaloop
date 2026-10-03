@@ -1,0 +1,135 @@
+commands = [
+  "import model sm-default.json",
+  "generate amp {} > {} [{3}] | g b\n            --numerator-grouping group_identical_graphs_up_to_scalar_rescaling\n            --max-n-bridges 0\n            --number-of-factorized-loop-subtopologies 1 1\n            --number-of-fermion-loops 1 1\n            --only-diagrams\n            --select-graphs GL1\n            -p quark_mercedes\n            -i 3L\n    ",
+  "generate",
+  "save state -o",
+  "display integrand -p quark_mercedes -i 3L --show-sampling pretty"
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = true
+debug_cache = false
+inverse_temperature = 10.0
+m_uv = 1.0
+renormalization_localization_scale = 2.0
+mu_r = 2.0
+
+[default_runtime_settings.model]
+aS = [1.0, 0.0]
+muB = [3.0, 0.0]
+MB = [0.0, 0.0]
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.medium]
+mode = "zero_temperature_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+softct = false
+generate_integrated = true
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = false
+unsafe_math = false
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 1
+compile = 10
+integrate = 1
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+do_algebra = true
+do_fn_map_replacements = false
+horner_iterations = 1
+n_cores = 1
+abort_level = 0
+max_horner_scheme_variables = 500
+max_common_pair_cache_entries = 10000000
+max_common_pair_distance = 1000
+verbose = true
+direct_translation = true
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+
+# [cli_settings.global.generation.orientation_pattern]
+# pat = "(+,-,+,+,+,+)"
+
+# Disable thresholds with
+#[cli_settings.global.generation.threshold_subtraction]
+#enable_thresholds = false
+#[default_runtime_settings.subtraction]
+#disable_threshold_subtraction = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[cli_settings.global.log_style]
+include_fields = false
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = true
+loop_momenta_norm_escalation_factor = 100.0
+rotation_axis = [
+  { type = "x" },
+  { type = "z" },
+]
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-10
+required_precision_for_im = 1.0e-10
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[default_runtime_settings.h_function]
+function = "poly_exponential"
+sigma = 1.0
+power = 0

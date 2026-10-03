@@ -1,0 +1,3220 @@
+{
+  "metadata": {
+    "example": "sunrise",
+    "zero_temperature": true,
+    "arb_only": false,
+    "skip_quad": true,
+    "revision": "8ec568b6c736da6ccb7900569923ab3f6e1a0578",
+    "binary": "/nix/store/njc53dp8y78m625s5q7g1qjvmvwq8hci-gammaloop-api-0.1.0/bin/gammaloop",
+    "binary_sha256": "6f6b105ce11efb450ea541861ad0aa662ac1dab18bb868e94d1db4f39edac376",
+    "host": "itphlies",
+    "cpu_affinity": null,
+    "samples": 100000,
+    "iterations": 10,
+    "workers": 1,
+    "generation_card_sha256": "46cd827515cc5ba092c6641cbbf972d08bd05784de04aa1d2ad0454ec23e8f5c",
+    "sampling_overlay": "",
+    "reference": "User-supplied exact-T=0 targets (2026-10-03)",
+    "generation_wall_seconds": 3.5780469151213765,
+    "cpu_affinities": [
+      150,
+      151,
+      152,
+      153,
+      154
+    ],
+    "execution": "Five concurrent one-worker seed batches, each pinned to a separate CPU"
+  },
+  "runs": [
+    {
+      "beta": null,
+      "seed": 1337,
+      "mode": "optimized_fermi",
+      "target": -0.016125767216599744,
+      "value": -0.015348662544970925,
+      "error": 0.00039486084853743815,
+      "pull": 1.9680469069222981,
+      "relative_error": 0.024486329439939537,
+      "wall_seconds": 55.08262135600671,
+      "cpu_seconds": 54.632287,
+      "variance_times_wall": 8.58821185005737e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2824,
+              "result": {
+                "re": 0.0,
+                "im": -0.015348662544970925
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.00039486084853743815
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 7.053313424154737
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.015348662544970925,
+                "error": 0.00039486084853743815,
+                "relative_error_percent": 2.572607530985275,
+                "chi_sq_per_dof": 0.7053313424154737,
+                "target_delta_sigma": 1.9680469069222981,
+                "target_delta_percent": 4.819024491615342,
+                "max_weight_impact": 0.006009529585444252
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000535402,
+              "average_parameterization_time_seconds": 0.000376758,
+              "average_integrand_time_seconds": 0.000135637,
+              "average_evaluator_time_seconds": 0.000113686,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.388e-06,
+              "f64_percentage": 88.802,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.198,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 9.223824166100284,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n5.7927896648825061e-01 8.4404318402900702e-01 4.3281667815264502e-01\n6.5493366495144911e-01 8.9497577593870414e-01 5.7778235726477345e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -3.038324299087682,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.1684647229686262e-01 2.3824347065148282e-01 5.9684049678198781e-01\n5.9613659127514862e-01 1.9968602590849205e-01 4.6954224920456494e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.1764945328873262,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 20032
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2001743786112861,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 20030
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.27222578461144636,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 26914
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.35110530388994143,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 33024
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.1764945328873262,
+                    "value": -0.007221110468527501,
+                    "error": 0.00015380471705660467,
+                    "chi_sq": 3.1423845377156265,
+                    "processed_samples": 20032
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2001743786112861,
+                    "value": -0.007218506579472449,
+                    "error": 0.0001744490340948813,
+                    "chi_sq": 4.8316454654232,
+                    "processed_samples": 20030
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.27222578461144636,
+                    "value": 0.00018645421719752712,
+                    "error": 0.00020466233085624853,
+                    "chi_sq": 4.411086926266922,
+                    "processed_samples": 26914
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.35110530388994143,
+                    "value": -0.0011654697007191467,
+                    "error": 0.00023829714612293927,
+                    "chi_sq": 10.514075731362226,
+                    "processed_samples": 33024
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2824,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07417104509560007
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0003213361763630879
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 8.375337448080927
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07417104509560007,
+                  "error": 0.0003213361763630879,
+                  "relative_error_percent": 0.4332366841385521,
+                  "chi_sq_per_dof": 0.8375337448080927,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0012435882700872788
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 9.223824166100284,
+                  "coordinates": "graph: 0, sampling channel: 1, xs: [\n5.7927896648825061e-01 8.4404318402900702e-01 4.3281667815264502e-01\n6.5493366495144911e-01 8.9497577593870414e-01 5.7778235726477345e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.1764945328873262,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 20032
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2001743786112861,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 20030
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.27222578461144636,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 26914
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.35110530388994143,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 33024
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.1764945328873262,
+                      "value": 0.013857561393011114,
+                      "error": 0.00012912140383969825,
+                      "chi_sq": 4.29900819113368,
+                      "processed_samples": 20032
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2001743786112861,
+                      "value": 0.013691719559339063,
+                      "error": 0.00015386502936143276,
+                      "chi_sq": 6.381807691045992,
+                      "processed_samples": 20030
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.27222578461144636,
+                      "value": 0.019390552550070907,
+                      "error": 0.00016708458484834016,
+                      "chi_sq": 9.72182663909075,
+                      "processed_samples": 26914
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.35110530388994143,
+                      "value": 0.027203692434779148,
+                      "error": 0.00018551765442270486,
+                      "chi_sq": 4.973883145629294,
+                      "processed_samples": 33024
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 1337,
+      "mode": "optimized",
+      "target": -0.016125767216599744,
+      "value": -0.016074685042006768,
+      "error": 0.00039779612760057525,
+      "pull": 0.128412950877862,
+      "relative_error": 0.024668353589470577,
+      "wall_seconds": 18.66387216700241,
+      "cpu_seconds": 18.512986999999995,
+      "variance_times_wall": 2.9534039639588075e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2979,
+              "result": {
+                "re": 0.0,
+                "im": -0.016074685042006768
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.00039779612760057525
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 4.06746412039962
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.016074685042006768,
+                "error": 0.00039779612760057525,
+                "relative_error_percent": 2.4746744745607425,
+                "chi_sq_per_dof": 0.40674641203996204,
+                "target_delta_sigma": 0.128412950877862,
+                "target_delta_percent": 0.3167736077722416,
+                "max_weight_impact": 0.0016608203279645133
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000173864,
+              "average_parameterization_time_seconds": 2.7644e-05,
+              "average_integrand_time_seconds": 0.000129344,
+              "average_evaluator_time_seconds": 0.000110512,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.287e-06,
+              "f64_percentage": 88.742,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.258,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.3804848391826083,
+                "coordinates": "graph: 0, sampling channel: 0, xs: [\n4.8694973971709898e-01 1.2895506259208700e-01 2.9435835363220542e-01\n9.5220528747037858e-01 6.1946978132142760e-01 7.9829019113010635e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.6697163683391936,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n9.7925510982803265e-01 6.6328696910788587e-01 9.6901309460568252e-01\n4.9927428441387145e-01 7.4805789620053109e-01 9.5359849038775446e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.27802781620195005,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 29270
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.26483232801235695,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 27933
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.457139855785693,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 42797
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.27802781620195005,
+                    "value": -0.00916725265868722,
+                    "error": 0.00020127441612516862,
+                    "chi_sq": 7.529286225911768,
+                    "processed_samples": 29270
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.26483232801235695,
+                    "value": -0.00954522604874226,
+                    "error": 0.0001962565910009001,
+                    "chi_sq": 6.341868120586213,
+                    "processed_samples": 27933
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.457139855785693,
+                    "value": 0.0026011369537961254,
+                    "error": 0.0002736854861055389,
+                    "chi_sq": 5.0548756628329485,
+                    "processed_samples": 42797
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2979,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07378325737107796
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.000326167909029384
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 9.525646693942235
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07378325737107796,
+                  "error": 0.000326167909029384,
+                  "relative_error_percent": 0.44206222475241025,
+                  "chi_sq_per_dof": 0.9525646693942236,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.00036183227245069913
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 2.6697163683391936,
+                  "coordinates": "graph: 0, sampling channel: 2, xs: [\n9.7925510982803265e-01 6.6328696910788587e-01 9.6901309460568252e-01\n4.9927428441387145e-01 7.4805789620053109e-01 9.5359849038775446e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.27802781620195005,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 29270
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.26483232801235695,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 27933
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.457139855785693,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 42797
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.27802781620195005,
+                      "value": 0.020954656396962375,
+                      "error": 0.00016846512314634988,
+                      "chi_sq": 8.571455372039054,
+                      "processed_samples": 29270
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.26483232801235695,
+                      "value": 0.02063926235683269,
+                      "error": 0.00016287409091537985,
+                      "chi_sq": 6.608800691424904,
+                      "processed_samples": 27933
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.457139855785693,
+                      "value": 0.03213154527632483,
+                      "error": 0.0002256928141756615,
+                      "chi_sq": 8.542613282190587,
+                      "processed_samples": 42797
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 2843,
+      "mode": "optimized_fermi",
+      "target": -0.016125767216599744,
+      "value": -0.015872738093777206,
+      "error": 0.00038823413688451137,
+      "pull": 0.6517436226835654,
+      "relative_error": 0.024075390129957106,
+      "wall_seconds": 55.33001162484288,
+      "cpu_seconds": 54.880027999999996,
+      "variance_times_wall": 8.3396572253625e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2852,
+              "result": {
+                "re": 0.0,
+                "im": -0.015872738093777206
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.00038823413688451137
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 4.960878768209845
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.015872738093777206,
+                "error": 0.00038823413688451137,
+                "relative_error_percent": 2.445917866160192,
+                "chi_sq_per_dof": 0.49608787682098454,
+                "target_delta_sigma": 0.6517436226835654,
+                "target_delta_percent": 1.5690981980818401,
+                "max_weight_impact": 0.0028221380321653807
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000538003,
+              "average_parameterization_time_seconds": 0.000377806,
+              "average_integrand_time_seconds": 0.000136817,
+              "average_evaluator_time_seconds": 0.000114726,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.369e-06,
+              "f64_percentage": 88.75699999999999,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.243,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 1.2891246136026906,
+                "coordinates": "graph: 0, sampling channel: 3, xs: [\n3.6463649363586281e-01 4.2847867049998867e-01 3.3625186915236360e-01\n8.9175261037986142e-01 9.2519414415997581e-01 6.4766962641241654e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -4.479505784904887,
+                "coordinates": "graph: 0, sampling channel: 0, xs: [\n6.0154125893223942e-01 2.1268423447212181e-01 8.2970560394033199e-01\n5.6757587724913472e-01 7.0117639827274769e-01 4.6121670362195361e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.18965841125108243,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 20480
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.17992620127136957,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 19908
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.2737693877245159,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 26548
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.356645999753032,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 33064
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.18965841125108243,
+                    "value": -0.007347062024663555,
+                    "error": 0.00016157456536514643,
+                    "chi_sq": 13.539426110294812,
+                    "processed_samples": 20480
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.17992620127136957,
+                    "value": -0.0072915109630539085,
+                    "error": 0.00015547005916815153,
+                    "chi_sq": 6.228673915668409,
+                    "processed_samples": 19908
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.2737693877245159,
+                    "value": -0.00014112396752024269,
+                    "error": 0.00020484832676775973,
+                    "chi_sq": 4.191476119980347,
+                    "processed_samples": 26548
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.356645999753032,
+                    "value": -0.0012213411319152287,
+                    "error": 0.00023912307661353013,
+                    "chi_sq": 3.0711964296846546,
+                    "processed_samples": 33064
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2852,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07449549263593261
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.00031264815558217605
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 7.046745973392774
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07449549263593261,
+                  "error": 0.00031264815558217605,
+                  "relative_error_percent": 0.4196873455285689,
+                  "chi_sq_per_dof": 0.7046745973392774,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0006013123245988463
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 4.479505784904887,
+                  "coordinates": "graph: 0, sampling channel: 0, xs: [\n6.0154125893223942e-01 2.1268423447212181e-01 8.2970560394033199e-01\n5.6757587724913472e-01 7.0117639827274769e-01 4.6121670362195361e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.18965841125108243,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 20480
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.17992620127136957,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 19908
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.2737693877245159,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 26548
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.356645999753032,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 33064
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.18965841125108243,
+                      "value": 0.0139768779213543,
+                      "error": 0.00013857483794181224,
+                      "chi_sq": 17.028441920924706,
+                      "processed_samples": 20480
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.17992620127136957,
+                      "value": 0.013896118106636487,
+                      "error": 0.00013092537521454858,
+                      "chi_sq": 7.238818860356474,
+                      "processed_samples": 19908
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.2737693877245159,
+                      "value": 0.019262072582259034,
+                      "error": 0.00016729417138303704,
+                      "chi_sq": 7.491475894544749,
+                      "processed_samples": 26548
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.356645999753032,
+                      "value": 0.027400949593897675,
+                      "error": 0.0001857859913171292,
+                      "chi_sq": 6.1506021940778055,
+                      "processed_samples": 33064
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 2843,
+      "mode": "optimized",
+      "target": -0.016125767216599744,
+      "value": -0.015889001429296744,
+      "error": 0.000432890899198323,
+      "pull": 0.5469410138708632,
+      "relative_error": 0.026844669985853966,
+      "wall_seconds": 19.479985267855227,
+      "cpu_seconds": 19.322034999999993,
+      "variance_times_wall": 3.6504426955347575e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 3234,
+              "result": {
+                "re": 0.0,
+                "im": -0.015889001429296744
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.000432890899198323
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 2.30143131281321
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.015889001429296744,
+                "error": 0.000432890899198323,
+                "relative_error_percent": 2.7244688794611243,
+                "chi_sq_per_dof": 0.230143131281321,
+                "target_delta_sigma": 0.5469410138708632,
+                "target_delta_percent": 1.4682451019091702,
+                "max_weight_impact": 0.006210873820481565
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000182193,
+              "average_parameterization_time_seconds": 2.7676e-05,
+              "average_integrand_time_seconds": 0.000137294,
+              "average_evaluator_time_seconds": 0.000117592,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.295e-06,
+              "f64_percentage": 88.10900000000001,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.891,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.7405219603863897,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n9.2254076435267229e-01 6.5129596068378193e-01 2.3150166815255713e-01\n4.9957457399627336e-01 1.5727665402220459e-01 6.1423487426187184e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -9.868458301081331,
+                "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.6093627574244405e-01 4.4377684228066511e-02 2.7900827705088405e-01\n7.1822441828097883e-01 5.8241105499963330e-01 7.6346633335786773e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.30958831487426997,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 30566
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2684374189905642,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 28981
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.42197426613516587,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 40453
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.30958831487426997,
+                    "value": -0.009402599006609594,
+                    "error": 0.00023938782068111893,
+                    "chi_sq": 2.597784567363078,
+                    "processed_samples": 30566
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2684374189905642,
+                    "value": -0.009585518206545766,
+                    "error": 0.0002131687579427893,
+                    "chi_sq": 1.4521788635373358,
+                    "processed_samples": 28981
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.42197426613516587,
+                    "value": 0.003056565709510298,
+                    "error": 0.0002836257505315539,
+                    "chi_sq": 6.051396050096095,
+                    "processed_samples": 40453
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 3234,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.0751224680359544
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0003653556392570532
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 3.916996168056329
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.0751224680359544,
+                  "error": 0.0003653556392570532,
+                  "relative_error_percent": 0.48634669335170155,
+                  "chi_sq_per_dof": 0.3916996168056329,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0013136493726960863
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 9.868458301081331,
+                  "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.6093627574244405e-01 4.4377684228066511e-02 2.7900827705088405e-01\n7.1822441828097883e-01 5.8241105499963330e-01 7.6346633335786773e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.30958831487426997,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 30566
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2684374189905642,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 28981
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.42197426613516587,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 40453
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.30958831487426997,
+                      "value": 0.021215143982157285,
+                      "error": 0.0002132453984913305,
+                      "chi_sq": 8.072869154240607,
+                      "processed_samples": 30566
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2684374189905642,
+                      "value": 0.021083722846284646,
+                      "error": 0.00018240747140225395,
+                      "chi_sq": 5.870905754993714,
+                      "processed_samples": 28981
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.42197426613516587,
+                      "value": 0.03283501112301519,
+                      "error": 0.00023242685575825786,
+                      "chi_sq": 5.52657736911263,
+                      "processed_samples": 40453
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 4517,
+      "mode": "optimized_fermi",
+      "target": -0.016125767216599744,
+      "value": -0.01591311032407408,
+      "error": 0.0005820476705657115,
+      "pull": 0.36535992373094583,
+      "relative_error": 0.03609426222936891,
+      "wall_seconds": 55.30550021119416,
+      "cpu_seconds": 54.832059,
+      "variance_times_wall": 1.8736369200594408e-05,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2839,
+              "result": {
+                "re": 0.0,
+                "im": -0.01591311032407408
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0005820476705657115
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 8.74761761148011
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.01591311032407408,
+                "error": 0.0005820476705657115,
+                "relative_error_percent": 3.6576612535964337,
+                "chi_sq_per_dof": 0.874761761148011,
+                "target_delta_sigma": 0.36535992373094583,
+                "target_delta_percent": 1.3187396895246983,
+                "max_weight_impact": 0.020081880349047065
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.00053797,
+              "average_parameterization_time_seconds": 0.000376801,
+              "average_integrand_time_seconds": 0.000137914,
+              "average_evaluator_time_seconds": 0.000115778,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.366e-06,
+              "f64_percentage": 88.619,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.381,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 1.3959424849652102,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.6844218063567422e-01 6.0840905311116134e-01 4.5480331134249308e-01\n8.1590416790343523e-01 8.0813631482402837e-02 5.9330432473099781e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -31.956517750924128,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.0039530440217470e-01 3.8334782696546787e-01 8.4083387786124619e-01\n3.9522003048068760e-01 3.6979940166678554e-01 7.9813158065746714e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.252816306531749,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 26668
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2688943392348248,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 18530
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.20478111197161908,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 24391
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.27350824226180703,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 30411
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.252816306531749,
+                    "value": -0.0076210775550478015,
+                    "error": 0.0002490956045230129,
+                    "chi_sq": 17.9688183956726,
+                    "processed_samples": 26668
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2688943392348248,
+                    "value": -0.0073476736047366495,
+                    "error": 0.00031783647186870264,
+                    "chi_sq": 4.19658867674903,
+                    "processed_samples": 18530
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.20478111197161908,
+                    "value": 0.000312170218338658,
+                    "error": 0.00021097551664039295,
+                    "chi_sq": 5.182048747083838,
+                    "processed_samples": 24391
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.27350824226180703,
+                    "value": -0.0012313466545778142,
+                    "error": 0.00025235404514848444,
+                    "chi_sq": 7.783084286168809,
+                    "processed_samples": 30411
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2839,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07472475035916289
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0005342970572527854
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 7.2659351054424235
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07472475035916289,
+                  "error": 0.0005342970572527854,
+                  "relative_error_percent": 0.7150201970360532,
+                  "chi_sq_per_dof": 0.7265935105442424,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0042765640028672985
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 31.956517750924128,
+                  "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.0039530440217470e-01 3.8334782696546787e-01 8.4083387786124619e-01\n3.9522003048068760e-01 3.6979940166678554e-01 7.9813158065746714e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.252816306531749,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 26668
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2688943392348248,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 18530
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.20478111197161908,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 24391
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.27350824226180703,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 30411
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.252816306531749,
+                      "value": 0.014161774790867353,
+                      "error": 0.00023812994960159192,
+                      "chi_sq": 16.962086931334397,
+                      "processed_samples": 26668
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2688943392348248,
+                      "value": 0.013864438723956509,
+                      "error": 0.0003058751221550932,
+                      "chi_sq": 9.428943293919701,
+                      "processed_samples": 18530
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.20478111197161908,
+                      "value": 0.018952237187522848,
+                      "error": 0.0001725915345042426,
+                      "chi_sq": 7.097613852544896,
+                      "processed_samples": 24391
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.27350824226180703,
+                      "value": 0.027532180682685772,
+                      "error": 0.00019699168084414084,
+                      "chi_sq": 23.90629019128187,
+                      "processed_samples": 30411
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 4517,
+      "mode": "optimized",
+      "target": -0.016125767216599744,
+      "value": -0.015435833574187489,
+      "error": 0.0003975387079596548,
+      "pull": 1.735513117586213,
+      "relative_error": 0.02465239034025193,
+      "wall_seconds": 18.714817371219397,
+      "cpu_seconds": 18.558856000000002,
+      "variance_times_wall": 2.9576340481563836e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2946,
+              "result": {
+                "re": 0.0,
+                "im": -0.015435833574187489
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0003975387079596548
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 16.782754533171314
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.015435833574187489,
+                "error": 0.0003975387079596548,
+                "relative_error_percent": 2.575427533919757,
+                "chi_sq_per_dof": 1.6782754533171313,
+                "target_delta_sigma": 1.735513117586213,
+                "target_delta_percent": 4.278454681536287,
+                "max_weight_impact": 0.0017941903439142623
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.00017447,
+              "average_parameterization_time_seconds": 2.7698e-05,
+              "average_integrand_time_seconds": 0.000129929,
+              "average_evaluator_time_seconds": 0.000110862,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.239e-06,
+              "f64_percentage": 88.766,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.234,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.557603379749181,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n9.3969498277479258e-01 9.2705780634972146e-02 1.0874333075487541e-01\n4.9757610392283591e-01 6.0307290041406092e-01 9.7930580952166479e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.7694823549074767,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n4.9862605344260613e-01 7.9311259261769140e-01 3.3253570841188518e-02\n8.5925452858194284e-01 1.6726710387792454e-01 9.7079631518989917e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.266842199187592,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 28164
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2778713506420632,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 29673
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.4552864501703448,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 42163
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.266842199187592,
+                    "value": -0.009328851920103631,
+                    "error": 0.0001976205821306659,
+                    "chi_sq": 17.456077902749087,
+                    "processed_samples": 28164
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2778713506420632,
+                    "value": -0.009212807524443374,
+                    "error": 0.00020048758405803618,
+                    "chi_sq": 6.926905254200619,
+                    "processed_samples": 29673
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.4552864501703448,
+                    "value": 0.0030074282376218787,
+                    "error": 0.0002755759060990677,
+                    "chi_sq": 9.445717293741712,
+                    "processed_samples": 42163
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2946,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07397420303574316
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.00032511124767191406
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 6.02362056068921
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07397420303574316,
+                  "error": 0.00032511124767191406,
+                  "relative_error_percent": 0.4394927343993492,
+                  "chi_sq_per_dof": 0.602362056068921,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.00037438488571067224
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 2.7694823549074767,
+                  "coordinates": "graph: 0, sampling channel: 1, xs: [\n4.9862605344260613e-01 7.9311259261769140e-01 3.3253570841188518e-02\n8.5925452858194284e-01 1.6726710387792454e-01 9.7079631518989917e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.266842199187592,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 28164
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2778713506420632,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 29673
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.4552864501703448,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 42163
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.266842199187592,
+                      "value": 0.02054586516728917,
+                      "error": 0.00016478811589109457,
+                      "chi_sq": 8.083620890614611,
+                      "processed_samples": 28164
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2778713506420632,
+                      "value": 0.02077246053422299,
+                      "error": 0.0001688596310821408,
+                      "chi_sq": 6.632988422394874,
+                      "processed_samples": 29673
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.4552864501703448,
+                      "value": 0.03264820905108654,
+                      "error": 0.00022555578086334307,
+                      "chi_sq": 15.931497654502891,
+                      "processed_samples": 42163
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 6007,
+      "mode": "optimized_fermi",
+      "target": -0.016125767216599744,
+      "value": -0.01575501881272095,
+      "error": 0.0003817600109063282,
+      "pull": 0.9711556823319702,
+      "relative_error": 0.02367391304727178,
+      "wall_seconds": 54.80383285181597,
+      "cpu_seconds": 54.335142000000005,
+      "variance_times_wall": 7.987149287339926e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2890,
+              "result": {
+                "re": 0.0,
+                "im": -0.01575501881272095
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0003817600109063282
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 10.08028994170617
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.01575501881272095,
+                "error": 0.0003817600109063282,
+                "relative_error_percent": 2.4231009524284848,
+                "chi_sq_per_dof": 1.0080289941706169,
+                "target_delta_sigma": 0.9711556823319702,
+                "target_delta_percent": 2.2991055178890956,
+                "max_weight_impact": 0.0010510660608982522
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000532947,
+              "average_parameterization_time_seconds": 0.000374661,
+              "average_integrand_time_seconds": 0.000135185,
+              "average_evaluator_time_seconds": 0.000113561,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.334e-06,
+              "f64_percentage": 88.805,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.195,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 1.4650536733939465,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.7464669696894324e-01 7.6642387650315080e-01 7.1902395465797742e-01\n8.8075910437475291e-01 2.4493158570491436e-01 2.9307649180725770e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -1.6559565562864464,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.2328245189976839e-01 6.1259433628776194e-01 6.1293738038356083e-01\n4.6799158150195203e-01 6.3368240275511878e-01 7.9625812250125771e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.17424924215433174,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 19655
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.1774061634252021,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 19308
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.28193035511816666,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 27375
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.3664142393022995,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 33662
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.17424924215433174,
+                    "value": -0.007299373727817843,
+                    "error": 0.00014864803745238972,
+                    "chi_sq": 6.853383297675352,
+                    "processed_samples": 19655
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.1774061634252021,
+                    "value": -0.007110486496715134,
+                    "error": 0.00015269508685351765,
+                    "chi_sq": 6.9544912224595805,
+                    "processed_samples": 19308
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.28193035511816666,
+                    "value": 2.7522251464003353e-05,
+                    "error": 0.000203791687064889,
+                    "chi_sq": 5.071989166928126,
+                    "processed_samples": 27375
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.3664142393022995,
+                    "value": -0.0013112922574773657,
+                    "error": 0.00023884854128901784,
+                    "chi_sq": 17.867538818580883,
+                    "processed_samples": 33662
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2890,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07435273457651372
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.00030485913582981977
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 9.71898478748949
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07435273457651372,
+                  "error": 0.00030485913582981977,
+                  "relative_error_percent": 0.4100173820992424,
+                  "chi_sq_per_dof": 0.971898478748949,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.00022271629493093644
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 1.6559565562864464,
+                  "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.2328245189976839e-01 6.1259433628776194e-01 6.1293738038356083e-01\n4.6799158150195203e-01 6.3368240275511878e-01 7.9625812250125771e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.17424924215433174,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 19655
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.1774061634252021,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 19308
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.28193035511816666,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 27375
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.3664142393022995,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 33662
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.17424924215433174,
+                      "value": 0.01368189614792203,
+                      "error": 0.00012362319131221434,
+                      "chi_sq": 5.427474451153444,
+                      "processed_samples": 19655
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.1774061634252021,
+                      "value": 0.013695143637146127,
+                      "error": 0.00012735785892429454,
+                      "chi_sq": 7.967284900991217,
+                      "processed_samples": 19308
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.28193035511816666,
+                      "value": 0.01937230475058788,
+                      "error": 0.00016679776367138058,
+                      "chi_sq": 13.160145206738036,
+                      "processed_samples": 27375
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.3664142393022995,
+                      "value": 0.0275701155713156,
+                      "error": 0.00018579113213542062,
+                      "chi_sq": 5.775888648779926,
+                      "processed_samples": 33662
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 6007,
+      "mode": "optimized",
+      "target": -0.016125767216599744,
+      "value": -0.01592310286365231,
+      "error": 0.00041304127387498747,
+      "pull": 0.4906636836704424,
+      "relative_error": 0.02561374403630271,
+      "wall_seconds": 18.594693078193814,
+      "cpu_seconds": 18.44304,
+      "variance_times_wall": 3.172312169712117e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 3003,
+              "result": {
+                "re": 0.0,
+                "im": -0.01592310286365231
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.00041304127387498747
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 11.158130324240018
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.01592310286365231,
+                "error": 0.00041304127387498747,
+                "relative_error_percent": 2.593974788782137,
+                "chi_sq_per_dof": 1.1158130324240019,
+                "target_delta_sigma": 0.4906636836704424,
+                "target_delta_percent": 1.2567734001444113,
+                "max_weight_impact": 0.003923394907670228
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.00017693,
+              "average_parameterization_time_seconds": 2.7427e-05,
+              "average_integrand_time_seconds": 0.000132654,
+              "average_evaluator_time_seconds": 0.000113398,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.238e-06,
+              "f64_percentage": 88.445,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.555,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.7515218825650747,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n9.2060093452476199e-01 1.0209339248379901e-01 1.1196900741934135e-02\n4.9654746821416229e-01 3.8870266332589865e-01 9.9075854052054890e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -6.24726206895627,
+                "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.8942129023021739e-01 2.4474787805114040e-01 1.2493837123595671e-01\n3.5413857888010747e-01 7.9368253714685655e-01 7.8906679420646963e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.2902339710030855,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 29411
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.26048673028762365,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 27380
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.4492792987092909,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 43209
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.2902339710030855,
+                    "value": -0.009728557221213126,
+                    "error": 0.00021705341202373423,
+                    "chi_sq": 6.871839472968503,
+                    "processed_samples": 29411
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.26048673028762365,
+                    "value": -0.00921026165967163,
+                    "error": 0.0002019029660796522,
+                    "chi_sq": 11.529475851693633,
+                    "processed_samples": 27380
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.4492792987092909,
+                    "value": 0.0030485747684930796,
+                    "error": 0.0002772044588396986,
+                    "chi_sq": 13.883829008111974,
+                    "processed_samples": 43209
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 3003,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07495546171597953
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0003419865451721921
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 8.928542276053804
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07495546171597953,
+                  "error": 0.0003419865451721921,
+                  "relative_error_percent": 0.45625300324083656,
+                  "chi_sq_per_dof": 0.8928542276053804,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0008334632228173488
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 6.24726206895627,
+                  "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.8942129023021739e-01 2.4474787805114040e-01 1.2493837123595671e-01\n3.5413857888010747e-01 7.9368253714685655e-01 7.8906679420646963e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.2902339710030855,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 29411
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.26048673028762365,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 27380
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.4492792987092909,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 43209
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.2902339710030855,
+                      "value": 0.021085003479141398,
+                      "error": 0.00018765330585473574,
+                      "chi_sq": 5.134902767137419,
+                      "processed_samples": 29411
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.26048673028762365,
+                      "value": 0.020799217980203046,
+                      "error": 0.00016751843046084177,
+                      "chi_sq": 11.440279758200177,
+                      "processed_samples": 27380
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.4492792987092909,
+                      "value": 0.0329940287149169,
+                      "error": 0.0002277341891548846,
+                      "chi_sq": 8.759338568760313,
+                      "processed_samples": 43209
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 7919,
+      "mode": "optimized_fermi",
+      "target": -0.016125767216599744,
+      "value": -0.01624692664952778,
+      "error": 0.0004072954310901268,
+      "pull": -0.29747309613504114,
+      "relative_error": 0.025257429654004925,
+      "wall_seconds": 55.052134583704174,
+      "cpu_seconds": 54.582038999999995,
+      "variance_times_wall": 9.132574833857362e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 2834,
+              "result": {
+                "re": 0.0,
+                "im": -0.01624692664952778
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0004072954310901268
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 9.350530912351303
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.01624692664952778,
+                "error": 0.0004072954310901268,
+                "relative_error_percent": 2.5069075516627937,
+                "chi_sq_per_dof": 0.9350530912351303,
+                "target_delta_sigma": 0.29747309613504114,
+                "target_delta_percent": 0.7513405799589845,
+                "max_weight_impact": 0.007355076091548333
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000535674,
+              "average_parameterization_time_seconds": 0.000376063,
+              "average_integrand_time_seconds": 0.000136413,
+              "average_evaluator_time_seconds": 0.00011452,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.365e-06,
+              "f64_percentage": 88.781,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.219,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 1.3461780957599672,
+                "coordinates": "graph: 0, sampling channel: 3, xs: [\n8.5885447091060774e-01 2.2786455748375567e-02 8.8355902374028872e-01\n3.6209057062324723e-01 5.3221499683700513e-01 2.5399708713944391e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -11.949738176108124,
+                "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.4894182468992081e-01 2.8017288129706086e-01 8.2962937494870770e-01\n3.5140669321116647e-01 8.9181778063444239e-01 4.6428485366934025e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.20218709520926445,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 19208
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.19082701683787198,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 21592
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.2630458348189621,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 26671
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.3439400531339014,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 32529
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.20218709520926445,
+                    "value": -0.007324572064232566,
+                    "error": 0.00018481509461492482,
+                    "chi_sq": 14.853066984332372,
+                    "processed_samples": 19208
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.19082701683787198,
+                    "value": -0.007722381262929021,
+                    "error": 0.00016451945292695388,
+                    "chi_sq": 8.704717258282244,
+                    "processed_samples": 21592
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.2630458348189621,
+                    "value": 0.00042290082822698356,
+                    "error": 0.00020404863591717492,
+                    "chi_sq": 3.7452366981342866,
+                    "processed_samples": 26671
+                  },
+                  {
+                    "bin_index": 3,
+                    "bin_label": "fermi_pair",
+                    "pdf": 0.3439400531339014,
+                    "value": -0.0016810099132704426,
+                    "error": 0.00024158382193086757,
+                    "chi_sq": 13.57490267717306,
+                    "processed_samples": 32529
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 2834,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07439368045429103
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0003364289976742714
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 7.6936660709232
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07439368045429103,
+                  "error": 0.0003364289976742714,
+                  "relative_error_percent": 0.4522279253020425,
+                  "chi_sq_per_dof": 0.76936660709232,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0016062840422917755
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 11.949738176108124,
+                  "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.4894182468992081e-01 2.8017288129706086e-01 8.2962937494870770e-01\n3.5140669321116647e-01 8.9181778063444239e-01 4.6428485366934025e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.20218709520926445,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 19208
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.19082701683787198,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 21592
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.2630458348189621,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 26671
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.3439400531339014,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 32529
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.20218709520926445,
+                      "value": 0.013733705944872249,
+                      "error": 0.00016471107179672002,
+                      "chi_sq": 13.964795515765445,
+                      "processed_samples": 19208
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.19082701683787198,
+                      "value": 0.01406527469850483,
+                      "error": 0.00014375668462483145,
+                      "chi_sq": 18.674347105173297,
+                      "processed_samples": 21592
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.2630458348189621,
+                      "value": 0.019162880890468817,
+                      "error": 0.00016695410337010737,
+                      "chi_sq": 7.104546459553859,
+                      "processed_samples": 26671
+                    },
+                    {
+                      "bin_index": 3,
+                      "bin_label": "fermi_pair",
+                      "pdf": 0.3439400531339014,
+                      "value": 0.027482505479605946,
+                      "error": 0.00018769652692912718,
+                      "chi_sq": 18.84939882666754,
+                      "processed_samples": 32529
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "beta": null,
+      "seed": 7919,
+      "mode": "optimized",
+      "target": -0.016125767216599744,
+      "value": -0.016353382633385042,
+      "error": 0.00040650236317013377,
+      "pull": -0.559936269521842,
+      "relative_error": 0.025208249487297774,
+      "wall_seconds": 19.13620025711134,
+      "cpu_seconds": 18.98203300000001,
+      "variance_times_wall": 3.162145552607321e-06,
+      "result": {
+        "slots": [
+          {
+            "key": "fermi_sunrise@two_loop",
+            "process": "fermi_sunrise",
+            "integrand": "two_loop",
+            "target": {
+              "re": 0.0,
+              "im": -0.016125767216599744
+            },
+            "integral": {
+              "neval": 100000,
+              "real_zero": 100000,
+              "im_zero": 3137,
+              "result": {
+                "re": 0.0,
+                "im": -0.016353382633385042
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.00040650236317013377
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 13.023898400637101
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": 0.0,
+                "target_delta_percent": 0.0,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": -0.016353382633385042,
+                "error": 0.00040650236317013377,
+                "relative_error_percent": 2.48573871402158,
+                "chi_sq_per_dof": 1.3023898400637102,
+                "target_delta_sigma": 0.559936269521842,
+                "target_delta_percent": 1.41150131790934,
+                "max_weight_impact": 0.002411430544399564
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.000179097,
+              "average_parameterization_time_seconds": 2.761e-05,
+              "average_integrand_time_seconds": 0.000134584,
+              "average_evaluator_time_seconds": 0.000115106,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.24e-06,
+              "f64_percentage": 88.298,
+              "f128_percentage": 0.0,
+              "arb_percentage": 11.702,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.656279868196118,
+                "coordinates": "graph: 0, sampling channel: 2, xs: [\n8.7787172008702163e-01 6.1819187668766451e-01 3.9909475078334022e-01\n4.9617922053317631e-01 1.7334257552507126e-01 5.8187783534314164e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -3.943504638639807,
+                "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.5130442170629910e-01 4.2032207061785171e-01 4.0862822246601122e-01\n5.3255985707331555e-01 4.0847065217130973e-01 2.4391943653268675e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.25733335981313943,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 27111
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2965874667802692,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 31013
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.44607917340659137,
+                    "value": 0.0,
+                    "error": 0.0,
+                    "chi_sq": 0.0,
+                    "processed_samples": 41876
+                  }
+                ]
+              },
+              "im": {
+                "axis_label": "sampling channel",
+                "fixed_coordinates": [
+                  {
+                    "axis_label": "graph",
+                    "bin_index": 0,
+                    "bin_label": "GL0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "bin_index": 0,
+                    "bin_label": "(1,2)",
+                    "pdf": 0.25733335981313943,
+                    "value": -0.009476719520950019,
+                    "error": 0.00019787559190023976,
+                    "chi_sq": 15.189496312623618,
+                    "processed_samples": 27111
+                  },
+                  {
+                    "bin_index": 1,
+                    "bin_label": "(0,2)",
+                    "pdf": 0.2965874667802692,
+                    "value": -0.009607199449140109,
+                    "error": 0.00021323024328890418,
+                    "chi_sq": 7.102647142307816,
+                    "processed_samples": 31013
+                  },
+                  {
+                    "bin_index": 2,
+                    "bin_label": "(0,1)",
+                    "pdf": 0.44607917340659137,
+                    "value": 0.002747657891542108,
+                    "error": 0.0002759913258158458,
+                    "chi_sq": 5.9260037335672155,
+                    "processed_samples": 41876
+                  }
+                ]
+              }
+            },
+            "absolute": {
+              "integral": {
+                "neval": 100000,
+                "real_zero": 100000,
+                "im_zero": 3137,
+                "result": {
+                  "re": 0.0,
+                  "im": 0.07411243264707885
+                },
+                "error": {
+                  "re": 0.0,
+                  "im": 0.0003361420135040904
+                },
+                "real_chisq": 0.0,
+                "im_chisq": 18.78358143485582
+              },
+              "table_results": [
+                {
+                  "component": "|re|",
+                  "value": 0.0,
+                  "error": 0.0,
+                  "relative_error_percent": null,
+                  "chi_sq_per_dof": 0.0,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.0
+                },
+                {
+                  "component": "|im|",
+                  "value": 0.07411243264707885,
+                  "error": 0.0003361420135040904,
+                  "relative_error_percent": 0.45355684801872376,
+                  "chi_sq_per_dof": 1.8783581434855818,
+                  "target_delta_sigma": null,
+                  "target_delta_percent": null,
+                  "max_weight_impact": 0.00053209758441187
+                }
+              ],
+              "max_weight_info": [
+                {
+                  "component": "im",
+                  "sign": "+",
+                  "max_eval": 3.943504638639807,
+                  "coordinates": "graph: 0, sampling channel: 1, xs: [\n6.5130442170629910e-01 4.2032207061785171e-01 4.0862822246601122e-01\n5.3255985707331555e-01 4.0847065217130973e-01 2.4391943653268675e-01 ]"
+                }
+              ],
+              "grid_breakdown": {
+                "re": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.25733335981313943,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 27111
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2965874667802692,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 31013
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.44607917340659137,
+                      "value": 0.0,
+                      "error": 0.0,
+                      "chi_sq": 0.0,
+                      "processed_samples": 41876
+                    }
+                  ]
+                },
+                "im": {
+                  "axis_label": "sampling channel",
+                  "fixed_coordinates": [
+                    {
+                      "axis_label": "graph",
+                      "bin_index": 0,
+                      "bin_label": "GL0"
+                    }
+                  ],
+                  "entries": [
+                    {
+                      "bin_index": 0,
+                      "bin_label": "(1,2)",
+                      "pdf": 0.25733335981313943,
+                      "value": 0.020669624949213455,
+                      "error": 0.00016342652456270723,
+                      "chi_sq": 12.20175151288845,
+                      "processed_samples": 27111
+                    },
+                    {
+                      "bin_index": 1,
+                      "bin_label": "(0,2)",
+                      "pdf": 0.2965874667802692,
+                      "value": 0.021131730338946265,
+                      "error": 0.00018451038671944795,
+                      "chi_sq": 9.028850656709437,
+                      "processed_samples": 31013
+                    },
+                    {
+                      "bin_index": 2,
+                      "bin_label": "(0,1)",
+                      "pdf": 0.44607917340659137,
+                      "value": 0.03228688950254484,
+                      "error": 0.00022684209193883366,
+                      "chi_sq": 10.560368454220125,
+                      "processed_samples": 41876
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

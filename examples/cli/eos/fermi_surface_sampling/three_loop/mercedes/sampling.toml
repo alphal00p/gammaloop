@@ -1,0 +1,3 @@
+[sampling.channel_definitions.GL1.fermi_shells]
+around = "product(block(lmb(0),fermi(0)),block(lmb(1),fermi(1)),block(lmb(3),fermi(3)))"
+parent_lmb = [0, 1, 3]

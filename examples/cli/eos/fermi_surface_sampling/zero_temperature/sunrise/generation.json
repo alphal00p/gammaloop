@@ -1,0 +1,16 @@
+{
+  "example": "sunrise",
+  "zero_temperature": true,
+  "revision": "8ec568b6c736da6ccb7900569923ab3f6e1a0578",
+  "binary": "/nix/store/njc53dp8y78m625s5q7g1qjvmvwq8hci-gammaloop-api-0.1.0/bin/gammaloop",
+  "binary_sha256": "6f6b105ce11efb450ea541861ad0aa662ac1dab18bb868e94d1db4f39edac376",
+  "host": "itphlies",
+  "cpu_affinity": 96,
+  "samples": 200,
+  "iterations": 2,
+  "workers": 1,
+  "generation_card_sha256": "46cd827515cc5ba092c6641cbbf972d08bd05784de04aa1d2ad0454ec23e8f5c",
+  "sampling_overlay": "",
+  "reference": "User-supplied exact-T=0 targets (2026-10-03)",
+  "generation_wall_seconds": 3.5780469151213765
+}

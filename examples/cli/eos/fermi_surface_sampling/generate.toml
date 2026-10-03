@@ -1,0 +1,103 @@
+commands = [
+  "import model sm-default.json",
+  "import graphs tests/resources/graphs/sunrise_qcd_vacuum.dot -p fermi_sunrise -i two_loop",
+  "generate",
+  "save state -o",
+  "display integrand -p fermi_sunrise -i two_loop --show-sampling pretty",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = true
+[cli_settings.global.generation.uv]
+subtract_uv = true
+softct = false
+generate_integrated = true
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = false
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+jit_direct_translation = true
+fast_math = false
+unsafe_math = false
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+do_algebra = true
+do_fn_map_replacements = false
+direct_translation = true
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+inverse_temperature = 1.0
+m_uv = 2.0
+renormalization_localization_scale = 2.0
+mu_r = 2.0
+[default_runtime_settings.model]
+aS = [1.0, 0.0]
+muB = [3.0, 0.0]
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+[default_runtime_settings.kinematics.externals.data]
+momenta = []
+helicities = []
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "map_density"
+default_channel_selection = ["lmb(0,1)"]
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+power = 2.0
+[default_runtime_settings.sampling.channel_definitions.GL0.fermi_pair]
+around = "product(block(lmb(0),fermi(0)),block(lmb(1),fermi(1)))"
+parent_lmb = [0,1]
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+n_start = 20000
+n_increase = 0
+n_max = 200000
+seed = 1337
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = true
+loop_momenta_norm_escalation_factor = 100.0
+rotation_axis = [{type = "x"}, {type = "z"}]
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-10
+required_precision_for_im = 1.0e-10
+escalate_for_large_weight_threshold = 0.9
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = 0.9
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0

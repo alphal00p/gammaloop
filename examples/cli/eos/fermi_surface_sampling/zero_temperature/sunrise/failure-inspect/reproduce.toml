@@ -1,0 +1,8 @@
+commands = [
+  "set process -p fermi_sunrise -i two_loop file 'examples/cli/eos/fermi_surface_sampling/zero_temperature/sunrise/failure-inspect/overlay.toml'",
+  "set process -p fermi_sunrise -i two_loop kv general.generate_events=true",
+  "inspect -p fermi_sunrise -i two_loop -d 0 3 -x 0.9999979939221901 0.7175305085693164 0.7804597937233336 0.7657230379170762 0.6724037094880719 0.9143901444844765  --json-output '/tmp/fermi-T0-positive_default_detailed.json'",
+  "inspect -p fermi_sunrise -i two_loop -d 0 3 -x 0.9999979939221901 0.7175305085693164 0.7804597937233336 0.7657230379170762 0.6724037094880719 0.9143901444844765 -f --json-output '/tmp/fermi-T0-positive_arb_detailed.json'",
+  "inspect -p fermi_sunrise -i two_loop -d 0 3 -x 0.9999836379973899 0.773298918325919 0.7608230094504842 0.7414482985368588 0.8897801160225466 0.6214577656799363  --json-output '/tmp/fermi-T0-negative_default_detailed.json'",
+  "inspect -p fermi_sunrise -i two_loop -d 0 3 -x 0.9999836379973899 0.773298918325919 0.7608230094504842 0.7414482985368588 0.8897801160225466 0.6214577656799363 -f --json-output '/tmp/fermi-T0-negative_arb_detailed.json'"
+]

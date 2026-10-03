@@ -1,0 +1,16 @@
+{
+  "example": "tennis_ball",
+  "zero_temperature": true,
+  "revision": "8ec568b6c736da6ccb7900569923ab3f6e1a0578",
+  "binary": "/nix/store/njc53dp8y78m625s5q7g1qjvmvwq8hci-gammaloop-api-0.1.0/bin/gammaloop",
+  "binary_sha256": "6f6b105ce11efb450ea541861ad0aa662ac1dab18bb868e94d1db4f39edac376",
+  "host": "itphlies",
+  "cpu_affinity": 100,
+  "samples": 200,
+  "iterations": 2,
+  "workers": 1,
+  "generation_card_sha256": "958fb06d7fef6da48a5e5570313e74e0c3f7df48ef28d3b10e4615de89aac4b1",
+  "sampling_overlay": "[sampling.channel_definitions.GL3.fermi_shells]\naround = \"product(block(lmb(0),fermi(0)),block(lmb(1),fermi(1)),block(lmb(3),fermi(3)))\"\nparent_lmb = [0, 1, 3]\n\n[sampling.channel_definitions.GL3.fermi_repeated]\naround = \"product(block(lmb(0),fermi(0)),complement(1,3))\"\nparent_lmb = [0, 1, 3]\n",
+  "reference": "User-supplied exact-T=0 targets (2026-10-03)",
+  "generation_wall_seconds": 1490.0393826239742
+}

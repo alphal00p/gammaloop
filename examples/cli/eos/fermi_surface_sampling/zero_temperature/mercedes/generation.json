@@ -1,0 +1,16 @@
+{
+  "example": "mercedes",
+  "zero_temperature": true,
+  "revision": "8ec568b6c736da6ccb7900569923ab3f6e1a0578",
+  "binary": "/nix/store/njc53dp8y78m625s5q7g1qjvmvwq8hci-gammaloop-api-0.1.0/bin/gammaloop",
+  "binary_sha256": "6f6b105ce11efb450ea541861ad0aa662ac1dab18bb868e94d1db4f39edac376",
+  "host": "itphlies",
+  "cpu_affinity": 104,
+  "samples": 200,
+  "iterations": 2,
+  "workers": 1,
+  "generation_card_sha256": "ae4440e4887eb6d3f698a3bba85215e1ad4c143dcf2398ada930bbd3bcecf856",
+  "sampling_overlay": "[sampling.channel_definitions.GL1.fermi_shells]\naround = \"product(block(lmb(0),fermi(0)),block(lmb(1),fermi(1)),block(lmb(3),fermi(3)))\"\nparent_lmb = [0, 1, 3]\n",
+  "reference": "User-supplied exact-T=0 targets (2026-10-03)",
+  "generation_wall_seconds": 2657.2957900669426
+}

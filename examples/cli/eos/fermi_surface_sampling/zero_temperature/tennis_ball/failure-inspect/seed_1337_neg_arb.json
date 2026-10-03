@@ -1,0 +1,99 @@
+{
+  "evaluation": {
+    "integrand_result": {
+      "re": 2.9671343364219876e-303,
+      "im": -0.29825110222756446
+    },
+    "absolute_integrand_result": {
+      "re": 2.9671343364219876e-303,
+      "im": 0.29825110222756446
+    },
+    "parameterization_jacobian": 1.0,
+    "integrator_weight": 1.0,
+    "event_groups": [
+      [
+        {
+          "kinematic_configuration": [
+            [],
+            []
+          ],
+          "cut_info": {
+            "particle_pdgs": [
+              [],
+              []
+            ],
+            "cut_id": 0,
+            "graph_id": 0,
+            "graph_group_id": 0,
+            "orientation_id": null,
+            "sampling_channel_id": 4,
+            "sampling_channel_edge_ids": [
+              2,
+              3,
+              4
+            ]
+          },
+          "weight": {
+            "re": 2.9671343364219876e-303,
+            "im": -0.29825110222756446
+          },
+          "additional_weights": {
+            "weights": []
+          }
+        }
+      ]
+    ],
+    "evaluation_metadata": {
+      "total_timing": {
+        "secs": 0,
+        "nanos": 66894754
+      },
+      "integrand_evaluation_time": {
+        "secs": 0,
+        "nanos": 65223087
+      },
+      "canonical_physical_preparation_time": {
+        "secs": 0,
+        "nanos": 0
+      },
+      "evaluator_evaluation_time": {
+        "secs": 0,
+        "nanos": 55345216
+      },
+      "parameterization_time": {
+        "secs": 0,
+        "nanos": 1521705
+      },
+      "canonical_sampling_preparation_time": {
+        "secs": 0,
+        "nanos": 1515254
+      },
+      "event_processing_time": {
+        "secs": 0,
+        "nanos": 6469
+      },
+      "generated_event_count": 1,
+      "accepted_event_count": 1,
+      "relative_instability_error": {
+        "re": 0.0,
+        "im": 0.0
+      },
+      "is_nan": false,
+      "loop_momenta_escalation": null,
+      "stability_results": [
+        {
+          "precision": "Arb",
+          "estimated_relative_accuracy": 1.564560217100459e-300,
+          "estimated_decimal_digits": 299.8056077169849,
+          "status": {
+            "Stable": 3
+          },
+          "total_time": {
+            "secs": 0,
+            "nanos": 65339719
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "evaluation": {
+    "integrand_result": {
+      "re": 3.269098497052812e-18,
+      "im": 0.26049066368524354
+    },
+    "absolute_integrand_result": {
+      "re": 3.269098497052812e-18,
+      "im": 0.26049066368524354
+    },
+    "parameterization_jacobian": 1.0,
+    "integrator_weight": 1.0,
+    "event_groups": [
+      [
+        {
+          "kinematic_configuration": [
+            [],
+            []
+          ],
+          "cut_info": {
+            "particle_pdgs": [
+              [],
+              []
+            ],
+            "cut_id": 0,
+            "graph_id": 0,
+            "graph_group_id": 0,
+            "orientation_id": null,
+            "sampling_channel_id": 9,
+            "sampling_channel_edge_ids": [
+              0,
+              1,
+              4
+            ]
+          },
+          "weight": {
+            "re": 3.269098497052812e-18,
+            "im": 0.26049066368524354
+          },
+          "additional_weights": {
+            "weights": []
+          }
+        }
+      ]
+    ],
+    "evaluation_metadata": {
+      "total_timing": {
+        "secs": 0,
+        "nanos": 2396617
+      },
+      "integrand_evaluation_time": {
+        "secs": 0,
+        "nanos": 822332
+      },
+      "canonical_physical_preparation_time": {
+        "secs": 0,
+        "nanos": 0
+      },
+      "evaluator_evaluation_time": {
+        "secs": 0,
+        "nanos": 358019
+      },
+      "parameterization_time": {
+        "secs": 0,
+        "nanos": 1534815
+      },
+      "canonical_sampling_preparation_time": {
+        "secs": 0,
+        "nanos": 1525365
+      },
+      "event_processing_time": {
+        "secs": 0,
+        "nanos": 5180
+      },
+      "generated_event_count": 1,
+      "accepted_event_count": 1,
+      "relative_instability_error": {
+        "re": 0.0,
+        "im": 0.0
+      },
+      "is_nan": false,
+      "loop_momenta_escalation": null,
+      "stability_results": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 6.951246811220788e-11,
+          "estimated_decimal_digits": 10.157937291141014,
+          "status": {
+            "Stable": 3
+          },
+          "total_time": {
+            "secs": 0,
+            "nanos": 849932
+          }
+        }
+      ]
+    }
+  }
+}

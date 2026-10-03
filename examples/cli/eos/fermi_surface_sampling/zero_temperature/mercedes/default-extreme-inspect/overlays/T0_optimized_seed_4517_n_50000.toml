@@ -1,0 +1,14 @@
+[general]
+inverse_temperature = 1.0
+[integrator]
+seed = 4517
+n_start = 5000
+n_increase = 0
+n_max = 50000
+[sampling]
+default_channel_selection = ["auto:optimized_lmb"]
+power = 2.0
+sampling_channel_weight = "map_density"
+[sampling.channel_definitions.GL1.fermi_shells]
+around = "product(block(lmb(0),fermi(0)),block(lmb(1),fermi(1)),block(lmb(3),fermi(3)))"
+parent_lmb = [0, 1, 3]

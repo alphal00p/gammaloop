@@ -1,0 +1,89 @@
+{
+  "revision": "8ec568b6c736da6ccb7900569923ab3f6e1a0578",
+  "datasets": [
+    {
+      "path": "mercedes/double_arb/results.json",
+      "runs": 10,
+      "samples_per_run": 50000,
+      "max_abs_mean_pull": 0.4831527514555862,
+      "validation_note": null
+    },
+    {
+      "path": "mercedes/results.json",
+      "runs": 10,
+      "samples_per_run": 50000,
+      "max_abs_mean_pull": 1.5149569552412734,
+      "validation_note": "Three-shell Fermi seed 2843 fails same-coordinate precision checks: Quad accepts large spurious tail contributions. Variance-based efficiency is not interpretable. Every seed is retained."
+    },
+    {
+      "path": "sunrise/arb_only/results.json",
+      "runs": 10,
+      "samples_per_run": 100000,
+      "max_abs_mean_pull": 1.1511396344342424,
+      "validation_note": null
+    },
+    {
+      "path": "sunrise/double_arb/results.json",
+      "runs": 10,
+      "samples_per_run": 100000,
+      "max_abs_mean_pull": 1.5254988017301723,
+      "validation_note": null
+    },
+    {
+      "path": "sunrise/results.json",
+      "runs": 10,
+      "samples_per_run": 100000,
+      "max_abs_mean_pull": 41.09698702806767,
+      "validation_note": "Fermi seeds 4517 and 7919 fail catastrophically; same-coordinate replay detects false Quad stability acceptance. Do not interpret their variance-based efficiency as sampling performance. All runs are retained."
+    },
+    {
+      "path": "tennis_ball/double_arb/results.json",
+      "runs": 15,
+      "samples_per_run": 50000,
+      "max_abs_mean_pull": 1.2665052651031687,
+      "validation_note": null
+    },
+    {
+      "path": "tennis_ball/results.json",
+      "runs": 15,
+      "samples_per_run": 50000,
+      "max_abs_mean_pull": 7.2062124718811225,
+      "validation_note": "Three-shell Fermi seed 2843 fails; same-coordinate replay detects false Quad acceptance. Do not interpret its variance-based efficiency as sampling performance. All seeds retained."
+    }
+  ],
+  "total_primary_runs": 80,
+  "total_primary_draws": 5500000,
+  "all_rejected_sample_percentages_zero": true,
+  "known_default_failures": [
+    [
+      "sunrise",
+      "optimized_fermi",
+      4517
+    ],
+    [
+      "sunrise",
+      "optimized_fermi",
+      7919
+    ],
+    [
+      "tennis_ball",
+      "optimized_fermi",
+      2843
+    ],
+    [
+      "mercedes",
+      "optimized_fermi",
+      2843
+    ]
+  ],
+  "binary_sha256": "6f6b105ce11efb450ea541861ad0aa662ac1dab18bb868e94d1db4f39edac376",
+  "max_abs_double_arb_mean_pull": 1.5254988017301723,
+  "cpu_over_wall_range": [
+    0.9912178994314282,
+    0.994100672680214
+  ],
+  "fresh_sunrise_reproducer_exact_match": true,
+  "finite_temperature_summary_unchanged": true,
+  "ruff_and_python_compile": "passed",
+  "typst_report": "compiled and visually checked"
+}
