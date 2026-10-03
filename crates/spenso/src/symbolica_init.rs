@@ -29,9 +29,19 @@ fn is_in_symbolica_initializer() -> bool {
     IN_SYMBOLICA_INITIALIZER.with(|depth| depth.get() > 0)
 }
 
+/// Set once a probe outside an initializer has initialized Symbolica's
+/// global state; later accesses skip the probe and its global lock.
+static SYMBOLICA_INITIALIZED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 fn ensure_symbolica_initialized() {
+    use std::sync::atomic::Ordering;
+    if SYMBOLICA_INITIALIZED.load(Ordering::Acquire) {
+        return;
+    }
     if !is_in_symbolica_initializer() {
         let _ = symbolica::state::State::is_builtin("__spenso_symbolica_init_probe__");
+        SYMBOLICA_INITIALIZED.store(true, Ordering::Release);
     }
 }
 

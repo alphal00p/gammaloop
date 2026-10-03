@@ -349,3 +349,49 @@ fn minimal_contract_leaves_unrelated_scalar_arithmetic_opaque() {
         baseline
     );
 }
+
+#[test]
+fn metrics_between_external_ports_complete_beside_internal_dummies() {
+    use crate::color::ColorSimplifySettings;
+    // The internal f-f dummy does not make a metric on two open ports a
+    // contraction source; the control has no internal dummy at all.
+    for source in [
+        "spenso::f(spenso::coad(8,a1),spenso::coad(8,a4),spenso::coad(8,d))*spenso::f(spenso::coad(8,a2),spenso::coad(8,a5),spenso::coad(8,d))*spenso::g(spenso::coad(8,b0),spenso::coad(8,b1))",
+        "spenso::g(spenso::coad(8,b0),spenso::coad(8,b1))*spenso::f(spenso::coad(8,a1),spenso::coad(8,a2),spenso::coad(8,a3))",
+    ] {
+        let source = tensor(source);
+        for settings in [
+            ContractSettings::default(),
+            ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        ] {
+            let contracted = source.contract(settings).unwrap();
+            assert_eq!(
+                contracted.reduction_status(),
+                ReductionStatus::Complete,
+                "{source:?}"
+            );
+            assert_eq!(contracted.expression, source.expression);
+        }
+        for (color, contract) in [
+            (ColorSimplifySettings::default(), AlgebraContraction::None),
+            (
+                ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                AlgebraContraction::Fully,
+            ),
+        ] {
+            let reduced = source
+                .simplify_algebra(&AlgebraSettings {
+                    color: Some(color),
+                    contract,
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+            assert_eq!(reduced.structure, source.structure);
+        }
+    }
+}
