@@ -568,6 +568,12 @@ pub struct ColorSimplifySettings {
     /// Whether invariant factors for `cof(N)` should be written directly in
     /// terms of the fundamental dimension.
     pub substitute_cof_dimension_invariants: bool,
+    /// Whether a trace line that nothing else in its term can reach is
+    /// decomposed completely in one kernel call. The kernel then also
+    /// certifies colour fixed points, so the planner needs no confirming
+    /// colour round, and distributes a colour sum with ports only when a
+    /// rule can span it. Without it, every insertion returns to the planner.
+    pub one_shot_traces: bool,
 }
 
 impl Default for ColorSimplifySettings {
@@ -576,6 +582,7 @@ impl Default for ColorSimplifySettings {
             evaluate_traces: true,
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,
+            one_shot_traces: true,
         }
     }
 }
@@ -597,6 +604,13 @@ impl ColorSimplifySettings {
     /// Rewrites supported `cof(N)` invariants to explicit dimension formulas.
     pub fn with_cof_dimension_invariants(mut self) -> Self {
         self.substitute_cof_dimension_invariants = true;
+        self
+    }
+
+    /// Returns to the planner after each trace insertion and confirms every
+    /// colour fixed point with a no-op round.
+    pub fn without_one_shot_traces(mut self) -> Self {
+        self.one_shot_traces = false;
         self
     }
 }

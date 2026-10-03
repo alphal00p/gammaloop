@@ -956,3 +956,157 @@ fn trusted_replacements_reuse_unchanged_opaque_boundary_interfaces() {
     assert_eq!(current.len(), prior.len() + 1);
     assert!(current.contains_key(&p!(&mu)));
 }
+
+#[test]
+fn isolated_colour_trace_needs_no_confirming_structure_or_colour_round() {
+    use crate::representations::{ColorAdjoint, ColorFundamental};
+    use crate::tensor::contract::CONTRACT_DOMAIN_CALLS;
+    crate::test_support::test_initialize();
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let word = trace!(ColorFundamental {}.new_rep(3).to_symbolic([]);
+        (0..6).map(|index| crate::color_t!(adjoint.to_symbolic([Atom::num(99_910 + index)]))));
+    let source = SymbolicTensor::infer(word).unwrap();
+    for color in [
+        ColorSimplifySettings::default(),
+        ColorSimplifySettings::default().without_one_shot_traces(),
+    ] {
+        let settings = AlgebraSettings {
+            color: Some(color.with_cof_dimension_invariants()),
+            ..Default::default()
+        };
+        IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+        CONTRACT_DOMAIN_CALLS.with(|count| count.set(0));
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(result.structure, source.structure);
+        if color.one_shot_traces {
+            // One certified colour round and one notation-only structural round.
+            assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), 1);
+            assert_eq!(CONTRACT_DOMAIN_CALLS.with(|count| count.get()), 1);
+        }
+        let fresh = SymbolicTensor::infer(result.expression.clone()).unwrap();
+        assert_eq!(
+            fresh.simplify_algebra(&settings).unwrap().expression,
+            result.expression
+        );
+    }
+}
+
+#[test]
+fn colour_rows_contract_only_metrics_the_kernel_cannot_eliminate() {
+    use crate::representations::ColorAdjoint;
+    use crate::tensor::contract::CONTRACT_PARTS_CALLS;
+    crate::test_support::test_initialize();
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, e, x, y] = [99_920, 99_921, 99_922, 99_923, 99_924, 99_925, 99_926]
+        .map(|index| adjoint.to_symbolic([Atom::num(index)]));
+    let settings = AlgebraSettings {
+        color: Some(ColorSimplifySettings::default()),
+        contract: AlgebraContraction::None,
+        ..Default::default()
+    };
+    // The loop identity emits g(x,y); its partner sits in a foreign tensor,
+    // so the shared contractor still owns that contraction.
+    let foreign = spenso::tensor_symbol!("kernel_contraction::V");
+    let source = SymbolicTensor::infer(
+        crate::color_f!(&a, &b, &x)
+            * crate::color_f!(&a, &b, &y)
+            * symbolica::function!(foreign, &y),
+    )
+    .unwrap();
+    let result = source.simplify_algebra(&settings).unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(
+        result.expression,
+        crate::color_cas!(2, &adjoint) * symbolica::function!(foreign, &x)
+    );
+    // A closed f graph emits no metric and never builds a contraction network.
+    let closed = SymbolicTensor::infer(
+        crate::color_f!(&a, &b, &c)
+            * crate::color_f!(&a, &d, &e)
+            * crate::color_f!(&b, &d, &x)
+            * crate::color_f!(&c, &e, &x),
+    )
+    .unwrap();
+    CONTRACT_PARTS_CALLS.with(|count| count.set(0));
+    let result = closed.simplify_algebra(&settings).unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert!(!result.expression.contains_symbol(crate::color::CS.f));
+    assert_eq!(CONTRACT_PARTS_CALLS.with(|count| count.get()), 0);
+}
+
+/// Symbolica sorts and zeroes an antisymmetric function only when none of
+/// its arguments contains a wildcard-named symbol.
+#[test]
+fn antisymmetric_normalization_skips_wildcard_spelled_arguments() {
+    crate::test_support::test_initialize();
+    let f = crate::color::CS.f;
+    let [pa, pb, pc] =
+        ["pa", "pb", "pc"].map(|name| Atom::var(symbol!(&format!("antisymmetric_pin::{name}"))));
+    let [wa, wb, wc] =
+        ["a_", "b_", "c_"].map(|name| Atom::var(symbol!(&format!("antisymmetric_pin::{name}"))));
+    assert!(
+        (symbolica::function!(f, &pb, &pa, &pc) + symbolica::function!(f, &pa, &pb, &pc)).is_zero()
+    );
+    assert!(symbolica::function!(f, &pa, &pa, &pc).is_zero());
+    assert!(
+        !(symbolica::function!(f, &wb, &wa, &wc) + symbolica::function!(f, &wa, &wb, &wc))
+            .is_zero()
+    );
+    assert!(!symbolica::function!(f, &wa, &wa, &wc).is_zero());
+}
+
+/// Colour labels spelled like wildcards reach the zeros of antisymmetric
+/// structure constants through private aliases, and are restored.
+#[test]
+fn wildcard_spelled_colour_labels_reduce_through_private_aliases() {
+    use crate::representations::{ColorAdjoint, ColorFundamental};
+    crate::test_support::test_initialize();
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let label = |name: &str| Atom::var(symbol!(&format!("wildcard_alias::{name}")));
+    let slot = |name: &str| adjoint.to_symbolic([label(name)]);
+    let [a, b, c, x, y] = ["a_", "b_", "c_", "x_", "y_"].map(slot);
+    let fundamental = ColorFundamental {}.new_rep(3).to_symbolic([]);
+    let settings = AlgebraSettings {
+        color: Some(ColorSimplifySettings::default()),
+        contract: AlgebraContraction::None,
+        ..Default::default()
+    };
+    let foreign = spenso::tensor_symbol!("wildcard_alias::V");
+    let spectator = symbolica::function!(symbol!("wildcard_alias::h"), label("x"));
+    for source in [
+        // The contraction leaves f(b_,b_,c_).
+        spenso::g!(&a, &b) * crate::color_f!(&a, &b, &c),
+        // Tr(T^a T^b) = idx g(a,b) leaves f(a_,a_,V).
+        &spectator
+            * symbolica::function!(foreign, &c)
+            * crate::color_f!(&a, &b, &c)
+            * trace!(&fundamental, crate::color_t!(&a), crate::color_t!(&b)),
+    ] {
+        let source = SymbolicTensor::infer(source).unwrap();
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert!(result.expression.is_zero(), "{}", result.expression);
+    }
+    // Open labels come back verbatim; the aliases never leave the planner.
+    let source = SymbolicTensor::infer(
+        trace!(
+            &fundamental,
+            crate::color_t!(&a),
+            crate::color_t!(&b),
+            crate::color_t!(&x)
+        ) * crate::color_f!(&a, &b, &y),
+    )
+    .unwrap();
+    let result = source.simplify_algebra(&settings).unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert_eq!(result.structure, source.structure);
+    let printed = result.expression.to_canonical_string();
+    assert!(
+        printed.contains("x_") && printed.contains("y_"),
+        "{printed}"
+    );
+    assert!(!printed.contains("wildcard_label"), "{printed}");
+    assert!(!result.expression.contains_symbol(crate::color::CS.f));
+    assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
+}
