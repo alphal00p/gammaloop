@@ -72,6 +72,7 @@
         "linnet"
         "linnet-py"
         "linnest"
+        "typst-renderer"
       ];
     }
     {

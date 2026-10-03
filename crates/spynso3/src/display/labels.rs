@@ -17,18 +17,29 @@ static LABELS: LazyLock<RwLock<BTreeMap<Symbol, LatexLabel>>> =
     LazyLock::new(|| RwLock::new(BTreeMap::new()));
 
 impl DisplaySettings {
-    /// Register a presentation-only LaTeX name for an existing scalar symbol.
+    /// Register presentation-only LaTeX and native Typst names for an existing scalar symbol.
     ///
     /// Model importers can supply their labels even when the algebraic symbols
     /// already exist. Reloading a label updates display only; plain text and
     /// exact Atom payloads retain the original symbol identities.
     /// An empty label removes a previous registration.
-    pub fn register_latex_name(symbol: Symbol, latex: &str) {
-        if latex.trim().is_empty() {
+    pub fn register_names(symbol: Symbol, latex: &str, typst: &str) {
+        if latex.trim().is_empty() && typst.trim().is_empty() {
             LABELS.write().unwrap().remove(&symbol);
             return;
         }
-        let typst = format!("#{{ import \"@preview/mitex:0.2.6\": mi; mi({latex:?}) }}");
+        let ordinary = symbol.get_name();
+        let ordinary = ordinary.rsplit("::").next().unwrap();
+        let latex = if latex.trim().is_empty() {
+            ordinary
+        } else {
+            latex
+        };
+        let typst = if typst.trim().is_empty() {
+            format!("{ordinary:?}")
+        } else {
+            typst.to_owned()
+        };
         // Include the original symbol: distinct parameters with identical labels
         // must not combine while constructing a temporary presentation Atom.
         let identity = symbol
@@ -36,6 +47,8 @@ impl DisplaySettings {
             .bytes()
             .chain([0])
             .chain(latex.bytes())
+            .chain([0])
+            .chain(typst.bytes())
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         let name = NamespacedSymbol::parse(&format!("spenso::latex_label_{identity}"));
@@ -109,12 +122,12 @@ mod tests {
         let atom = Atom::var(first) + Atom::var(second);
         let plain = format_atom_with_mode(&atom, TensorDisplayMode::Plain, false);
         for symbol in [first, second] {
-            DisplaySettings::register_latex_name(symbol, r"\alpha_s");
-            DisplaySettings::register_latex_name(symbol, r"\alpha_s");
+            DisplaySettings::register_names(symbol, r"\alpha_s", "alpha_s");
+            DisplaySettings::register_names(symbol, r"\alpha_s", "alpha_s");
         }
         let source = format_atom_with_mode(&atom, TensorDisplayMode::Typst, false);
-        assert_eq!(source.matches("mi(").count(), 2);
-        assert!(source.contains("@preview/mitex:0.2.6"));
+        assert_eq!(source.matches("alpha_s").count(), 2);
+        assert!(!source.contains("mitex"));
         assert_eq!(
             format_atom_with_mode(&atom, TensorDisplayMode::Plain, false),
             plain
@@ -124,10 +137,10 @@ mod tests {
         assert!(
             atom_to_latex(&atom, &Default::default(), Some(1)).starts_with(r"$$\begin{gathered}")
         );
-        DisplaySettings::register_latex_name(first, r"\beta");
+        DisplaySettings::register_names(first, r"\beta", "beta");
         assert!(format_atom_with_mode(&atom, TensorDisplayMode::Latex, false).contains(r"\beta"));
         for symbol in [first, second] {
-            DisplaySettings::register_latex_name(symbol, "");
+            DisplaySettings::register_names(symbol, "", "");
         }
         assert_eq!(presentation_atom(&atom), atom);
     }

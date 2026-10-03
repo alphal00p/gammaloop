@@ -1,16 +1,9 @@
 use feynkit_graph::{FeynmanDiagram, SceneOptions};
 use feynkit_model::{Model, ParticleId};
-use linnest::svg::Scene;
-use linnet_py::PreparedRender;
-use pyo3::{
-    prelude::*,
-    types::{PyBytes, PyDict},
-};
-use serde_json::Value;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write,
-};
+use linnest::svg::{Config, Scene};
+
+use pyo3::prelude::*;
+use std::{collections::BTreeMap, fmt::Write};
 
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -27,81 +20,68 @@ pub(crate) fn escape_html(value: &str) -> String {
     escaped
 }
 
-/// typst-py is required to compile diagrams and typeset their labels.
-fn require_typst(py: Python<'_>) -> PyResult<()> {
-    py.import("typst").map_err(|error| {
-        if error.is_instance_of::<pyo3::exceptions::PyImportError>(py) {
-            pyo3::exceptions::PyImportError::new_err(format!(
-                "diagram rendering requires typst-py: {error}"
-            ))
-        } else {
-            error
-        }
-    })?;
-    Ok(())
+/// Parse the native, serializable SVG configuration.
+pub(crate) fn render_config(py: Python<'_>, config: Option<&Bound<'_, PyAny>>) -> PyResult<Config> {
+    let source = match config {
+        Some(config) => py
+            .import("json")?
+            .call_method1("dumps", (config,))?
+            .extract::<String>()?,
+        None => "{}".into(),
+    };
+    Config::from_json(&source).map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
-/// Compile a diagram's Linnest source with typst-py and return its SVG page.
-pub(crate) fn render_diagram_svg(py: Python<'_>, prepared: &Bound<'_, PyAny>) -> PyResult<String> {
-    require_typst(py)?;
-    Ok(themed_svg(prepared.call_method0("to_svg")?.extract()?))
-}
-
-/// The physics options of a render configuration a native drawing honours,
-/// or `None` when the configuration needs the Typst renderer.
-pub(crate) fn native_scene_options(config: &Bound<'_, PyAny>) -> PyResult<Option<SceneOptions>> {
-    // The config comes from the separate `linnet` extension, so read it through Python.
-    let native = config.call_method0("native_drawing_options")?;
-    if native.is_none() {
-        return Ok(None);
-    }
-    let (options, layout): (Bound<'_, PyDict>, Bound<'_, PyDict>) = native.extract()?;
-    let auto = config.py().import("linnet")?.getattr("AUTO")?;
-    let mut scene = SceneOptions::default();
-    for (key, value) in options.iter() {
-        let flag = value.extract::<bool>().ok();
-        match (key.extract::<String>()?.as_str(), flag) {
-            ("momentum-arrows", Some(flag)) => scene.momentum_arrows = flag,
-            ("show-momentum", Some(flag)) => scene.show_momentum = Some(flag),
-            ("show-momentum", None) if value.is(&auto) => scene.show_momentum = None,
-            ("show-particle", Some(flag)) => scene.show_particle = flag,
-            ("show-particle", None) if value.is(&auto) => scene.show_particle = true,
-            ("show-edge-index", Some(flag)) => scene.show_edge_index = flag,
-            // Amplitudes have no initial states to open.
-            ("split-initial-state", _) => {}
-            _ => return Ok(None),
+pub(crate) fn scene_options(config: &Config, momenta: bool) -> PyResult<SceneOptions> {
+    let mut options = SceneOptions {
+        momentum_arrows: momenta,
+        ..Default::default()
+    };
+    for (key, value) in &config.template_options {
+        if key == "mode" && value.as_str() == Some("auto") {
+            continue;
         }
-    }
-    for (key, value) in layout.iter() {
-        let value = if let Ok(flag) = value.extract::<bool>() {
-            Value::from(flag)
-        } else if let Ok(integer) = value.extract::<i64>() {
-            Value::from(integer)
-        } else if let Ok(number) = value.extract::<f64>() {
-            Value::from(number)
-        } else {
-            return Ok(None);
-        };
-        match key.extract::<String>()? {
-            key if key == "impred-labels" => scene.label_feedback = value == Value::Bool(true),
-            key => {
-                scene.layout.insert(key, value);
+        let flag = value.as_bool().ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!("{key} must be boolean"))
+        })?;
+        match key.as_str() {
+            "momentum-arrows" => options.momentum_arrows = flag,
+            "show-momentum" => options.show_momentum = Some(flag),
+            "show-particle" => options.show_particle = flag,
+            "show-edge-index" => options.show_edge_index = flag,
+            "show-node-index" => options.show_node_index = flag,
+            "split-initial-state" => options.split_initial_state = flag,
+            "debug" => {
+                options.show_node_index = flag;
+                options.show_edge_index = flag;
+            }
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "unsupported SVG physics option {key:?}"
+                )));
             }
         }
     }
-    Ok(Some(scene))
+    Ok(options)
 }
 
-/// Typeset a scene's labels with typst-py, then lay out and draw it natively.
-pub(crate) fn render_scene(py: Python<'_>, scene: &Scene) -> PyResult<String> {
-    let runtime = |error: String| pyo3::exceptions::PyRuntimeError::new_err(error);
-    require_typst(py)?;
-    let mut sources = physics_sources();
-    sources.insert("main.typ".to_owned(), scene.label_document().into_bytes());
-    let pages = PreparedRender::from_sources(sources)?.svg_pages(py)?;
+/// Typst handles only label pages; Rust owns all graph layout and geometry.
+pub(crate) fn render_scene(scene: &Scene) -> PyResult<String> {
+    let runtime = pyo3::exceptions::PyRuntimeError::new_err;
+    let files = BTreeMap::from([("main.typ".into(), scene.label_document().into_bytes())]);
+    if scene.pages.is_empty() && scene.title.is_none() {
+        let svg = scene.render(&Default::default()).map_err(runtime)?;
+        return Ok(themed_svg(Scene::interactive_svg(&svg).map_err(runtime)?));
+    }
+    let pages = typst_renderer::Document::compile_sources(&files, "svg")
+        .map_err(runtime)?
+        .into_iter()
+        .map(String::from_utf8)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| runtime(e.to_string()))?;
     let typeset = scene.typeset(&pages).map_err(runtime)?;
     let svg = scene.render(&typeset).map_err(runtime)?;
-    Ok(themed_svg(PreparedRender::interactive_svg(&svg)?))
+    Ok(themed_svg(Scene::interactive_svg(&svg).map_err(runtime)?))
 }
 
 /// Use the website SVG palette from docs/assets/typst/theme.typ, including
@@ -220,53 +200,7 @@ pub(crate) fn collection_html(
     Ok(html)
 }
 
-/// The shared physics renderer's sources, at the project paths importers use.
-fn physics_sources() -> BTreeMap<String, Vec<u8>> {
-    [
-        (
-            "assets/embedded/drawing/templates/layout-core.typ",
-            include_bytes!("../../../assets/embedded/drawing/templates/layout-core.typ").as_slice(),
-        ),
-        (
-            "assets/embedded/drawing/templates/physics-edge-style.typ",
-            include_bytes!("../../../assets/embedded/drawing/templates/physics-edge-style.typ")
-                .as_slice(),
-        ),
-        (
-            "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
-            include_bytes!(
-                "../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"
-            )
-            .as_slice(),
-        ),
-    ]
-    .into_iter()
-    .map(|(path, source)| (path.to_owned(), source.to_vec()))
-    .collect()
-}
-
-/// Package the shared physics renderer once for diagram and process displays.
-pub(crate) fn prepare_physics_render<'py>(
-    py: Python<'py>,
-    source: &str,
-    config: Option<&Bound<'_, PyAny>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let sources = PyDict::new(py);
-    sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
-    for (path, source) in physics_sources() {
-        sources.set_item(path, PyBytes::new(py, &source))?;
-    }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("config", config)?;
-    py.import("linnet")?.getattr("PreparedRender")?.call_method(
-        "from_sources",
-        (sources,),
-        Some(&kwargs),
-    )
-}
-
-/// A process schematic uses the same particle labels, arrows and lines as diagrams.
-/// It is a native Linnest star graph, not a partially initialized FeynmanDiagram.
+/// Draw each process channel as a native star graph with a hatched interaction blob.
 pub(crate) fn process_svg(
     py: Python<'_>,
     model: &Model,
@@ -274,127 +208,16 @@ pub(crate) fn process_svg(
     outgoing: &[Vec<ParticleId>],
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
-    let mut source = String::from(
-        r##"#set page(width: auto, height: auto, margin: 2mm, fill: none)
-#set text(size: 10pt)
-#import "crates/linnest/typst/src/graph.typ" as graph
-#import "crates/linnest/typst/src/render/layout.typ" as renderer
-#import "crates/linnest/typst/src/impl/draw.typ": _node-radius, _radius-outset
-#import "crates/linnest/typst/src/impl/graph.typ": _node-style-data, _canvas-length
-#import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
-#import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
-#import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
-#import graph: build, edge, node, sink, source
-#set text(fill: palette.ink)
-#let particle-map = (
-"##,
-    );
-    let particles: BTreeSet<_> = incoming
-        .iter()
-        .chain(outgoing.iter().flatten())
-        .copied()
-        .collect();
-    if particles.is_empty() {
-        source.push(':');
-    }
-    for id in particles {
-        let p = model
-            .particle_by_id(id)
-            .expect("validated process particle");
-        writeln!(
-            source,
-            "{:?}: {},",
-            p.name,
-            p.generate_edge_typst_dict(model)
-        )
-        .unwrap();
-    }
-    source.push_str(")\n#context { stack(dir: ttb, spacing: 10pt,\n");
+    let config = render_config(py, config)?;
+    let options = scene_options(&config, false)?;
+    let mut figures = Vec::new();
     for state in outgoing {
-        let names = |state: &[ParticleId]| {
-            state
-                .iter()
-                .map(|id| model.particle_by_id(*id).unwrap().name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let initial = names(incoming);
-        let final_state = names(state);
-        let summary = format!("{initial} → {final_state}");
-        writeln!(source, "{{ let raw = build({{\n node(<process>, inspection: (title: \"Process\", summary: {summary:?}, properties: ((\"Model\", {:?}), (\"Incoming\", {initial:?}), (\"Outgoing\", {final_state:?}))))", model.name()).unwrap();
-        for (index, (id, is_incoming)) in incoming
-            .iter()
-            .map(|id| (id, true))
-            .chain(state.iter().map(|id| (id, false)))
-            .enumerate()
-        {
-            let p = model
-                .particle_by_id(*id)
-                .expect("validated process particle");
-            let endpoints = if is_incoming {
-                format!("<e{index}>, sink(<process>)")
-            } else {
-                format!("source(<process>), <e{index}>")
-            };
-            let orientation = if p.antiparticle == *id {
-                "undirected"
-            } else if p.is_antiparticle() {
-                "reversed"
-            } else {
-                "default"
-            };
-            writeln!(
-                source,
-                "edge({endpoints}, particle: {:?}, orientation: {orientation:?}, inspection: (title: {:?}, summary: {:?}, properties: ((\"PDG\", {:?}), (\"Mass\", {:?}))))",
-                p.name, p.name, format!("{} leg {}: {}", if is_incoming { "Incoming" } else { "Outgoing" }, index + 1, p.name), p.pdg_code.to_string(), model.parameter_by_id(p.mass).unwrap().name
-            )
-            .unwrap();
-        }
-        writeln!(
-            source,
-            "}})\n let process-mode = {:?}",
-            if incoming.is_empty() || state.is_empty() {
-                "generic"
-            } else {
-                "amplitude"
-            }
-        )
-        .unwrap();
-        source.push_str(r#" let config = _linnet_config
- let title = config.at("title", default: auto)
- let config = config + (title: if title == auto { none } else { title })
- let options = (mode: process-mode, label-fill: palette.ink) + config.at("options", default: (:))
- let drawing = config.at("draw", default: (:))
- let blob-fill = tiling(size: (5pt, 5pt), {
-   place(line(start: (0pt, 5pt), end: (5pt, 0pt), stroke: palette.ink + 0.35pt))
- })
- let style = (node-label: none, node-style: (radius: drawing.at("node-radius", default: 3.0), fill: blob-fill, stroke: (paint: palette.ink, thickness: 0.7pt, dash: "dashed"))) + config.at("style", default: (:))
- // Size the process springs from the final blob, including element styles.
- let effective = renderer._effective-options((unit: 1.5, node-label-style: (padding: 0.08)), style, drawing)
- let callbacks = renderer._callbacks(effective)
- let measured = graph.style(renderer.attach-elements(raw, config.at("elements", default: (:))), ..(effective + callbacks))
- let node = graph.nodes(measured).first()
- let bounds = node.statements
- let node-data = _node-style-data(node, effective)
- let fitted-radius = _node-radius(
-   (length: _canvas-length(effective.unit).to-absolute()),
-   (callbacks.node-label)(node-data), (callbacks.node-style)(node-data),
-   drawing.at("node-min-radius", default: 0.16), drawing.at("node-label-padding", default: 0.08),
- )
- let outset = drawing.at("node-outset", default: auto)
- let radius = calc.max(1.0, _radius-outset(fitted-radius), float(bounds.at("layout-width")) / 2, float(bounds.at("layout-height")) / 2, if outset == auto { 0 } else { outset })
- // The process uses blob-sized force-layout springs rather than the point-node ImPrEd seed.
- // At the default 10 x 10 viewport, dangling rest length is 20 times length-scale.
- // A modest outward pull leaves visible legs while mixed states retain left/right groups.
- let defaults = (layout-algo: "force", length-scale: radius / 20, spring-length-scale: 1.0, external-pull: 0.5)
- let layouts = renderer._layout-passes(config.at("layouts", default: ((:),))).map(pass => defaults + pass)
- physics-layout.render-layout(config + (options: options, style: style, layouts: layouts), input: raw, graph: graph, renderer: renderer, physics: physics, edge-style: (map: particle-map, default-edge: physics.default-edge))
-},
-"#);
+        let scene = options
+            .process_scene(model, incoming, state, &config)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        figures.push(render_scene(&scene)?);
     }
-    source.push_str(") }");
-    let prepared = prepare_physics_render(py, &source, config)?;
-    render_diagram_svg(py, &prepared)
+    Scene::combine_svgs(&figures).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.

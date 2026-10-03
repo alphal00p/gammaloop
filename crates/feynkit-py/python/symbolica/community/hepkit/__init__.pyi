@@ -3238,13 +3238,13 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
-        Emit the exact Typst source used by ``render`` without compiling it.
+        Export a self-contained Typst document embedding the rendered SVG.
 
         Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
-        as ``render``. The shared Linnest/Kurvst and physics assets must be available
-        beneath the Typst project root when compiling this source separately.
+        as ``render``. Labels are already typeset; compiling the exported source
+        needs no Linnest, Kurvst, MiTeX, or model assets.
 
         Examples
         --------
@@ -3255,7 +3255,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -3264,34 +3264,30 @@ class FeynmanDiagram:
         highlight : Subgraph or linnet.Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an interactive, transparent SVG using the shared physics renderer.
 
-        Amplitudes are laid out and drawn natively, with Typst typesetting only
-        their labels. Templates, selectors, graph styles, drawing options,
-        titles and cross sections compile the complete Typst renderer instead.
-        ``LayoutOptions(impred_labels=True)`` refines the layout around the drawn
-        labels.
+        All graph geometry is drawn in Rust; the embedded Typst compiler typesets
+        labels and titles. ``layouts={"impred_labels": True}`` refines the layout
+        around the drawn labels. No Python renderer or Typst graph package is needed.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> import linnet as ln
-        >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
-        ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
-        ...     template_options={"show-particle": False},
-        ... ))
+        >>> svg = diagram.render(momenta=True, config={
+        ...     "layouts": {"impred_steps": 100},
+        ...     "template_options": {"show-particle": False},
+        ... })
         >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
-            Typed ``layouts``, ``drawing`` and ``style`` groups. Physics controls
-            use ``template_options`` with the same names as ``just draw --input``:
-            ``show-particle``, ``show-edge-index``, ``show-node-index``, ``debug``,
-            ``momentum-arrows`` and the ``momentum-arrow-*``/``momentum-label-*`` options.
+        config : dict or None, optional
+            Native ``layouts``, ``drawing`` and ``style`` dictionaries. Boolean physics
+            controls in ``template_options`` include ``show-particle``, ``show-momentum``,
+            ``show-edge-index``, ``show-node-index``, ``debug``, and ``momentum-arrows``.
             Cross sections open their initial-state connections by default; set
             ``split-initial-state`` to ``False`` to draw the sewn graph.
         momenta : bool, optional
@@ -3304,7 +3300,7 @@ class FeynmanDiagram:
             Highlight a region while preserving the full diagram as muted context.
             A Subgraph highlights its own region by default.
         """
-    def to_html(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an HTML figure with the same options and hover information as ``render``.
 
@@ -3317,7 +3313,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -5369,56 +5365,11 @@ class Kinematics:
     --------
     >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> P = hep.Kinematics.external_momentum
+    >>> P = hep.Kinematics.external_momentum()
     >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
-    >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
+    >>> s, t, u = hep.Kinematics.s(), hep.Kinematics.t(), hep.Kinematics.u()
     >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
-    """
-    s: Expression
-    r"""
-    Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> s = hep.Kinematics.s
-    """
-    t: Expression
-    r"""
-    Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> t = hep.Kinematics.t
-    """
-    u: Expression
-    r"""
-    Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> u = hep.Kinematics.u
-    """
-    external_momentum: Expression
-    r"""
-    External momentum family indexed by physical leg.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Kinematics.external_momentum
-    """
-    loop_momentum: Expression
-    r"""
-    Loop momentum family indexed by loop basis position.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Kinematics.loop_momentum
     """
     @property
     def dimension(self) -> Expression:
@@ -5430,6 +5381,56 @@ class Kinematics:
         Using the setup in the ``Kinematics`` class example:
 
         >>> assert hep.Kinematics(S("D")).dimension == S("D")
+        """
+    @staticmethod
+    def s() -> Expression:
+        r"""
+        Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> s = hep.Kinematics.s()
+        """
+    @staticmethod
+    def t() -> Expression:
+        r"""
+        Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> t = hep.Kinematics.t()
+        """
+    @staticmethod
+    def u() -> Expression:
+        r"""
+        Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> u = hep.Kinematics.u()
+        """
+    @staticmethod
+    def external_momentum() -> Expression:
+        r"""
+        External momentum family indexed by physical leg.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Kinematics.external_momentum()
+        """
+    @staticmethod
+    def loop_momentum() -> Expression:
+        r"""
+        Loop momentum family indexed by loop basis position.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Kinematics.loop_momentum()
         """
     def __new__(cls, dimension: typing.Optional[Expression] = None, *, momenta: typing.Optional[typing.Sequence[Expression]] = None) -> Kinematics:
         r"""
@@ -7060,7 +7061,7 @@ class Parameter:
     def symbol(self) -> Expression:
         r"""
         Return the symbolic reference used by this model's expressions.
-        TeX and Typst output use the parameter's ``texname``. Plain output keeps
+        TeX and Typst output use ``texname`` and ``typstname``, respectively. Plain output keeps
         its symbolic name; no defining expression or numerical value is substituted.
 
         Examples
@@ -7070,6 +7071,17 @@ class Parameter:
         >>> reference = model.parameter("ee").symbol
         >>> mass = model.parameter("Me").symbol
         >>> assert "m_e" in (mass**2).to_latex()
+        """
+    @property
+    def typstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.standard_model().parameter("aS").typstname
+        'alpha_s'
         """
     @property
     def name(self) -> builtins.str:
@@ -7086,7 +7098,7 @@ class Parameter:
     def texname(self) -> typing.Optional[builtins.str]:
         r"""
         The model's LaTeX display label, or None when no label was supplied.
-        MiTeX renders this label in Typst and notebook math output.
+        Native Typst output uses ``typstname`` independently.
 
         >>> hep.Model.standard_model().parameter("ee").texname
         'e'
@@ -7397,6 +7409,28 @@ class Particle:
     >>> electron = model.particle_by_pdg(11)
     >>> assert electron.name == "e-"
     """
+    @property
+    def typstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.qcd().particle("g").typstname
+        'g'
+        """
+    @property
+    def antitypstname(self) -> typing.Optional[builtins.str]:
+        r"""
+        Native Typst math label of the antiparticle, without dollar delimiters.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> hep.Model.qcd().particle("u").antitypstname
+        'overline(u)'
+        """
     @property
     def name(self) -> builtins.str:
         r"""
@@ -8075,7 +8109,7 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
         r"""
         Render a blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
@@ -8088,7 +8122,7 @@ class Process:
 
         Parameters
         ----------
-        config : linnet.RenderConfig or None, optional
+        config : dict or linnet.RenderConfig or None, optional
             Particle-label, layout and drawing overrides shared with Feynman diagrams.
         """
     def _repr_svg_(self) -> builtins.str:
@@ -9175,6 +9209,7 @@ class Symbols:
     Canonical expression heads owned by diagrams and imported models.
 
     Tensor and representation vocabulary belongs to `symbolica.community.tensor`.
+    Symbols are constructed on demand so importing the module leaves time to set a license key.
     Use these references for diagram patterns and momentum construction without
     depending on internal namespaces. External and loop momenta belong to
     ``Kinematics``. Model parameters and couplings belong to
@@ -9184,101 +9219,111 @@ class Symbols:
     Examples
     --------
     >>> from symbolica.community import hepkit as hep
-    >>> Q = hep.Symbols.edge_momentum
+    >>> Q = hep.Symbols.edge_momentum()
     >>> edge_momentum = Q(0)
     >>> mass = hep.Model.standard_model().particle("e-").mass
     """
-    edge_momentum: Expression
-    r"""
-    Momentum family indexed by graph edge.
+    @staticmethod
+    def edge_momentum() -> Expression:
+        r"""
+        Momentum family indexed by graph edge.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.edge_momentum
-    """
-    denominator: Expression
-    r"""
-    Tagged propagator denominator head; its fourth argument is the inverse denominator.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.edge_momentum()
+        """
+    @staticmethod
+    def denominator() -> Expression:
+        r"""
+        Tagged propagator denominator head; its fourth argument is the inverse denominator.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.denominator
-    """
-    dimension: Expression
-    r"""
-    Lorentz dimension used by generated diagram expressions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.denominator()
+        """
+    @staticmethod
+    def dimension() -> Expression:
+        r"""
+        Lorentz dimension used by generated diagram expressions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.dimension
-    """
-    half_edge: Expression
-    r"""
-    Half-edge index family used to match external tensor slots.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.dimension()
+        """
+    @staticmethod
+    def half_edge() -> Expression:
+        r"""
+        Half-edge index family used to match external tensor slots.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.half_edge
-    """
-    polarization: Expression
-    r"""
-    Vector polarization wavefunction head.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.half_edge()
+        """
+    @staticmethod
+    def polarization() -> Expression:
+        r"""
+        Vector polarization wavefunction head.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.polarization
-    """
-    polarization_conjugate: Expression
-    r"""
-    Conjugated vector polarization wavefunction head.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.polarization()
+        """
+    @staticmethod
+    def polarization_conjugate() -> Expression:
+        r"""
+        Conjugated vector polarization wavefunction head.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.polarization_conjugate
-    """
-    ufo_metric: Expression
-    r"""
-    Metric head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.polarization_conjugate()
+        """
+    @staticmethod
+    def ufo_metric() -> Expression:
+        r"""
+        Metric head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_metric
-    """
-    ufo_index: Expression
-    r"""
-    Index placeholder head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_metric()
+        """
+    @staticmethod
+    def ufo_index() -> Expression:
+        r"""
+        Index placeholder head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_index
-    """
-    ufo_momentum: Expression
-    r"""
-    Momentum head in model propagator definitions.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_index()
+        """
+    @staticmethod
+    def ufo_momentum() -> Expression:
+        r"""
+        Momentum head in model propagator definitions.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> reference = hep.Symbols.ufo_momentum
-    """
-    model_conjugate: Expression
-    r"""
-    Complex-conjugation helper used in imported model formulas.
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> reference = hep.Symbols.ufo_momentum()
+        """
+    @staticmethod
+    def model_conjugate() -> Expression:
+        r"""
+        Complex-conjugation helper used in imported model formulas.
 
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.standard_model()
-    >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
-    """
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> model = hep.Model.standard_model()
+        >>> conjugate = hep.Symbols.model_conjugate()(model.parameter("CKM1x1").symbol)
+        """
 
 @typing.final
 class TadpoleFilterOptions:

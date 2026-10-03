@@ -6,7 +6,7 @@ use std::{
 };
 
 use pyo3::{
-    exceptions::{PyImportError, PyRuntimeError, PyValueError},
+    exceptions::{PyRuntimeError, PyValueError},
     prelude::*,
     types::{PyBytes, PyDict},
 };
@@ -34,7 +34,6 @@ use spenso::{
         parametric::{AtomViewOrConcrete, ParamOrConcrete},
     },
 };
-use std::path::Path;
 use symbolica::{
     api::python::{FormattedOutputBackend, PythonExpression, PythonFormattedOutput},
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
@@ -1331,57 +1330,31 @@ fn render_atom_tree(atom: &Atom) -> PyResult<Vec<u8>> {
 }
 
 fn compile_typst(
-    py: Python<'_>,
+    _py: Python<'_>,
     main_source: &str,
     format: &str,
     notation_source: Option<&str>,
     tree: Option<&[u8]>,
 ) -> PyResult<Vec<u8>> {
-    let typst = PyModule::import(py, "typst").map_err(|_| {
-        PyImportError::new_err(
-            "Typst rendering requires the optional dependency; install gammaloop[typst-display]",
-        )
-    })?;
-    let compile = typst.getattr("compile")?;
-    // typst-py treats every value in its virtual-file mapping as UTF-8 source,
-    // so binary render trees must be routed through an actual temporary file.
-    let temporary_directory = PyModule::import(py, "tempfile")?
-        .getattr("TemporaryDirectory")?
-        .call0()?;
-    let root_string: String = temporary_directory.getattr("name")?.extract()?;
-    let root = Path::new(&root_string);
-    let write_file = |name: &str, contents: &[u8]| {
-        std::fs::write(root.join(name), contents).map_err(|error| {
-            PyRuntimeError::new_err(format!("could not prepare Typst input {name}: {error}"))
-        })
-    };
-    write_file("main.typ", main_source.as_bytes())?;
-    write_file("render.typ", RENDER_TYP.as_bytes())?;
-    write_file(
-        "notation.typ",
-        notation_source.unwrap_or(NOTATION_TYP).as_bytes(),
-    )?;
+    let mut sources = std::collections::BTreeMap::from([
+        ("main.typ".to_owned(), main_source.as_bytes().to_vec()),
+        ("render.typ".to_owned(), RENDER_TYP.as_bytes().to_vec()),
+        (
+            "notation.typ".to_owned(),
+            notation_source.unwrap_or(NOTATION_TYP).as_bytes().to_vec(),
+        ),
+    ]);
     if let Some(tree) = tree {
-        write_file("tree.cbor", tree)?;
+        sources.insert("tree.cbor".to_owned(), tree.to_vec());
     }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("format", format)?;
-    kwargs.set_item("pretty", true)?;
-    kwargs.set_item("root", &root_string)?;
-    let result = compile
-        .call((root.join("main.typ"),), Some(&kwargs))
-        .and_then(|output| output.extract::<Vec<u8>>());
-    let cleanup = temporary_directory.call_method0("cleanup");
-    match result {
-        Ok(output) => {
-            cleanup?;
-            Ok(output)
-        }
-        Err(error) => {
-            let _ = cleanup;
-            Err(error)
-        }
-    }
+    let pages = typst_renderer::Document::compile_sources(&sources, format)
+        .map_err(PyRuntimeError::new_err)?;
+    let [output] = pages.as_slice() else {
+        return Err(PyRuntimeError::new_err(
+            "expression display requires exactly one page",
+        ));
+    };
+    Ok(output.clone())
 }
 
 fn extract_html_fragment(document: &str) -> Result<String, &'static str> {
@@ -2564,7 +2537,7 @@ fn to_typst(
 ///
 /// Notes
 /// -----
-/// Mathematical rendering uses the optional Typst runtime. The returned
+/// Mathematical rendering uses the embedded Typst compiler. The returned
 /// string is not automatically displayed; pass it to the notebook's HTML
 /// or SVG display facility.
 ///
@@ -2615,7 +2588,7 @@ fn to_html(
 ///
 /// Notes
 /// -----
-/// Mathematical rendering uses the optional Typst runtime. The returned
+/// Mathematical rendering uses the embedded Typst compiler. The returned
 /// string is not automatically displayed; pass it to the notebook's HTML
 /// or SVG display facility.
 ///

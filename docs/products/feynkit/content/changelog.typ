@@ -14,6 +14,12 @@ reduction settings with results. Python installations additionally depend on whi
 modules the host wheel registers. Rebuild that host and regenerate its stubs when changing the
 native API; importing an older installed wheel does not exercise a newly edited checkout.
 
+Python symbolic constants are now static methods: use `Symbols.dimension()`,
+`Symbols.edge_momentum()`, `Kinematics.s()` (likewise `t()` and `u()`), and
+`Kinematics.external_momentum()` / `loop_momentum()`. All expression-valued `Symbols` attributes
+follow this convention, as does the tensor module's `Nc()`. Deferring their construction lets
+callers set a license key after import.
+
 The current toolkit provides canonical model and graph ownership, deterministic generation,
 shared CFF arenas, native rank-20 vacuum tensor projection, and notebook diagram rendering.
 Use the #link("reference/interfaces/")[component references] to inspect the exact shipped surface.

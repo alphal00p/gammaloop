@@ -10,7 +10,7 @@ provide interface-aware rewriting. Dirac matrices, color tensors, and their
 simplifiers are specialized helpers built on these generic tensor operations.
 
 AUTO (also exported as _) leaves a tensor axis unresolved during indexing.
-Nc is the registered real Symbolica color-count symbol: its built-in numerical
+Nc() returns the registered real Symbolica color-count symbol: its built-in numerical
 value is 3. Use your own dimension symbol for formal SU(N) calculations
 when that default numerical value is not appropriate.
 
@@ -24,7 +24,6 @@ Examples
 
 import builtins
 import decimal
-import linnet
 import numpy
 import numpy.typing
 import symbolica.core
@@ -33,7 +32,6 @@ from symbolica import ComplexFloat, Float
 from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
-Nc: Expression
 _: _AutoIndex
 _Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
 _IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
@@ -3028,7 +3026,7 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -3071,7 +3069,7 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -6533,7 +6531,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -6566,7 +6564,7 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -6845,7 +6843,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6874,7 +6875,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6903,7 +6907,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -6932,7 +6939,10 @@ class TensorExpression(Expression):
         Notes
         -----
         Matching explicit labels contract. Compatible unresolved axes are
-        paired only when the choice is unambiguous. Use outer(), contract_ports(),
+        paired to maximize the number of contractions. Among equally complete
+        pairings, unresolved-unresolved pairs take precedence over unresolved-named
+        pairs; equally preferred alternatives raise an ambiguity error. Established
+        matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
         Examples
@@ -8890,25 +8900,25 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> source = network.to_dot()
         """
-    def to_linnest(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
-        Generate Typst/Linnest source for the network graph.
+        Export a self-contained Typst document embedding the native SVG graph.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
         -------
         str
-            Typst graph source produced by Linnet.
+            Typst source containing the complete SVG and its typeset labels.
 
         Notes
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -8921,13 +8931,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_linnest()
         """
-    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
         Render the current network graph to SVG.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -8939,7 +8949,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -9064,13 +9074,13 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
         Display the current network graph and execution status.
 
         Parameters
         ----------
-        config : linnet.RenderConfig, optional
+        config : dict, optional
             Graph layout and rendering options. Omit for the standard network view.
 
         Returns
@@ -9082,7 +9092,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph rendering requires the Linnet/Typst rendering support.
+        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
 
         Examples
         --------
@@ -9117,7 +9127,7 @@ class TensorNetwork:
 
         Notes
         -----
-        Mathematical rendering uses the optional Typst runtime. The returned
+        Mathematical rendering uses the embedded Typst compiler. The returned
         string is not automatically displayed; pass it to the notebook's HTML
         or SVG display facility.
 
@@ -10770,6 +10780,21 @@ class _AutoIndex:
     """
     ...
 
+def Nc() -> Expression:
+    r"""
+    Return the canonical real color-count symbol, whose default numerical value is 3.
+
+    Construct it on demand so importing Symbolica leaves time to set a license key.
+    Use a separate dimension symbol for formal SU(N) calculations when the default
+    numerical value is not appropriate.
+
+    Examples
+    --------
+    >>> from symbolica.community.tensor import Nc
+    >>> Nc().evaluate({})
+    3
+    """
+
 def as_tensor(expression: typing.Any) -> TensorExpression:
     r"""
     Convert a symbolic expression to a TensorExpression.
@@ -11170,7 +11195,7 @@ def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bo
 
     Notes
     -----
-    Mathematical rendering uses the optional Typst runtime. The returned
+    Mathematical rendering uses the embedded Typst compiler. The returned
     string is not automatically displayed; pass it to the notebook's HTML
     or SVG display facility.
 
@@ -11207,7 +11232,7 @@ def to_svg(expression: Expression, show_dimensions: typing.Optional[builtins.boo
 
     Notes
     -----
-    Mathematical rendering uses the optional Typst runtime. The returned
+    Mathematical rendering uses the embedded Typst compiler. The returned
     string is not automatically displayed; pass it to the notebook's HTML
     or SVG display facility.
 
