@@ -14,7 +14,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
-    id::{Match, Replacement},
+    id::{Condition, Match, PatternRestriction, Replacement},
 };
 use symbolica_utils::PatternReplacement;
 
@@ -166,39 +166,53 @@ impl<'a> Chain for AtomView<'a> {
         traces: bool,
         retain_singletons: bool,
     ) -> Atom {
+        // Match full slot compatibility, including dimensions and duality.
+        // Names alone never authorize a closure.
+        let closed = |node: AtomView<'_>, slots: &mut SlotMatcher| {
+            use spenso::structure::slot::IsAbstractSlot;
+            let AtomView::Fun(chain) = node else {
+                return None;
+            };
+            if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
+                return None;
+            }
+            let mut arguments = chain.iter();
+            let start = slots
+                .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+                .ok()?;
+            let end = slots
+                .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+                .ok()?;
+            if start.rep().rep != representation
+                || !start.rep().matches(&end.rep())
+                || start.aind != end.aind
+                || !(representation.is_self_dual()
+                    || representation.is_base() && end.rep().rep.is_dual())
+            {
+                return None;
+            }
+            Some(spenso::shadowing::trace(
+                start.rep().to_symbolic([]),
+                arguments,
+            ))
+        };
         let normalize = |value: Atom| {
             if !traces {
                 return value;
             }
-            // Match full slot compatibility, including dimensions and duality.
-            // Names alone never authorize a closure.
-            use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
             let mut slots = SlotMatcher::default();
+            let mut closes = false;
+            value.visitor(&mut |node| {
+                closes |= closed(node, &mut slots).is_some();
+                !closes
+            });
+            if !closes {
+                return value;
+            }
             value.replace_map(|node, _, output| {
-                let AtomView::Fun(chain) = node else {
-                    return;
-                };
-                if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
-                    return;
+                if let Some(trace) = closed(node, &mut slots) {
+                    **output = trace;
                 }
-                let mut arguments = chain.iter();
-                let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
-                else {
-                    return;
-                };
-                let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
-                else {
-                    return;
-                };
-                if start.rep().rep != representation
-                    || !start.rep().matches(&end.rep())
-                    || start.aind != end.aind
-                    || !(representation.is_self_dual()
-                        || representation.is_base() && end.rep().rep.is_dual())
-                {
-                    return;
-                }
-                **output = spenso::shadowing::trace(start.rep().to_symbolic([]), arguments);
             })
         };
         if !collect {
@@ -252,9 +266,12 @@ impl<'a> Chain for AtomView<'a> {
                 ),
             ]);
         }
-        let mut result = source.clone();
+        // Joins match two chains of one product. Each product with two or
+        // more chains reaches its fixed point among its own chain factors,
+        // children first, instead of matching every product of the whole
+        // expression once per pass.
         let mut joined = false;
-        loop {
+        let mut fixed_point = |mut result: Atom| loop {
             let previous = result.clone();
             for (product, transpose_left, transpose_right) in &joins {
                 let start = in_index.to_pattern();
@@ -318,44 +335,48 @@ impl<'a> Chain for AtomView<'a> {
             result = normalize(result);
             // Every join removes one chain; normalization may close it as a trace.
             if result == previous {
-                if retain_singletons {
-                    // The existing pass has already collected every matrix.
-                    // Algebra kernels keep those words, so neither unfold them
-                    // here nor run chainify again to reconstruct them afterward.
-                    return result;
-                }
-                if !joined && (!traces || result == source) {
-                    // No connection was joined or closed. Keep the original
-                    // notation, including existing one-factor chains: unfolding
-                    // them here competes with the algebra kernels' collection.
-                    return self.to_owned();
-                }
-                // An isolated matrix has no product to collect. Retain its exact
-                // indexed form; a closed word must survive when traces are disabled.
-                return result.replace_map(|node, _, output| {
-                    let AtomView::Fun(chain) = node else {
-                        return;
-                    };
-                    if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
-                        return;
-                    }
-                    let mut arguments = chain.iter();
-                    let start = arguments.next().unwrap();
-                    let end = arguments.next().unwrap();
-                    use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
-                    let mut slots = SlotMatcher::default();
-                    let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(start) else {
-                        return;
-                    };
-                    let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(end) else {
-                        return;
-                    };
-                    if start.rep().rep == representation && start.aind != end.aind {
-                        **output = node.undo_single_length();
-                    }
-                });
+                return result;
             }
+        };
+        let joined_products = joining_products(source.as_view(), &mut fixed_point);
+        // Close single chains outside joined products too.
+        let result = normalize(joined_products.unwrap_or_else(|| source.clone()));
+        if retain_singletons {
+            // The existing pass has already collected every matrix.
+            // Algebra kernels keep those words, so neither unfold them
+            // here nor run chainify again to reconstruct them afterward.
+            return result;
         }
+        if !joined && (!traces || result == source) {
+            // No connection was joined or closed. Keep the original
+            // notation, including existing one-factor chains: unfolding
+            // them here competes with the algebra kernels' collection.
+            return self.to_owned();
+        }
+        // An isolated matrix has no product to collect. Retain its exact
+        // indexed form; a closed word must survive when traces are disabled.
+        result.replace_map(|node, _, output| {
+            let AtomView::Fun(chain) = node else {
+                return;
+            };
+            if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
+                return;
+            }
+            let mut arguments = chain.iter();
+            let start = arguments.next().unwrap();
+            let end = arguments.next().unwrap();
+            use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+            let mut slots = SlotMatcher::default();
+            let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(start) else {
+                return;
+            };
+            let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(end) else {
+                return;
+            };
+            if start.rep().rep == representation && start.aind != end.aind {
+                **output = node.undo_single_length();
+            }
+        })
     }
 
     fn chainify(&self, representation: LibraryRep) -> Atom {
@@ -370,65 +391,8 @@ impl<'a> Chain for AtomView<'a> {
 
         let in_index = Atom::var(W_.i_);
         let out_index = Atom::var(W_.j_);
-        let endpoints = W_.i_.filter_cmp(W_.j_, move |left, right| {
-            let (Match::Single(left), Match::Single(right)) = (left, right) else {
-                return false;
-            };
-            let mut slots = SlotMatcher::default();
-            let Some(left) = slots.port_representation(*left) else {
-                return false;
-            };
-            let Some(right) = slots.port_representation(*right) else {
-                return false;
-            };
-            left.0 == representation && right.0 == representation.dual() && left.1 == right.1
-        });
-
-        // Existing ports belong to an enclosing chain. A second representation
-        // must retain its explicit slots rather than reuse those untyped ports.
-        let no_ports = |matched: &Match<'_>| {
-            let args = match matched {
-                Match::Multiple(_, args) => args.as_slice(),
-                Match::Single(arg) => std::slice::from_ref(arg),
-                Match::FunctionName(_) => return false,
-            };
-            let mut slots = SlotMatcher::default();
-            let mut found = false;
-            for argument in args {
-                argument.visitor(&mut |value| {
-                    if !matches!(slots.classify(value), SlotMatch::Other) {
-                        return false;
-                    }
-                    found |= matches!(value, AtomView::Var(var)
-                        if var.get_symbol() == T.chain_in || var.get_symbol() == T.chain_out);
-                    !found
-                });
-                if found {
-                    return false;
-                }
-            }
-            true
-        };
-        let replacement = Replacement::new(
-            function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
-            function!(
-                T.chain,
-                in_index,
-                out_index,
-                function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
-            ),
-        )
-        .when(
-            endpoints.clone()
-                & W_.a_.filter_match(move |a| {
-                    matches!(a, Match::FunctionName(a)
-                    if *a != T.chain && *a != T.trace && *a != ETS.metric)
-                })
-                & W_.a___.filter_match(no_ports)
-                & W_.b___.filter_match(no_ports)
-                & W_.c___.filter_match(no_ports),
-        )
-        .max_level(0);
+        let endpoints = chainify_endpoints(representation);
+        let replacement = chainify_rule(representation);
         let opaque_heads = [T.chain, T.trace];
         let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
         // An unchanged pruning assignment in replace_map rebuilds ancestors
@@ -497,7 +461,10 @@ impl<'a> Chain for AtomView<'a> {
             *self,
             &mut SlotMatcher::default(),
             &opaque_heads,
-            &|atom| atom.replace_multiple([&replacement]),
+            &|atom| match chainified_slot_function(atom, representation) {
+                Some(chained) => chained.unwrap_or_else(|| atom.to_owned()),
+                None => atom.replace_multiple([&replacement]),
+            },
             &|function| {
                 if function.get_symbol() != T.dot && function.get_symbol() != ETS.metric {
                     return None;
@@ -571,9 +538,271 @@ impl<'a> Chain for AtomView<'a> {
     }
 
     fn undo_single_length(&self) -> Atom {
-        self.to_owned()
-            .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
+        undone_self_dual_single_length(*self).unwrap_or_else(|| {
+            self.to_owned()
+                .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
+        })
     }
+}
+
+/// chainify's endpoints: a port of the representation and one of its dual,
+/// of one dimension. A port may be an explicit slot, an unresolved
+/// representation or a supplied compact rank-one tensor.
+fn chainify_endpoints(representation: LibraryRep) -> Condition<PatternRestriction> {
+    W_.i_.filter_cmp(W_.j_, move |left, right| {
+        let (Match::Single(left), Match::Single(right)) = (left, right) else {
+            return false;
+        };
+        let mut slots = SlotMatcher::default();
+        let Some(left) = slots.port_representation(*left) else {
+            return false;
+        };
+        let Some(right) = slots.port_representation(*right) else {
+            return false;
+        };
+        left.0 == representation && right.0 == representation.dual() && left.1 == right.1
+    })
+}
+
+/// chainify's endpoint rule: a function with two endpoints of the
+/// representation becomes a one-factor chain between them.
+fn chainify_rule(representation: LibraryRep) -> Replacement {
+    let in_index = Atom::var(W_.i_);
+    let out_index = Atom::var(W_.j_);
+
+    // Existing ports belong to an enclosing chain. A second representation
+    // must retain its explicit slots rather than reuse those untyped ports.
+    let no_ports = |matched: &Match<'_>| {
+        let args = match matched {
+            Match::Multiple(_, args) => args.as_slice(),
+            Match::Single(arg) => std::slice::from_ref(arg),
+            Match::FunctionName(_) => return false,
+        };
+        let mut slots = SlotMatcher::default();
+        let mut found = false;
+        for argument in args {
+            argument.visitor(&mut |value| {
+                if !matches!(slots.classify(value), SlotMatch::Other) {
+                    return false;
+                }
+                found |= matches!(value, AtomView::Var(var)
+                    if var.get_symbol() == T.chain_in || var.get_symbol() == T.chain_out);
+                !found
+            });
+            if found {
+                return false;
+            }
+        }
+        true
+    };
+    Replacement::new(
+        function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
+        function!(
+            T.chain,
+            in_index,
+            out_index,
+            function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
+        ),
+    )
+    .when(
+        chainify_endpoints(representation)
+            & W_.a_.filter_match(move |a| {
+                matches!(a, Match::FunctionName(a)
+                if *a != T.chain && *a != T.trace && *a != ETS.metric)
+            })
+            & W_.a___.filter_match(no_ports)
+            & W_.b___.filter_match(no_ports)
+            & W_.c___.filter_match(no_ports),
+    )
+    .max_level(0)
+}
+
+/// The first match of chainify's endpoint rule on a function whose arguments
+/// are all explicit slots, in a self-dual representation: the rightmost slot
+/// of the representation that a later slot of the same dimension follows,
+/// and the rightmost such later slot. `Some(None)` when nothing matches;
+/// `None` when the rule must decide.
+fn chainified_slot_function(
+    atom: AtomView<'_>,
+    representation: LibraryRep,
+) -> Option<Option<Atom>> {
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    if !representation.is_self_dual()
+        || [T.chain, T.trace, ETS.metric].contains(&function.get_symbol())
+    {
+        return None;
+    }
+    let mut slots = SlotMatcher::default();
+    let arguments = function.iter().collect::<Vec<_>>();
+    if !arguments
+        .iter()
+        .all(|argument| matches!(slots.classify(*argument), SlotMatch::Explicit(_)))
+    {
+        return None;
+    }
+    // The dimension of a port of this self-dual representation, as the
+    // rule's endpoint condition reads it.
+    let dimensions = arguments
+        .iter()
+        .map(|argument| {
+            slots
+                .port_representation(*argument)
+                .and_then(|(rep, dimension)| (rep == representation).then_some(dimension))
+        })
+        .collect::<Vec<_>>();
+    // Sequence wildcards try their longest spans first.
+    let Some((start, end)) = (0..arguments.len()).rev().find_map(|start| {
+        let dimension = dimensions[start]?;
+        (start + 1..arguments.len())
+            .rev()
+            .find(|&end| dimensions[end] == Some(dimension))
+            .map(|end| (start, end))
+    }) else {
+        return Some(None);
+    };
+    let mut matrix = FunctionBuilder::new(function.get_symbol());
+    for (position, argument) in arguments.iter().enumerate() {
+        matrix = if position == start {
+            matrix.add_arg(Atom::var(T.chain_in))
+        } else if position == end {
+            matrix.add_arg(Atom::var(T.chain_out))
+        } else {
+            matrix.add_arg(*argument)
+        };
+    }
+    Some(Some(chain!(
+        arguments[start],
+        arguments[end],
+        matrix.finish()
+    )))
+}
+
+/// `chain(s, e, F(.., in, .., out, ..))` as `F(.., s, .., e, ..)` for slots
+/// of one self-dual representation of one dimension; `None` otherwise, for
+/// the general rule.
+fn undone_self_dual_single_length(chain: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(chain) = chain else {
+        return None;
+    };
+    if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
+        return None;
+    }
+    let mut arguments = chain.iter();
+    let (start, end, factor) = (
+        arguments.next().unwrap(),
+        arguments.next().unwrap(),
+        arguments.next().unwrap(),
+    );
+    let (AtomView::Fun(start_slot), AtomView::Fun(end_slot), AtomView::Fun(factor)) =
+        (start, end, factor)
+    else {
+        return None;
+    };
+    if start_slot.get_symbol() != end_slot.get_symbol()
+        || !start_slot.get_symbol().has_tag(&T.self_dual)
+        || start_slot.get_nargs() != 2
+        || end_slot.get_nargs() != 2
+        || start_slot.iter().next() != end_slot.iter().next()
+    {
+        return None;
+    }
+    let is = |argument: AtomView<'_>, symbol: Symbol| matches!(argument, AtomView::Var(variable) if variable.get_symbol() == symbol);
+    let position_in = factor
+        .iter()
+        .position(|argument| is(argument, T.chain_in))?;
+    let position_out = factor
+        .iter()
+        .position(|argument| is(argument, T.chain_out))?;
+    if position_out <= position_in {
+        return None;
+    }
+    let mut undone = FunctionBuilder::new(factor.get_symbol());
+    for (position, argument) in factor.iter().enumerate() {
+        undone = if position == position_in {
+            undone.add_arg(start)
+        } else if position == position_out {
+            undone.add_arg(end)
+        } else {
+            undone.add_arg(argument)
+        };
+    }
+    Some(undone.finish())
+}
+
+/// Rewrite every product with at least two chain factors, children first:
+/// `join` receives the product of its chains, the other factors stay. `None`
+/// when nothing changed. Slots are left unopened.
+fn joining_products(expression: AtomView<'_>, join: &mut impl FnMut(Atom) -> Atom) -> Option<Atom> {
+    fn visit(
+        expression: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        join: &mut impl FnMut(Atom) -> Atom,
+    ) -> Option<Atom> {
+        if !matches!(slots.classify(expression), SlotMatch::Other) {
+            return None;
+        }
+        let children = match expression {
+            AtomView::Fun(function) => function.iter().collect::<Vec<_>>(),
+            AtomView::Add(sum) => sum.iter().collect(),
+            AtomView::Mul(product) => product.iter().collect(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                vec![base, exponent]
+            }
+            _ => return None,
+        };
+        let rewritten = children
+            .iter()
+            .map(|child| visit(*child, slots, join))
+            .collect::<Vec<_>>();
+        let changed = rewritten.iter().any(Option::is_some);
+        let children = children
+            .iter()
+            .zip(rewritten)
+            .map(|(child, rewritten)| {
+                rewritten.map_or_else(|| AtomOrView::from(*child), AtomOrView::from)
+            })
+            .collect::<Vec<_>>();
+        let is_chain = |factor: &AtomView<'_>| matches!(factor, AtomView::Fun(function) if function.get_symbol() == T.chain);
+        let rebuilt = match expression {
+            AtomView::Mul(product) if !changed && product.iter().filter(is_chain).count() < 2 => {
+                return None;
+            }
+            _ if !changed && !matches!(expression, AtomView::Mul(_)) => return None,
+            AtomView::Fun(function) => {
+                let mut output = FunctionBuilder::new(function.get_symbol());
+                for child in children {
+                    output = output.add_arg(child);
+                }
+                return Some(output.finish());
+            }
+            AtomView::Add(_) => return Some(Atom::add_many(children)),
+            AtomView::Pow(_) => return Some(children[0].as_view().pow(children[1].as_view())),
+            AtomView::Mul(_) if changed => Atom::mul_many(children),
+            _ => expression.to_owned(),
+        };
+        let AtomView::Mul(product) = rebuilt.as_view() else {
+            return changed.then_some(rebuilt);
+        };
+        let (chains, others): (Vec<_>, Vec<_>) = product.iter().partition(is_chain);
+        if chains.len() < 2 {
+            return changed.then_some(rebuilt);
+        }
+        let chains = Atom::mul_many(chains);
+        let joined = join(chains.clone());
+        if joined == chains {
+            return changed.then_some(rebuilt);
+        }
+        Some(Atom::mul_many(
+            others
+                .into_iter()
+                .map(AtomOrView::from)
+                .chain([joined.into()]),
+        ))
+    }
+    visit(expression, &mut SlotMatcher::default(), join)
 }
 
 #[cfg(test)]
@@ -1082,6 +1311,66 @@ mod tests {
         let collected = normalized.join_chains(rep);
 
         assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))),gamma(in,out,p(2,mink(4)))))");
+    }
+
+    /// The self-dual fast paths of chainify and of the single-length undo
+    /// give what their rules give: structure constants with slots in every
+    /// order, mixed dimensions, a slot of another representation, and the
+    /// undo of each result.
+    #[test]
+    fn self_dual_fast_paths_agree_with_their_rules() {
+        test_initialize();
+        let adjoint = crate::representations::ColorAdjoint {};
+        let slot = |dimension: i64, name: &str| {
+            adjoint.to_symbolic([
+                Atom::num(dimension),
+                Atom::var(symbol!(&format!("idenso::chain_fast::{name}"))),
+            ])
+        };
+        let fundamental = ColorFundamental {}
+            .to_symbolic([Atom::num(3), Atom::var(symbol!("idenso::chain_fast::i"))]);
+        let head = symbol!("idenso::chain_fast::T");
+        let [a, b, c, d] = ["a", "b", "c", "d"].map(|name| slot(8, name));
+        let small = slot(3, "s");
+        let mut inputs = vec![
+            crate::color_f!(&a, &b, &c),
+            crate::color_f!(&c, &a, &b),
+            crate::color_f!(&b, &c, &a),
+        ];
+        for arguments in [
+            vec![&a, &b, &c, &d],
+            vec![&a, &small, &b],
+            vec![&small, &a, &b],
+            vec![&a, &b, &small],
+            vec![&a, &fundamental, &b],
+            vec![&a, &small],
+            vec![&a],
+        ] {
+            inputs.push(
+                arguments
+                    .into_iter()
+                    .fold(FunctionBuilder::new(head), |builder, argument| {
+                        builder.add_arg(argument)
+                    })
+                    .finish(),
+            );
+        }
+        let representation = LibraryRep::from(adjoint);
+        let rule = chainify_rule(representation);
+        for input in inputs {
+            let fast = chainified_slot_function(input.as_view(), representation)
+                .expect("explicit slots are decided")
+                .unwrap_or_else(|| input.clone());
+            assert_eq!(fast, input.replace_multiple([&rule]), "{input}");
+            if let Some(undone) = undone_self_dual_single_length(fast.as_view()) {
+                assert_eq!(
+                    undone,
+                    fast.replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref()),
+                    "{fast}"
+                );
+                assert_eq!(undone, input, "{fast}");
+            }
+        }
     }
 
     #[test]

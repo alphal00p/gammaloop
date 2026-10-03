@@ -8,7 +8,7 @@ use crate::{
 };
 use spenso::structure::{partial::PartialStructure, representation::RepName};
 use std::{collections::HashMap, sync::Arc};
-use symbolica::atom::AtomView;
+use symbolica::atom::{AtomCore, AtomView, Symbol};
 
 pub(crate) mod observation;
 use observation::{DomainObservations, SettledRegions};
@@ -193,6 +193,80 @@ impl DomainPlan {
     }
 }
 
+/// Index labels spelled like Symbolica wildcards (`a_`, also nested as in
+/// `coad(8,h(a_))`). Normalization neither sorts nor zeroes an antisymmetric
+/// function whose arguments contain one, so `f(a_,a_,c)` would survive and
+/// equal terms would not merge. The colour verb reduces private aliases and
+/// restores the admitted labels on publication; no pattern is built from them.
+struct WildcardLabelAliases {
+    forward: HashMap<Symbol, Symbol>,
+    backward: HashMap<Symbol, Symbol>,
+}
+
+impl WildcardLabelAliases {
+    fn of(expression: AtomView<'_>) -> Option<Self> {
+        let mut slots = spenso::structure::slot::SlotMatcher::default();
+        let mut labels = std::collections::BTreeSet::new();
+        expression.visitor(&mut |node| {
+            if !matches!(
+                slots.classify(node),
+                spenso::structure::slot::SlotMatch::Explicit(_)
+            ) {
+                return true;
+            }
+            node.visitor(&mut |payload| {
+                if let AtomView::Var(variable) = payload
+                    && variable.get_symbol().get_wildcard_level() > 0
+                {
+                    labels.insert(variable.get_symbol());
+                }
+                true
+            });
+            false
+        });
+        if labels.is_empty() {
+            return None;
+        }
+        // The renaming must be injective: an alias never names a symbol the
+        // expression already contains. Collect those once, not per label.
+        let present = expression.get_all_symbols(true);
+        let forward = labels
+            .into_iter()
+            .map(|label| {
+                let alias = (0..)
+                    .map(|attempt| {
+                        symbolica::symbol!(&format!(
+                            "idenso::wildcard_label_{}_{attempt}",
+                            label.get_id()
+                        ))
+                    })
+                    .find(|alias| !present.contains(alias))
+                    .unwrap();
+                (label, alias)
+            })
+            .collect::<HashMap<_, _>>();
+        let backward = forward
+            .iter()
+            .map(|(&label, &alias)| (alias, label))
+            .collect();
+        Some(Self { forward, backward })
+    }
+
+    fn reduce(
+        &self,
+        value: &SymbolicTensor<PartialStructure>,
+        request: ReductionRequest<'_>,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
+        let reduced = value
+            .with_renamed_symbols(&self.forward)?
+            .plan_reduction(request)?;
+        let mut restored = reduced.with_renamed_symbols(&self.backward)?;
+        restored.proofs.contracted = reduced.proofs.contracted;
+        restored.proofs.reduction = reduced.proofs.reduction;
+        Ok(restored)
+    }
+}
+
 impl SymbolicTensor<PartialStructure> {
     /// Apply the identity families and output policy in [`AlgebraSettings`],
     /// preserving unrelated scalar factorization. Enabled identities authorize
@@ -244,6 +318,12 @@ impl SymbolicTensor<PartialStructure> {
             result.proofs.reduction.as_mut().unwrap().status = ReductionStatus::Complete;
             return Ok(result);
         }
+        if let ReductionRequest::Algebra(settings) = request
+            && settings.color.is_some()
+            && let Some(aliases) = WildcardLabelAliases::of(self.expression.as_view())
+        {
+            return aliases.reduce(self, request);
+        }
         let enabled = request.enabled();
         // Identity prerequisites are independent of the additional structural
         // filter. Both requests use the same contractor with different scope.
@@ -268,6 +348,9 @@ impl SymbolicTensor<PartialStructure> {
                 _ => ContractSettings::default(),
             },
         };
+        // Whether colour rounds certify their fixed points.
+        let one_shot_colour = matches!(request, ReductionRequest::Algebra(settings)
+            if settings.color.is_some_and(|color| color.one_shot_traces));
         let mut plan = DomainPlan::new(self.clone(), enabled);
         while plan.pending != 0 {
             let candidates = plan.local_candidates();
@@ -327,6 +410,10 @@ impl SymbolicTensor<PartialStructure> {
                 })
                 .unwrap();
             plan.pending &= !operation;
+            // Set when the colour kernel certifies its result as a fixed point.
+            let mut certified = false;
+            // Set when a structural round only collected chain/trace notation.
+            let mut notation_only = false;
             let mut before = plan.value.clone();
             before.proofs.frontier = ReductionStatus::Complete;
             let (value, operation_status) = match request {
@@ -339,7 +426,10 @@ impl SymbolicTensor<PartialStructure> {
                         },
                         ..settings
                     };
-                    before.contract_domain(settings)?
+                    let value;
+                    let status;
+                    (value, status, notation_only) = before.contract_domain(settings)?;
+                    (value, status)
                 }
                 ReductionRequest::Algebra(settings) => {
                     if operation == DOTS {
@@ -348,7 +438,10 @@ impl SymbolicTensor<PartialStructure> {
                             ReductionStatus::Complete,
                         )
                     } else if operation == STRUCTURE {
-                        before.contract_domain(structural)?
+                        let value;
+                        let status;
+                        (value, status, notation_only) = before.contract_domain(structural)?;
+                        (value, status)
                     } else {
                         let observed = &plan.observed;
                         let prerequisites = before.contract_prerequisites(prerequisite_settings, |value| {
@@ -384,7 +477,11 @@ impl SymbolicTensor<PartialStructure> {
                             });
                             let value = match operation {
                                 GAMMA => before.simplify_gamma_parts(settings.gamma.unwrap(), settings.collect_coefficients, plan.settled.entry(GAMMA).or_default(), settings.max_passes.map(|limit| limit.saturating_sub(plan.changes)))?,
-                                COLOR => before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?,
+                                COLOR => {
+                                    let value;
+                                    (value, certified) = before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?;
+                                    value
+                                }
                                 EPSILON if observed.epsilon_degree < 2 => before.clone(),
                                 EPSILON => before.collect_with_map(crate::tensor::CollectionMode::Monomials, None,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
@@ -392,7 +489,7 @@ impl SymbolicTensor<PartialStructure> {
                                         let expression = EpsilonSimplifierPass::step(selected.expression.as_view());
                                         let rewritten = selected.with_identity_result(expression, None)?;
                                         if rewritten == selected { return Ok(rewritten); }
-                                        let (mut value, status) = rewritten.contract_domain(prerequisite_settings)?;
+                                        let (mut value, status, _) = rewritten.contract_domain(prerequisite_settings)?;
                                         value.proofs.frontier = status;
                                         Ok(value)
                                     }))?,
@@ -421,6 +518,17 @@ impl SymbolicTensor<PartialStructure> {
                 } else {
                     None
                 };
+                // In one-shot mode a colour fixed point, certified or confirmed
+                // by a no-op round, survives another family's intrinsic change
+                // that adds no colour work, instead of needing a confirming
+                // colour round.
+                let colour_settled = operation != COLOR
+                    && dirty.is_some()
+                    && (plan.pending | plan.deferred) & COLOR == 0
+                    && one_shot_colour
+                    && (observed.adds_no_colour_work(&plan.observed)
+                        || (notation_only
+                            && observed.notation_adds_no_colour_work(&plan.observed)));
                 plan.observed = observed;
                 plan.value = value;
                 plan.changes += 1;
@@ -429,6 +537,17 @@ impl SymbolicTensor<PartialStructure> {
                 // output and newly affected identities still need consideration.
                 plan.pending |=
                     enabled & dirty.map_or(enabled, |families| STRUCTURE | DOTS | families);
+                if colour_settled {
+                    plan.pending &= !COLOR;
+                }
+                // A certified colour result needs no confirming no-op round.
+                if certified {
+                    plan.pending &= !COLOR;
+                }
+                // Nor does a notation-only structural result.
+                if notation_only {
+                    plan.pending &= !STRUCTURE;
+                }
             }
             if operation_status == ReductionStatus::Deferred {
                 plan.deferred |= operation;

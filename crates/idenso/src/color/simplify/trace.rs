@@ -1,14 +1,39 @@
 //! General trace decomposition in the existing colour kernel.
 //!
 //! A normalized symmetric prefix is multiplied by one ordered generator at a
-//! time using equations (30)--(34) of hep-ph/9802376. Each kernel call leaves
-//! the unprocessed suffix in existing trace/projector notation, so the shared
-//! planner can contract newly exposed connections before resuming. No projector
-//! is expanded into its factorial number of permutations.
+//! time using equations (30)--(34) of hep-ph/9802376. No projector is expanded
+//! into its factorial number of permutations.
+//!
+//! A line that may still connect to other factors returns after each insertion
+//! and leaves the unprocessed suffix in existing trace/projector notation, so
+//! the shared planner can apply product rules and contractions before resuming.
+//! An isolated line has no such partner: every insertion only creates
+//! commutator dummies used later in the same recursion. With
+//! [`ColorSimplifySettings::one_shot_traces`] it is decomposed completely in
+//! one call.
 
 use symbolica::domains::{integer::Integer, rational::Rational};
 
 use super::*;
+
+/// How far the remaining colour factors of a term can reach a trace line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LineContext {
+    /// Other factors may still connect to the line's ports.
+    Unknown,
+    /// The line is the only colour factor of a complete top-level term.
+    Isolated,
+}
+
+/// Fixed data of one symmetric-prefix recursion.
+struct TraceRecursion<'a> {
+    rep: &'a Atom,
+    adjoint: bool,
+    /// Bernoulli coefficients up to the largest prefix that can occur.
+    coefficients: &'a [Rational],
+    /// Continue past the first insertion instead of returning to the planner.
+    one_shot: bool,
+}
 
 impl ColorAlgebraSimplifier {
     /// Decompose one compatible generator word, preserving raw adjoint phases.
@@ -17,20 +42,61 @@ impl ColorAlgebraSimplifier {
     /// F^a_bc = f^{bca} = i T_A^a_bc, so [F^a,F^b] = -f^{abc} F^c.
     /// Its emitted symmetric traces also contain raw F matrices: at even degree
     /// n they equal i^n times the normalized Hermitian invariant d_A.
-    pub(super) fn simplify_generator_trace(&self, rep: &Atom, generators: &[Atom]) -> Option<Atom> {
+    pub(super) fn simplify_generator_trace(
+        &self,
+        rep: &Atom,
+        generators: &[Atom],
+        line: LineContext,
+    ) -> Option<Atom> {
         let adjoint = Self::trace_generator_is_adjoint(rep, generators)?;
         let Some(first) = generators.first() else {
             return trace_terminal_dimension(rep.as_view());
         };
+        if adjoint
+            && let [i1, i2, i3, i4, i5] = generators
+            && generators
+                .iter()
+                .enumerate()
+                .all(|(i, slot)| !generators[..i].contains(slot))
+        {
+            return self.adjoint_five_trace(rep, [i1, i2, i3, i4, i5], line);
+        }
+        self.trace_line(rep, adjoint, vec![first.clone()], &generators[1..], line)
+    }
 
-        let coefficients = Self::trace_bernoulli_coefficients(1);
-        self.trace_symmetric_prefix(
-            rep,
-            adjoint,
-            vec![first.clone()],
-            &generators[1..],
-            &coefficients,
-        )
+    /// The five-generator raw adjoint trace, color.h's cOlff(i1,...,i5)
+    /// table: four f d_A^{(4)} terms and five f^3 terms, against fifteen
+    /// from the symmetric-prefix recursion. d_A^{(4)} is the raw symmetric
+    /// trace (i^4 = 1), as in the four-cycle identity.
+    fn adjoint_five_trace(
+        &self,
+        rep: &Atom,
+        [i1, i2, i3, i4, i5]: [&Atom; 5],
+        line: LineContext,
+    ) -> Option<Atom> {
+        let k3 = self.color_adjoint_dummy_like(i1)?;
+        let k4 = self.color_adjoint_dummy_like(i1)?;
+        let quartic = |slots: [&Atom; 4]| trace_sym!(rep.clone(); slots.map(|slot| Self::trace_generator_factor(true, slot)));
+        let casimir = quadratic_casimir(rep.clone());
+        let result = (quartic([i2, i3, i4, &k3]) * color_f!(&k3, i1, i5)
+            - quartic([i1, i4, i5, &k3]) * color_f!(&k3, i2, i3)
+            - quartic([i1, i3, i5, &k3]) * color_f!(&k3, i2, i4)
+            - quartic([i1, i2, i5, &k3]) * color_f!(&k3, i3, i4))
+            / Atom::num(2)
+            + casimir / Atom::num(12)
+                * (color_f!(i1, &k3, &k4) * color_f!(i2, i3, &k3) * color_f!(i4, i5, &k4)
+                    + color_f!(i1, &k3, &k4) * color_f!(i2, i5, &k4) * color_f!(i3, i4, &k3)
+                    + color_f!(i1, i3, &k3) * color_f!(i2, i4, &k4) * color_f!(i5, &k3, &k4)
+                    - Atom::num(2)
+                        * color_f!(i1, i5, &k3)
+                        * color_f!(i2, i3, &k4)
+                        * color_f!(i4, &k3, &k4)
+                    + color_f!(i1, i5, &k3) * color_f!(i2, i4, &k4) * color_f!(i3, &k3, &k4));
+        if line == LineContext::Isolated && self.settings.one_shot_traces {
+            self.certificate.terminal.set(true);
+        }
+        self.certificate.expansion.set(true);
+        Some(result)
     }
 
     /// Continue a trace with one symmetric block and an ordered suffix.
@@ -40,6 +106,7 @@ impl ColorAlgebraSimplifier {
         &self,
         rep: &Atom,
         factors: &[Atom],
+        line: LineContext,
     ) -> Option<Atom> {
         if factors.len() < 2 {
             return None;
@@ -68,8 +135,39 @@ impl ColorAlgebraSimplifier {
             .collect::<Option<Vec<_>>>()?;
         let generators = prefix.iter().chain(&suffix).cloned().collect::<Vec<_>>();
         Self::trace_generator_is_adjoint(rep, &generators)?;
-        let coefficients = Self::trace_bernoulli_coefficients(prefix.len());
-        self.trace_symmetric_prefix(rep, adjoint, prefix, &suffix, &coefficients)
+        self.trace_line(rep, adjoint, prefix, &suffix, line)
+    }
+
+    /// Decompose a symmetric prefix and ordered suffix. Repeated ports
+    /// contract inside the line, and their open symmetric invariants still
+    /// have rules of their own, so only distinct ports qualify for one shot.
+    fn trace_line(
+        &self,
+        rep: &Atom,
+        adjoint: bool,
+        prefix: Vec<Atom>,
+        suffix: &[Atom],
+        line: LineContext,
+    ) -> Option<Atom> {
+        let one_shot = line == LineContext::Isolated && self.settings.one_shot_traces && {
+            let mut ports = prefix.iter().chain(suffix).collect::<Vec<_>>();
+            ports.sort();
+            ports.windows(2).all(|pair| pair[0] != pair[1])
+        };
+        // The prefix grows by one generator per insertion.
+        let coefficients = Self::trace_bernoulli_coefficients(prefix.len() + suffix.len());
+        let recursion = TraceRecursion {
+            rep,
+            adjoint,
+            coefficients: &coefficients,
+            one_shot,
+        };
+        let result = self.trace_symmetric_prefix(&recursion, prefix, suffix)?;
+        if one_shot {
+            self.certificate.terminal.set(true);
+        }
+        self.certificate.expansion.set(true);
+        Some(result)
     }
 
     /// A structure constant annihilates two legs of the same symmetric block,
@@ -152,6 +250,11 @@ impl ColorAlgebraSimplifier {
                 })
                 .map(|start| (gap, start))
         })?;
+        if gap >= 2
+            && let Some(block) = Self::simplify_repeated_block_trace(rep, adjoint, generators)
+        {
+            return Some(block);
+        }
         let contracted = &generators[start];
         // The pair was scoped inside the trace. Allocate the replacement
         // connection freshly when moving it outside that notation, rather than
@@ -187,6 +290,64 @@ impl ColorAlgebraSimplifier {
         Some(Atom::add_many(terms))
     }
 
+    /// color.h's two-block identity: a repeated ordered pair a b becomes
+    /// reversed, and the commutator closes the pair into one bridge,
+    ///   Tr(X^a X^b W X^a X^b R) = Tr(X^a X^b W X^b X^a R) + κ² (C_A/2) Tr(X^a W X^a R),
+    /// with [X^a, X^b] = κ f^{abk} X^k (κ² = -1 for T, +1 for raw F), since
+    /// f^{abk} X^a X^b = (κ/2) C_A X^k. Two terms against binomial(gap, 2) + 1
+    /// from the generic pair rule; the reversed pair is closer.
+    fn simplify_repeated_block_trace(
+        rep: &Atom,
+        adjoint: bool,
+        generators: &[Atom],
+    ) -> Option<Atom> {
+        let n = generators.len();
+        let twice = |slot: &Atom| generators.iter().filter(|other| *other == slot).count() == 2;
+        let (first, second) = (0..n).find_map(|first| {
+            let (a, b) = (&generators[first], &generators[(first + 1) % n]);
+            if a == b || !twice(a) || !twice(b) {
+                return None;
+            }
+            (2..n - 1)
+                .map(|offset| (first + offset) % n)
+                .find(|&second| generators[second] == *a && generators[(second + 1) % n] == *b)
+                .map(|second| (first, second))
+        })?;
+        let a = &generators[first];
+        let b = &generators[(first + 1) % n];
+        let between = (first + 2..)
+            .map(|position| position % n)
+            .take_while(|&position| position != second)
+            .map(|position| generators[position].clone())
+            .collect::<Vec<_>>();
+        let rest = (second + 2..)
+            .map(|position| position % n)
+            .take_while(|&position| position != first)
+            .map(|position| generators[position].clone())
+            .collect::<Vec<_>>();
+        let word = |pair: [&Atom; 2], closing: [&Atom; 2]| {
+            pair.into_iter()
+                .cloned()
+                .chain(between.iter().cloned())
+                .chain(closing.into_iter().cloned())
+                .chain(rest.iter().cloned())
+                .collect::<Vec<_>>()
+        };
+        let reversed = word([a, b], [b, a]);
+        let bridged = std::iter::once(a.clone())
+            .chain(between.iter().cloned())
+            .chain(std::iter::once(a.clone()))
+            .chain(rest.iter().cloned())
+            .collect::<Vec<_>>();
+        let kappa_squared = if adjoint { Atom::one() } else { -Atom::one() };
+        let casimir = adjoint_casimir_for_dimension(color_adjoint_dimension(a)?);
+        Some(
+            Self::trace_generator_word(rep, adjoint, &reversed)
+                + kappa_squared * casimir / Atom::num(2)
+                    * Self::trace_generator_word(rep, adjoint, &bridged),
+        )
+    }
+
     fn trace_generator_word(rep: &Atom, adjoint: bool, generators: &[Atom]) -> Atom {
         trace_with_factors(
             rep.clone(),
@@ -197,7 +358,7 @@ impl ColorAlgebraSimplifier {
         )
     }
 
-    fn trace_generator_factor(adjoint: bool, slot: &Atom) -> Atom {
+    pub(super) fn trace_generator_factor(adjoint: bool, slot: &Atom) -> Atom {
         if adjoint {
             color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), slot)
         } else {
@@ -277,12 +438,16 @@ impl ColorAlgebraSimplifier {
 
     fn trace_symmetric_prefix(
         &self,
-        rep: &Atom,
-        adjoint: bool,
+        recursion: &TraceRecursion<'_>,
         mut prefix: Vec<Atom>,
         suffix: &[Atom],
-        coefficients: &[Rational],
     ) -> Option<Atom> {
+        let TraceRecursion {
+            rep,
+            adjoint,
+            coefficients,
+            ..
+        } = *recursion;
         // Cyclicity makes Tr(sym(A) B) fully symmetric, so the last generator
         // needs no commutator expansion. In particular this avoids allocating
         // dummy indices in terms which would vanish by trace cyclicity.
@@ -332,8 +497,7 @@ impl ColorAlgebraSimplifier {
             {
                 continue;
             }
-            let term =
-                self.trace_prefix_commutators(rep, adjoint, &prefix, next, depth, remaining)?;
+            let term = self.trace_prefix_commutators(recursion, &prefix, next, depth, remaining)?;
             if !term.is_zero() {
                 terms.push(Atom::num(coefficient.clone()) * term);
             }
@@ -343,17 +507,28 @@ impl ColorAlgebraSimplifier {
 
     fn trace_prefix_commutators(
         &self,
-        rep: &Atom,
-        adjoint: bool,
+        recursion: &TraceRecursion<'_>,
         prefix: &[Atom],
         next: &Atom,
         depth: usize,
         suffix: &[Atom],
     ) -> Option<Atom> {
+        let adjoint = recursion.adjoint;
         if depth == 0 {
             let mut symmetric = prefix.to_vec();
             symmetric.push(next.clone());
-            return Some(Self::trace_prefixed_word(rep, adjoint, symmetric, suffix));
+            // Nothing between two insertions of an isolated line is
+            // contractible: each dummy is used only later in this recursion.
+            return if recursion.one_shot {
+                self.trace_symmetric_prefix(recursion, symmetric, suffix)
+            } else {
+                Some(Self::trace_prefixed_word(
+                    recursion.rep,
+                    adjoint,
+                    symmetric,
+                    suffix,
+                ))
+            };
         }
         let mut terms = Vec::new();
         for (position, generator) in prefix.iter().enumerate() {
@@ -370,8 +545,7 @@ impl ColorAlgebraSimplifier {
             let mut remaining = prefix.to_vec();
             let _ = remaining.remove(position);
             let nested = self.trace_prefix_commutators(
-                rep,
-                adjoint,
+                recursion,
                 &remaining,
                 &contracted,
                 depth - 1,
@@ -379,6 +553,10 @@ impl ColorAlgebraSimplifier {
             )?;
             if !nested.is_zero() {
                 let commutator = if adjoint { -Atom::one() } else { Atom::i() };
+                // A rank-two terminal leaves the new dummy in a metric only:
+                // f^{g n c} g^{c y} = f^{g n y}, with nothing else to contract.
+                let (nested, contracted) =
+                    Self::metric_partner(&nested, &contracted).unwrap_or((nested, contracted));
                 terms.push(
                     Atom::num(Integer::from(multiplicity))
                         * commutator
@@ -388,6 +566,32 @@ impl ColorAlgebraSimplifier {
             }
         }
         Some(Atom::add_many(terms))
+    }
+
+    /// `term` as `rest * g(dummy, partner)`, with no other occurrence of
+    /// `dummy`: the rank-two terminal of a commutator branch.
+    fn metric_partner(term: &Atom, dummy: &Atom) -> Option<(Atom, Atom)> {
+        let factors = multiplicative_factor_views(term.as_view());
+        let (position, partner) = factors.iter().enumerate().find_map(|(position, factor)| {
+            let [x, y] = emitted_adjoint_metric(*factor)?;
+            if x == *dummy {
+                Some((position, y))
+            } else if y == *dummy {
+                Some((position, x))
+            } else {
+                None
+            }
+        })?;
+        let rest = factors
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != position)
+            .map(|(_, factor)| *factor)
+            .collect::<Vec<_>>();
+        if rest.iter().any(|factor| factor.contains(dummy.as_view())) {
+            return None;
+        }
+        Some((Atom::mul_many(rest), partner))
     }
 
     fn trace_symmetric_terminal(rep: &Atom, adjoint: bool, generators: Vec<Atom>) -> Atom {
@@ -415,6 +619,48 @@ impl ColorAlgebraSimplifier {
 mod tests {
     use super::*;
 
+    /// A rank-two terminal of a commutator branch contracts its metric into
+    /// the branch's structure constant: a one-shot decomposition leaves no
+    /// metric with a dummy end, so the planner has nothing to contract.
+    #[test]
+    fn rank_two_terminals_fold_into_structure_constants() {
+        crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("idenso::terminal_fold::edge");
+        for (adjoint, length) in [(false, 5), (false, 6), (true, 5), (true, 6)] {
+            let slots = (0..length)
+                .map(|i| ColorAdjoint {}.to_symbolic([Atom::num(8), function!(label, i, 1)]))
+                .collect::<Vec<_>>();
+            let rep = if adjoint {
+                ColorAdjoint {}.to_symbolic([Atom::num(8)])
+            } else {
+                ColorFundamental {}.to_symbolic([Atom::num(3)])
+            };
+            let simplifier = ColorAlgebraSimplifier::new(Default::default(), ParseState::default());
+            let recursion = TraceRecursion {
+                rep: &rep,
+                adjoint,
+                coefficients: &ColorAlgebraSimplifier::trace_bernoulli_coefficients(length),
+                one_shot: true,
+            };
+            let result = simplifier
+                .trace_symmetric_prefix(&recursion, slots[..1].to_vec(), &slots[1..])
+                .unwrap();
+            let mut dummy_metrics = 0;
+            result.visitor(&mut |node| {
+                if let Some([x, y]) = emitted_adjoint_metric(node)
+                    && (!slots.contains(&x) || !slots.contains(&y))
+                {
+                    dummy_metrics += 1;
+                }
+                true
+            });
+            assert_eq!(
+                dummy_metrics, 0,
+                "adjoint={adjoint} length={length}: {result}"
+            );
+        }
+    }
+
     #[test]
     fn exact_bernoulli_coefficients_have_no_machine_integer_factorial_limit() {
         let coefficients = ColorAlgebraSimplifier::trace_bernoulli_coefficients(20);
@@ -441,10 +687,8 @@ mod tests {
     fn cubic_generator_traces_preserve_fundamental_and_raw_adjoint_conventions() {
         let reps = crate::test_support::test_initialize();
         let slots = [1, 2, 3].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         let fundamental = reps.cof_nc.to_symbolic([] as [Atom; 0]);
         let adjoint = reps.coad_da.to_symbolic([] as [Atom; 0]);
         let mut reversed = slots.clone();
@@ -462,7 +706,9 @@ mod tests {
                     quadratic_casimir(adjoint.clone()) / Atom::num(2) * &f,
                 ),
             ] {
-                let result = simplifier.simplify_generator_trace(rep, &word).unwrap();
+                let result = simplifier
+                    .simplify_generator_trace(rep, &word, LineContext::Unknown)
+                    .unwrap();
                 let contracted = SymbolicTensor::infer(result)
                     .unwrap()
                     .contract(crate::tensor::ContractSettings {
@@ -576,26 +822,134 @@ mod tests {
         let slots = (0..8)
             .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]))
             .collect::<Vec<_>>();
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
-        let result = simplifier.simplify_generator_trace(&rep, &slots).unwrap();
+        let longest_prefix = |result: &Atom| {
+            let mut longest = 0;
+            result.as_view().visitor(&mut |node| {
+                if let AtomView::Fun(function) = node
+                    && function.get_symbol() == *shadowing::SYM
+                {
+                    longest = longest.max(function.get_nargs());
+                }
+                true
+            });
+            longest
+        };
+        let result = simplifier
+            .simplify_generator_trace(&rep, &slots, LineContext::Unknown)
+            .unwrap();
         let AtomView::Add(sum) = result.as_view() else {
             panic!("one insertion must leave its symmetric and commutator branches");
         };
         assert_eq!(sum.get_nargs(), 2);
-        let mut longest_prefix = 0;
+        assert_eq!(longest_prefix(&result), 2);
+
+        // An isolated line has no partner to wait for; one shot leaves no
+        // ordered continuation, only complete symmetric invariants.
+        let isolated = simplifier
+            .simplify_generator_trace(&rep, &slots, LineContext::Isolated)
+            .unwrap();
+        assert_eq!(ordered_trace_words(&isolated), 0);
+        assert_eq!(longest_prefix(&isolated), slots.len());
+        // Without one-shot traces, an isolated line also resumes per insertion.
+        let incremental = ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default().without_one_shot_traces(),
+            ParseState::default(),
+        )
+        .simplify_generator_trace(&rep, &slots, LineContext::Isolated)
+        .unwrap();
+        assert_eq!(longest_prefix(&incremental), 2);
+    }
+
+    fn ordered_trace_words(result: &Atom) -> usize {
+        let mut words = 0;
         result.as_view().visitor(&mut |node| {
             if let AtomView::Fun(function) = node
-                && function.get_symbol() == *shadowing::SYM
+                && let Some((_, factors)) = shadowing::trace_parts(function)
             {
-                longest_prefix = longest_prefix.max(function.get_nargs());
+                words += usize::from(factors.len() > 1);
             }
             true
         });
-        assert_eq!(longest_prefix, 2);
+        words
+    }
+
+    /// Fully distributed term count, without expanding the nested result.
+    fn flat_terms(view: AtomView<'_>) -> usize {
+        match view {
+            AtomView::Add(sum) => sum.iter().map(flat_terms).sum(),
+            AtomView::Mul(product) => product.iter().map(flat_terms).product(),
+            _ => 1,
+        }
+    }
+
+    #[test]
+    fn one_shot_decomposition_matches_the_resumed_continuations() {
+        let reps = crate::test_support::test_initialize();
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
+        // Leaves of the bare recursion for ranks 5, 6 and 7. The planner
+        // merges no terms between insertions, so both routes give these.
+        // Fundamental counts follow the two-plus-two terminal of 164274b4b.
+        for (adjoint, census) in [(false, [28, 179, 1432]), (true, [15, 109, 798])] {
+            let rep = if adjoint {
+                reps.coad_da.to_symbolic([] as [Atom; 0])
+            } else {
+                reps.cof_nc.to_symbolic([] as [Atom; 0])
+            };
+            for (rank, expected) in (5..).zip(census) {
+                let slots = (0..rank)
+                    .map(|index| reps.coad_da.to_symbolic([Atom::num(99_870 + index)]))
+                    .collect::<Vec<_>>();
+                let coefficients = ColorAlgebraSimplifier::trace_bernoulli_coefficients(rank);
+                let one_shot = simplifier
+                    .trace_symmetric_prefix(
+                        &TraceRecursion {
+                            rep: &rep,
+                            adjoint,
+                            coefficients: &coefficients,
+                            one_shot: true,
+                        },
+                        vec![slots[0].clone()],
+                        &slots[1..],
+                    )
+                    .unwrap();
+                assert_eq!(ordered_trace_words(&one_shot), 0);
+                assert_eq!(
+                    flat_terms(one_shot.as_view()),
+                    expected,
+                    "adjoint={adjoint} rank={rank}"
+                );
+
+                // Resume each continuation as the planner does, without the
+                // contractions it applies between rounds. The five-generator
+                // adjoint trace takes color.h's table instead: nine terms.
+                let mut resumed = simplifier
+                    .simplify_generator_trace(&rep, &slots, LineContext::Unknown)
+                    .unwrap();
+                if adjoint && rank == 5 {
+                    assert_eq!(ordered_trace_words(&resumed), 0);
+                    assert_eq!(flat_terms(resumed.as_view()), 9);
+                    continue;
+                }
+                while ordered_trace_words(&resumed) != 0 {
+                    resumed = resumed.replace_map(|node, _context, out| {
+                        if let Some(result) =
+                            simplifier.simplify_trace_node(node, true, LineContext::Unknown)
+                        {
+                            **out = result;
+                        }
+                    });
+                }
+                assert_eq!(
+                    flat_terms(resumed.as_view()),
+                    expected,
+                    "adjoint={adjoint} rank={rank}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -609,13 +963,20 @@ mod tests {
                 .to_symbolic([function!(label, Atom::num(axis), Atom::num(1))])
         });
         let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         let coefficients = ColorAlgebraSimplifier::trace_bernoulli_coefficients(2);
         let result = simplifier
-            .trace_symmetric_prefix(&rep, false, slots[..2].to_vec(), &slots[2..], &coefficients)
+            .trace_symmetric_prefix(
+                &TraceRecursion {
+                    rep: &rep,
+                    adjoint: false,
+                    coefficients: &coefficients,
+                    one_shot: false,
+                },
+                slots[..2].to_vec(),
+                &slots[2..],
+            )
             .unwrap();
         // The established ordered-word identity supplies an independent
         // symbolic derivation; only its first two matrices are symmetrized.
@@ -648,10 +1009,8 @@ mod tests {
     fn prefixed_trace_terminal_uses_cyclicity_and_adjoint_parity() {
         let reps = crate::test_support::test_initialize();
         let slots = [1, 2, 3].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         for (rep, adjoint) in [
             (reps.cof_nc.to_symbolic([] as [Atom; 0]), false),
             (reps.coad_da.to_symbolic([] as [Atom; 0]), true),
@@ -671,7 +1030,11 @@ mod tests {
             };
             for _ in 0..factors.len() {
                 assert_eq!(
-                    simplifier.simplify_prefixed_generator_trace(&rep, &factors),
+                    simplifier.simplify_prefixed_generator_trace(
+                        &rep,
+                        &factors,
+                        LineContext::Unknown
+                    ),
                     Some(expected.clone()),
                 );
                 factors.rotate_left(1);
@@ -697,22 +1060,22 @@ mod tests {
             (reps.coad_da.to_symbolic([] as [Atom; 0]), true),
             (reps.cof_nc.to_symbolic([] as [Atom; 0]), false),
         ] {
-            let simplifier = ColorAlgebraSimplifier {
-                settings: ColorSimplifySettings::default(),
-                dummies: ParseState::default(),
-            };
+            let simplifier = ColorAlgebraSimplifier::new(
+                ColorSimplifySettings::default(),
+                ParseState::default(),
+            );
             // The existing diagnostic view includes the operation-local
             // reservation set; unlike the global dummy counter this is stable
             // when unrelated tests allocate their own fresh indices.
             let before = format!("{:?}", simplifier.dummies);
+            let recursion = TraceRecursion {
+                rep: &rep,
+                adjoint,
+                coefficients: &coefficients,
+                one_shot: false,
+            };
             let result = simplifier
-                .trace_symmetric_prefix(
-                    &rep,
-                    adjoint,
-                    slots[..3].to_vec(),
-                    &slots[3..],
-                    &coefficients,
-                )
+                .trace_symmetric_prefix(&recursion, slots[..3].to_vec(), &slots[3..])
                 .unwrap();
             assert_eq!(result.is_zero(), adjoint);
             assert_eq!(format!("{:?}", simplifier.dummies) == before, adjoint);
@@ -725,10 +1088,8 @@ mod tests {
         let slots =
             [1, 2, 3, 4].map(|index| ColorAdjoint {}.to_symbolic([Atom::num(3), Atom::num(index)]));
         let word = slots.iter().chain(&slots).cloned().collect::<Vec<_>>();
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         // For T=Pauli/2, Str(Ta Tb Tc Td)=S_abcd/24; for the real
         // Levi-Civita matrices, Str(Fa Fb Fc Fd)=2*S_abcd/3, where
         // S_abcd=delta_ab*delta_cd+delta_ac*delta_bd+delta_ad*delta_bc.
@@ -793,20 +1154,26 @@ mod tests {
     #[test]
     fn generator_trace_requires_compatible_adjoint_spaces() {
         crate::test_support::test_initialize();
-        let simplifier = ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: ParseState::default(),
-        };
+        let simplifier =
+            ColorAlgebraSimplifier::new(ColorSimplifySettings::default(), ParseState::default());
         let slots = [3, 8]
             .map(|dimension| ColorAdjoint {}.to_symbolic([Atom::num(dimension), Atom::num(1)]));
         assert!(
             simplifier
-                .simplify_generator_trace(&fundamental_rep(Atom::num(3)), &slots)
+                .simplify_generator_trace(
+                    &fundamental_rep(Atom::num(3)),
+                    &slots,
+                    LineContext::Unknown
+                )
                 .is_none()
         );
         assert!(
             simplifier
-                .simplify_generator_trace(&adjoint_rep(Atom::num(8)), &slots[..1])
+                .simplify_generator_trace(
+                    &adjoint_rep(Atom::num(8)),
+                    &slots[..1],
+                    LineContext::Unknown
+                )
                 .is_none()
         );
     }

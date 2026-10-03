@@ -2,9 +2,11 @@ use spenso::structure::{
     partial::{PartialStructure, PartialStructureExt},
     representation::{LibraryRep, RepName},
 };
-#[cfg(test)]
-use symbolica::atom::AtomCore;
-use symbolica::atom::{Atom, AtomView};
+use spenso::{
+    network::library::symbolic::ETS,
+    structure::slot::{DualSlotTo, IsAbstractSlot},
+};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use super::{
     SymbolicTensor, inference::TensorInferenceError,
@@ -17,6 +19,7 @@ use crate::shorthands::schoonschip::{
 #[cfg(test)]
 thread_local! {
     pub(crate) static CONTRACT_DOMAIN_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static CONTRACT_PARTS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Contraction scheduling and whether rank-one tensors may form compact products.
@@ -197,15 +200,21 @@ impl SymbolicTensor<PartialStructure> {
         self.plan_reduction(super::simplification::ReductionRequest::Contract(settings))
     }
 
+    /// Also reports a notation-only change: nothing was contracted and only
+    /// chain and trace collection changed the expression. Collection is
+    /// idempotent and adds no contraction source, so such a result is its
+    /// own fixed point and needs no confirming round.
     pub(crate) fn contract_domain(
         &self,
         settings: ContractSettings<'_>,
-    ) -> Result<(Self, ReductionStatus), TensorInferenceError> {
+    ) -> Result<(Self, ReductionStatus, bool), TensorInferenceError> {
         #[cfg(test)]
         CONTRACT_DOMAIN_CALLS.with(|count| count.set(count.get() + 1));
-        let contracted = self.contract_parts(settings)?;
+        let observed = self.reduction_observations();
+        let (contracted, notation_only) =
+            self.contract_parts_observed(settings, &observed.candidates)?;
         contracted.root.observe_replacement(self);
-        Ok((contracted.root, contracted.status))
+        Ok((contracted.root, contracted.status, notation_only))
     }
 
     /// Contract only metric/vector paths incident to selected identity factors.
@@ -236,6 +245,7 @@ impl SymbolicTensor<PartialStructure> {
         let observed = self.reduction_observations();
         if observed.excludes_contraction_sources(settings)
             || (!observed.candidates.repeated_indices && !self.structural_work_permitted(settings))
+            || self.only_external_metric_sources(settings)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
                 root: self.clone(),
@@ -375,16 +385,26 @@ impl SymbolicTensor<PartialStructure> {
         settings: ContractSettings<'_>,
     ) -> Result<crate::shorthands::schoonschip::FactorizedContraction<Self>, TensorInferenceError>
     {
+        #[cfg(test)]
+        CONTRACT_PARTS_CALLS.with(|count| count.set(count.get() + 1));
         let observed = self.reduction_observations();
-        self.contract_parts_observed(settings, &observed.candidates)
+        Ok(self
+            .contract_parts_observed(settings, &observed.candidates)?
+            .0)
     }
 
-    pub(crate) fn contract_parts_observed<const N: usize>(
+    /// See [`Self::contract_domain`] for the notation-only flag.
+    fn contract_parts_observed<const N: usize>(
         &self,
         settings: ContractSettings<'_>,
         observed: &SimplificationCandidates<N>,
-    ) -> Result<crate::shorthands::schoonschip::FactorizedContraction<Self>, TensorInferenceError>
-    {
+    ) -> Result<
+        (
+            crate::shorthands::schoonschip::FactorizedContraction<Self>,
+            bool,
+        ),
+        TensorInferenceError,
+    > {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::Contraction,
@@ -397,7 +417,7 @@ impl SymbolicTensor<PartialStructure> {
             .get()
             .is_some_and(|observed| observed.excludes_internal_connections())
         {
-            return Ok(result);
+            return Ok((result, false));
         }
         if settings.rank_one && observed.dots {
             let expression =
@@ -406,6 +426,8 @@ impl SymbolicTensor<PartialStructure> {
                     .contract_inner_products(result.root.expression.as_view());
             result.root = result.root.with_identity_result(expression, None)?;
         }
+        let uncontracted =
+            result.status == ReductionStatus::Complete && result.root.expression == self.expression;
         if settings.collect_chains || settings.collect_traces {
             result.root.observe_replacement(self);
             let updated = result.root.reduction_observations();
@@ -421,7 +443,7 @@ impl SymbolicTensor<PartialStructure> {
             representations.sort_unstable();
             representations.dedup();
             if representations.is_empty() {
-                return Ok(result);
+                return Ok((result, false));
             }
             let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
@@ -445,7 +467,44 @@ impl SymbolicTensor<PartialStructure> {
                 .unwrap_or_else(|| result.root.expression.clone());
             result.root = result.root.with_identity_result(expression, None)?;
         }
-        Ok(result)
+        let notation_only = uncontracted && result.root.expression != self.expression;
+        Ok((result, notation_only))
+    }
+
+    /// A metric whose two ports are both external to the whole domain is
+    /// terminal: no factor can absorb it, even when other factors carry
+    /// internal dummies. With no vector source either, nothing is left to
+    /// contract.
+    pub(crate) fn only_external_metric_sources(&self, settings: ContractSettings<'_>) -> bool {
+        if !self
+            .reduction_observations()
+            .excludes_contraction_sources(ContractSettings {
+                metrics: false,
+                ..settings
+            })
+        {
+            return false;
+        }
+        let Ok(slots) = self.structure.slots() else {
+            return false;
+        };
+        let external = slots
+            .iter()
+            .flat_map(|slot| [slot.to_atom(), slot.dual().to_atom()])
+            .collect::<std::collections::HashSet<_>>();
+        let mut terminal = true;
+        self.expression.visitor(&mut |node| {
+            if let AtomView::Fun(metric) = node
+                && metric.get_symbol() == ETS.metric
+            {
+                terminal &= metric
+                    .iter()
+                    .all(|port| external.contains(&port.to_owned()));
+                return false;
+            }
+            terminal
+        });
+        terminal
     }
 
     fn normalized_contract_notation(&self, settings: ContractSettings<'_>) -> Atom {
@@ -605,7 +664,8 @@ impl SymbolicTensor<PartialStructure> {
             || root
                 .reduction_observations()
                 .excludes_contraction_sources(settings)
-            || (root.expression != self.expression && root.contraction_is_noop());
+            || (root.expression != self.expression && root.contraction_is_noop())
+            || root.only_external_metric_sources(settings);
         Ok(crate::shorthands::schoonschip::FactorizedContraction {
             root,
             observations: None,

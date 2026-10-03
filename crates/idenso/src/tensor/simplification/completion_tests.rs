@@ -364,9 +364,17 @@ fn rank_five_adjoint_traces_normalize_transposed_and_signed_factors() {
             .collect::<Vec<_>>();
         let aligned = result.permuted(&axes).unwrap().canonize().unwrap();
         // F^T=-F. Canonicalization identifies generated dummy names without
-        // distributing the surrounding expression or evaluating trace tensors.
+        // evaluating trace tensors. The colour kernel returns canonical
+        // states as a flat sum, which the negated reference keeps factored.
         assert_eq!(aligned.structure, expected.structure);
-        assert_eq!(aligned.expression, expected.expression);
+        assert!(
+            (&aligned.expression - &expected.expression)
+                .expand()
+                .is_zero(),
+            "{}\n{}",
+            aligned.expression,
+            expected.expression
+        );
         assert_eq!(result.reduction_status(), ReductionStatus::Complete);
         assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
     }
@@ -437,10 +445,10 @@ fn single_bridge_color_sums_and_scalar_spectators_remain_factored() {
     let bridge = crate::color_f!(&a, &b, &x);
     for outside in [&scalar, &bridge, &(&scalar * &bridge)] {
         let source = SymbolicTensor::infer(outside * &sum).unwrap();
-        let kernel = crate::color::simplify::ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: SymbolicTensor::reserved_dummies([&source]),
-        };
+        let kernel = crate::color::simplify::ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default(),
+            SymbolicTensor::reserved_dummies([&source]),
+        );
         assert_eq!(
             kernel.step(source.expression.as_view(), true),
             source.expression
@@ -535,6 +543,208 @@ fn a_rank_twelve_symmetric_color_trace_completes_without_materializing_permutati
     let repeated = result.simplify_algebra(&settings).unwrap();
     assert_eq!(repeated, result);
     assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), 1);
+}
+
+#[test]
+fn an_isolated_generator_trace_needs_one_color_kernel_call() {
+    let reps = crate::test_support::test_initialize();
+    let rank = 7;
+    let word = trace!(reps.cof_nc.to_symbolic([]);
+        (99_881..99_881 + rank).map(|i| crate::color_t!(reps.coad_da.to_symbolic([Atom::num(i)]))));
+    let source = SymbolicTensor::infer(word).unwrap();
+    // Incrementally, each of the rank-2 insertions is one round, followed by
+    // a round confirming that nothing changes.
+    for (color, expected) in [
+        (ColorSimplifySettings::default(), 1),
+        (
+            ColorSimplifySettings::default().without_one_shot_traces(),
+            rank as usize - 1,
+        ),
+    ] {
+        let settings = AlgebraSettings {
+            color: Some(color),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), expected);
+        // The certificate must not skip work: a fresh admission is unchanged.
+        let fresh = SymbolicTensor::infer(result.expression.clone()).unwrap();
+        assert_eq!(
+            fresh.simplify_algebra(&settings).unwrap().expression,
+            result.expression
+        );
+    }
+}
+
+#[test]
+fn a_single_port_adjoint_chain_leaves_a_color_sum_factored() {
+    use crate::color::simplify::ColorAlgebraSimplifier;
+    use spenso::network::tags::SPENSO_TAG;
+    let reps = crate::test_support::test_initialize();
+    let [a, b, x, c, d, e, y] =
+        std::array::from_fn(|i| reps.coad_da.to_symbolic([Atom::num(99_891 + i as i64)]));
+    let matrix = |port: &Atom| {
+        crate::color_f!(
+            Atom::var(SPENSO_TAG.chain_in),
+            Atom::var(SPENSO_TAG.chain_out),
+            port
+        )
+    };
+    let ports = [&x, &c, &d, &e];
+    let sum = crate::color::CS.symmetric_generator_trace(reps.cof_nc.to_symbolic([]), ports)
+        + spenso::trace_sym!(reps.coad_da.to_symbolic([]); ports.map(matrix));
+    // The shared contractor writes f(a,b,z) f(z,y,x) as this adjoint chain.
+    // It reaches the sum through x alone, so no colour rule can span both.
+    let chain = spenso::chain!(&a, &x; [matrix(&b), matrix(&y)]);
+    let source = SymbolicTensor::infer(&chain * &sum).unwrap();
+    let step = |settings: ColorSimplifySettings| {
+        ColorAlgebraSimplifier::new(settings, SymbolicTensor::reserved_dummies([&source]))
+            .step(source.expression.as_view(), true)
+    };
+    assert_eq!(step(ColorSimplifySettings::default()), source.expression);
+    // Incremental rounds spread the chain over the summands, whose
+    // states take canonical names for the contracted index x.
+    use crate::IndexTooling;
+    let canonical = |expression: Atom| {
+        expression
+            .expand()
+            .canonize(spenso::structure::abstract_index::AbstractIndex::Dummy)
+            .unwrap()
+    };
+    let stepped = step(ColorSimplifySettings::default().without_one_shot_traces());
+    assert_ne!(stepped, source.expression);
+    assert_eq!(canonical(stepped), canonical(source.expression.clone()));
+}
+
+#[test]
+fn a_contracted_isolated_adjoint_trace_needs_one_color_kernel_call() {
+    use spenso::network::tags::SPENSO_TAG;
+    let reps = crate::test_support::test_initialize();
+    let word = trace!(reps.coad_da.to_symbolic([]); (99_901..99_908).map(|i| {
+        crate::color_f!(
+            Atom::var(SPENSO_TAG.chain_in),
+            Atom::var(SPENSO_TAG.chain_out),
+            reps.coad_da.to_symbolic([Atom::num(i)])
+        )
+    }));
+    let source = SymbolicTensor::infer(word).unwrap();
+    for color in [
+        ColorSimplifySettings::default(),
+        ColorSimplifySettings::default().without_one_shot_traces(),
+    ] {
+        let settings = AlgebraSettings {
+            color: Some(color),
+            ..Default::default()
+        };
+        IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        if color.one_shot_traces {
+            // Collecting the decomposition's f pairs into adjoint chains neither
+            // revokes the certificate nor makes the chains distribute the sums.
+            assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), 1);
+        }
+        let fresh = SymbolicTensor::infer(result.expression.clone()).unwrap();
+        assert_eq!(
+            fresh.simplify_algebra(&settings).unwrap().expression,
+            result.expression
+        );
+    }
+}
+
+#[test]
+fn a_cof_dimension_substitution_keeps_an_isolated_trace_certified() {
+    use crate::representations::{ColorAdjoint, ColorFundamental};
+    crate::test_support::test_initialize();
+    let word = trace!(ColorFundamental {}.to_symbolic([Atom::num(3)]); (99_911..99_918).map(|i| {
+        crate::color_t!(ColorAdjoint {}.to_symbolic([Atom::num(8), Atom::num(i)]))
+    }));
+    let source = SymbolicTensor::infer(word).unwrap();
+    for color in [
+        ColorSimplifySettings::default(),
+        ColorSimplifySettings::default().without_one_shot_traces(),
+    ] {
+        let settings = AlgebraSettings {
+            color: Some(color.with_cof_dimension_invariants()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert!(!result.expression.contains_symbol(crate::color::CS.cas));
+        if color.one_shot_traces {
+            // Writing the invariants as SU(3) numbers keeps every sum around the
+            // colour factors, so no round confirms the decomposition.
+            assert_eq!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]), 1);
+        }
+        let fresh = SymbolicTensor::infer(result.expression.clone()).unwrap();
+        assert_eq!(
+            fresh.simplify_algebra(&settings).unwrap().expression,
+            result.expression
+        );
+    }
+}
+
+#[test]
+fn nested_vertex_sums_reach_their_loops_in_one_color_pass() {
+    let reps = crate::test_support::test_initialize();
+    let slots: [Atom; 12] =
+        std::array::from_fn(|i| reps.coad_da.to_symbolic([Atom::num(99_921 + i as i64)]));
+    let f =
+        |a: usize, b: usize, c: usize| crate::color_f!(&slots[a - 1], &slots[b - 1], &slots[c - 1]);
+    let v: [[Atom; 3]; 2] = std::array::from_fn(|vertex| {
+        std::array::from_fn(|s| {
+            Atom::var(symbolica::symbol!(format!(
+                "nested_vertex_v{}s{s}",
+                vertex + 1
+            )))
+        })
+    });
+    // Four-loop graph FK2338 with two four-gluon vertex sums, one inside the
+    // other's distributed terms.
+    let first = &v[0][0] * f(11, 1, 8) * f(11, 6, 2)
+        + &v[0][1] * f(11, 1, 2) * f(11, 6, 8)
+        + &v[0][2] * f(11, 1, 6) * f(11, 2, 8);
+    let second = &v[1][0] * f(12, 7, 10) * f(12, 3, 9)
+        + &v[1][1] * f(12, 7, 9) * f(12, 3, 10)
+        + &v[1][2] * f(12, 7, 3) * f(12, 9, 10);
+    let source =
+        SymbolicTensor::infer(f(1, 2, 3) * f(4, 5, 6) * f(4, 5, 7) * f(8, 9, 10) * first * second)
+            .unwrap();
+    // FORM color.h: NA cA^4 times this polynomial in the vertex markers.
+    let markers = (&v[0][0] * &v[1][0] + &v[0][2] * &v[1][0]) / Atom::num(4)
+        + &v[0][1] * &v[1][0] / Atom::num(2)
+        - (&v[0][0] * &v[1][1] + &v[0][2] * &v[1][1]) / Atom::num(4)
+        - &v[0][1] * &v[1][1] / Atom::num(2)
+        - (&v[0][0] * &v[1][2] + &v[0][2] * &v[1][2]) / Atom::num(2)
+        - &v[0][1] * &v[1][2];
+    let expected = Atom::var(spenso::s!(dA))
+        * crate::color::CS
+            .cas(Atom::num(2), reps.coad_da.to_symbolic([]))
+            .pow(4)
+        * markers;
+    for color in [
+        ColorSimplifySettings::default(),
+        ColorSimplifySettings::default().without_one_shot_traces(),
+    ] {
+        let settings = AlgebraSettings {
+            color: Some(color),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        IDENTITY_KERNEL_CALLS.with(|calls| calls.set([0; 3]));
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.expression.expand(), expected.expand());
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        if color.one_shot_traces {
+            // Incremental rounds need six calls: each nested sum waits one round.
+            assert!(IDENTITY_KERNEL_CALLS.with(|calls| calls.get()[1]) <= 4);
+        }
+    }
 }
 
 #[test]
