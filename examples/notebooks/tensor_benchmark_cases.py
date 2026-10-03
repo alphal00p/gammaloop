@@ -727,7 +727,7 @@ class ProductionNumerator:
         # Q is registered by the combined host, including its display metadata.
         TensorName.dirac_gamma()
         TensorName.color_t()
-        Representation.mink(Symbols.dimension)
+        Representation.mink(Symbols.dimension())
         Representation.bis(4)
         Representation.cof(3)
         Representation.coad(8)

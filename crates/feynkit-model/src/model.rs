@@ -77,6 +77,11 @@ pub(crate) struct ParticleDefinition {
     pub width: String,
     pub texname: String,
     pub antitexname: String,
+    /// Native Typst math source (without dollar delimiters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typstname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub antitypstname: Option<String>,
     #[serde(with = "quantum_number")]
     pub charge: Rational,
     pub ghost_number: i64,
@@ -146,6 +151,9 @@ pub(crate) struct ParameterDefinition {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub texname: Option<String>,
+    /// Native Typst math source (without dollar delimiters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typstname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -319,6 +327,9 @@ pub struct Particle {
     pub width: ParameterId,
     pub texname: String,
     pub antitexname: String,
+    /// Native Typst math source (without dollar delimiters).
+    pub typstname: Option<String>,
+    pub antitypstname: Option<String>,
     pub charge: Rational,
     pub ghost_number: i64,
     pub lepton_number: i64,
@@ -332,6 +343,14 @@ pub struct Particle {
 }
 
 impl Particle {
+    /// Native math label, with an escaped ordinary name for models without one.
+    pub fn typst_label(&self) -> String {
+        self.typstname
+            .clone()
+            .filter(|label| !label.trim().is_empty())
+            .unwrap_or_else(|| format!("{:?}", self.name))
+    }
+
     /// Signed physical charge Q e, inferred from the model's photon vertices.
     pub fn electric_charge(&self, model: &Model) -> Result<Atom, ModelError> {
         if self.charge.is_zero() {
@@ -423,10 +442,10 @@ impl Particle {
         let stroke =
             |half| format!("{half}-stroke(c: {color}, thickness: {thickness}{dash}){decoration}");
         format!(
-            "(source:{}, sink:{}, label:mi(`{}`)){}",
+            "(source:{}, sink:{}, label:$ {} $){}",
             stroke("source"),
             stroke("sink"),
-            self.texname,
+            self.typst_label(),
             if style.fermion_flow {
                 " + fermion-flow"
             } else {
@@ -508,6 +527,8 @@ pub struct Parameter {
     pub name: String,
     /// Model-supplied LaTeX label, independent of the algebraic symbol name.
     pub texname: Option<String>,
+    /// Native Typst math source (without dollar delimiters).
+    pub typstname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -640,7 +661,11 @@ impl Model {
         // Declare every parameter before parsing any expression: a parameter
         // can reference a later entry, and Symbolica fixes printers at creation.
         for parameter in &definition.parameters {
-            Self::register_parameter_symbol(&parameter.name, parameter.texname.as_deref())?;
+            Self::register_parameter_symbol(
+                &parameter.name,
+                parameter.texname.as_deref(),
+                parameter.typstname.as_deref(),
+            )?;
         }
         let parameters = definition
             .parameters
@@ -649,6 +674,7 @@ impl Model {
                 Ok(Parameter {
                     name: parameter.name.clone(),
                     texname: parameter.texname.clone(),
+                    typstname: parameter.typstname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -682,6 +708,8 @@ impl Model {
                 width: indexes.parameters[&particle.width],
                 texname: particle.texname.clone(),
                 antitexname: particle.antitexname.clone(),
+                typstname: particle.typstname.clone(),
+                antitypstname: particle.antitypstname.clone(),
                 charge: particle.charge.clone(),
                 ghost_number: particle.ghost_number,
                 lepton_number: particle.lepton_number,
@@ -1016,6 +1044,7 @@ impl Model {
                 .map(|parameter| ParameterDefinition {
                     name: parameter.name.clone(),
                     texname: parameter.texname.clone(),
+                    typstname: parameter.typstname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -1037,6 +1066,8 @@ impl Model {
                     width: self.parameters[particle.width.index()].name.clone(),
                     texname: particle.texname.clone(),
                     antitexname: particle.antitexname.clone(),
+                    typstname: particle.typstname.clone(),
+                    antitypstname: particle.antitypstname.clone(),
                     charge: particle.charge.clone(),
                     ghost_number: particle.ghost_number,
                     lepton_number: particle.lepton_number,

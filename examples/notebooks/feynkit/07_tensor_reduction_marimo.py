@@ -70,7 +70,7 @@ def _(Symbols):
     from symbolica import E, S
 
     D = S("D")
-    momentum = Symbols.edge_momentum
+    momentum = Symbols.edge_momentum()
     external = S("TensorTutorial::p")
     from symbolica.community.tensor import Representation
 

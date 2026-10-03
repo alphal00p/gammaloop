@@ -7,10 +7,8 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import linnet as lp
-import typst
 
 SVG = "{http://www.w3.org/2000/svg}"
 XLINK = "{http://www.w3.org/1999/xlink}"
@@ -139,25 +137,21 @@ class SvgInteractionTests(unittest.TestCase):
                         self.assertEqual(detail["pair"], half.pair.index)
                         self.assertNotEqual(detail["pair"], half.index)
 
-    def test_native_drawing_geometry_and_paints_are_unchanged(self):
-        compiled = []
-        compile_native = typst.compile
-
-        def capture_native(*args, **kwargs):
-            result = compile_native(*args, **kwargs)
-            compiled.append(result[0] if isinstance(result, list) else result)
-            return result
-
-        with patch.object(typst, "compile", side_effect=capture_native):
-            decorated = self.graph.to_svg()
-        native_root = ET.fromstring(compiled[0])
-        decorated_root = ET.fromstring(decorated)
+    def test_native_drawing_contains_custom_paints_and_inspection_targets(self):
+        root = ET.fromstring(self.graph.to_svg())
         self.assertTrue(
             any(
                 element.get("stroke", "").lower() == "#356a9a"
-                for element in native_root.iter()
+                for element in root.iter()
             )
         )
+        self.assertTrue(root.findall(".//*[@data-linnet-kind]"))
+
+    def assert_native_drawing_unchanged(self, native, decorated):
+        # Called by the Rust integration test at the embedded compiler boundary.
+        native_root = ET.fromstring(native)
+        decorated_root = ET.fromstring(decorated)
+        self.assertTrue(decorated_root.findall(".//*[@data-linnet-kind]"))
         # Compare the complete native drawing after removing inspection-only
         # hit targets and scripts/styles from both documents.
         for root in (native_root, decorated_root):

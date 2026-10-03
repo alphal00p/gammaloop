@@ -72,7 +72,7 @@ def check_types(
     assert_type(sp.TensorExpression.charge_conjugation(4), sp.TensorExpression)
     assert_type(sp.TensorExpression.levi_civita(representation), sp.TensorExpression)
     assert_type(sp.TensorPattern.chain(S("a_"), S("b_"), S("fs___")), sp.TensorPattern)
-    assert_type(sp.Nc, Expression)
+    assert_type(sp.Nc(), Expression)
     assert_type(expression.structure, sp.TensorStructure)
     assert_type(tensor.structure, sp.TensorStructure)
     assert_type(network.structure, sp.TensorStructure)

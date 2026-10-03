@@ -15,12 +15,15 @@ spenso-macros = { workspace = true }
 xpct = "0.5.1"
 
 eyre = { workspace = true }
-pyo3 = { workspace = true, features = ["eyre"] }
+pyo3 = { workspace = true, features = ["eyre", "multiple-pymethods"] }
 
 itertools = "0.14.0"
+serde_json = { workspace = true }
 roxmltree = "0.21.1"
 ciborium = "0.2"
 linnet = { workspace = true }
+linnest = { workspace = true, features = ["svg"] }
+typst-renderer = { path = "../typst-renderer" }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
@@ -36,7 +39,6 @@ features = ["bincode", "python_export", "serde"]
 default = ["native"]
 native = [
   "idenso/native",
-  "pyo3/multiple-pymethods",
   "spenso/native-code-generation",
   "spenso-hep-lib/native",
   "symbolica-typst-plugin/native",

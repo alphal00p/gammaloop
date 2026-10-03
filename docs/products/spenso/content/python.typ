@@ -74,8 +74,8 @@ Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second nati
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
 Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
-source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
-another Spynso binary.
+source revision. Typst, its fonts, and offline packages are embedded in the Rust
+extension. No Python compiler package is required.
 
 === Pyodide builds
 
@@ -124,8 +124,9 @@ factories express distinct unresolved ports without changing that normalization.
 Use `TensorPattern.dot/chain/trace` for compact syntax with wildcard operands or
 factor sequences, and `PortPattern.chain_in/chain_out` for forward or reversed
 contextual matrix channels. `TensorPattern.casimir/dynkin_index` also accept
-arbitrary representation patterns. `Nc: Expression` exports the canonical real
-colour constant, including its default numerical value 3.
+arbitrary representation patterns. `Nc() -> Expression` constructs the canonical real
+colour constant on demand, including its default numerical value 3. Importing the native
+module therefore leaves time to call Symbolica's `set_license_key` before symbolic work.
 
 `FactorProjector.symmetric`, `.antisymmetric`, and `.cyclic` group compatible
 matrix factors for `chain` or `trace`. For example,
@@ -161,7 +162,7 @@ representations, and duality remain part of the value.
 #source-link("examples/notebooks/spenso_api_tour.py", label: "The complete Python API tour")
 is a marimo notebook with one executed example for every declared type. Each entry shows its
 construction, live display, Python representation, and declared members. Run it in a native
-community-module environment with marimo, Typst, and a C++ compiler on `PATH`:
+community-module environment with marimo and a C++ compiler on `PATH`:
 
 // docs-example: syntax
 ```sh
@@ -179,7 +180,9 @@ current executable graph in notebooks, using Linnest's operator and typed-leaf s
 The renderer passes native node, edge, and half-edge identities directly to Linnest's
 graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
-Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
+self-contained Typst document embedding that SVG. Both accept native configuration
+dictionaries, like Feynman diagrams. Rust draws the graph directly and the embedded
+Typst compiler typesets labels without graph plugins or MiTeX.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 Its execution summary uses `network.status` to show remaining nodes, operations,
 contractions, and ready operations. “Graph reduced” means no graph work remains;
@@ -831,12 +834,7 @@ pslash = indexed.contract()
 pslash.formatted()
 ```
 
-Install the optional compiler to render HTML and SVG:
-
-// docs-example: syntax
-```sh
-pip install 'gammaloop[typst-display]'
-```
+HTML and SVG rendering use the embedded compiler:
 
 // docs-example: compile
 ```python
@@ -850,9 +848,8 @@ rich = trace.formatted(settings=compact)
 ```
 
 Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
-when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
-LaTeX or text. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+Wasm plugin. Explicit `to_html` and `to_svg` calls report compilation errors.
+Notebook `_repr_html_` and `formatted()` retain their LaTeX or text fallback on rendering errors. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
 the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
 rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
 needed instead of tensor-aware notation.

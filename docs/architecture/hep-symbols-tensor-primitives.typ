@@ -32,7 +32,7 @@ without inferring a concrete tensor rank.
   [`spinor`], [`R.bis(d)` and the same slot/pattern interface.],
   [`color_fundamental`], [`R.cof(Nc)`; `.dual()` selects the antifundamental representation.],
   [`color_adjoint`], [`R.coad(dA)` and its port patterns.],
-  [`color_number`], [`Nc: Expression`, exported from the tensor package.],
+  [`color_number`], [`Nc() -> Expression`, exported from the tensor package.],
   [`conjugate`], [`BroadcastFunction.conj()(expr)`; also accepts wildcard expressions.],
   [`dot`], [`dot(p, q)`; `TP.dot(left_, right_)`.],
   [`casimir`], [`rep.casimir(degree)`; `TP.casimir(degree_, rep_)`.],
@@ -137,7 +137,7 @@ arbitrary mixed variadic sequences use a conservative union return type.
 
 == Scalars, introspection, and the remaining HEP surface
 
-`Nc` is `CS.nc` itself: a real scalar with default numerical value 3.
+`Nc()` returns `CS.nc` itself: a real scalar with default numerical value 3.
 An unrelated `S("Nc")` lacks that identity and metadata. Generic
 user-supplied colour dimensions remain supported.
 
@@ -146,11 +146,12 @@ boundaries use `rep.to_expression().get_head()`, `rep.casimir().get_head()`,
 or `TensorName.dirac_gamma().to_expression()`. These are useful for rewrite
 oracles and syntax inspection.
 
-`hep.Symbols` retains ten graph/model entries: `edge_momentum`, `denominator`,
+`hep.Symbols` retains ten graph/model static methods: `edge_momentum`, `denominator`,
 `dimension`, `half_edge`, `polarization`, `polarization_conjugate`,
 `ufo_metric`, `ufo_index`, `ufo_momentum`, and `model_conjugate`.
 External and loop momenta belong to `Kinematics`; model parameters and
-couplings are retrieved from their model.
+couplings are retrieved from their model. These factories and `Nc()` construct expressions
+only when called, leaving imports quiet until the caller can set a Symbolica license key.
 
 == Migration and verification
 

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "tests"]
+exclude = ["vendor/typst-library", "vendor/typst-svg"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -89,6 +90,9 @@ which = "8.0.0"
 
 # Consuming workspaces select the Typst payload through their own root patch.
 [patch.crates-io]
+# Optional notebook compiler components; see vendor/typst.typ.
+typst-library = { path = "vendor/typst-library" }
+typst-svg = { path = "vendor/typst-svg" }
 # Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
 clarabel = { path = "vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
