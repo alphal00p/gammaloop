@@ -1,4 +1,5 @@
 svg[data-linnet-interactive] {
+  display: block;
   --linnet-selection: #c18a18;
   --linnet-panel-bg: #fffdf9;
   --linnet-panel-ink: #302c35;
