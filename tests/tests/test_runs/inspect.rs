@@ -32,7 +32,6 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             &[
                 "import model ./assets/models/json/scalars/scalars.json",
                 "import graphs ./tests/resources/graphs/bubble_inverse_prop_1_cancellation.dot -p bubble_inverse_propagator_1 -i cancellation",
-                // "import graphs ./tests/resources/graphs/bubble_inverse_prop_2_cancellation.dot -p bubble_inverse_propagator_2 -i cancellation",
                 "import graphs ./tests/resources/graphs/box_inverse_prop_cancellation.dot -p box_inverse_propagator -i cancellation",
                 "import graphs ./tests/resources/graphs/hexagon_cubed_inverse_prop_cancellation.dot -p hexagon_cubed_inverse_propagator -i cancellation",
                 "import graphs ./tests/resources/graphs/pentagon_two_distinct_inverse_prop_cancellation.dot -p pentagon_two_distinct_inverse_propagators -i cancellation",
@@ -55,16 +54,6 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                 ]"#,
                 "[0, 0, 0, 0]",
             ),
-            // (
-            //     "bubble_2",
-            //     "bubble_inverse_propagator_2",
-            //     vec![1.1, 0.7, -0.4],
-            //     r#"[
-            //         [3.0, 0.0, 0.0, 3.0],
-            //         "dependent"
-            //     ]"#,
-            //     "[0, 0, 0, 0]",
-            // ),
             (
                 "box",
                 "box_inverse_propagator",
