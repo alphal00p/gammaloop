@@ -1803,6 +1803,39 @@ impl ColorAlgebraSimplifier {
                 if common_count >= 2 {
                     return Some(Atom::Zero);
                 }
+                if common_count != 1 || !symmetric.has_distinct_args() {
+                    continue;
+                }
+                let bridge = structure
+                    .args
+                    .iter()
+                    .find(|arg| symmetric.args.contains(arg))
+                    .expect("one shared structure-constant leg");
+                // Invariance gives sum_i f(x,a_i,b) D(...,b,...) = 0.
+                // Contract every a_i with a second symmetric invariant: all
+                // terms coincide, so each is zero. This includes
+                // f(x,a,d) D_R(a,b,c) D_S(d,b,c,e), independently of the
+                // representations and the order used to decompose traces.
+                for (other_index, other_factor) in product.factors.iter().enumerate() {
+                    if other_index == symmetric_index {
+                        continue;
+                    }
+                    let Some(other) = &other_factor.symmetric_invariant else {
+                        continue;
+                    };
+                    if !other.has_distinct_args() {
+                        continue;
+                    }
+                    if !other.args.contains(bridge)
+                        && symmetric
+                            .args
+                            .iter()
+                            .all(|arg| arg == bridge || other.args.contains(arg))
+                        && structure.args.iter().any(|arg| other.args.contains(arg))
+                    {
+                        return Some(Atom::Zero);
+                    }
+                }
             }
         }
 
@@ -2115,8 +2148,8 @@ impl ColorAlgebraSimplifier {
                 let Some(right) = &right_factor.symmetric_invariant else {
                     continue;
                 };
-                if left.args.len() != right.args.len()
-                    || left.args.len() < 3
+                if left.args.len() < 3
+                    || right.args.len() < 3
                     || !left.has_distinct_args()
                     || !right.has_distinct_args()
                 {
@@ -2133,10 +2166,22 @@ impl ColorAlgebraSimplifier {
                     .iter()
                     .map(|arg| arg.to_owned())
                     .collect::<Vec<_>>();
-                // Contract equal-rank symmetric traces into the corresponding
-                // scalar invariant family, leaving a metric for one open pair.
                 let (common, left_open, right_open) =
                     symmetric_common_and_open_args(&left_args, &right_args);
+                // An invariant with a single adjoint port is zero: the
+                // adjoint of SU(N) has no invariant vector. This also avoids
+                // leaving a label-order-dependent d_R(3)*d_S(4) remainder.
+                if matches!(
+                    (left_open.as_slice(), right_open.as_slice()),
+                    ([], [_]) | ([_], [])
+                ) {
+                    return Some(Atom::Zero);
+                }
+                if left_args.len() != right_args.len() {
+                    continue;
+                }
+                // Contract equal-rank symmetric traces into the corresponding
+                // scalar invariant family, leaving a metric for one open pair.
                 if common.len() == left_args.len() {
                     let replacement = Atom::num(left.phase * right.phase)
                         * color_symmetric_product(
@@ -3988,6 +4033,135 @@ mod reconstruction_tests {
                     std::iter::once(partner.as_view()),
                 );
                 assert_eq!(kept, Some(replacement * &partner), "{labels:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_invariance_annihilates_a_bridge_between_traces() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings};
+        crate::test_support::test_initialize();
+        let rep = fundamental_rep(Atom::num(3));
+        let adjoint = adjoint_rep(Atom::num(8));
+        let [a, b, c, d, e, x, y] =
+            adjoint_slots("invariant_bridge", ["a", "b", "c", "d", "e", "x", "y"]);
+        let left = color_symmetric_trace(&rep, [a.clone(), b.clone(), c.clone()]);
+        let right = shadowing::trace_sym(
+            &adjoint,
+            [d.clone(), b.clone(), c.clone(), e.clone()]
+                .map(|slot| ColorAlgebraSimplifier::trace_generator_factor(true, &slot)),
+        );
+        let settings = AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        let source = color_f!(&x, &a, &d) * &left * &right;
+        assert!(!source.is_zero());
+        let reduced = SymbolicTensor::infer(source)
+            .unwrap()
+            .simplify_algebra(&settings)
+            .unwrap();
+        assert!(reduced.expression().is_zero());
+
+        // A missing connection does not sum the action on every leg of D_R.
+        let open = shadowing::trace_sym(
+            &adjoint,
+            [d.clone(), b.clone(), y, e]
+                .map(|slot| ColorAlgebraSimplifier::trace_generator_factor(true, &slot)),
+        );
+        let source = color_f!(x, a, d) * left * open;
+        assert!(
+            ColorAlgebraSimplifier::simplify_symmetric_structure_product(&ProductView::parse(
+                source.as_view()
+            ))
+            .is_none()
+        );
+        assert!(
+            !SymbolicTensor::infer(source)
+                .unwrap()
+                .simplify_algebra(&settings)
+                .unwrap()
+                .expression()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn symmetric_invariants_cannot_leave_one_adjoint_port() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings};
+        crate::test_support::test_initialize();
+        let [a, b, c, d, e] = adjoint_slots("invariant_vector", ["a", "b", "c", "d", "e"]);
+        let rep = fundamental_rep(Atom::num(3));
+        let adjoint = adjoint_rep(Atom::num(8));
+        let left = CS.symmetric_d(&rep, vec![a.clone(), b.clone(), c.clone()]);
+        let right = CS.symmetric_d(&adjoint, vec![a.clone(), b.clone(), c.clone(), d.clone()]);
+        let settings = AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        let source = &left * right;
+        assert!(!source.is_zero());
+        assert!(
+            SymbolicTensor::infer(source)
+                .unwrap()
+                .simplify_algebra(&settings)
+                .unwrap()
+                .expression()
+                .is_zero()
+        );
+        let open = CS.symmetric_d(&adjoint, vec![a, b, d, e]);
+        let source = left * open;
+        assert!(
+            ColorAlgebraSimplifier::simplify_symmetric_invariant_product(&ProductView::parse(
+                source.as_view()
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn quark_box_zero_is_independent_of_index_order() {
+        use crate::tensor::{AlgebraContraction, AlgebraSettings};
+        crate::test_support::test_initialize();
+        let rep = fundamental_rep(Atom::num(3));
+        let ports = adjoint_slots(
+            "quark_box_zero",
+            ["a", "b", "c", "d", "e", "h", "k", "x", "y"],
+        );
+        let settings = AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        };
+        // FK3426/FK3430 after propagator metrics: a four-generator quark
+        // loop joined to four three-gluon vertices, with two open color ports.
+        for reverse in [false, true] {
+            for shift in 0..ports.len() {
+                let order = |i: usize| {
+                    if reverse {
+                        (ports.len() - 1 - i + shift) % ports.len()
+                    } else {
+                        (i + shift) % ports.len()
+                    }
+                };
+                let [a, b, c, d, e, h, k, x, y] =
+                    std::array::from_fn::<_, 9, _>(|i| &ports[order(i)]);
+                let source = trace!(&rep, color_t!(a), color_t!(c), color_t!(b), color_t!(d))
+                    * color_f!(x, d, e)
+                    * color_f!(y, e, h)
+                    * color_f!(a, b, k)
+                    * color_f!(c, h, k);
+                let reduced = SymbolicTensor::infer(source)
+                    .unwrap()
+                    .simplify_algebra(&settings)
+                    .unwrap();
+                assert!(
+                    reduced.expression().is_zero(),
+                    "reverse={reverse}, shift={shift}: {}",
+                    reduced.expression()
+                );
             }
         }
     }
