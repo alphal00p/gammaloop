@@ -242,6 +242,23 @@ impl CofDimensionInvariantRewriter {
         if degree != 4 {
             return None;
         }
+        // Mixed contraction d_A^{abcd} d_F^{abcd} of normalized symmetric
+        // traces, as in color.h's d44(A,F): N (N^2-1)(N^2+6)/48.
+        for (adjoint, fundamental) in [(left_rep, right_rep), (right_rep, left_rep)] {
+            if let (Some(adjoint), Some(n)) = (
+                Self::adjoint_dimension(adjoint),
+                Self::fundamental_dimension(fundamental),
+            ) {
+                if Self::fundamental_dimension_from_adjoint_dimension(adjoint.as_view())? != n {
+                    return None;
+                }
+                let n_squared = n.clone().pow(Atom::num(2));
+                return Some(
+                    n * (n_squared.clone() - Atom::one()) * (n_squared + Atom::num(6))
+                        / Atom::num(48),
+                );
+            }
+        }
         let left = Self::adjoint_dimension(left_rep)?;
         if Self::adjoint_dimension(right_rep)? != left {
             return None;
@@ -391,8 +408,27 @@ mod tests {
         assert_eq!(result.to_cof_dimension_invariants(), result);
     }
 
+    /// d_A^{abcd} d_F^{abcd} = N (N^2-1)(N^2+6)/48, as color.h's d44(A,F).
     #[test]
-    fn adjoint_quartic_gram_retains_unrecognized_or_mixed_spaces() {
+    fn mixed_quartic_gram_uses_explicit_su_n_conventions() {
+        crate::test_support::test_initialize();
+        for (n, expected) in [
+            (2, Atom::num(5) / Atom::num(4)),
+            (3, Atom::num(15) / Atom::num(2)),
+        ] {
+            let adjoint = ColorAdjoint {}.to_symbolic([Atom::num(n * n - 1)]);
+            let fundamental = ColorFundamental {}.to_symbolic([Atom::num(n)]);
+            for invariant in [
+                CS.gram(Atom::num(4), adjoint.clone(), fundamental.clone()),
+                CS.gram(Atom::num(4), fundamental.clone(), adjoint.clone()),
+            ] {
+                assert_eq!(invariant.to_cof_dimension_invariants(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn adjoint_quartic_gram_retains_unrecognized_or_mismatched_spaces() {
         crate::test_support::test_initialize();
         let adjoint = |dimension| ColorAdjoint {}.to_symbolic([dimension]);
         let a8 = adjoint(Atom::num(8));
@@ -401,7 +437,7 @@ mod tests {
             CS.gram(
                 Atom::num(4),
                 a8.clone(),
-                ColorFundamental {}.to_symbolic([Atom::num(3)]),
+                ColorFundamental {}.to_symbolic([Atom::num(4)]),
             ),
             CS.gram(Atom::num(3), a8.clone(), a8),
             {

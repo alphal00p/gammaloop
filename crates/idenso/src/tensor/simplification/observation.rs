@@ -7,6 +7,7 @@ use crate::{
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::schoonschip::SimplificationCandidates,
 };
+use ahash::{AHashMap, AHashSet};
 use spenso::structure::partial::{
     PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
 };
@@ -19,7 +20,7 @@ use spenso::{
     },
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     sync::{Arc, LazyLock, RwLock},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
@@ -68,21 +69,21 @@ thread_local! {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RegionObservation {
     pub(crate) counts: [usize; HEAD_COUNT],
-    pub(crate) representations: HashSet<LibraryRep>,
+    pub(crate) representations: AHashSet<LibraryRep>,
     // Possible matrix channels, including existing chain endpoints. Merely
     // mentioning a representation in a vector or scalar dot is insufficient.
-    chain_channels: HashSet<LibraryRep>,
+    chain_channels: AHashSet<LibraryRep>,
     // Only functions observed directly in this scope. Descendant inventories
     // stay in their shared regional observations rather than being cloned and
     // rehashed into every arithmetic ancestor.
-    leaves: HashSet<Atom>,
+    leaves: AHashSet<Atom>,
     leaf_children: Vec<Arc<RegionObservation>>,
     leaf_inventory_complete: bool,
-    reserved_indices: HashSet<AbstractIndex>,
+    reserved_indices: AHashSet<AbstractIndex>,
     indices: usize,
     max_indices: usize,
-    metric_sources: HashSet<LibraryRep>,
-    vector_sources: HashSet<LibraryRep>,
+    metric_sources: AHashSet<LibraryRep>,
+    vector_sources: AHashSet<LibraryRep>,
     indexed_power: bool,
     scalar_interface: bool,
     epsilon_degree: u8,
@@ -95,16 +96,16 @@ impl Default for RegionObservation {
     fn default() -> Self {
         Self {
             counts: [0; HEAD_COUNT],
-            representations: HashSet::new(),
-            chain_channels: HashSet::new(),
-            leaves: HashSet::new(),
+            representations: AHashSet::new(),
+            chain_channels: AHashSet::new(),
+            leaves: AHashSet::new(),
             leaf_children: Vec::new(),
             leaf_inventory_complete: true,
-            reserved_indices: HashSet::new(),
+            reserved_indices: AHashSet::new(),
             indices: 0,
             max_indices: 0,
-            metric_sources: HashSet::new(),
-            vector_sources: HashSet::new(),
+            metric_sources: AHashSet::new(),
+            vector_sources: AHashSet::new(),
             indexed_power: false,
             scalar_interface: true,
             epsilon_degree: 0,
@@ -367,10 +368,10 @@ impl RegionObservation {
 #[derive(Clone, Debug)]
 pub(crate) struct DomainObservations {
     pub(crate) candidates: SimplificationCandidates<HEAD_COUNT>,
-    regions: HashMap<Atom, Arc<RegionObservation>>,
+    regions: AHashMap<Atom, Arc<RegionObservation>>,
     // Exact syntax facts survive replacements independently of live candidate
     // multiplicities. Share this memo instead of cloning every unchanged scope.
-    scopes: Arc<RwLock<HashMap<Atom, Arc<RegionObservation>>>>,
+    scopes: Arc<RwLock<AHashMap<Atom, Arc<RegionObservation>>>>,
     // A producer can establish terminal polynomial form without collecting syntactic
     // regions. Missing regions remain unknown to arbitrary collector predicates.
     polynomial_form: Option<TerminalPolynomialForm>,
@@ -441,7 +442,7 @@ impl DomainObservations {
                 traversal_complete: false,
                 intrinsic: true,
             },
-            regions: HashMap::new(),
+            regions: AHashMap::new(),
             scopes: Arc::default(),
             polynomial_form: Some(if needs_dots {
                 TerminalPolynomialForm::Metrics
@@ -464,14 +465,14 @@ impl DomainObservations {
     fn terminal_region(&self) -> Arc<RegionObservation> {
         debug_assert!(self.is_terminal_polynomial());
         Arc::new(RegionObservation {
-            representations: self.representations.clone(),
-            reserved_indices: self.reserved_indices.clone(),
+            representations: self.representations.iter().copied().collect(),
+            reserved_indices: self.reserved_indices.iter().copied().collect(),
             indices: self.max_indices,
             max_indices: self.max_indices,
             // Free polynomial ports can acquire partners during composition.
             // The producer excludes internal connections, not those new paths.
-            metric_sources: self.representations.clone(),
-            vector_sources: self.representations.clone(),
+            metric_sources: self.representations.iter().copied().collect(),
+            vector_sources: self.representations.iter().copied().collect(),
             scalar_interface: self.is_closed_scalar(),
             dots: self.needs_dot_normalization(),
             leaf_inventory_complete: false,
@@ -505,7 +506,7 @@ impl DomainObservations {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             _ => vec![expression],
         };
-        let mut regions = HashMap::new();
+        let mut regions = AHashMap::new();
         let mut retained = false;
         for factor in factors {
             let region = if factor == terminal_expression {
@@ -647,15 +648,15 @@ impl DomainObservations {
 
     fn scan_regions(
         expression: AtomView<'_>,
-        cached: Option<&HashMap<Atom, Arc<RegionObservation>>>,
+        cached: Option<&AHashMap<Atom, Arc<RegionObservation>>>,
     ) -> Self {
         let wanted = Self::regions(expression)
             .into_iter()
             .map(|region| region.get_data().as_ptr() as usize)
-            .collect::<HashSet<_>>();
-        let mut regions = HashMap::new();
+            .collect::<AHashSet<_>>();
+        let mut regions = AHashMap::new();
         let mut slots = SlotMatcher::default();
-        let mut scopes = HashMap::new();
+        let mut scopes = AHashMap::new();
         let mut stack = Vec::<(usize, usize, Atom, Arc<RegionObservation>)>::new();
         let candidates = SimplificationCandidates::scan_observing(
             expression,
@@ -710,9 +711,9 @@ impl DomainObservations {
 
     fn finish_observation(
         stack: &mut Vec<(usize, usize, Atom, Arc<RegionObservation>)>,
-        wanted: &HashSet<usize>,
-        regions: &mut HashMap<Atom, Arc<RegionObservation>>,
-        scopes: &mut HashMap<Atom, Arc<RegionObservation>>,
+        wanted: &AHashSet<usize>,
+        regions: &mut AHashMap<Atom, Arc<RegionObservation>>,
+        scopes: &mut AHashMap<Atom, Arc<RegionObservation>>,
     ) {
         let (begin, _, value, mut observed) = stack.pop().unwrap();
         if let AtomView::Fun(function) = value.as_view() {
@@ -778,8 +779,8 @@ impl DomainObservations {
 
     fn from_regions(
         candidates: SimplificationCandidates<HEAD_COUNT>,
-        regions: HashMap<Atom, Arc<RegionObservation>>,
-        scopes: Arc<RwLock<HashMap<Atom, Arc<RegionObservation>>>>,
+        regions: AHashMap<Atom, Arc<RegionObservation>>,
+        scopes: Arc<RwLock<AHashMap<Atom, Arc<RegionObservation>>>>,
         additive: bool,
     ) -> Self {
         let epsilon_degree = if additive {
@@ -827,7 +828,7 @@ impl DomainObservations {
     /// A kernel supplies the changed replacement. Reuse each surviving region;
     /// only newly written regions lose their syntactic and interface facts.
     pub(crate) fn updated(&self, expression: AtomView<'_>) -> Self {
-        let mut regions = HashMap::new();
+        let mut regions = AHashMap::new();
         for view in Self::regions(expression) {
             let region = if let Some(region) = self.region(view) {
                 #[cfg(test)]
@@ -969,6 +970,39 @@ impl DomainObservations {
             }
         }
         Some(dirty)
+    }
+
+    /// Whether another family's replacement keeps a colour fixed point fixed.
+    /// Colour rules match traces, generators, structure constants and
+    /// symmetric tensors. Closing a line changes the trace count, and
+    /// distributing a colour factor into new products copies its heads.
+    /// With every count unchanged, the edit can only relabel dummies, collect
+    /// adjoint matrices into chains or act on factors without colour rules.
+    pub(crate) fn adds_no_colour_work(&self, previous: &Self) -> bool {
+        // trace, t, f and d in DOMAIN_HEADS.
+        const COLOUR_WORK: [usize; 4] = [6, 18, 19, 20];
+        self.identity_inventory_complete
+            && previous.identity_inventory_complete
+            && COLOUR_WORK
+                .iter()
+                .all(|&head| self.candidates.counts[head] == previous.candidates.counts[head])
+    }
+
+    /// Whether a notation-only structural change keeps a colour fixed point
+    /// fixed. Collecting adjoint matrices into chains keeps every structure
+    /// constant, and canonical notation can merge or cancel equal terms,
+    /// which leaves fewer candidates. A new trace can come from a closed
+    /// cycle and stays colour work.
+    pub(crate) fn notation_adds_no_colour_work(&self, previous: &Self) -> bool {
+        // trace, then t, f and d in DOMAIN_HEADS.
+        const TRACE: usize = 6;
+        const COLOUR_WORK: [usize; 3] = [18, 19, 20];
+        self.identity_inventory_complete
+            && previous.identity_inventory_complete
+            && self.candidates.counts[TRACE] == previous.candidates.counts[TRACE]
+            && COLOUR_WORK
+                .iter()
+                .all(|&head| self.candidates.counts[head] <= previous.candidates.counts[head])
     }
 
     pub(crate) fn region(&self, expression: AtomView<'_>) -> Option<Arc<RegionObservation>> {
