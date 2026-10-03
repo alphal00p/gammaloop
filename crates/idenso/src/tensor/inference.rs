@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use ahash::{AHashMap, AHashSet};
 use spenso::{
     network::{
         library::symbolic::{ETS, ExplicitKey},
@@ -22,7 +23,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     evaluate::EvaluatorBuilder,
 };
@@ -1632,7 +1633,7 @@ impl InterfaceInference {
 
     fn validate_tensor_syntax_after_scopes(&mut self, atom: AtomView<'_>) -> InferenceResult<()> {
         let mut syntax_error = None;
-        let mut checked_functions = HashSet::new();
+        let mut checked_functions = AHashSet::new();
         atom.visitor(&mut |value| {
         if syntax_error.is_some() {
             return false;
@@ -1744,6 +1745,23 @@ impl InterfaceInference {
                     }
                 };
 
+                if let Some(structure) = &builtin
+                    && !symbol.has_tag(&SPENSO_TAG.rank1)
+                    && arguments.iter().all(|argument| self.slots.parse::<LibraryRep, AbstractIndex>(*argument)
+                        .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. })))
+                {
+                    // The builtin signature established every explicit port.
+                    // Slots own their metadata, so neither generic leaf ordering
+                    // nor another child syntax walk can add a validation here.
+                    if checked_functions.len() < InterfaceInference::CACHE_ENTRIES
+                        && value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
+                    {
+                        self.builtin_interface(value, &arguments, structure);
+                        checked_functions.insert(value);
+                    }
+                    return false;
+                }
+
                 let ports = arguments
                     .iter()
                     .enumerate()
@@ -1806,16 +1824,9 @@ impl InterfaceInference {
                 if syntax_error.is_none()
                     && checked_functions.len() < InterfaceInference::CACHE_ENTRIES
                     && value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
+                    && self.direct_leaf_interface(function, self.leaf_inference).is_some()
                 {
-                    if let Some(structure) = &builtin
-                        && arguments.iter().all(|argument| self.slots.parse::<LibraryRep, AbstractIndex>(*argument)
-                            .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. })))
-                    {
-                        self.builtin_interface(value, &arguments, structure);
-                        checked_functions.insert(value);
-                    } else if self.direct_leaf_interface(function, self.leaf_inference).is_some() {
-                        checked_functions.insert(value);
-                    }
+                    checked_functions.insert(value);
                 }
             }
             _ => {}
@@ -1832,12 +1843,12 @@ impl InterfaceInference {
 
 #[derive(Default)]
 pub struct InterfaceInference {
-    reusable_interfaces: HashMap<Vec<u8>, PartialStructure>,
+    reusable_interfaces: AHashMap<Vec<u8>, PartialStructure>,
     // Shape inference alone does not establish this stronger rewrite proof.
-    proven_leaf_interfaces: HashSet<Vec<u8>>,
+    proven_leaf_interfaces: AHashSet<Vec<u8>>,
     // A leaf-interface proof can leave scalar metadata opaque; this separate
     // certificate covers every function in a complete normalized subtree.
-    intrinsic_functions: HashSet<Vec<u8>>,
+    intrinsic_functions: AHashSet<Vec<u8>>,
     slots: SlotMatcher,
     dummies: ParseState<AbstractIndex>,
     leaf_inference: LeafInference,
@@ -2600,7 +2611,7 @@ impl InterfaceInference {
         Self::observe_indices(
             value,
             &mut SlotMatcher::default(),
-            &mut HashMap::new(),
+            &mut AHashMap::new(),
             ObservationScope {
                 inside_factor,
                 validate: true,
@@ -2668,35 +2679,47 @@ impl InterfaceInference {
         Ok(interface.clone())
     }
 
+    /// Delay replacement storage until a child changes; the common explicit
+    /// tensor leaves have no powers to lower. Every child is still visited once,
+    /// preserving callback execution and error order.
+    fn lower_tensor_power_arguments<'a>(
+        arguments: impl Iterator<Item = AtomView<'a>> + Clone,
+    ) -> InferenceResult<Option<Vec<AtomOrView<'a>>>> {
+        let original = arguments.clone();
+        let mut arguments = arguments.enumerate();
+        while let Some((position, argument)) = arguments.next() {
+            if let Some(lowered) = Self::lower_tensor_powers(argument)? {
+                let mut replacements = original
+                    .take(position)
+                    .map(AtomOrView::View)
+                    .collect::<Vec<_>>();
+                replacements.push(AtomOrView::Atom(lowered));
+                for (_, argument) in arguments {
+                    replacements.push(match Self::lower_tensor_powers(argument)? {
+                        Some(lowered) => AtomOrView::Atom(lowered),
+                        None => AtomOrView::View(argument),
+                    });
+                }
+                return Ok(Some(replacements));
+            }
+        }
+        Ok(None)
+    }
+
     /// Lower tensor powers, returning no replacement when the normalized atom is unchanged.
     pub fn lower_tensor_powers(value: AtomView<'_>) -> InferenceResult<Option<Atom>> {
         let lowered = match value {
             AtomView::Add(sum) => {
-                let terms = sum
-                    .iter()
-                    .map(Self::lower_tensor_powers)
-                    .collect::<InferenceResult<Vec<_>>>()?;
-                if terms.iter().all(Option::is_none) {
+                let Some(terms) = Self::lower_tensor_power_arguments(sum.iter())? else {
                     return Ok(None);
-                }
-                sum.iter()
-                    .zip(&terms)
-                    .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view))
-                    .sum()
+                };
+                terms.iter().map(AtomCore::as_atom_view).sum()
             }
             AtomView::Mul(product) => {
-                let factors = product
-                    .iter()
-                    .map(Self::lower_tensor_powers)
-                    .collect::<InferenceResult<Vec<_>>>()?;
-                if factors.iter().all(Option::is_none) {
+                let Some(factors) = Self::lower_tensor_power_arguments(product.iter())? else {
                     return Ok(None);
-                }
-                product
-                    .iter()
-                    .zip(&factors)
-                    .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view))
-                    .product()
+                };
+                factors.iter().map(AtomCore::as_atom_view).product()
             }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
@@ -2757,25 +2780,19 @@ impl InterfaceInference {
                 if SPENSO_TAG.is_scalar_metadata(symbol) {
                     return Ok(None);
                 }
-                let arguments = function
-                    .iter()
-                    .map(Self::lower_tensor_powers)
-                    .collect::<InferenceResult<Vec<_>>>()?;
-                if arguments.iter().all(Option::is_none)
+                let arguments = Self::lower_tensor_power_arguments(function.iter())?;
+                if arguments.is_none()
                     && symbol.get_normalization_function().is_none()
                     && symbol.get_evaluation_info().is_none()
                 {
                     return Ok(None);
                 }
                 // Preserve existing callback invocation when rebuilding is observable.
-                FunctionBuilder::new(symbol)
-                    .add_args(
-                        function
-                            .iter()
-                            .zip(&arguments)
-                            .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view)),
-                    )
-                    .finish()
+                let builder = FunctionBuilder::new(symbol);
+                match arguments {
+                    Some(arguments) => builder.add_args(arguments).finish(),
+                    None => builder.add_args(function.iter()).finish(),
+                }
             }
             _ => return Ok(None),
         };
