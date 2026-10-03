@@ -6,7 +6,8 @@ build-backend = "maturin"
 name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
-dependencies = ["linnet==0.1.0", "typst==0.15.0"]
+dependencies = ["numpy"]
+license-files = ["licenses/*"]
 
 [tool.maturin]
 module-name = "symbolica.core"
@@ -16,5 +17,8 @@ python-source = "python"
 build = "cp314-*"
 
 [tool.cibuildwheel.pyodide]
-repair-wheel-command = ""
+# Pyodide's ABI-tag rewrite repacks the wheel with DEFLATE; compress afterwards.
+repair-wheel-command = 'python "{package}/compress_wheel.py" "{wheel}" "{dest_dir}"'
 environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }
+test-sources = ["crates/feynkit-py/tests/installed_offline_rendering.py"]
+test-command = "python crates/feynkit-py/tests/installed_offline_rendering.py"

@@ -1,7 +1,10 @@
 //! Native SVG drawing of prepared graphs, the host-side counterpart of
 //! `draw.typ`: ImPrEd layout, Kurvst geometry, the shared annotation search
 //! and SVG output. Typst only typesets the label pages a [`Scene`] lists.
+mod config;
 mod curves;
+pub use config::Config;
+mod interactive;
 mod labels;
 mod marks;
 mod output;
@@ -39,12 +42,19 @@ pub struct Scene {
     pub label_feedback: bool,
 }
 
+#[derive(Clone)]
 pub struct NodeDrawing {
+    /// Radius/minimum half-size in drawing units.
+    pub radius: f64,
+    pub label: Option<usize>,
+    pub rectangular: bool,
+    pub fill: String,
     pub stroke: Stroke,
     /// Inspection fields after the node's incident edges.
     pub details: Details,
 }
 
+#[derive(Clone)]
 pub struct EdgeDrawing {
     pub stroke: Stroke,
     pub pattern: Option<Pattern>,
@@ -137,7 +147,15 @@ impl Scene {
 
     /// Lay out and draw the scene with its typeset pages; one SVG document.
     pub fn render(&self, typeset: &Typeset) -> Result<String, String> {
-        let graph = TypstGraph::from_spec(self.graph.clone())?;
+        let mut spec = self.graph.clone();
+        for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
+            let (w, h) = drawing.size(typeset);
+            node.statements
+                .insert("layout-width".into(), (2.0 * w).to_string());
+            node.statements
+                .insert("layout-height".into(), (2.0 * h).to_string());
+        }
+        let graph = TypstGraph::from_spec(spec)?;
         let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
         let mut drawing = Drawing::new(self, typeset, &run)?;
         if !self.label_feedback {
@@ -221,6 +239,9 @@ enum Element {
     },
     Node {
         at: [f64; 2],
+        size: (f64, f64),
+        rectangular: bool,
+        fill: String,
         stroke: Stroke,
     },
 }
@@ -293,7 +314,7 @@ impl Drawing {
                 .ok_or("scene edges do not match the layout graph")?;
             let hrefs = output::edge_hrefs(edge, &drawing.details);
             let anchor = edge.pos.as_ref().map_or([0.0; 2], |p| [p.x, p.y]);
-            let (visible, parts) = Self::edge_paths(&laid, edge, carrier, anchor)?;
+            let (visible, parts) = Self::edge_paths(scene, typeset, &laid, edge, carrier, anchor)?;
             let part_refs: Vec<&BezPath> = parts.iter().collect();
             for (region, points) in curves::region_samples(&part_refs, UNIT)? {
                 targets.extend(points.into_iter().map(|at| Target {
@@ -455,11 +476,27 @@ impl Drawing {
             let at = laid.node(node.node);
             layers.push(Element::Node {
                 at,
+                size: drawing.size(typeset),
+                rectangular: drawing.rectangular,
+                fill: drawing.fill.clone(),
                 stroke: drawing.stroke.clone(),
             });
+            if let Some(page) = drawing.label {
+                let label = &typeset.pages[page];
+                layers.push(Element::Label {
+                    page,
+                    bounds: Bounds {
+                        left: at[0] - label.width / UNIT / 2.0,
+                        right: at[0] + label.width / UNIT / 2.0,
+                        bottom: at[1] - label.height / UNIT / 2.0,
+                        top: at[1] + label.height / UNIT / 2.0,
+                    },
+                    href: output::node_href(node, &laid.edges, &drawing.details),
+                });
+            }
             targets.push(Target {
                 at,
-                size: 10.0,
+                size: (drawing.radius * UNIT * 2.0).max(10.0),
                 href: output::node_href(node, &laid.edges, &drawing.details),
             });
         }
@@ -474,11 +511,33 @@ impl Drawing {
 
     /// The visible (node-trimmed) edge path, and its source and sink parts.
     fn edge_paths(
+        scene: &Scene,
+        typeset: &Typeset,
         laid: &Laid,
         edge: &TypstDotEdge,
         carrier: &[[f64; 2]],
         anchor: [f64; 2],
     ) -> Result<(BezPath, Vec<BezPath>), String> {
+        let outset = |end: &TypstDotEndpoint| {
+            let (w, h) = scene.nodes[end.node].size(typeset);
+            if !scene.nodes[end.node].rectangular {
+                return w;
+            }
+            let center = laid.node(end.node);
+            let neighbor = if edge
+                .source
+                .as_ref()
+                .is_some_and(|source| source.hedge == end.hedge)
+            {
+                carrier.iter().find(|point| **point != center)
+            } else {
+                carrier.iter().rev().find(|point| **point != center)
+            };
+            let Some(neighbor) = neighbor else { return 0.0 };
+            let dx = (neighbor[0] - center[0]).abs();
+            let dy = (neighbor[1] - center[1]).abs();
+            (w / dx).min(h / dy) * dx.hypot(dy)
+        };
         let interior = carrier
             .get(1..carrier.len().saturating_sub(1))
             .unwrap_or(&[]);
@@ -487,16 +546,18 @@ impl Drawing {
             Ok((path.clone(), vec![path]))
         };
         match (&edge.source, &edge.sink) {
-            (Some(_), Some(_)) => {
+            (Some(source_node), Some(sink_node)) => {
+                let source_radius = outset(source_node);
+                let sink_radius = outset(sink_node);
                 let curve = curves::routed_curve(carrier)?;
                 let half = curves::length(&curve) / 2.0;
                 let source =
-                    curves::trim_routed(&curves::trim(&curve, 0.0, half)?, NODE_RADIUS, 0.0)?;
+                    curves::trim_routed(&curves::trim(&curve, 0.0, half)?, source_radius, 0.0)?;
                 let sink =
-                    curves::trim_routed(&curves::trim(&curve, half, 0.0)?, 0.0, NODE_RADIUS)?;
+                    curves::trim_routed(&curves::trim(&curve, half, 0.0)?, 0.0, sink_radius)?;
                 // `layer(curve, outsets)`: one trimmed window, reassembled from its cubics.
                 let visible = curves::from_cubics(&curves::cubics(
-                    &curves::windows(&curve, &[(NODE_RADIUS, NODE_RADIUS)])?.remove(0),
+                    &curves::windows(&curve, &[(source_radius, sink_radius)])?.remove(0),
                 ));
                 Ok((visible, vec![source, sink]))
             }
@@ -504,13 +565,13 @@ impl Drawing {
                 let mut points = vec![laid.node(*node)];
                 points.extend_from_slice(interior);
                 points.push(anchor);
-                dangling(points, NODE_RADIUS, 0.0)
+                dangling(points, outset(edge.source.as_ref().unwrap()), 0.0)
             }
             (None, Some(TypstDotEndpoint { node, .. })) => {
                 let mut points = vec![anchor];
                 points.extend_from_slice(interior);
                 points.push(laid.node(*node));
-                dangling(points, 0.0, NODE_RADIUS)
+                dangling(points, 0.0, outset(edge.sink.as_ref().unwrap()))
             }
             (None, None) => Err("edge without endpoints".to_owned()),
         }
@@ -681,6 +742,10 @@ mod tests {
             },
             nodes: (0..2)
                 .map(|_| NodeDrawing {
+                    radius: NODE_RADIUS,
+                    label: None,
+                    rectangular: false,
+                    fill: "none".into(),
                     stroke: ink(1.45),
                     details: Details::default(),
                 })
@@ -772,5 +837,71 @@ mod tests {
         }
         let svg = unlabelled.render(&typeset(&unlabelled)).unwrap();
         assert_eq!(svg.matches(chevron).count(), 4);
+    }
+}
+
+impl NodeDrawing {
+    fn size(&self, typeset: &Typeset) -> (f64, f64) {
+        let Some(label) = self.label.map(|i| &typeset.pages[i]) else {
+            return (self.radius, self.radius);
+        };
+        let (w, h) = (
+            (label.width / UNIT / 2.0 + 0.25).max(self.radius),
+            (label.height / UNIT / 2.0 + 0.25).max(self.radius),
+        );
+        if self.rectangular {
+            (w, h)
+        } else {
+            (w.hypot(h), w.hypot(h))
+        }
+    }
+}
+
+impl Scene {
+    /// Arrange independently rendered channels in one valid SVG document.
+    pub fn combine_svgs(figures: &[String]) -> Result<String, String> {
+        if let [figure] = figures {
+            return Ok(figure.clone());
+        }
+        let mut body = String::new();
+        let (mut width, mut height) = (0.0_f64, 0.0_f64);
+        for figure in figures {
+            let document = roxmltree::Document::parse(figure).map_err(|e| e.to_string())?;
+            let size = document
+                .root_element()
+                .attribute("viewBox")
+                .ok_or("SVG has no viewBox")?
+                .split_whitespace()
+                .map(str::parse::<f64>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            if size.len() != 4 {
+                return Err("invalid SVG viewBox".into());
+            }
+            // Nested viewports use the outer SVG's graph units, not CSS points.
+            let end = figure.find('>').ok_or("SVG has no opening tag")?;
+            let mut opening = figure[..end].to_owned();
+            let mut dimensions = document
+                .root_element()
+                .attributes()
+                .filter(|attribute| matches!(attribute.name(), "width" | "height"))
+                .map(|attribute| attribute.range())
+                .collect::<Vec<_>>();
+            dimensions.sort_by_key(|range| range.start);
+            for range in dimensions.into_iter().rev() {
+                opening.replace_range(range, "");
+            }
+            body.push_str(&format!(
+                "{opening} x=\"{width}\" y=\"0\" width=\"{}\" height=\"{}\"{}",
+                size[2],
+                size[3],
+                &figure[end..]
+            ));
+            width += size[2] + 10.0;
+            height = height.max(size[3]);
+        }
+        Ok(format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\" width=\"{width}pt\" height=\"{height}pt\">{body}</svg>"
+        ))
     }
 }

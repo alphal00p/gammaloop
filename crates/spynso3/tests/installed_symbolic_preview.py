@@ -1,9 +1,7 @@
 """Complete notebook display and lazy backends against the installed extension."""
 
 import unittest
-from unittest.mock import patch
 
-import typst
 from symbolica import E, FormattedOutput, PrintMode
 from symbolica.community import tensor as sp
 
@@ -25,60 +23,60 @@ class SymbolicDisplayTests(unittest.TestCase):
         )
         original = value.to_expression()
         modes.clear()
-        with patch.object(typst, "compile", wraps=typst.compile) as compile_:
-            formatted = value.formatted()
-            self.assertIs(type(formatted), FormattedOutput)
-            self.assertEqual(modes, [])
-            compile_.assert_not_called()
+        formatted = value.formatted()
+        self.assertIs(type(formatted), FormattedOutput)
+        self.assertEqual(modes, [])
 
-            plain = formatted.format_plain()
-            self.assertIn("Jbar", plain)
-            self.assertEqual(set(modes), {PrintMode.Symbolica})
-            count = len(modes)
-            self.assertEqual(str(formatted), plain)
-            self.assertEqual(repr(formatted), plain)
-            self.assertEqual(len(modes), count)
-            compile_.assert_not_called()
+        plain = formatted.format_plain()
+        self.assertIn("Jbar", plain)
+        self.assertEqual(set(modes), {PrintMode.Symbolica})
+        count = len(modes)
+        self.assertEqual(str(formatted), plain)
+        self.assertEqual(repr(formatted), plain)
+        self.assertEqual(len(modes), count)
 
-            modes.clear()
-            latex = formatted._repr_latex_()
-            self.assertIn(r"\bar{J}", latex)
-            self.assertEqual(set(modes), {PrintMode.Latex})
-            count = len(modes)
-            self.assertEqual(formatted._repr_latex_(), latex)
-            self.assertEqual(len(modes), count)
-            compile_.assert_not_called()
+        modes.clear()
+        latex = formatted._repr_latex_()
+        self.assertIn(r"\bar{J}", latex)
+        self.assertEqual(set(modes), {PrintMode.Latex})
+        count = len(modes)
+        self.assertEqual(formatted._repr_latex_(), latex)
+        self.assertEqual(len(modes), count)
 
-            modes.clear()
-            html = formatted._repr_html_()
-            self.assertIn("<mover", html)
-            self.assertEqual(set(modes), {PrintMode.Typst})
-            count = len(modes)
-            self.assertEqual(formatted._repr_html_(), html)
-            self.assertEqual(len(modes), count)
-            self.assertEqual(compile_.call_count, 1)
+        modes.clear()
+        html = formatted._repr_html_()
+        self.assertIn("<mover", html)
+        self.assertEqual(set(modes), {PrintMode.Typst})
+        count = len(modes)
+        self.assertEqual(formatted._repr_html_(), html)
+        self.assertEqual(len(modes), count)
         self.assertEqual(value.to_expression(), original)
 
     def test_free_formatted_owns_its_input_until_rendered(self):
         expression = E("(full_display_tests::x+1)^3")
-        with patch.object(typst, "compile", wraps=typst.compile) as compile_:
-            output = sp.formatted(expression)
-            del expression
-            compile_.assert_not_called()
-            self.assertIn("3", output._repr_latex_())
-            compile_.assert_not_called()
-            self.assertIn("<msup", output._repr_html_())
-            self.assertEqual(compile_.call_count, 1)
+        output = sp.formatted(expression)
+        del expression
+        self.assertIn("3", output._repr_latex_())
+        self.assertIn("<msup", output._repr_html_())
 
-    def test_missing_renderer_is_cached_without_preventing_latex(self):
-        output = sp.TensorExpression(E("full_display_tests::x+1")).formatted()
-        with patch.object(
-            typst, "compile", side_effect=ImportError("no renderer")
-        ) as compile_:
-            self.assertIsNone(output._repr_html_())
-            self.assertIsNone(output._repr_html_())
-            self.assertEqual(compile_.call_count, 1)
-        self.assertIn("x", output._repr_latex_())
+    def test_failed_render_is_cached_without_preventing_latex(self):
+        modes = []
+
+        def printer(expression, *, mode, **options):
+            modes.append(mode)
+            if mode == PrintMode.Typst:
+                return '#panic("intentional-render-failure")'
+            return "J"
+
+        value = sp.TensorName("full_display_tests::BrokenRender", print=printer)(
+            sp.Representation.euc(2)
+        )
+        output = value.formatted()
+        self.assertIsNone(output._repr_html_())
+        count = len(modes)
+        self.assertIsNone(output._repr_html_())
+        self.assertEqual(len(modes), count)
+        self.assertIn("J", output._repr_latex_())
 
     def test_large_scalar_display_prints_every_term(self):
         calls = []
@@ -136,14 +134,12 @@ class SymbolicDisplayTests(unittest.TestCase):
         for raw in (product, (product + 1) ** 7):
             with self.subTest(power=raw != product):
                 value = sp.TensorExpression(raw)
-                with patch.object(typst, "compile", wraps=typst.compile) as compile_:
-                    html = value._repr_html_()
-                    latex = value._repr_latex_()
-                    plain = str(value.formatted())
-                    free_html = sp.formatted(raw)._repr_html_()
-                    pretty = Pretty()
-                    value._repr_pretty_(pretty, False)
-                    self.assertEqual(compile_.call_count, 2)
+                html = value._repr_html_()
+                latex = value._repr_latex_()
+                plain = str(value.formatted())
+                free_html = sp.formatted(raw)._repr_html_()
+                pretty = Pretty()
+                value._repr_pretty_(pretty, False)
                 self.assertEqual(html, free_html)
                 self.assertEqual(plain, value.format_tensor())
                 self.assertEqual(latex, value.to_latex())

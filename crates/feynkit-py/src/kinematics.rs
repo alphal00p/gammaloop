@@ -34,9 +34,9 @@ use symbolica::{
 /// --------
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hepkit as hep
-/// >>> P = hep.Kinematics.external_momentum
+/// >>> P = hep.Kinematics.external_momentum()
 /// >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
-/// >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
+/// >>> s, t, u = hep.Kinematics.s(), hep.Kinematics.t(), hep.Kinematics.u()
 /// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
 /// >>> assert kin.scalar_product(p1, p2) == s/2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -61,8 +61,8 @@ impl PyKinematics {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> s = hep.Kinematics.s
-    #[classattr]
+    /// >>> s = hep.Kinematics.s()
+    #[staticmethod]
     fn s() -> PythonExpression {
         Atom::var(symbol!("feynkit::s")).into()
     }
@@ -72,8 +72,8 @@ impl PyKinematics {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> t = hep.Kinematics.t
-    #[classattr]
+    /// >>> t = hep.Kinematics.t()
+    #[staticmethod]
     fn t() -> PythonExpression {
         Atom::var(symbol!("feynkit::t")).into()
     }
@@ -83,8 +83,8 @@ impl PyKinematics {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> u = hep.Kinematics.u
-    #[classattr]
+    /// >>> u = hep.Kinematics.u()
+    #[staticmethod]
     fn u() -> PythonExpression {
         Atom::var(symbol!("feynkit::u")).into()
     }
@@ -94,8 +94,8 @@ impl PyKinematics {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Kinematics.external_momentum
-    #[classattr]
+    /// >>> reference = hep.Kinematics.external_momentum()
+    #[staticmethod]
     fn external_momentum() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::external_momentum()).into()
     }
@@ -105,8 +105,8 @@ impl PyKinematics {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> reference = hep.Kinematics.loop_momentum
-    #[classattr]
+    /// >>> reference = hep.Kinematics.loop_momentum()
+    #[staticmethod]
     fn loop_momentum() -> PythonExpression {
         Atom::var(feynkit_graph::symbols::loop_momentum()).into()
     }

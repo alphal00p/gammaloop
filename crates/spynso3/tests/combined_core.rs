@@ -91,7 +91,10 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
         assert!(!community.hasattr("spenso")?);
         for name in ["Tensor", "TensorExpression", "Representation"] {
             assert_eq!(
-                spenso.getattr(name)?.getattr("__module__")?.extract::<String>()?,
+                spenso
+                    .getattr(name)?
+                    .getattr("__module__")?
+                    .extract::<String>()?,
                 "symbolica.community.tensor"
             );
         }
@@ -127,81 +130,36 @@ assert type(spenso.formatted(expression, True)) is core.FormattedOutput
 for name in ("formatted", "to_html", "to_svg", "to_typst"):
     assert hasattr(tensor, name), name
 
-# Explicit rendering reports the optional dependency, while notebook and
-# FormattedOutput paths silently retain their existing LaTeX/text fallback.
+# Rendering is self-contained even when the unrelated PyPI Linnet and
+# typst-py cannot be imported. Trusted notation still crosses the real compiler.
 import builtins
 import sys
 
-previous_typst = sys.modules.pop("typst", None)
 original_import = builtins.__import__
-
-def import_without_typst(name, globals=None, locals=None, fromlist=(), level=0):
-    if name == "typst":
-        raise ImportError("typst deliberately unavailable in this test")
+def import_without_renderers(name, globals=None, locals=None, fromlist=(), level=0):
+    if name in ("typst", "linnet"):
+        raise ImportError(f"{name} deliberately unavailable in this test")
     return original_import(name, globals, locals, fromlist, level)
 
-builtins.__import__ = import_without_typst
+builtins.__import__ = import_without_renderers
 try:
-    try:
-        spenso.to_html(expression)
-    except ImportError as error:
-        assert "gammaloop[typst-display]" in str(error)
-    else:
-        raise AssertionError("explicit HTML rendering must require typst-display")
-
-    assert tensor._repr_html_() is None
+    html = spenso.to_html(expression)
+    assert "<math" in html
+    assert "data:font" not in html
+    assert len(html.encode()) < 10_000
+    assert "<math" in tensor._repr_html_()
+    assert tensor.to_svg().startswith("<svg")
     assert type(spenso.formatted(expression, True)) is core.FormattedOutput
+    for render in (spenso.to_html, spenso.to_svg):
+        try:
+            render(expression, notation_source='#panic("trusted-notation-sentinel")')
+        except RuntimeError as error:
+            assert "trusted-notation-sentinel" in str(error), str(error)
+        else:
+            raise AssertionError("custom notation was not compiled")
 finally:
     builtins.__import__ = original_import
-    if previous_typst is not None:
-        sys.modules["typst"] = previous_typst
 
-# A fake compiler lets this test verify the trusted notation source and
-# temporary project routing without installing typst-py or pretending to test
-# its compiler.
-import pathlib
-import types
-
-typst = types.ModuleType("typst")
-typst.calls = []
-
-def compile_typst(input, *, root, format, pretty):
-    root = pathlib.Path(root)
-    assert pathlib.Path(input) == root / "main.typ"
-    files = {path.name: path.read_bytes() for path in root.iterdir()}
-    typst.calls.append((files, format, pretty))
-    if format == "html":
-        return b"<html><head><style>.math{}</style></head><body><math><mi>T</mi></math></body></html>"
-    if format == "svg":
-        return b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
-    raise AssertionError(format)
-
-typst.compile = compile_typst
-sys.modules["typst"] = typst
-notation_source = "#let trusted-notation-sentinel = 42"
-
-html = spenso.to_html(expression, notation_source=notation_source)
-assert "<math" in html
-assert "data:font" not in html
-assert "https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/" in html
-assert len(html.encode()) < 10_000
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert files["render.typ"]
-assert files["tree.cbor"]
-assert format == "html"
-assert pretty is True
-
-svg = tensor.to_svg(notation_source=notation_source)
-assert svg.startswith("<svg")
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert format == "svg"
-assert pretty is True
-
-del sys.modules["typst"]
-if previous_typst is not None:
-    sys.modules["typst"] = previous_typst
 "##,
         )
         .expect("Python assertions contain a null byte");

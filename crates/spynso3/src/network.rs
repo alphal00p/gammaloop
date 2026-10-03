@@ -1456,23 +1456,23 @@ impl SpensoNet {
         self.network.dot_pretty()
     }
 
-    /// Generate Typst/Linnest source for the network graph.
+    /// Export a self-contained Typst document embedding the native SVG graph.
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
     /// -------
     /// str
-    ///     Typst graph source produced by Linnet.
+    ///     Typst source containing the complete SVG and its typeset labels.
     ///
     /// Notes
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph rendering requires the Linnet/Typst rendering support.
+    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
     ///
     /// Examples
     /// --------
@@ -1488,19 +1488,19 @@ impl SpensoNet {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        self.prepare_render(py, config)?
-            .getattr("typst_source")?
-            .extract()
+        Ok(typst_renderer::Document::svg_source(
+            &self.render_graph(py, config)?,
+        ))
     }
 
     /// Render the current network graph to SVG.
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1512,7 +1512,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph rendering requires the Linnet/Typst rendering support.
+    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
     ///
     /// Examples
     /// --------
@@ -1528,13 +1528,10 @@ impl SpensoNet {
     fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let svg: String = self
-            .prepare_render(py, config)?
-            .call_method0("to_svg")?
-            .extract()?;
+        let svg = self.render_graph(py, config)?;
         Ok(display::network::svg_theme(&svg))
     }
 
@@ -1688,7 +1685,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig, optional
+    /// config : dict, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1700,7 +1697,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph rendering requires the Linnet/Typst rendering support.
+    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
     ///
     /// Examples
     /// --------
@@ -1716,7 +1713,7 @@ impl SpensoNet {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         Ok(display::network::html(
@@ -1745,7 +1742,7 @@ impl SpensoNet {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the optional Typst runtime. The returned
+    /// Mathematical rendering uses the embedded Typst compiler. The returned
     /// string is not automatically displayed; pass it to the notebook's HTML
     /// or SVG display facility.
     ///

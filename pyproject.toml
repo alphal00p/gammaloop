@@ -29,8 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-typst-display = ["typst>=0.15,<0.16"]
-notebook-display = ["anywidget>=0.9,<1", "typst>=0.15,<0.16"]
+notebook-display = ["anywidget>=0.9,<1"]
 
 [project.urls]
 homepage = "https://alphaloop.ch"

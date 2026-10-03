@@ -64,9 +64,10 @@ class TensorVocabularyTests(unittest.TestCase):
         )
 
     def test_scalar_constant_and_invariant_patterns(self):
-        self.assertIsInstance(Nc, Expression)
-        self.assertEqual(Nc.get_name(), "spenso::Nc")
-        self.assertEqual(Nc.evaluate({}), 3)
+        nc = Nc()
+        self.assertIsInstance(nc, Expression)
+        self.assertEqual(nc.get_name(), "spenso::Nc")
+        self.assertEqual(nc.evaluate({}), 3)
         degree, rep = S("vocabulary::degree_", "vocabulary::rep_")
         for value, pattern in (
             (Representation.cof(3).casimir(), TensorPattern.casimir(degree, rep)),

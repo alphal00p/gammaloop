@@ -55,8 +55,12 @@ Copy the package containing
 #source-link("crates/feynkit-py/python/symbolica/community/hepkit/__init__.py", label: "the Python wrapper")
 into the host's `python/symbolica/community/hepkit` tree. Its wrapper imports the native module and
 calls the initializer. FeynKit itself must not declare another PyO3 extension entry point.
-Include `linnet==0.1.0` and `typst>=0.15,<0.16` in the host's display dependencies for automatic notebook figures;
-include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
+Registration must not construct symbolic expressions: callers need to import Symbolica before
+calling `set_license_key`. Keep expression-valued constants as static methods. After rebuilding
+the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
+to check that importing `E` and `hepkit` defers the license banner until the first operation.
+Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
+Linnet or Typst dependency is needed. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
 standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a
@@ -99,6 +103,10 @@ The #link("guides/showcases/")[showcase gallery] runs in Marimo's browser Python
 The repository's combined host packages Symbolica, FeynKit, Spenso, and Idenso into one
 WebAssembly wheel. Its `wasm` feature selects portable numeric backends; its default
 `native` feature retains the desktop backends. Browser Symbolica runs without a license key.
+The browser wheel uses Zstandard level 22 inside the wheel's ZIP archive. Installing
+it requires Python 3.14 with Zstandard support, as provided by the pinned Pyodide
+runtime. Its ABI3 tag describes extension compatibility, not archive decompression
+support in older Python installers.
 
 The wheel command uses the checkout's pinned Emscripten Rust toolchain and provisions the
 matching Pyodide build environment through cibuildwheel. Then export the executable
@@ -119,16 +127,15 @@ Rerun the export after editing a notebook; the watcher reloads the changed asset
 argument can instead point to an already built site. Generated wheels and notebook assets
 remain local build outputs.
 
-For the shared Spenso + Idenso showcase, also supply the matching Linnet browser wheel for
-network figures:
+The shared Spenso + Idenso showcases use the same host wheel for network figures:
 
 // docs-example: syntax
 ```sh
-just docs-notebooks /path/to/symbolica-wasm.whl spenso docs/generated/notebooks /path/to/linnet-wasm.whl
-just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks /path/to/linnet-wasm.whl
+just docs-notebooks /path/to/symbolica-wasm.whl spenso docs/generated/notebooks
+just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks
 ```
 
-Publication builds both wheels at the documented revision and adds all three products' assets
+Publication builds the host wheel at the documented revision and adds all three products' assets
 to the versioned site. The FeynKit notebooks use built-in model constructors, so neither
 native execution nor browser export needs separate model JSON files. The UFO-loading
 tutorial deliberately retains its raw UFO fixture to demonstrate importing external models.

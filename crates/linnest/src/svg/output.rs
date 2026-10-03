@@ -5,10 +5,10 @@ use std::fmt::Write as _;
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
-use super::{Dash, Element, NODE_RADIUS, Stroke, Target, Typeset, UNIT, labels::Bounds};
+use super::{Dash, Element, Stroke, Target, Typeset, UNIT, labels::Bounds};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
-/// Canvas padding in drawing units,     let title = typeset.title.as_ref(); margin (2mm) and title gutter (1em) in points.
+/// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
 const PAD: f64 = 0.4;
 const MARGIN: f64 = 5.669291339;
 const GUTTER: f64 = 9.0;
@@ -123,7 +123,15 @@ pub(super) fn edge_hrefs(edge: &TypstDotEdge, fields: &Details) -> EdgeHrefs {
             .cloned()
             .unwrap_or_else(|| owner.hedge.into());
         let half_details = details.with("half-edge", hedge.clone());
-        edges.push(half_details.href("edge", edge.edge));
+        edges.push(
+            half_details.href(
+                "edge",
+                details
+                    .get("edge")
+                    .cloned()
+                    .unwrap_or_else(|| edge.edge.into()),
+            ),
+        );
         let pair_hedge = details
             .get(&format!("{other}-hedge"))
             .cloned()
@@ -132,7 +140,13 @@ pub(super) fn edge_hrefs(edge: &TypstDotEdge, fields: &Details) -> EdgeHrefs {
                 _ => Value::Null,
             });
         let half_details = half_details
-            .with("node", owner.node)
+            .with(
+                "node",
+                details
+                    .get(flow)
+                    .cloned()
+                    .unwrap_or_else(|| owner.node.into()),
+            )
             .with("flow", flow)
             .with("pair", pair_hedge);
         halves.push(half_details.href("halfedge", hedge));
@@ -141,7 +155,13 @@ pub(super) fn edge_hrefs(edge: &TypstDotEdge, fields: &Details) -> EdgeHrefs {
     let [source_edge, sink_edge] = <[String; 2]>::try_from(edges).unwrap_or_default();
     EdgeHrefs {
         regions: [source_half, source_edge, sink_edge, sink_half],
-        label: details.href("edge", edge.edge),
+        label: details.href(
+            "edge",
+            details
+                .get("edge")
+                .cloned()
+                .unwrap_or_else(|| edge.edge.into()),
+        ),
     }
 }
 
@@ -159,7 +179,13 @@ pub(super) fn node_href(node: &TypstDotNode, edges: &[TypstDotEdge], fields: &De
     std::iter::once(("edges", Value::from(incident)))
         .collect::<Details>()
         .extended(fields)
-        .href("node", node.node)
+        .href(
+            "node",
+            fields
+                .get("node")
+                .cloned()
+                .unwrap_or_else(|| node.node.into()),
+        )
 }
 
 fn number(value: f64) -> String {
@@ -190,12 +216,11 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 }
             }
             Element::Label { bounds, .. } => include(Rect::from(*bounds)),
-            Element::Node { at: [x, y], .. } => include(Rect::new(
-                x - NODE_RADIUS,
-                y - NODE_RADIUS,
-                x + NODE_RADIUS,
-                y + NODE_RADIUS,
-            )),
+            Element::Node {
+                at: [x, y],
+                size: (w, h),
+                ..
+            } => include(Rect::new(x - w, y - h, x + w, y + h)),
         }
     }
     if !bounds.is_finite() {
@@ -257,7 +282,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let stroke_attributes = |stroke: &Stroke| {
         let mut attributes = format!(
             r#"stroke="{}" stroke-width="{}""#,
-            stroke.paint,
+            xml_escape(&stroke.paint),
             number(stroke.width)
         );
         if stroke.round_cap {
@@ -335,16 +360,33 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             }
             Element::Node {
                 at: [nx, ny],
+                size: (w, h),
+                rectangular,
+                fill,
                 stroke,
             } => {
-                let _ = write!(
-                    svg,
-                    r#"<circle cx="{}" cy="{}" r="{}" fill="none" {}/>"#,
-                    x(*nx),
-                    y(*ny),
-                    number(NODE_RADIUS * UNIT),
-                    stroke_attributes(stroke)
-                );
+                if *rectangular {
+                    let _ = write!(
+                        svg,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" rx="2" fill="{}" {}/>"#,
+                        x(nx - w),
+                        y(ny + h),
+                        number(2.0 * w * UNIT),
+                        number(2.0 * h * UNIT),
+                        xml_escape(fill),
+                        stroke_attributes(stroke)
+                    );
+                } else {
+                    let _ = write!(
+                        svg,
+                        r#"<circle cx="{}" cy="{}" r="{}" fill="{}" {}/>"#,
+                        x(*nx),
+                        y(*ny),
+                        number(w * UNIT),
+                        xml_escape(fill),
+                        stroke_attributes(stroke)
+                    );
+                }
             }
         }
     }
@@ -357,7 +399,11 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             s = number(*size)
         );
     }
-    let _ = write!(svg, "<defs>{}</defs></svg>", typeset.defs);
+    let _ = write!(
+        svg,
+        r##"<defs><pattern id="linnest-process-hatch" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="#3d2645" stroke-width="0.35"/></pattern>{}</defs></svg>"##,
+        typeset.defs
+    );
     svg
 }
 

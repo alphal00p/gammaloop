@@ -40,8 +40,9 @@
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
   localCargoPatchSources = lib.fileset.unions (
-    lib.optional (builtins.pathExists (workspaceRoot + "/vendor/clarabel"))
-    (workspaceRoot + "/vendor/clarabel")
+    map (name: workspaceRoot + "/vendor/${name}")
+    (lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
+      ["clarabel" "typst-library" "typst-svg"])
   );
   cargoSources = lib.fileset.unions [
     (craneLib.fileset.commonCargoSources workspaceRoot)
@@ -98,6 +99,7 @@
     # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
     # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
+    (workspaceRoot + "/crates/typst-renderer/fonts")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -455,6 +457,7 @@
       "crates/linnet-py/vendor"
     ];
     spynso3 = ["crates/spynso3/typst"];
+    "typst-renderer" = ["crates/typst-renderer/fonts"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"

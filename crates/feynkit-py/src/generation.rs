@@ -595,13 +595,13 @@ impl PyProcess {
     ///
     /// Parameters
     /// ----------
-    /// config : linnet.RenderConfig or None, optional
+    /// config : dict or linnet.RenderConfig or None, optional
     ///     Particle-label, layout and drawing overrides shared with Feynman diagrams.
     #[pyo3(signature = (*, config=None))]
     fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "linnet.RenderConfig | None", imports = ("linnet")))]
+        #[gen_stub(override_type(type_repr = "builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None", imports = ("builtins", "typing", "linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let resolve = |state: &[ParticleSelector]| {

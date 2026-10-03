@@ -19,59 +19,32 @@ collection. Single-diagram SVG and Typst exports remain available independently.
 
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
 
-Loading a model registers its parameter `texname` labels with Spenso's display
-settings. Typst renders these LaTeX names through MiTeX in both SVG and notebook
-MathML, including inside amplitudes and parameter definitions. The algebraic
-names and plain-text output stay unchanged. `model.parameter("ee").texname`
-returns `"e"` in the Standard Model; `Me` deliberately uses the UFO label
-`\text{Me}`, rather than an inferred mass notation. JSON export and UFO import
-preserve these labels; parameters without labels keep their ordinary names.
+Graph geometry, layout, and interaction are produced directly in Rust. The embedded
+Typst compiler typesets labels and formulas with bundled fonts; it does not load
+MiTeX, Linnest, or Kurvst Typst packages. NumPy is the host's only Python dependency
+for these notebook displays.
 
-Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
-`to_linnest()` method returns complete Typst source; it does not compile a figure. `render()`,
-`to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.
-Rendering uses Linnet’s Python preparation and compilation pipeline. `render()` replaces
-the earlier diagram `to_svg()` method and returns SVG text, including hover information.
-SVG figures have a transparent background. Their palette follows the browser's
-light/dark preference when opened separately; inline figures also follow explicit
-Marimo and Jupyter notebook themes. Both modes use the website diagram palette,
-including its neutral and charged-particle colours. Each edge uses one colour
-by default; `orientation-split` enables lightened sink halves.
-The native module embeds the compatible Linnest/Kurvst source, Wasm files, and shared
-physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
-photon waves, gluon coils, and mathematical labels from the model's TeX names.
-FeynKit, the physics showcase, and `just draw` use the same physics layout template:
-100 steps per epoch and 30 epochs by default. Both modes group incoming X coordinates on the
-left and outgoing X coordinates on the right, and start Y coordinates in half-edge order.
-Amplitudes keep Y independent; finalized cross-section diagrams share movable Y groups by
-external connection ID (`is_cut`). Dangling-centroid repulsion spreads external endpoints,
-with default strength `gamma-dangling-centroid=1.25`. A horizontal spring also biases
-incoming endpoints left and outgoing endpoints right of the current node centroid,
-with `external-centroid-bias=1.0` relative to the edge spring strength. Its target
-distance is `external-centroid-distance=3.0` times the external edge's natural
-spring length; Y stays free. The reaction
-is shared over the nodes so this force does not translate the whole graph.
-Use `just draw --input external-centroid-bias=0` to disable it, or increase that
-value for a stronger bias. Generic Linnest layouts default to zero and expose the
-same option through Python's `LayoutOptions(external_centroid_bias=...)` and
-Typst's `constraints: (external-centroid-bias: ...)`.
-Neither mode automatically pins X or Y;
-explicit positions still take precedence.
-The shared template owns label placement, force presets, and particle styles.
-Internal and external label distances are independent: ordinary particle labels
-use offsets of 0.60 and 0.45 times the graph spring length, respectively; with
-momentum labels these become 0.75 and 0.60. These defaults also apply to `just draw`.
-Linnest exposes `internal-label-length-scale` and `external-label-length-scale`
-(or `labels: (internal-distance: ..., external-distance: ...)` in Typst).
-For example, `just draw --input internal-label-length-scale=0.8` increases only
-internal spacing; `--input external-label-length-scale=0.6` controls external labels.
+The notebook compiler retains SVG output, HTML/MathML, text shaping, and math
+layout. It omits PDF/PNG export, PDF image import, WebAssembly plugins,
+syntax highlighting, bibliographies, JPEG/GIF/WebP decoding, and system font
+discovery. Labels can use normal Typst math and text, including bold and italic;
+raw text is displayed without syntax coloring. Fonts are bundled, so rendering
+works offline without Typst packages or a system installation. General document
+compilation remains available in the standalone tools.
 
-// docs-example: syntax
-```sh
-python -m pip install "linnet==0.1.0" "typst>=0.15,<0.16"
-```
+== Model labels
 
-Save the resulting SVG or leave the diagram as the last value in a notebook cell:
+Particles accept optional `typstname` and `antitypstname` fields; parameters accept
+`typstname`. Supply native Typst math without dollar delimiters, for example
+`"typstname": "alpha_s"` or `"antitypstname": "overline(u)"`. Built-in models
+supply these labels. Missing labels display the ordinary model name as escaped text.
+The separate `texname` and `antitexname` fields still control LaTeX output. Loading
+parameter labels changes presentation only, preserving algebraic names and expressions.
+
+== Native SVG configuration
+
+Save the SVG directly, or export a self-contained Typst document embedding that
+SVG, including its typeset glyphs. The exported document needs no graph packages.
 
 // docs-example: compile
 ```python
@@ -82,45 +55,27 @@ Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
 diagram
 ```
 
-Rendering controls use Linnet's existing typed groups. `layouts` contains solver and
-spacing settings, `drawing` controls the canvas and geometry, and `style` supplies
-node/edge styling. Physics controls belong in `template_options`, using the same
-hyphenated names as `just draw --input`: `show-particle`, `show-edge-index`,
-`show-node-index`, `show-half-edge-index`, `debug`, `momentum-arrows`,
-`momentum-arrow-offset`, `momentum-arrow-length`, `momentum-arrow-side`,
-`momentum-arrow-stroke`, `momentum-label-gap`, `momentum-label-side`, and
-`momentum-label-slide`, among others. Catalogue pagination
-(`rows` and `columns`) applies to `just draw`, rather than an individual SVG.
+Configuration is a nested Python dictionary. `title` supplies a plain-text title.
+`layouts` accepts native ImPrEd options such as `impred_steps`, `impred_spacing`,
+`impred_repulsion`, and `impred_labels`; underscores and hyphens are equivalent.
+`drawing.node_radius` sets the vertex radius in graph units. `style.node-style`
+accepts `fill`, `radius`, and `stroke`; `style.edge-style` accepts `stroke`.
+A stroke is a CSS color string or a dictionary with `paint`, `thickness` in points,
+and `dash` (`solid`, `dotted`, or `dashed`).
 
-To distinguish the source and sink halves by colour:
-
-// docs-example: compile
-```python
-from linnet import RenderConfig
-
-settings = RenderConfig(template_options={"orientation-split": True})
-svg = diagram.render(config=settings)
-```
-
-The equivalent controls are `physics.style(orientation-split: true)` in direct
-Typst and `just draw --input orientation-split=true`.
+Physics options in `template_options` are booleans: `show-particle`,
+`show-momentum`, `show-edge-index`, `show-node-index`, `momentum-arrows`,
+`split-initial-state`, and `debug` (node and edge indices).
+Unsupported options raise an error. Standalone Linnet configuration objects,
+custom Typst templates, and the older template-specific layout controls do not
+apply to this renderer; those remain features of the standalone drawing tools.
 
 // docs-example: compile
 ```python
-from linnet import DrawOptions, LayoutOptions, RenderConfig
-
-settings = RenderConfig(
-    layouts=LayoutOptions(
-        seed=42,
-        steps=100,
-        epochs=30,
-        external_centroid_bias=1.5,
-        internal_label_length_scale=0.8,
-        external_label_length_scale=0.7,
-    ),
-    drawing=DrawOptions(unit=1.5),
-    template_options={"show-particle": False},
-)
+settings = {
+    "layouts": {"impred_steps": 100},
+    "template_options": {"show-particle": False},
+}
 Path("momenta.svg").write_text(
     diagram.render(momenta=True, config=settings), encoding="utf-8"
 )
@@ -130,79 +85,17 @@ Path("alternative-routing.svg").write_text(
 )
 ```
 
-Internal particle labels use a uniform gap to the measured text box by default;
-a deterministic annealing pass slides them along the rendered curves and can
-switch sides to reduce overlaps without changing that gap. Explicit `label-side`
-choices on path labels stay fixed. Adjust
-`LayoutOptions(internal_label_length_scale=...)` to change that gap. External
-labels keep their independent spacing. `LabelLayout.FixedGap` exposes the same
-mode on generic Linnet layouts; `LabelLayout.DanglingTangent` retains the freely
-relaxed internal labels.
+`momenta=True` displays the stored routing. Passing `lmb=basis` enables momentum
+display with that basis without changing the diagram. Loop and external components
+use zero-based `k_i` and `p_i`. Momentum arrows follow source to sink independently
+of fermion arrows. Explicit physics options override these display defaults.
+A basis from a different diagram is rejected.
 
-Enable the notebook's *Collision boxes* toggle or set
-`DrawOptions(debug_label_collisions=True)` to inspect the optimizer's padded
-boxes. Dashed purple boxes repel other purple boxes; cyan label boxes repel
-orange node/edge boxes, excluding each label's own edge unless it is a self-loop.
-The fixed normal gap controls clearance from its own carrier, so increasing
-padding does not push labels along that edge. Self-loops retain collision checks
-because another part of the loop can approach the label.
-The orange rectangles sample the visible edge carriers,
-including the width of waves and coils. Base padding is split equally across each
-pair of boxes. `DrawOptions(label_collision_padding=0.6)` adds another 0.6
-canvas units on every side of each label box by default. Increase it to encourage
-more clearance from labels, nodes, and edges; use zero for the original base
-sizes. The notebook's *Extra label collision padding* slider controls this value.
-It changes collision avoidance while preserving the fixed normal label gap.
-The debug overlay itself preserves layout, canvas size, and SVG interaction.
-In Typst, pass `label-collision-padding: 0.6` and
-`debug-label-collisions: true` to `draw`.
-
-`momenta=True` draws the graph's stored routing. Passing `lmb=basis` also enables
-momentum display, using that basis without changing the diagram. Loop and external
-components use the same zero-based `k_i` and `p_i` conventions as
-`MomentumSignature.format_momentum()`. Momentum arrows always follow source to sink,
-independently of fermion-arrow orientation. A basis from a different diagram is
-rejected; region highlighting can use its original diagram's complete basis.
-Explicit physics settings override the display defaults enabled by `momenta` or
-`lmb`: for example, `momentum-arrows: false` hides arrows while retaining labels,
-and `show-momentum: false` hides momentum labels. Edge hover information still
-contains the routing. `to_html()` and `to_linnest()` accept the same options.
-
-Momentum arrows and their labels move together using the same collision optimizer
-and `label_collision_padding` as ordinary labels. `momentum-label-gap` controls
-the label's fixed normal clearance from its arrow carrier, and
-`momentum-label-shift` selects a preferred position along the full edge.
-Arrow and label shifts retain their relative separation during optimization.
-`momentum-label-side: auto` inherits the arrow side; automatic sides may flip,
-while an explicit `left` or `right` stays fixed. Set `momentum-label-slide: false`
-to pin the annotation; an explicit `momentum-label-anchor` also pins it. Global
-template options can be overridden through edge or half-edge data using the same `momentum-*` field names.
-
-// docs-example: compile
-```python
-settings = RenderConfig(
-    drawing=DrawOptions(label_collision_padding=0.6),
-    template_options={
-        "momentum-arrow-length": 0.8,
-        "momentum-arrow-offset": 0.4,
-        "momentum-label-gap": 0.2,
-        "momentum-label-slide": True,
-    },
-)
-diagram.render(momenta=True, config=settings)
-```
-
-Cross sections open their initial-state connections into matched incoming and outgoing
-legs by default, retaining the physical final-state cut edges. Use
-`RenderConfig(template_options={"split-initial-state": False})` for the sewn view.
-Both views retain the original diagram's edge and half-edge IDs for hover, selection,
-and highlighting; the physics graph and its loop-momentum basis are unchanged.
-
-Configurations are per-call snapshots: neither the diagram nor the supplied
-`RenderConfig` is changed. The embedded physics renderer accepts typed layout,
-drawing, style and template options; custom templates and Python drawing selectors
-belong on the generic Linnet graph's `prepare_render()` API. Imported Typst style
-functions are supported through the usual `source_root` and module references.
+Cross sections open initial-state connections into incoming and outgoing legs by
+default, retaining final-state cut edges. Set
+`{"template_options": {"split-initial-state": False}}` for the sewn view.
+Both views preserve the original edge and half-edge IDs. Configuration is per-call;
+it changes neither the physics graph nor its loop-momentum basis.
 
 The example assumes `diagram` from the quickstart. Its rich representation draws the figure
 automatically. Hover over a vertex or edge to identify it, or click to pin its details.
@@ -246,8 +139,7 @@ expression. Displaying those algebraic results is separate from rendering a grap
 algebra and #product-link("linnet", page: "guides/python-rendering/", label: "Linnet's rendering guide")
 for the underlying graph renderer.
 
-If figure compilation reports a missing `linnet` or `typst` module, install it in the interpreter that runs
-the Symbolica host. A model import or successful generation does not require that renderer.
-The #link("guides/community-host/")[host guide] explains how a distribution can include this
-optional dependency for notebook users.
+The #link("guides/community-host/")[host guide] describes embedding the renderer
+in a distribution. Optional standalone Linnet graph interoperability is separate
+from rendering and requires that package only when explicitly used.
 ]

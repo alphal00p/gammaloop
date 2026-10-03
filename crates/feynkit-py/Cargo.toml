@@ -24,7 +24,7 @@ feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", defaul
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-features = false }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
-linnet-py = { path = "../linnet-py" }
+typst-renderer = { path = "../typst-renderer" }
 linnest = { workspace = true, features = ["svg"] }
 serde_json = { workspace = true }
 linnet.workspace = true

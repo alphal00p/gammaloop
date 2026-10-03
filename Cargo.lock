@@ -93,7 +93,9 @@ dependencies = [
  "typst",
  "typst-bundle",
  "typst-kit",
+ "typst-library",
  "typst-pdf",
+ "typst-svg",
  "walkdir",
 ]
 
@@ -1973,7 +1975,6 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
- "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -1982,6 +1983,7 @@ dependencies = [
  "spynso3",
  "symbolica",
  "tempfile",
+ "typst-renderer",
 ]
 
 [[package]]
@@ -3710,6 +3712,7 @@ dependencies = [
  "linnet",
  "rand 0.8.6",
  "rkyv",
+ "roxmltree 0.21.1",
  "self_cell",
  "serde",
  "serde_json",
@@ -3772,6 +3775,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "typst-renderer",
  "walkdir",
 ]
 
@@ -6342,11 +6346,13 @@ dependencies = [
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnest",
  "linnet",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
  "spenso-macros",
@@ -6354,6 +6360,7 @@ dependencies = [
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
+ "typst-renderer",
  "xpct",
 ]
 
@@ -7552,8 +7559,6 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12becd02464849f1507f3c4ef3f401a4d28d5938cc74b6acc6f1d703458bf393"
 dependencies = [
  "arrayvec",
  "az",
@@ -7700,10 +7705,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-renderer"
+version = "0.1.0"
+dependencies = [
+ "comemo",
+ "tempfile",
+ "typst",
+ "typst-html",
+ "typst-kit",
+ "typst-layout",
+ "typst-library",
+ "typst-pdf",
+ "typst-render",
+ "typst-svg",
+]
+
+[[package]]
 name = "typst-svg"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5df6dc785695aae085678bd6657aa04a1d26058a76ed042e738658078bca681e"
 dependencies = [
  "base64 0.22.1",
  "comemo",

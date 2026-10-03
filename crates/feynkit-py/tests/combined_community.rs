@@ -18,6 +18,49 @@ const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
+#[test]
+fn qcd_rich_display_requires_no_python_rendering_packages() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let code = CString::new(include_str!("installed_offline_rendering.py")).unwrap();
+        let locals = PyDict::new(py);
+        py.run(&code, Some(&locals), Some(&locals))?;
+        let network_tests = CString::new(include_str!(
+            "../../spynso3/tests/installed_tensor_network_display.py"
+        )).unwrap();
+        locals.set_item("__name__", "network_display_tests")?;
+        py.run(&network_tests, Some(&locals), Some(&locals))?;
+        py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(NetworkDisplayTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
+        for name in ["network", "diagram"] {
+            let source = locals.get_item(name)?.unwrap().call_method0("to_linnest")?.extract::<String>()?;
+            let files = std::collections::BTreeMap::from([("main.typ".into(), source.into_bytes())]);
+            let pages = typst_renderer::Document::compile_sources(&files, "svg")
+                .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+            assert_eq!(pages.len(), 1);
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
 fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
     let package = PyModule::new(py, name)?;
     package.setattr("__package__", name)?;
@@ -334,33 +377,28 @@ for vertex in indexed_diagram.vertices:
     assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
 for edge in indexed_diagram.edges:
     assert isinstance(edge.numerator_expression(), spenso.TensorExpression)
-# Rich output must use the portable index hook when the renderer is installed.
-try:
-    import typst
-except ImportError:
-    pass
-else:
-    # Scalar graphs use the same dashed-particle styling as exported Typst figures.
-    assert "stroke-dasharray" in diagram.render()
-    assert "stroke-dasharray" in diagram._repr_html_()
-    # The portable renderer combines inverse factors without changing the tensor.
-    rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")
-    before_render = rational.to_expression()
-    fraction_html = rational.to_html()
-    assert fraction_html.count("<mfrac>") == 1, fraction_html
-    assert rational.to_expression() == before_render
-    html = indexed.to_html()
-    # Standalone notebook fragments share a pinned font URL without embedding font files.
-    assert "data:font" not in html
-    assert "https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/" in html
-    assert "<div data-spenso-math>" in html
-    assert "Momentum" not in html
-    assert ">𝑞<" in html
-    for output in (html, indexed.to_svg()):
-        assert "SourceIndex" not in output
-        assert "SinkIndex" not in output
-        assert "EdgeDummy" not in output
-        assert "VertexDummy" not in output
+# Rich output uses the embedded renderer in every installation.
+# Scalar graphs use the same dashed-particle styling as exported Typst figures.
+assert "stroke-dasharray" in diagram.render()
+assert "stroke-dasharray" in diagram._repr_html_()
+# The portable renderer combines inverse factors without changing the tensor.
+rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")
+before_render = rational.to_expression()
+fraction_html = rational.to_html()
+assert fraction_html.count("<mfrac>") == 1, fraction_html
+assert rational.to_expression() == before_render
+html = indexed.to_html()
+# Standalone notebook fragments share a pinned font URL without embedding font files.
+assert "data:font" not in html
+assert "https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/" in html
+assert "<div data-spenso-math>" in html
+assert "Momentum" not in html
+assert ">𝑞<" in html
+for output in (html, indexed.to_svg()):
+    assert "SourceIndex" not in output
+    assert "SinkIndex" not in output
+    assert "EdgeDummy" not in output
+    assert "VertexDummy" not in output
 assert scalar_graphs[0].projector_expression() == 1
 assert scalar_graphs[0].numerator_prefactor_expression() == numerator_prefactor
 assert scalar_graphs[0].overall_factor_expression() == feynkit_expression

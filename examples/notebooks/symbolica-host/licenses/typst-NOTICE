@@ -1,0 +1,9 @@
+Typst 0.15.1, Copyright The Typst Project Developers.
+https://github.com/typst/typst
+Licensed under Apache-2.0; see typst-LICENSE.
+
+The typst-library and typst-svg components have been modified to make
+plugins, syntax highlighting, bibliographies, PDF import, and additional
+raster decoders optional. The notebook build disables those components.
+Font assets are unmodified selections from typst-assets 0.15.1;
+see typst-fonts-NOTICE for their copyrights and licenses.

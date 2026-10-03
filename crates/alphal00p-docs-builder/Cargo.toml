@@ -9,6 +9,8 @@ default = []
 persistent-typst = [
   "dep:comemo",
   "dep:typst",
+  "dep:typst-library",
+  "dep:typst-svg",
   "dep:typst-bundle",
   "dep:typst-kit",
   "dep:typst-pdf",
@@ -31,6 +33,9 @@ toml.workspace = true
 # `Cargo.lock` deliberately holds Typst's internal component family at 0.15.1
 # as well, matching the Nix-provided CLI used for release output parity.
 typst = { version = "=0.15.1", optional = true }
+# Activate full document support in the vendored notebook compiler components.
+typst-library = { version = "=0.15.1", features = ["full"], optional = true }
+typst-svg = { version = "=0.15.1", features = ["pdf"], optional = true }
 typst-bundle = { version = "=0.15.1", optional = true }
 typst-kit = { version = "=0.15.1", default-features = false, features = [
   "datetime",
@@ -42,3 +47,7 @@ typst-kit = { version = "=0.15.1", default-features = false, features = [
 ], optional = true }
 typst-pdf = { version = "=0.15.1", optional = true }
 walkdir.workspace = true
+
+# These optional dependencies activate the full compiler in the vendor patches.
+[package.metadata.cargo-machete]
+ignored = ["typst-library", "typst-svg"]

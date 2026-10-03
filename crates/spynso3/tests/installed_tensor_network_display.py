@@ -5,8 +5,9 @@ import re
 import unittest
 import xml.etree.ElementTree as ET
 
-import linnet
-from symbolica import E
+from symbolica.core import Expression
+
+E = Expression.parse
 from symbolica.community.tensor import (
     Representation,
     Tensor,
@@ -14,6 +15,19 @@ from symbolica.community.tensor import (
     TensorName,
     TensorNetwork,
 )
+
+
+def graph_labels(network):
+    labels = {}
+    for node in ET.fromstring(network.render()).iter():
+        if node.attrib.get("data-linnet-kind") not in {"node", "edge"}:
+            continue
+        detail = json.loads(node.attrib["data-linnet-detail"])
+        if "label-typst" in detail:
+            labels[(node.attrib["data-linnet-kind"], node.attrib["data-linnet-id"])] = (
+                detail["label-typst"]
+            )
+    return list(labels.values())
 
 
 class NetworkDisplayTests(unittest.TestCase):
@@ -55,7 +69,7 @@ class NetworkDisplayTests(unittest.TestCase):
 
     def test_edge_slots_use_representation_alphabets(self):
         gamma = TensorExpression.dirac_gamma(4)(1, 2, 1).to_network()
-        labels = re.findall(r'\("label-typst"\): "([^"]*)"', gamma.to_linnest())
+        labels = graph_labels(gamma)
         self.assertCountEqual(labels, ["a", "b", "mu", "gamma"])
         ET.fromstring(gamma.render())
 
@@ -66,7 +80,7 @@ class NetworkDisplayTests(unittest.TestCase):
         network = (
             p(E("gammalooprs::hedge(2,1)")) * q(E("gammalooprs::hedge(3,1)"))
         ).to_network()
-        labels = re.findall(r'\("label-typst"\): "([^"]*)"', network.to_linnest())
+        labels = graph_labels(network)
         self.assertIn("mu", labels)
         self.assertIn("nu", labels)
         ET.fromstring(network.render())
@@ -76,7 +90,7 @@ class NetworkDisplayTests(unittest.TestCase):
         jbar = TensorName("network_details::Jbar", print={"typst": "macron(J)"})(spinor)
         gamma = TensorExpression.dirac_gamma(4)
         network = (jbar(1) * gamma(1, 2, 1)).to_network()
-        self.assertIn("macron(J)", network.to_linnest())
+        self.assertIn("macron(J)", graph_labels(network))
         root = ET.fromstring(network.render())
         details = [
             json.loads(node.attrib["data-linnet-detail"])
@@ -191,15 +205,14 @@ class NetworkDisplayTests(unittest.TestCase):
 
     def test_linnet_configuration_and_portable_source(self):
         network = TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network()
-        config = linnet.RenderConfig(title="Network preview")
+        config = {"title": "Network preview"}
         source = network.to_linnest(config=config)
-        self.assertIn("Network preview", source)
-        self.assertIn("render-network", source)
+        self.assertIn("#image(bytes(", source)
+        self.assertNotIn("@preview", source)
         self.assertNotIn("digraph", source)
         self.assertNotIn("network-dot", source)
-        # The entrypoint contains its data; Linnet supplies the shared assets.
-        prepared = linnet.PreparedRender.from_sources({"main.typ": source.encode()})
-        self.assertIn("<svg", prepared.to_svg())
+        # Portable source contains the complete SVG, including typeset glyphs.
+        self.assertIn("<svg", source)
         self.assertIn("<svg", network.render(config=config))
         self.assertIn("<math", network.expression().to_html())
 
