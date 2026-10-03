@@ -159,10 +159,10 @@ fn untyped_structure_constants_do_not_assume_an_adjoint_dimension() {
     let atom = f!(3, 1, 5) * f!(3, 5, 1);
     assert!(SymbolicTensor::infer(atom.clone()).is_err());
     assert_eq!(
-        super::simplify::ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: Default::default(),
-        }
+        super::simplify::ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default(),
+            Default::default()
+        )
         .step(atom.as_view(), true),
         atom
     );
@@ -174,10 +174,10 @@ fn partially_typed_or_inconsistent_structure_constants_are_not_rewritten() {
     let partially_typed = parse_lit!(f(coad(dA, a), b, c) ^ 2, default_namespace = "spenso");
     assert!(SymbolicTensor::infer(partially_typed.clone()).is_err());
     assert_eq!(
-        super::simplify::ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: Default::default(),
-        }
+        super::simplify::ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default(),
+            Default::default()
+        )
         .step(partially_typed.as_view(), true),
         partially_typed
     );
@@ -188,10 +188,10 @@ fn partially_typed_or_inconsistent_structure_constants_are_not_rewritten() {
     );
     assert!(SymbolicTensor::infer(inconsistent.clone()).is_err());
     assert_eq!(
-        super::simplify::ColorAlgebraSimplifier {
-            settings: ColorSimplifySettings::default(),
-            dummies: Default::default(),
-        }
+        super::simplify::ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default(),
+            Default::default()
+        )
         .step(inconsistent.as_view(), true),
         inconsistent
     );

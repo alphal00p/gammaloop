@@ -461,11 +461,8 @@ fn fundamental_trace_fierz_respects_settings_and_representations() {
         )
     ));
     assert_eq!(
-        crate::color::simplify::ColorAlgebraSimplifier {
-            settings: unevaluated,
-            dummies: Default::default(),
-        }
-        .step(invalid.as_view(), true),
+        crate::color::simplify::ColorAlgebraSimplifier::new(unevaluated, Default::default())
+            .step(invalid.as_view(), true),
         invalid
     );
     // A one-generator fundamental trace vanishes, including when the cut
