@@ -714,9 +714,10 @@ Schoonschip notation writes a vector in the position of an index contracted with
 $T(p, nu) = T_(mu nu) p^mu$. See
 #link("https://www.nikhef.nl/~form/maindir/documentation/tutorial/book.pdf#page=14")[A. Heck,
 _FORM for Pedestrians_, §1.2.2, pp. 9–10]. For the metric this gives
-$g(p, q) = g_(mu nu) p^mu q^nu = p dot q$. The notation showcase compares the default
-bra-and-marker display with a dot product. Its foldout shows explicit indices and
-the alternative layouts with vector arguments or vectors in index positions.
+$g(p, q) = g_(mu nu) p^mu q^nu = p dot q$. The notation showcase renders the indexed
+metric and vectors, the default bra-and-marker display, and the dot product directly
+from Spenso objects. Its foldout shows the generated Typst source and alternative
+layouts with vector arguments or vectors in index positions.
 `to_dots()` converts the compact metric form without evaluating component data.
 Compound graph indices and generated dummy indices use each representation's alphabet by default: Lorentz indices
 render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
