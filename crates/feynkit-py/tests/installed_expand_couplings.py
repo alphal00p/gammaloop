@@ -5,7 +5,12 @@ from typing_extensions import assert_type
 
 from symbolica import E, Expression, S
 from symbolica.community import hepkit as hep
-from symbolica.community.tensor import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import (
+    Representation,
+    TensorExpression,
+    TensorName,
+    TensorStructure,
+)
 
 model = hep.Model.standard_model()
 coupling = S("UFO::GC_11")
@@ -57,6 +62,23 @@ expanded = model.expand_couplings(numerator)
 assert expanded.structure.axes == numerator.structure.axes
 assert expanded.to_expression() == model.expand_couplings(numerator.to_expression())
 assert not expanded.to_expression().matches(S("UFO::GC_3"))
+
+# Follow the notebook's weighted numerator through both multiplication orders.
+weight = diagram.overall_factor_expression(evaluate=True)
+assert_type(numerator * weight, TensorExpression)
+assert_type(weight * numerator, TensorExpression)
+for weighted in (numerator * weight, weight * numerator):
+    massless = model.expand_couplings(weighted)
+    assert_type(massless, TensorExpression)
+    collected = massless.with_lorentz_dimension(S("D")).collect_factors()
+    assert_type(collected, TensorExpression)
+    assert_type(collected.structure, TensorStructure)
+    assert type(collected) is TensorExpression
+    assert (
+        collected.structure.axes
+        == numerator.with_lorentz_dimension(S("D")).structure.axes
+    )
+
 assert model.expand_couplings(E("0")) == 0
 print(
     "Coupling expansion: overloads, coefficients, ordered ports, zeros and diagram passed"
