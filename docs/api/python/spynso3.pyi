@@ -36,6 +36,7 @@ _: _AutoIndex
 _Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
 _IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
 _LibraryDefault = typing.TypeVar("_LibraryDefault")
+_ProductT = typing.TypeVar("_ProductT")
 _Projected = typing.TypeVar("_Projected", "TensorExpression", "TensorNetwork", covariant=True)
 _RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
 _ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
@@ -6032,6 +6033,28 @@ class TensorExpression(Expression):
         >>> A = TensorName("M")(space, space)
         >>> negated = -A
         """
+    def __symbolica_rmul__(self, lhs: Expression) -> TensorExpression:
+        r"""
+        Preserve the tensor type when a Symbolica expression multiplies this tensor.
+
+        Parameters
+        ----------
+        lhs : Expression
+            Left operand; a tensor expression retains its tensor structure.
+
+        Returns
+        -------
+        TensorExpression
+            The same ordered product as ``lhs * self``.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> vector = TensorName.vector("v")(Representation.euc(2))
+        >>> (S("x") * vector).rank
+        1
+        """
     def __pow__(self, exponent: TensorExpression | _ScalarInput, modulo: typing.Optional[typing.Any] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Raise tensor algebra to a scalar power.
@@ -6166,7 +6189,9 @@ class TensorExpression(Expression):
             matrix without applying a gamma identity. False retains those connections.
         collect_chains : bool, default True
             Represent connected matrix products as ordered chains without evaluating
-            their matrices. False retains the indexed factors for open products.
+            their matrices, including words with supplied rank-one endpoints.
+            Supplied endpoints do not add external axes. False retains the indexed
+            factors for open products.
         collect_traces : bool, default True
             Represent compatible closed matrix products as unevaluated traces.
             False retains indexed closure, including when collect_chains=True.
@@ -6278,6 +6303,16 @@ class TensorExpression(Expression):
         >>> assert collected.undo_trace().undo_chain().contract() == collected
         >>> uncollected = word.contract(collect_traces=False)
         >>> assert uncollected.contract() == collected
+
+        A supplied spinor remains attached when collecting an open gamma word.
+        Only the unresolved spinor slot remains an external axis.
+
+        >>> spinor = sp.Representation.bis(4)
+        >>> psi = sp.TensorName.vector("contract_docs::psi")(spinor)
+        >>> word = psi("a") * gamma("a", "b", "mu") * p("mu") * gamma("b", sp.AUTO, "nu") * p("nu")
+        >>> collected = word.contract()
+        >>> assert collected.rank == 1
+        >>> assert collected.contract() == collected
 
         A closed color delta gives N_c without any color-algebra identity. An empty
         filter retains this product, and an unrelated scalar power remains factored.
@@ -6825,6 +6860,34 @@ class TensorExpression(Expression):
         >>> result = A - A
         """
     @typing.overload
+    def __mul__(self, rhs: symbolica.core._ExpressionProduct[_ProductT]) -> _ProductT:
+        r"""
+        Multiply by an extension operand with its own multiplication result type.
+
+        Parameters
+        ----------
+        rhs : extension operand
+            Implements ``__symbolica_rmul__(left)``. The tensor is passed unchanged
+            as the left operand, so the extension can access its tensor structure.
+
+        Returns
+        -------
+        extension result
+            The result declared by the extension's multiplication method.
+
+        Examples
+        --------
+        >>> from symbolica import Expression
+        >>> from symbolica.community.tensor import Representation, TensorName
+        >>> class Product:
+        ...     def __symbolica_rmul__(self, left: Expression) -> tuple[Expression, str]:
+        ...         return left, "product"
+        >>> vector = TensorName.vector("v")(Representation.euc(2))
+        >>> result, label = vector * Product()
+        >>> label
+        'product'
+        """
+    @typing.overload
     def __mul__(self, rhs: TensorExpression | _ScalarInput) -> TensorExpression:
         r"""
         Multiply tensors, contracting unambiguous compatible axes.
@@ -6849,12 +6912,22 @@ class TensorExpression(Expression):
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
+        Automatic dot notation requires both operands to be calls to rank-one-tagged
+        heads, created with TensorName.vector(). Rank alone does not select a dot:
+        generic rank-one tensors and composite expressions retain their indexed
+        contractions. Use contract() to pack them into Schoonschip notation, or dot()
+        to request a scalar-product notation explicitly.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> result = A * 2
+        >>> from symbolica.community.tensor import dot
+        >>> p = TensorName.vector("product_p")(space)
+        >>> q = TensorName.vector("product_q")(space)
+        >>> assert p * q == dot(p, q)
         """
     @typing.overload
     def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork:
@@ -6881,12 +6954,22 @@ class TensorExpression(Expression):
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
 
+        Automatic dot notation requires both operands to be calls to rank-one-tagged
+        heads, created with TensorName.vector(). Rank alone does not select a dot:
+        generic rank-one tensors and composite expressions retain their indexed
+        contractions. Use contract() to pack them into Schoonschip notation, or dot()
+        to request a scalar-product notation explicitly.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
         >>> space = Representation.euc(2)
         >>> A = TensorName("M")(space, space)
         >>> result = A * 2
+        >>> from symbolica.community.tensor import dot
+        >>> p = TensorName.vector("product_p")(space)
+        >>> q = TensorName.vector("product_q")(space)
+        >>> assert p * q == dot(p, q)
         """
     @typing.overload
     def __rmul__(self, lhs: TensorExpression | _ScalarInput) -> TensorExpression:
@@ -6912,6 +6995,9 @@ class TensorExpression(Expression):
         pairs; equally preferred alternatives raise an ambiguity error. Established
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
+
+        Automatic dot notation follows __mul__(): both operands must be calls to
+        rank-one-tagged heads created with TensorName.vector().
 
         Examples
         --------
@@ -6944,6 +7030,9 @@ class TensorExpression(Expression):
         pairs; equally preferred alternatives raise an ambiguity error. Established
         matrix channels retain their composition order. Use outer(), contract_ports(),
         or compose() to make the intended pairing explicit.
+
+        Automatic dot notation follows __mul__(): both operands must be calls to
+        rank-one-tagged heads created with TensorName.vector().
 
         Examples
         --------

@@ -1524,28 +1524,10 @@ impl<'a> ComponentSum<'a, '_> {
                 )?;
             }
             Variable::Tensor(source, arguments) => {
-                if matches!(source, TensorSource::Function(head) if head == self.contractor.metric && !self.contractor.metrics)
-                {
-                    self.variable(Variable::Tensor(source, arguments), exponent);
-                    return Some(());
-                }
                 if exponent != 1 {
                     return None;
                 }
-                let tensor = self.tensors.len();
-                for (position, &argument) in arguments.iter().enumerate() {
-                    if let Argument::Original(slot) = argument
-                        && matches!(self.slots.classify(slot), SlotMatch::Explicit(_))
-                        && self.permits_slot(slot)
-                    {
-                        let (space, index) = self.resolve_endpoint(slot)?;
-                        let node = self.endpoint(slot, space, index)?;
-                        self.nodes[node]
-                            .terminals
-                            .push(Terminal::Tensor(tensor, position));
-                    }
-                }
-                self.tensors.push((source, arguments));
+                self.tensor_with_arguments(source, arguments)?;
             }
             value => self.variable(value, exponent),
         }

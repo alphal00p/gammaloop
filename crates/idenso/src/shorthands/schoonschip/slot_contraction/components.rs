@@ -1008,6 +1008,28 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         Some(())
     }
 
+    fn tensor_with_arguments(
+        &mut self,
+        source: TensorSource,
+        arguments: Vec<Argument<'a>>,
+    ) -> Option<()> {
+        let tensor = self.tensors.len();
+        for (position, &argument) in arguments.iter().enumerate() {
+            if let Argument::Original(slot) = argument
+                && matches!(self.slots.classify(slot), SlotMatch::Explicit(_))
+                && self.permits_slot(slot)
+            {
+                let (space, index) = self.resolve_endpoint(slot)?;
+                let node = self.endpoint(slot, space, index)?;
+                self.nodes[node]
+                    .terminals
+                    .push(Terminal::Tensor(tensor, position));
+            }
+        }
+        self.tensors.push((source, arguments));
+        Some(())
+    }
+
     fn factor(&mut self, value: AtomView<'a>, exponent: u32) -> Option<()> {
         match value {
             AtomView::Num(_) => {
@@ -1040,13 +1062,15 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                         || (self.contractor.representations.is_some()
                             && (!self.permits_slot(first) || !self.permits_slot(second)))
                     {
-                        self.variable(
-                            Variable::Tensor(
-                                TensorSource::Function(function.get_symbol()),
-                                function.iter().map(Argument::Original).collect(),
-                            ),
-                            exponent,
-                        );
+                        let source = TensorSource::Function(function.get_symbol());
+                        let arguments = function.iter().map(|arg| self.argument(arg)).collect();
+                        if exponent == 1 {
+                            // Retain the metric as a tensor instead of an edge.
+                            // Its ports still participate in vector substitutions.
+                            self.tensor_with_arguments(source, arguments)?;
+                        } else {
+                            self.variable(Variable::Tensor(source, arguments), exponent);
+                        }
                         return Some(());
                     }
                     self.metric(self.argument(first), self.argument(second), exponent)?;
