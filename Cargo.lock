@@ -3423,6 +3423,7 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "kurbo",
+ "libm",
  "serde",
  "wasm-minimal-protocol",
 ]

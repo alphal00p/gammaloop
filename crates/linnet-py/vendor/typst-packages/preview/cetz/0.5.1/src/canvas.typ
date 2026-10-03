@@ -86,6 +86,9 @@
 
   // Filter hidden drawables
   drawables = drawable.filter-tagged(drawables, drawable.TAG.hidden)
+  // Bounds and anchors are already computed. Paths without paint need no
+  // canvas output; content, including transparent link targets, remains.
+  drawables = drawables.filter(d => d.type != "path" or d.stroke != none or d.fill != none)
 
   // Order draw commands by z-index
   drawables = drawables.sorted(key: (cmd) => {
@@ -131,7 +134,7 @@
       // Typst path elements have strange bounding boxes. We need to
       // offset all paths to start at (0, 0) to make gradients work.
       let (segment-x, segment-y, _) = if drawable.type == "path" {
-        let path-bounds = aabb.aabb(path-util.bounds(drawable.segments))
+        let path-bounds = path-util._bounds-aabb(drawable.segments).bounds
         (path-bounds.low.at(0) - bounds.low.at(0),
          bounds.high.at(1) - path-bounds.high.at(1),
          0)
@@ -156,7 +159,13 @@
                 vertices.push(curve.line(transform-point(pt)))
               }
             } else if kind == "c" {
-              vertices.push(curve.cubic(..args.map(transform-point)))
+              // Avoid three coordinate callbacks for each cubic segment.
+              let ((x1, y1, ..), (x2, y2, ..), (x3, y3, ..)) = args
+              vertices.push(curve.cubic(
+                ((x1 - offset-x - segment-x) * length, (-y1 - offset-y - segment-y) * length),
+                ((x2 - offset-x - segment-x) * length, (-y2 - offset-y - segment-y) * length),
+                ((x3 - offset-x - segment-x) * length, (-y3 - offset-y - segment-y) * length),
+              ))
             } else {
               panic(kind, args)
             }

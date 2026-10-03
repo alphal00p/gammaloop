@@ -260,6 +260,167 @@ fn public_kurvst_pattern_endpoints_behave() {
         .unwrap();
 }
 
+#[test]
+fn public_kurvst_contracts_are_enforced() {
+    let fixture = (
+        "kurvst-public-contract.typ",
+        include_str!("resources/kurvst-public-contract.typ"),
+    );
+    let (base, renderer) = staged(&[fixture]);
+    let input = base.path().join(TEMPLATES).join(fixture.0);
+    let output = base.path().join("kurvst-public-contract.svg");
+    // Validate the shared setup and installed Wasm before testing rejections.
+    renderer.compile_template(&input, &output, &[]).unwrap();
+
+    for (source, expected) in [
+        (
+            "#let _ = kurvst.parallel(kurvst.line((0, 0), (1, 0)), optimize: true)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), optimize: false)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.close(mode: \"smooth\")",
+            "unexpected argument: mode",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"close\", mode: \"smooth\"),))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "unknown field `mode`",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"line\", end: (1, 0), extra: true),))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "unknown field `extra`",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, length: 3, ratio: 0.2, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.center-outset(10, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.from-elements(()), offset: 1, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+    ] {
+        fs::write(
+            &input,
+            format!("#import \"crates/kurvst/typst/src/lib.typ\" as kurvst\n{source}"),
+        )
+        .unwrap();
+        let error = renderer.compile_template(&input, &output, &[]).unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "{source}: expected {expected}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn public_kurvst_batch_geometry_behaves() {
+    let fixtures = [
+        (
+            "layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+        ),
+        (
+            "pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+        ),
+    ];
+    let (base, renderer) = staged(&[]);
+    for (name, source) in fixtures {
+        let input = base.path().join(TEMPLATES).join(name);
+        // compile_template roots at the fixture directory, not its package parent.
+        let source = source.replace("../src/lib.typ", "crates/kurvst/typst/src/lib.typ");
+        fs::write(&input, &source).unwrap();
+        let output = base.path().join(name).with_extension("pdf");
+        renderer.compile_template(&input, &output, &[]).unwrap();
+
+        let contracts: &[(&str, &str)] = if name == "layer-offset.typ" {
+            &[
+                ("resolver-empty", "resolve-length: unsupported method"),
+                ("resolver-packet", "resolve-length: unsupported method"),
+                ("optimize", "unexpected argument: optimize"),
+                ("close-mode", "unknown field `mode`"),
+            ]
+        } else {
+            &[
+                ("optimize", "unexpected argument: optimize"),
+                ("positional", "unexpected argument"),
+                ("resolver", "unexpected argument: resolve-length"),
+            ]
+        };
+        for (mode, expected) in contracts {
+            fs::write(
+                &input,
+                source.replace("default: \"\"", &format!("default: \"{mode}\"")),
+            )
+            .unwrap();
+            let error = renderer.compile_template(&input, &output, &[]).unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "{name} {mode}: expected {expected}, got {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn public_cetz_native_batches_preserve_scalar_geometry() {
+    let fixtures = [
+        (
+            "cetz-bounds-behavior.typ",
+            include_str!("resources/cetz-bounds-behavior.typ"),
+        ),
+        (
+            "identity-target-behavior.typ",
+            include_str!("resources/identity-target-behavior.typ"),
+        ),
+        (
+            "marker-geometry-behavior.typ",
+            include_str!("resources/marker-geometry-behavior.typ"),
+        ),
+    ];
+    let (base, renderer) = staged(&fixtures);
+    for (name, _) in fixtures {
+        renderer
+            .compile_template(
+                base.path().join(TEMPLATES).join(name),
+                base.path().join(name).with_extension("pdf"),
+                &[],
+            )
+            .unwrap();
+    }
+}
+
 /// The Linnest public behaviour fixture, rendered once and shared by the SVG
 /// probes below. Compiling it also runs its own Typst assertions.
 fn linnest_public_svg() -> &'static str {

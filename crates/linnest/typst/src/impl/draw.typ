@@ -69,7 +69,6 @@
   resolve-length: "min",
   shift: 0,
   accuracy: 0.001,
-  optimize: true,
   offset-side: none,
   split-gap: 0,
 )
@@ -488,11 +487,6 @@
   )
   same = (
     same
-      and _style-value(source-style, "optimize")
-        == _style-value(sink-style, "optimize")
-  )
-  same = (
-    same
       and _style-value(source-style, "offset-side")
         == _style-value(sink-style, "offset-side")
   )
@@ -699,7 +693,6 @@
     end-outset: end-outset,
     side-point: if side-point == none { none } else { _point(side-point) },
     accuracy: geometry.accuracy,
-    optimize: geometry.optimize,
   )
 }
 
@@ -2705,7 +2698,6 @@
   let edge-ratio = options.edge-ratio
   let edge-resolve-length = options.edge-resolve-length
   let edge-accuracy = options.edge-accuracy
-  let edge-optimize = options.edge-optimize
   let edge-split-gap = options.edge-split-gap
   let edge-dangling-tangent = options.edge-dangling-tangent
   let edge-label = options.edge-label
@@ -2870,7 +2862,6 @@
               ratio: edge-ratio,
               resolve-length: edge-resolve-length,
               accuracy: edge-accuracy,
-              optimize: edge-optimize,
               split-gap: edge-split-gap,
               dangling-tangent: edge-dangling-tangent,
             )

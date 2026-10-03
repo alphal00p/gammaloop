@@ -150,7 +150,8 @@
   == Path Wire Format
 
   A Kurvst wire path is a dictionary with one `elements` array. The elements mirror
-  Typst's native `curve` commands, but points are plain numeric tuples:
+  Typst's native `curve` commands, but points are plain numeric tuples and
+  closure is always straight:
 
   ```typ
   #let path = (
@@ -164,7 +165,7 @@
         control-end: (2.4, 1.0),
         end: (3.0, 0),
       ),
-      (kind: "close", mode: "straight"),
+      (kind: "close"),
     ),
   )
   ```
@@ -175,8 +176,13 @@
   - `line`: adds a straight segment ending at `end`.
   - `quad`: adds a quadratic segment using `control` and `end`.
   - `cubic`: adds a cubic segment using `control-start`, `control-end`, and `end`.
-  - `close`: closes the current subpath. `mode` is optional and defaults to
-    `"straight"` when emitted by Kurvst.
+  - `close`: closes the current subpath with a straight segment back to its start.
+    It has no `mode` argument or field. To close along a curve, add explicit
+    curve segments ending at the subpath start before `close()`. This keeps
+    measurements, transforms, and native/CeTZ drawing on the same geometry.
+
+  Unknown element fields are rejected by both the Typst constructors/emitters
+  and the Rust-backed geometry operations.
 
   Prefer the path fragment helpers for new code. `line`, `quad`, and `cubic`
   include their start points, so fragments can be built independently:
@@ -220,6 +226,12 @@
   Use `elements` when you need the raw command stream, `points` for the
   visited endpoints, `segments` for cubic segment dictionaries, `to-native`
   for native Typst drawing, and `to-cetz-data` or `to-cetz` for CeTZ.
+
+  `outset-point(from, toward, distance:)` moves along the line between two points.
+  Positive distances are capped at 45% of their separation so endpoint adjustments
+  leave room between them. Negative distances move away from `toward` without a
+  cap; coincident points return `from`. For example, moving `(0, 0)` toward
+  `(10, 0)` by `8` gives `(4.5, 0)`, while requesting `-2` gives `(-2, 0)`.
 
   A typical chain keeps the returned dictionaries intact until the final drawing
   step:
@@ -310,6 +322,14 @@
   })
   ```
 
+  Cuts must be finite. They are sorted and clamped to `[0, L]`; duplicate cuts
+  and cuts at the endpoints retain empty parts, so there are always one more
+  parts than cuts. With no cuts, the only part is the full pattern. A zero-length
+  carrier produces empty parts. The full `path` is unchanged: sampling, phase,
+  endpoint tapering, and spline fitting use the full carrier once. Parts are
+  exact subdivisions, with distances mapped linearly between carrier samples
+  rather than measured along the longer decorated curve.
+
   Custom patterns use the same object shape:
 
   ```typ
@@ -362,9 +382,14 @@
   ```
 
   Fitting requires positive, finite `fit-length` and `wavelength`, finite
-  `amplitude`, and finite, nonnegative `longitudinal-scale`. Fitting happens
-  in Typst; `kurvst.pattern` has no `natural-endpoints` argument. As for other
-  point patterns, curved carriers use local tangent/normal offsets, not
+  `amplitude`, and finite, nonnegative `longitudinal-scale`. Kurvst's numeric
+  engine owns fitting and sampling. To paint a fitted coil without transferring
+  its points through Typst, pass a dictionary with `kind: "fitted-coil"`,
+  `fit-length: L`, and the same fitting parameters directly as `pattern`.
+  Keep the outer `amplitude: A`, `wavelength: L`, and `phase: 0`; the engine
+  selects the fitted sample count. The public `kurvst.coil(...).points` uses
+  that same sampler. As for other point patterns, curved carriers use local
+  tangent/normal offsets, not
   evaluation at a corrected arc distance. `endpoint-slope` has no effect
   with `endpoint-ramp: false`.
 
@@ -451,6 +476,22 @@
   shortened interval toward the path end; it is clamped to preserve the endpoint
   outsets.
 
+  `resolve-length` and the `method` argument of `resolve-length(...)` accept
+  `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
+  `"ratio"`/`"relative"`, and `"none"`/`"full"`. Non-positive limits are treated
+  as absent. Except for `"none"`/`"full"`, a sole provided limit is used regardless
+  of the policy; with two limits, `"length"` prefers the fixed length and `"ratio"`
+  the relative length. `"none"`/`"full"` always keeps the full path, ignoring both
+  limits. Unknown policy strings are rejected.
+
+  A custom resolver receives one dictionary with `base-length`, `length`, and
+  `ratio`. The latter two entries are positive absolute lengths or `none`:
+  `ratio` has already been multiplied by `base-length`. Return an absolute target
+  length, or `none` to keep the full path.
+
+  Empty layers remain empty, with or without an offset; invalid resolver names
+  are still rejected.
+
   ```typ
   #let base = kurvst.hobby-spline((
     (0.0, 0.0),
@@ -476,6 +517,37 @@
   side of the original path, before offsetting or trimming. Drawing packages can
   use this to place derived layers on the same side as an edge label without
   knowing anything about the physics or graph style that requested the layer.
+  The returned `offset` records the resolved signed distance, including for
+  empty paths. When processing fragments of the same carrier, reuse this value
+  with `side-point: none` so all fragments use the full carrier's side choice.
+
+  `layers(path, shifts, ..options)` prepares that carrier once and returns a
+  `(path: ..., segments: ...)` record for each shift. The geometry options,
+  resolver policies, and callback dictionary are the same as for `layer`.
+  `"none"` and `"full"` ignore both length limits. Unknown policies and
+  unsupported options are rejected even on empty paths or empty batches.
+  `format: "cbor"` returns encoded layers and footprints plus `count`,
+  `nonzero`, `supported`, `all-single`, and the shared `offset`. The encoded
+  paths omit that offset metadata. `unit` scales multi-segment footprints only;
+  a single cubic retains unit 1.
+
+  `frames(path, distances)` samples points and unnormalized tangents using the
+  same prefix trimming as `trim`. Distances are clamped to the path; empty
+  paths return `none` for each distance. `format: "cbor"` retains encoded
+  records for transfer to native drawing operations.
+
+  `region-samples(parts, regions: 4, unit: 1, step: 4, accuracy: 0.001)`
+  samples overlapping points in equal arc-length regions of cubic parts with
+  `segments` and `visible` fields. Hidden parts contribute length but no
+  output. Both endpoints of every trimmed cubic are retained, including shared
+  endpoints; `step` bounds control-polygon sampling distance after scaling.
+  Sampling density uses the magnitude of `unit`, so negative and positive
+  scales give the same samples. Returned point coordinates stay unscaled.
+
+  `pattern-to-cetz(path, unit: 1, style: (:), ..options)` generates and draws
+  a pattern directly. Geometry options match `pattern`; CeTZ style stays in
+  the separate `style` dictionary. Numeric coordinates can be transferred
+  directly from the geometry engine without an intermediate wire path.
 
   == Native Drawing Primitives
 

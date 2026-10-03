@@ -346,11 +346,7 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
     let build_dir =
         tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     let build_root = canonicalize(build_dir.path(), "render directory")?;
-    write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
-    let package_store = canonicalize(
-        &build_root.join(TYPST_PACKAGES_DIR),
-        "bundled Typst package store",
-    )?;
+    let package_store = build_root.join(TYPST_PACKAGES_DIR);
     for (variable, description) in [
         ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
         ("TYPST_PACKAGE_PATH", "Typst package path"),
@@ -364,6 +360,9 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
             copy_directory(&path, &package_store, description)?;
         }
     }
+    // Keep external path-over-cache precedence, but bundled package versions
+    // are authoritative: their source and Wasm must stay matched.
+    write_embedded_assets::<EmbeddedTypstPackages>(&package_store)?;
 
     let mut files = BTreeMap::new();
     insert_embedded_assets::<EmbeddedLinnestPackage>(&mut files, &build_root, LINNEST_PACKAGE_DIR)?;
@@ -477,6 +476,16 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                 PyRuntimeError::new_err(format!(
                     "failed to create render asset directory {}: {error}",
                     parent.display()
+                ))
+            })?;
+        }
+        // External stores may contain read-only files (for example Nix assets).
+        // Replace the staged copy rather than inheriting its write permissions.
+        if target.exists() {
+            fs::remove_file(&target).map_err(|error| {
+                PyRuntimeError::new_err(format!(
+                    "failed to replace staged render asset {}: {error}",
+                    target.display()
                 ))
             })?;
         }

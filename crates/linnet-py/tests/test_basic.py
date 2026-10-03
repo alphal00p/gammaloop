@@ -2790,7 +2790,6 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_ratio=0.8,
             edge_resolve_length=lp.EdgeLengthResolution.Shorter,
             edge_accuracy=0.001,
-            edge_optimize=True,
             edge_split_gap=0.25,
             edge_dangling_tangent=lp.DanglingTangent.Horizontal,
             source_style=[{"stroke": stroke}],
@@ -2904,6 +2903,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
+        with self.assertRaisesRegex(TypeError, "unknown .*edge_optimize"):
+            lp.DrawOptions(edge_optimize=True)
         with self.assertRaises(TypeError):
             lp.DrawOptions(edge_split_gap=-0.1)
         with self.assertRaises(TypeError):
@@ -3101,6 +3102,59 @@ class TestTypedTypstSurface(unittest.TestCase):
 class TestRendering(unittest.TestCase):
     def test_typst_py_version_matches_the_supported_typst_runtime(self):
         self.assertEqual(typst.__version__, "0.15.0")
+
+    def test_prepare_preserves_bundled_packages_over_external_stores(self):
+        bundled = Path(__file__).resolve().parents[1] / "vendor" / "typst-packages"
+        cetz = Path("preview/cetz/0.5.1")
+        conflicts = (cetz / "src/lib.typ", cetz / "cetz-core/cetz_core.wasm")
+        with TemporaryDirectory(prefix="linnet package precedence ") as directory:
+            root = Path(directory)
+            cache = root / "cache"
+            packages = root / "packages"
+            for store, marker in ((cache, b"cache"), (packages, b"path")):
+                for relative in conflicts:
+                    destination = store / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(marker)
+                    if store == packages:
+                        destination.chmod(0o444)
+                for name in ("shared", store.name):
+                    manifest = store / "preview" / name / "1.0.0" / "typst.toml"
+                    manifest.parent.mkdir(parents=True)
+                    manifest.write_bytes(marker)
+
+            graph = lp.build(lp.node("only"))
+            with patch.dict(
+                os.environ,
+                {
+                    "TYPST_PACKAGE_CACHE_PATH": str(cache),
+                    "TYPST_PACKAGE_PATH": str(packages),
+                },
+            ):
+                prepared = graph.prepare_render()
+
+            def compile_typst(input, **kwargs):
+                staged = Path(kwargs["package_cache_path"])
+                self.assertEqual(Path(kwargs["package_path"]), staged)
+                for relative in conflicts:
+                    self.assertEqual(
+                        (staged / relative).read_bytes(),
+                        (bundled / relative).read_bytes(),
+                    )
+                for name, marker in (
+                    ("cache", b"cache"),
+                    ("packages", b"path"),
+                    ("shared", b"path"),
+                ):
+                    self.assertEqual(
+                        (staged / "preview" / name / "1.0.0" / "typst.toml").read_bytes(),
+                        marker,
+                    )
+                return b"<svg>prepared</svg>"
+
+            with patch.object(typst, "compile", side_effect=compile_typst) as compile_mock:
+                self.assertEqual(prepared.to_svg(), "<svg>prepared</svg>")
+            compile_mock.assert_called_once()
 
     def test_render_calls_typst_py_with_virtual_project_and_package_environment(self):
         with TemporaryDirectory(prefix="linnet typst py ") as directory:

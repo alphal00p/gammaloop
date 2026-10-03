@@ -437,14 +437,18 @@ to Kurvst's path-in/path-out helpers:
 - `length`: maximum visible arc length for a centered parallel path.
 - `ratio`: maximum visible fraction of the base edge length for a centered
   parallel path.
-- `resolve-length`: how to combine `length` and `ratio`.
+- `resolve-length`: how to combine `length` and `ratio`; `"none"`/`"full"`
+  ignores both limits. A custom function receives one dictionary with
+  `base-length`, `length`, and `ratio`. The latter two entries are positive
+  absolute-length limits or `none`, with the ratio already multiplied by
+  `base-length`.
+- `shift`: arc-length displacement of the centered visible interval.
 - `accuracy`: Kurbo fitting tolerance for the parallel path.
-- `optimize`: whether Kurbo should optimize the fitted path.
 - `offset-side: "label"`: choose the sign of `offset` so the path is on the
   same side as the edge label.
 
 `draw` also accepts `edge-offset`, `edge-length`, `edge-ratio`,
-`edge-resolve-length`, `edge-accuracy`, and `edge-optimize` as defaults for both
+`edge-resolve-length`, and `edge-accuracy` as defaults for both
 half edges. Derived paths are computed on the base edge geometry before patterns
 and other decorations; node outsets then trim the shifted path, so it remains
 shortened at node boundaries. When both length and ratio limits are set,
