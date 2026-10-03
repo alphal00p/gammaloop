@@ -91,6 +91,12 @@ impl GenerationSettings {
             ));
         }
 
+        if self.medium.mode != MediumMode::Vacuum && self.threshold_subtraction.enable_thresholds {
+            return Err(eyre!(
+                "Threshold subtraction is not supported in thermal modes; set `global.generation.threshold_subtraction.enable_thresholds = false`"
+            ));
+        }
+
         if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
             && self.uv.local_uv_cts_from_expanded_4d_integrands
         {
@@ -130,6 +136,7 @@ mod generation_settings_tests {
             .validate_for_process(GenerationType::Amplitude)
             .unwrap();
 
+        settings.threshold_subtraction.enable_thresholds = false;
         for mode in [
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
@@ -145,6 +152,39 @@ mod generation_settings_tests {
                     .unwrap_err();
                 assert!(error.to_string().contains("`xs`"));
                 assert!(error.to_string().contains("not supported"));
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_modes_require_threshold_subtraction_disabled() {
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for vacuum_subtraction in [false, true] {
+                let mut settings = GenerationSettings::default();
+                settings.medium.mode = mode;
+                settings.medium.vacuum_subtraction = vacuum_subtraction;
+
+                let error = settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("Threshold subtraction is not supported")
+                );
+                assert!(
+                    error.to_string().contains(
+                        "global.generation.threshold_subtraction.enable_thresholds = false"
+                    )
+                );
+
+                settings.threshold_subtraction.enable_thresholds = false;
+                settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap();
             }
         }
     }
@@ -171,6 +211,7 @@ mod generation_settings_tests {
             let mut settings = GenerationSettings::default();
             settings.medium.mode = mode;
             settings.medium.vacuum_subtraction = vacuum_subtraction;
+            settings.threshold_subtraction.enable_thresholds = false;
             settings
                 .validate_for_process(GenerationType::Amplitude)
                 .unwrap();
