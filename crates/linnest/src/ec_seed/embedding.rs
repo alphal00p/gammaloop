@@ -405,40 +405,48 @@ impl Graph {
 
     fn valid_embedding(&self) -> Result<bool> {
         let fs = self.faces()?;
-        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        let mut component_of: HashMap<&str, usize> = HashMap::new();
+        let mut counts: Vec<[i64; 3]> = Vec::new();
         let mut adj: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for [a, b] in self.edges.values() {
             adj.entry(a).or_default().push(b);
             adj.entry(b).or_default().push(a);
         }
         for root in &self.nodes {
-            if seen.contains(root.as_str()) {
+            if component_of.contains_key(root.as_str()) {
                 continue;
             }
-            let mut component = BTreeSet::new();
+            let component = counts.len();
+            let mut vertices = 0;
             let mut pending = vec![root.as_str()];
             while let Some(n) = pending.pop() {
-                if !component.insert(n) {
-                    continue;
+                if let Entry::Vacant(entry) = component_of.entry(n) {
+                    entry.insert(component);
+                    vertices += 1;
+                    pending.extend(adj.get(n).into_iter().flatten());
                 }
-                pending.extend(adj.get(n).into_iter().flatten());
             }
-            seen.extend(&component);
-            let ne = self
-                .edges
-                .values()
-                .filter(|p| component.contains(p[0].as_str()))
-                .count() as i64;
-            let nf = (0..fs.len())
-                .filter(|&f| {
-                    fs.darts(f)
-                        .next()
-                        .is_some_and(|(_, n)| component.contains(n.as_str()))
-                })
-                .count() as i64;
-            if ne != 0 && component.len() as i64 - ne + nf != 2 {
-                return Ok(false);
+            counts.push([vertices, 0, 0]);
+        }
+        // Count each edge and face once, rather than rescanning the whole
+        // graph for every component of a partly embedded edge prefix.
+        for [a, _] in self.edges.values() {
+            if let Some(&component) = component_of.get(a.as_str()) {
+                counts[component][1] += 1;
             }
+        }
+        for face in 0..fs.len() {
+            if let Some((_, n)) = fs.darts(face).next() {
+                if let Some(&component) = component_of.get(n.as_str()) {
+                    counts[component][2] += 1;
+                }
+            }
+        }
+        if counts
+            .iter()
+            .any(|&[nv, ne, nf]| ne != 0 && nv - ne + nf != 2)
+        {
+            return Ok(false);
         }
         for (hub, expected) in &self.hubs {
             if !cyclic_equal(self.rotation_at(hub)?, expected) {
@@ -669,18 +677,23 @@ impl Graph {
         Err("Embedding does not realize insertion path".into())
     }
 
-    /// First edge at `n` whose following corner is not inside a wheel.
-    fn free_corner(&self, n: &str) -> Result<Id> {
+    /// First wheel-free corner at every vertex. Gluing blocks through these
+    /// corners merges two wheel-free faces, so all other corner choices survive.
+    fn free_corners(&self) -> Result<BTreeMap<Id, Id>> {
         let fs = self.faces()?;
-        for e in self.rotation_at(n)? {
-            let wheel = fs
-                .darts(fs.of(e, n)?)
-                .any(|(_, v)| self.wheel_hubs.contains(v));
-            if !wheel {
-                return Ok(e.clone());
+        let wheel: Vec<_> = (0..fs.len())
+            .map(|face| fs.darts(face).any(|(_, v)| self.wheel_hubs.contains(v)))
+            .collect();
+        let mut corners: BTreeMap<Id, Id> = BTreeMap::new();
+        for (n, rotation) in &self.rotation {
+            for e in rotation {
+                if !wheel[fs.of(e, n)?] {
+                    corners.insert(n.clone(), e.clone());
+                    break;
+                }
             }
         }
-        Err("Cannot attach block inside wheel".into())
+        Ok(corners)
     }
 
     /// Join a block at cut vertex `n`, inserting its rotation (starting after
@@ -729,24 +742,41 @@ impl Graph {
     }
 
     /// Attach embedded blocks at cut vertices through faces outside wheels.
-    fn glue(&self, mut pending: Vec<Self>) -> Result<Self> {
+    fn glue(&self, pending: Vec<Self>) -> Result<Self> {
+        let mut pending = pending
+            .into_iter()
+            .map(|block| Ok((block.free_corners()?, block)))
+            .collect::<Result<Vec<_>>>()?;
         let mut out = Self::default();
+        let mut corners: BTreeMap<Id, Id> = BTreeMap::new();
         while !pending.is_empty() {
             let mut attached = false;
             for i in 0..pending.len() {
-                let shared = intersection(&out.nodes, &pending[i].nodes);
+                let (child_corners, child) = &pending[i];
+                let shared = intersection(&out.nodes, &child.nodes);
                 let Some(n) = shared.first() else {
                     continue;
                 };
                 require(shared.len() == 1, "Blocks share multiple cut vertices")?;
-                let corners = (out.free_corner(n)?, pending[i].free_corner(n)?);
-                out = out.join_vertex(&pending[i], n, &corners.0, &corners.1)?;
-                pending.remove(i);
+                out = out.join_vertex(
+                    child,
+                    n,
+                    corners.get(n).ok_or("Cannot attach block inside wheel")?,
+                    child_corners
+                        .get(n)
+                        .ok_or("Cannot attach block inside wheel")?,
+                )?;
+                let (child_corners, _) = pending.remove(i);
+                for (n, corner) in child_corners {
+                    corners.entry(n).or_insert(corner);
+                }
                 attached = true;
                 break;
             }
             if !attached {
-                out = out.unite(&pending.remove(0))?;
+                let (child_corners, child) = pending.remove(0);
+                out = out.unite(&child)?;
+                corners.extend(child_corners);
             }
         }
         out.nodes.extend(self.nodes.iter().cloned());
@@ -1019,6 +1049,7 @@ impl Graph {
             embedding = Some(joined);
         }
         let mut embedding = embedding.ok_or("Insertion endpoints are disconnected")?;
+        let mut corners = embedding.free_corners()?;
         let mut pending: BTreeSet<usize> =
             (0..subgraphs.len()).filter(|i| !used.contains(i)).collect();
         while let Some(&first) = pending.first() {
@@ -1030,13 +1061,24 @@ impl Graph {
                     continue;
                 };
                 require(shared.len() == 1, "Invalid block decomposition")?;
-                let corners = (embedding.free_corner(n)?, current.free_corner(n)?);
-                embedding = embedding.join_vertex(current, n, &corners.0, &corners.1)?;
+                let child_corners = current.free_corners()?;
+                embedding = embedding.join_vertex(
+                    current,
+                    n,
+                    corners.get(n).ok_or("Cannot attach block inside wheel")?,
+                    child_corners
+                        .get(n)
+                        .ok_or("Cannot attach block inside wheel")?,
+                )?;
+                for (n, corner) in child_corners {
+                    corners.entry(n).or_insert(corner);
+                }
                 pending.remove(&i);
                 progress = true;
             }
             if !progress {
                 embedding = embedding.unite(&subgraphs[first])?;
+                corners.extend(subgraphs[first].free_corners()?);
                 pending.remove(&first);
             }
         }
@@ -1980,5 +2022,85 @@ impl Insertion {
         }
         out.chains.insert(id.to_owned(), inserted);
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod corner_tests {
+    use super::*;
+
+    fn wheel(prefix: &str, a: &str) -> Graph {
+        let (h, b, c) = (
+            format!("{prefix}:h"),
+            format!("{prefix}:b"),
+            format!("{prefix}:c"),
+        );
+        let edges = [
+            ("ha", h.as_str(), a),
+            ("hb", h.as_str(), b.as_str()),
+            ("hc", h.as_str(), c.as_str()),
+            ("ab", a, b.as_str()),
+            ("bc", b.as_str(), c.as_str()),
+            ("ca", c.as_str(), a),
+        ]
+        .map(|(e, u, v)| (format!("{prefix}:{e}"), [u.to_owned(), v.to_owned()]));
+        let nodes = edges
+            .iter()
+            .flat_map(|(_, ends)| ends.iter().cloned())
+            .collect();
+        let mut graph = Graph::new(nodes, edges.into_iter().collect()).unwrap();
+        for (vertex, order) in [
+            (h.as_str(), ["ha", "hb", "hc"]),
+            (a, ["ha", "ca", "ab"]),
+            (b.as_str(), ["hb", "ab", "bc"]),
+            (c.as_str(), ["hc", "bc", "ca"]),
+        ] {
+            graph.rotation.insert(
+                vertex.to_owned(),
+                order.map(|e| format!("{prefix}:{e}")).to_vec(),
+            );
+        }
+        graph.wheel_hubs.insert(h);
+        graph.protected_edges = graph.edges.key_set();
+        graph.validate().unwrap();
+        graph
+    }
+
+    #[test]
+    fn first_free_corners_survive_block_joins() {
+        let mut graph = wheel("root", "a");
+        let mut corners = graph.free_corners().unwrap();
+        assert!(!corners.contains_key("root:h"));
+        for step in 0..24 {
+            let prefix = format!("child:{step}");
+            let at = if step % 3 == 0 { "a" } else { "root:b" };
+            let child = if step % 2 == 0 {
+                wheel(&prefix, at)
+            } else {
+                Graph::new(
+                    [at.to_owned(), prefix.clone()].into_iter().collect(),
+                    [(prefix.clone(), [at.to_owned(), prefix.clone()])]
+                        .into_iter()
+                        .collect(),
+                )
+                .unwrap()
+            };
+            let child_corners = child.free_corners().unwrap();
+            graph = graph
+                .join_vertex(&child, at, &corners[at], &child_corners[at])
+                .unwrap();
+            for (n, corner) in child_corners {
+                corners.entry(n).or_insert(corner);
+            }
+            // Rewalking every face is the reference corner selection. Joining
+            // at a cut vertex must retain the parent's first available edge.
+            assert_eq!(corners, graph.free_corners().unwrap());
+            graph.validate().unwrap();
+        }
+        let disjoint = wheel("disjoint", "other");
+        corners.extend(disjoint.free_corners().unwrap());
+        graph = graph.unite(&disjoint).unwrap();
+        assert_eq!(corners, graph.free_corners().unwrap());
+        graph.validate().unwrap();
     }
 }

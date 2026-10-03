@@ -12,6 +12,7 @@ mod output;
 use kurbo::{BezPath, Point};
 use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
@@ -157,13 +158,16 @@ impl Scene {
         }
         let graph = TypstGraph::from_spec(spec)?;
         let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
-        let mut drawing = Drawing::new(self, typeset, &run)?;
+        let drawing = Drawing::new(self, typeset, &run)?;
         if !self.label_feedback {
-            return Ok(drawing.svg);
+            return Ok(drawing.svg(typeset));
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
-        let (mut best, mut svg) = (drawing.score(), std::mem::take(&mut drawing.svg));
+        // A rejected pass still supplies the next pass's pinned labels.
+        let mut best = drawing;
+        let mut rejected = None;
         for _ in 0..FEEDBACK_PASSES {
+            let drawing = rejected.as_ref().unwrap_or(&best);
             if drawing.overlaps.0 == 0 {
                 break;
             }
@@ -176,13 +180,15 @@ impl Scene {
                 steps: FEEDBACK_STEPS,
                 ..run.config
             })?;
-            drawing = Drawing::new(self, typeset, &run)?;
-            if drawing.score() < best {
-                best = drawing.score();
-                svg = std::mem::take(&mut drawing.svg);
+            let drawing = Drawing::new(self, typeset, &run)?;
+            if drawing.score() < best.score() {
+                best = drawing;
+                rejected = None;
+            } else {
+                rejected = Some(drawing);
             }
         }
-        Ok(svg)
+        Ok(best.svg(typeset))
     }
 }
 
@@ -250,7 +256,7 @@ enum Element {
 struct Target {
     at: [f64; 2],
     size: f64,
-    href: String,
+    href: Arc<str>,
 }
 
 /// The momentum arrow paint: 1pt round ink.
@@ -264,7 +270,8 @@ fn arrow_stroke() -> Stroke {
 }
 
 struct Drawing {
-    svg: String,
+    layers: Vec<Element>,
+    targets: Vec<Target>,
     placements: Vec<Placement>,
     chosen: Vec<Bounds>,
     /// Overlapping labels, line hits, label pairs.
@@ -272,6 +279,11 @@ struct Drawing {
 }
 
 impl Drawing {
+    /// Serialize only the selected feedback pass, preserving painting order.
+    fn svg(&self, typeset: &Typeset) -> String {
+        output::svg(typeset, &self.layers, &self.targets)
+    }
+
     /// Overlapping labels first, then label pairs, then line hits.
     fn score(&self) -> (usize, usize, usize) {
         (self.overlaps.0, self.overlaps.2, self.overlaps.1)
@@ -474,6 +486,7 @@ impl Drawing {
         }
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
             let at = laid.node(node.node);
+            let href = output::node_href(node, &laid.edges, &drawing.details);
             layers.push(Element::Node {
                 at,
                 size: drawing.size(typeset),
@@ -491,18 +504,19 @@ impl Drawing {
                         bottom: at[1] - label.height / UNIT / 2.0,
                         top: at[1] + label.height / UNIT / 2.0,
                     },
-                    href: output::node_href(node, &laid.edges, &drawing.details),
+                    href: href.clone(),
                 });
             }
             targets.push(Target {
                 at,
                 size: (drawing.radius * UNIT * 2.0).max(10.0),
-                href: output::node_href(node, &laid.edges, &drawing.details),
+                href: href.into(),
             });
         }
         let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
-            svg: output::svg(typeset, &layers, &targets),
+            layers,
+            targets,
             placements,
             chosen,
             overlaps,
@@ -837,6 +851,68 @@ mod tests {
         }
         let svg = unlabelled.render(&typeset(&unlabelled)).unwrap();
         assert_eq!(svg.matches(chevron).count(), 4);
+    }
+
+    #[test]
+    fn feedback_emits_the_same_svg_as_serializing_every_pass() {
+        // Keep an eager reference to check both painting order and selection:
+        // later rejected/tied passes must still drive the next warm layout.
+        fn eager(scene: &Scene, typeset: &Typeset) -> (String, Vec<(usize, usize, usize)>) {
+            let mut spec = scene.graph.clone();
+            for (node, drawing) in spec.nodes.iter_mut().zip(&scene.nodes) {
+                let (w, h) = drawing.size(typeset);
+                node.statements
+                    .insert("layout-width".into(), (2.0 * w).to_string());
+                node.statements
+                    .insert("layout-height".into(), (2.0 * h).to_string());
+            }
+            let graph = TypstGraph::from_spec(spec).unwrap();
+            let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
+            let mut drawing = Drawing::new(scene, typeset, &run).unwrap();
+            let mut scores = vec![drawing.score()];
+            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset));
+            for _ in 0..FEEDBACK_PASSES {
+                if drawing.overlaps.0 == 0 {
+                    break;
+                }
+                run.layout.labels = drawing.pinned_labels(&run);
+                run.layout
+                    .solve(ImpredConfig {
+                        labels: true,
+                        warm_start: FEEDBACK_WARM,
+                        steps: FEEDBACK_STEPS,
+                        ..run.config
+                    })
+                    .unwrap();
+                drawing = Drawing::new(scene, typeset, &run).unwrap();
+                let rendered = drawing.svg(typeset);
+                scores.push(drawing.score());
+                if drawing.score() < best {
+                    best = drawing.score();
+                    svg = rendered;
+                }
+            }
+            (svg, scores)
+        }
+
+        let mut continued_after_rejection = false;
+        for momentum in [false, true] {
+            for width in [10.0, 80.0] {
+                let mut scene = bubble(momentum);
+                scene.label_feedback = true;
+                let mut typeset = typeset(&scene);
+                typeset.pages[0].width = width;
+                typeset.pages[0].metrics = Some([width, 8.0, 8.0, 12.0]);
+                let (expected, scores) = eager(&scene, &typeset);
+                continued_after_rejection |= (1..scores.len().saturating_sub(1))
+                    .any(|i| scores[i] >= *scores[..i].iter().min().unwrap());
+                assert_eq!(scene.render(&typeset).unwrap(), expected, "{scores:?}");
+            }
+        }
+        assert!(
+            continued_after_rejection,
+            "exercise another feedback pass after rejecting a drawing"
+        );
     }
 }
 

@@ -22,8 +22,9 @@ def _(mo):
     Each component of the resulting current is a scalar symbolic expression
     in the input components, momenta and model parameters. The spinor current
     $Q(2,4)_c$ below has four such expressions, one for each value
-    $c=0,1,2,3$. All contracted indices have been summed over. Symbolica can
-    then optimise these expressions and turn them into numerical kernels.
+    $c=0,1,2,3$. All contracted indices have been summed over. Symbolica
+    optimises these scalar expressions, and SymJIT generates numerical code,
+    as described in the preceding sections.
 
     The purpose is similar to that of ALOHA [@deAquino:2011ub] and the UFO
     extension of Comix [@Hoeche:2014kca]. Spenso [@SpensoSoftware] separates
@@ -48,8 +49,8 @@ def _(mo):
 def _(mo):
     mo.md(r"""
     Consider the quark–gluon join $Q(2,4)=P_d V_{dgd}[Q(2),G(4)]$ from
-    equation (3.6) in the section on off-shell-current recurrence. We will
-    build it directly with the tensor API. For this standalone example,
+    equation (3.6) in the section on off-shell-current recurrence. The
+    tensor API lets us construct this join directly. For this example,
     we use a four-component row spinor, a massless quark propagator and the
     vertex normalization $V^\mu=i\gamma^\mu$, omitting the colour matrix and
     strong coupling. With $q_{24}=q_2+q_4$ and $s_{24}=q_{24}^2$,
@@ -72,7 +73,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    We begin with the two input currents and their combined momentum.
+    The two input currents and their combined momentum are named tensors.
     `TN.vector` declares a tensor with one index, whose space is set by the
     representation. The integers preceding that representation identify the
     external legs: `2` for $Q(2)$, `4` for $G(4)$, and `2, 4` for $q_{24}$.
@@ -85,7 +86,9 @@ def _(mo):
 @app.cell
 def _():
     from symbolica import Symbol
-    from symbolica.community.tensor import Representation as Rep, TensorExpression as T, TensorName as TN
+    from symbolica.community.tensor import Representation as Rep
+    from symbolica.community.tensor import TensorExpression as T
+    from symbolica.community.tensor import TensorName as TN
 
     spinor, vector = Rep.bis(4), Rep.mink(4)
     Q2 = TN.vector("Q")(2,spinor)
@@ -120,7 +123,7 @@ def _(G4, Q2, Symbol, T):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Next comes the propagator, $i\not q_{24}/q_{24}^2$. The product
+    The propagator is $i\not q_{24}/q_{24}^2$. The product
     `q24 * q24` forms the Minkowski scalar product. In the numerator,
     the Lorentz index `3` contracts the gamma matrix with the momentum,
     while the spinor index `3` remains open. The same label can serve both
@@ -160,8 +163,8 @@ def _(join, propagator):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The expression is now complete. Evaluating its contractions gives four
-    scalar component expressions, including the propagator denominator.
+    Evaluating the contractions gives four scalar component expressions,
+    including the propagator denominator.
     They form the tensor `Q24`, with its one open bispinor index.
     """)
     return
@@ -177,19 +180,24 @@ def _(current):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    These expressions become the numerical kernel. `components()` returns
-    the input symbols in component order, ready to serve as evaluator
-    parameters. The denominator is already expressed in the momentum
-    components. Once built, the evaluator can be reused at new input values
-    without repeating the tensor contraction.
+    Spenso has supplied the component expressions; Symbolica now builds their
+    numerical evaluator. `Q24[:]` lists the four scalar outputs, while
+    `components()` provides the input symbols in component order. The
+    denominator is already expressed in the momentum components.
+    `Expression.evaluator_multiple` optimises the outputs together and uses
+    SymJIT to compile them for numerical evaluation. The evaluator can then
+    be reused at new input values without repeating the tensor contraction.
+    Each input row produces an array of four complex components.
     """)
     return
 
 
 @app.cell
 def _(G4, Q2, Q24, q24):
+    from symbolica import Expression
+
     parameters = [*Q2.components(), *G4.components(), *q24.components()]
-    evaluator = Q24.evaluator(constants={}, funs={}, params=parameters, n_cores=1)
+    evaluator = Expression.evaluator_multiple(Q24, parameters)
 
     value = evaluator.evaluate_complex([[1, 0, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1]])[0]
     value
