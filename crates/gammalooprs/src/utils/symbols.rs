@@ -1126,13 +1126,15 @@ impl GammaloopSymbols {
         eid: impl Into<AtomOrView<'a>>,
         derivative_order: impl Into<AtomOrView<'a>>,
         temperature_flag: impl Into<AtomOrView<'a>>,
-        sign: impl Into<AtomOrView<'a>>,
+        thermal_sign: impl Into<AtomOrView<'a>>,
+        orientation_sign: impl Into<AtomOrView<'a>>,
     ) -> Atom {
         FunctionBuilder::new(self.thermal_distribution)
             .add_arg(eid)
             .add_arg(derivative_order)
             .add_arg(temperature_flag)
-            .add_arg(sign)
+            .add_arg(thermal_sign)
+            .add_arg(orientation_sign)
             .finish()
     }
 

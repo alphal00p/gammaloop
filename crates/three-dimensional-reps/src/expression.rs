@@ -499,11 +499,15 @@ impl OrientationExpression {
     }
 
     pub fn to_atom(&self) -> Atom {
-        self.variants
+        let expression = self
+            .variants
             .iter()
             .map(CFFVariant::to_atom)
             .reduce(|acc, atom| acc + atom)
-            .unwrap_or_else(Atom::new)
+            .unwrap_or_else(Atom::new);
+        // Bind thermal distribution arguments before combining different
+        // orientations into one explicit expression.
+        self.data.select(expression)
     }
 
     pub fn iter_denominator_nodes(&self) -> impl Iterator<Item = &TreeNode<HybridSurfaceID>> {

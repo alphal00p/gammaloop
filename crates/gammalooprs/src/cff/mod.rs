@@ -7388,6 +7388,115 @@ mod tests {
     }
 
     #[test]
+    fn thermal_mass_cycles_match_partial_fraction_contours() -> Result<()> {
+        use crate::integrands::process::param_builder::{
+            ParamBuilderGraph, ThermalDistributionReplacement,
+        };
+        use crate::utils::symbols::ThermalDistributionLimit;
+
+        test_initialise()?;
+        let model = crate::utils::load_generic_model("scalars");
+        for masses in [&[1_i64][..], &[1, 2], &[1, 2, 3], &[1, 1, 2]] {
+            let mut dot = String::from(
+                "digraph thermal_mass_cycle { params=\"m1;m2;m3\"; \
+                 edge [num=1]; node [num=1];",
+            );
+            for (edge, mass) in masses.iter().enumerate() {
+                write!(
+                    dot,
+                    "v{edge} -> v{} [id={edge} mass=\"m{mass}\"];",
+                    (edge + 1) % masses.len(),
+                )?;
+            }
+            dot.push('}');
+            let mut graph: Graph = dot.into_graph(&model)?;
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = three_dimensional_reps::MediumMode::ThermodynamicEquilibrium;
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(&Atom::one()),
+            )?;
+            let cff = graph.cff_from_production_expression(
+                &production,
+                &CutSet::empty(graph.n_hedges()),
+                &OrientationPattern::default(),
+                false,
+            )?;
+            let sum = cff
+                .terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::zero(), |sum, term| sum + &term.expression)
+                * Atom::num(cff.production_prefactor_factor());
+            // Remove the spatial measure and i to compare the signed energy
+            // contour J = integral dq0/(2*pi*i), as in the vacuum test below.
+            let sum = sum * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i();
+            let mut explicit = graph
+                .make_thermal_distributions_explicit(
+                    &sum,
+                    ThermalDistributionLimit::Default,
+                    graph.iter_edge_ids(),
+                    ThermalDistributionReplacement::All,
+                )?
+                .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                .with(W_.a_);
+            for (edge, mass) in masses.iter().enumerate() {
+                // Distinct mass symbols receive distinct values. Every line
+                // carries the same spatial momentum, with |k| = 3/5.
+                let energy = (Atom::num(mass * mass) + Atom::num((9, 25))).sqrt();
+                explicit = explicit.replace(GS.ose(EdgeIndex(edge))).with(energy);
+            }
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = explicit
+                .evaluator(&[Atom::var(GS.inverse_temperature)])
+                .build()
+                .map_err(|error| eyre::eyre!("thermal mass-cycle evaluator: {error}"))?;
+            let mut evaluator: ExpressionEvaluator<Complex<F<f64>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            for beta in [0.7_f64, 2.0] {
+                let tadpole = |mass: i64| {
+                    let energy = ((mass * mass) as f64 + 0.36).sqrt();
+                    -1.0 / (2.0 * energy * (beta * energy / 2.0).tanh())
+                };
+                // Partial fraction the original quadratic propagators. This
+                // oracle does not use CFF contractions or distribution weights.
+                let expected = if masses == [1, 1, 2] {
+                    let energy = 1.36_f64.sqrt();
+                    let arg = beta * energy / 2.0;
+                    let derivative = 1.0 / (4.0 * energy.powi(3) * arg.tanh())
+                        + beta / (8.0 * energy.powi(2) * arg.sinh().powi(2));
+                    // Differentiating the first mass squared creates its
+                    // second propagator occurrence: d(1/D)/d(m^2) = 1/D^2.
+                    (derivative * (1.0 - 4.0) - (tadpole(1) - tadpole(2))) / 9.0
+                } else {
+                    masses
+                        .iter()
+                        .map(|&mass| {
+                            tadpole(mass)
+                                / masses
+                                    .iter()
+                                    .filter(|&&other| other != mass)
+                                    .map(|&other| (mass * mass - other * other) as f64)
+                                    .product::<f64>()
+                        })
+                        .sum()
+                };
+                let actual = evaluator.evaluate_single(&[Complex::new(F(beta), F(0.0))]);
+                assert!(
+                    actual.im.0.abs() < 1.0e-13
+                        && (actual.re.0 - expected).abs() < 1.0e-11 * expected.abs(),
+                    "masses={masses:?}, beta={beta}: signed CFF={actual}, partial fractions={expected}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
         test_initialise()?;
         let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {

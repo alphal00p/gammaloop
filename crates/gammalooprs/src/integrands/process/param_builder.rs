@@ -120,6 +120,7 @@ pub trait ParamBuilderGraph {
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
+        orientation_sign: Atom,
         limit: ThermalDistributionLimit,
     ) -> Option<Atom>;
     fn make_thermal_distributions_explicit(
@@ -142,9 +143,9 @@ pub trait ParamBuilderGraph {
             if function.get_symbol() != GS.thermal_distribution {
                 return;
             }
-            if function.get_nargs() != 4 {
+            if function.get_nargs() != 5 {
                 error = Some(color_eyre::eyre::eyre!(
-                    "Thermal distribution must have four arguments, got {}",
+                    "Thermal distribution must have five arguments, got {}",
                     function.get_nargs()
                 ));
                 return;
@@ -173,10 +174,12 @@ pub trait ParamBuilderGraph {
             };
             let _temperature_flag = args.next().unwrap();
             let thermal_sign = args.next().unwrap().into();
+            let orientation_sign = args.next().unwrap().into();
             let Some(replacement) = self.explicit_thermal_distribution_atom(
                 edge,
                 derivative_order,
                 thermal_sign,
+                orientation_sign,
                 limit,
             ) else {
                 error = Some(color_eyre::eyre::eyre!(
@@ -1319,6 +1322,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         let thermal_sign = symbol!("thermal_sign");
+        let orientation_sign = symbol!("orientation_sign");
         let thermal_edges = graph
             .iter_edge_ids()
             .filter(|&edge| {
@@ -1345,6 +1349,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                         e,
                         derivative_order,
                         Atom::var(thermal_sign),
+                        Atom::var(orientation_sign),
                         limit,
                     ) {
                         new.add_tagged_function::<Symbol>(
@@ -1355,7 +1360,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                                 temperature_flag.clone(),
                             ],
                             format!("N{e}_{derivative_order}_{temperature_flag}"),
-                            vec![thermal_sign],
+                            vec![thermal_sign, orientation_sign],
                             body,
                         )
                         .unwrap();
@@ -1943,7 +1948,7 @@ mod tests {
     }
 
     #[test]
-    fn thermal_function_map_supports_higher_derivatives() {
+    fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
         for particle in ["d", "g"] {
@@ -1956,41 +1961,61 @@ mod tests {
             .into_graph(&model)
             .unwrap();
             let edge = EdgeIndex(0);
-            let mut params = vec![
-                GS.ose(edge),
-                GS.inverse_temperature.to_atom(),
-                GS.sign(edge),
-            ];
-            let mut input = vec![1.0, 2.0, 1.0];
+            // Concrete orientation calls must not depend on a global sign slot.
+            let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
+            let mut input = vec![1.0, 2.0];
             if let Some(mu) = graph[edge]
                 .chemical_potential_atom()
                 .filter(|mu| !mu.is_zero())
             {
                 params.push(mu);
-                input.push(0.0);
+                input.push(1.5);
             }
-            for order in [3, 4] {
-                let expressions = [
-                    GS.thermal_distribution(0, order, 1, 1),
-                    graph
-                        .explicit_thermal_distribution_atom(
-                            edge,
-                            order as usize,
-                            Atom::one(),
-                            ThermalDistributionLimit::Default,
-                        )
-                        .unwrap(),
-                ];
-                let [registered, explicit] = expressions.map(|expression| {
-                    expression
-                        .evaluator(&params)
-                        .function_map(graph.param_builder.fn_map.clone())
-                        .build()
-                        .unwrap()
-                        .map_coeff(&|coefficient| coefficient.re.to_f64())
-                        .evaluate_single(&input)
-                });
-                assert!((registered - explicit).abs() < 1e-13);
+            for limit in [
+                ThermalDistributionLimit::Default,
+                ThermalDistributionLimit::ZeroTemperature,
+            ] {
+                let orders = match limit {
+                    ThermalDistributionLimit::Default => 0..=4,
+                    _ => 0..=0,
+                };
+                for order in orders {
+                    for thermal_sign in [-1, 1] {
+                        for orientation_sign in [-1, 1] {
+                            let expressions = [
+                                GS.thermal_distribution(
+                                    0,
+                                    order,
+                                    limit.temperature_flag(),
+                                    thermal_sign,
+                                    orientation_sign,
+                                ),
+                                graph
+                                    .explicit_thermal_distribution_atom(
+                                        edge,
+                                        order as usize,
+                                        Atom::num(thermal_sign),
+                                        Atom::num(orientation_sign),
+                                        limit,
+                                    )
+                                    .unwrap(),
+                            ];
+                            let [registered, explicit] = expressions.map(|expression| {
+                                expression
+                                    .evaluator(&params)
+                                    .function_map(graph.param_builder.fn_map.clone())
+                                    .build()
+                                    .unwrap()
+                                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                                    .evaluate_single(&input)
+                            });
+                            assert!(
+                                (registered - explicit).abs() < 1e-13,
+                                "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -2005,7 +2030,9 @@ mod tests {
         .unwrap();
         let weight = symbolica::function!(
             GS.thermal_weight_wrapper,
-            GS.thermal_distribution(0, 0, 1, 1) * GS.thermal_distribution(1, 0, 1, 1) - 1
+            GS.thermal_distribution(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
+                * GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
+                - 1
         );
         let partial = graph
             .make_thermal_distributions_explicit(
@@ -2019,7 +2046,7 @@ mod tests {
             partial,
             symbolica::function!(
                 GS.thermal_weight_wrapper,
-                GS.thermal_distribution(1, 0, 1, 1) - 1
+                GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
             )
         );
         assert!(
@@ -2034,7 +2061,7 @@ mod tests {
                 .is_zero()
         );
 
-        let params = [GS.thermal_distribution(1, 0, 1, 1)];
+        let params = [GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))];
         let replacements = graph
             .param_builder
             .reps

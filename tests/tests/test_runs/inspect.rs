@@ -1543,6 +1543,81 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
 }
 
 #[test]
+fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
+    for (direct_translation, explicit_orientation_sum_only) in
+        itertools::iproduct!([false, true], [false, true])
+    {
+        let name = format!(
+            "thermal_evaluators_direct_{direct_translation}_explicit_{explicit_orientation_sum_only}"
+        );
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(&name),
+            Some(name),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model sm-default.json",
+                "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
+                "set model aS=1.0",
+                "set model muB=3.0",
+                &format!(
+                    "set global kv global.generation.medium.mode=thermodynamic_equilibrium global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.direct_translation={direct_translation} global.generation.evaluator.iterative_orientation_optimization=true global.generation.evaluator.summed=true global.generation.evaluator.summed_function_map=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true"
+                ),
+                r#"set default-runtime kv general.inverse_temperature=1.0 general.enable_cache=false sampling.orientations="summed" subtraction.disable_threshold_subtraction=true"#,
+                "generate",
+            ],
+        )?;
+        let methods: &[&str] = if explicit_orientation_sum_only {
+            &["SingleParametric"]
+        } else {
+            &[
+                "Iterative",
+                "Summed",
+                "SummedFunctionMap",
+                "SingleParametric",
+            ]
+        };
+        for method in methods {
+            // Keep orientation slots pristine: SingleParametric fills them at runtime.
+            let mut method_cli = cli.clone();
+            method_cli.run_command(&format!(
+                "set process -p thermal_sunrise kv general.evaluator_method=\"{method}\""
+            ))?;
+            for (mu, expected) in [
+                (3.0, 2.337_015_373_956_359e-3),
+                (0.0, 2.888_597_299_939_403e-3),
+            ] {
+                method_cli.run_command(&format!("set model muB={mu}"))?;
+                for use_arb_prec in [false, true] {
+                    let (_, value) = Inspect {
+                        process: Some(ProcessRef::Id(0)),
+                        graph_id: Some(0),
+                        integrand_name: Some("default".to_string()),
+                        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                        momentum_space: true,
+                        use_arb_prec,
+                        ..Default::default()
+                    }
+                    .run(&mut method_cli)?;
+                    assert_complex_approx_eq(
+                        value,
+                        Complex::new(0.0, expected),
+                        format!(
+                            "thermal sunrise {method}, muB={mu}, direct={direct_translation}, explicit={explicit_orientation_sum_only}, arb={use_arb_prec}"
+                        ),
+                    );
+                }
+            }
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+#[test]
 fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
     // CFF normalization contributes the loop-dependent phase i^L.
     fn assert_inspect(

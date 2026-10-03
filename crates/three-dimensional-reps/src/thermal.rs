@@ -11,7 +11,7 @@ use symbolica::{
     symbol,
 };
 
-use crate::symbols::S;
+use crate::symbols::{S, sign};
 
 #[derive(
     Debug,
@@ -57,12 +57,15 @@ pub struct ThermalDistributionFactor {
 
 impl ThermalDistributionFactor {
     pub fn to_atom(self, is_finite_temperature: bool) -> Atom {
+        // Keep the chemical-potential orientation visible to selection before
+        // evaluator construction expands the distribution body.
         function!(
             S.thermal_distribution,
             self.edge_id.0 as i64,
             self.derivative_order as i64,
             i64::from(is_finite_temperature),
-            self.sign
+            self.sign,
+            sign(self.edge_id)
         )
     }
 }
@@ -209,8 +212,14 @@ impl ThermalWeight {
 /// Retain the wrapper through UV subtraction; only evaluator construction unwraps it.
 /// This replacement is used once at the CFF-to-integrand boundary.
 pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let (weight, edge, derivative, temperature, sign) =
-        symbol!("weight_", "edge_", "derivative_", "temperature_", "sign_");
+    let (weight, edge, derivative, temperature, sign, orientation) = symbol!(
+        "weight_",
+        "edge_",
+        "derivative_",
+        "temperature_",
+        "sign_",
+        "orientation_"
+    );
     [function!(S.thermal_weight_wrapper, weight)
         .to_pattern()
         .replace_with_map(move |matched| {
@@ -221,7 +230,8 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
                     edge,
                     0,
                     temperature,
-                    sign
+                    sign,
+                    orientation
                 ))
                 .with((Atom::one() + sign) / Atom::num(2))
                 .replace(function!(
@@ -229,7 +239,8 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
                     edge,
                     derivative,
                     temperature,
-                    sign
+                    sign,
+                    orientation
                 ))
                 .with(Atom::Zero);
             function!(S.thermal_weight_wrapper, weight - vacuum)
@@ -346,7 +357,14 @@ mod tests {
             let partial = product
                 .to_atom()
                 .replace_multiple(&*VACUUM_SUBTRACTION)
-                .replace(function!(S.thermal_distribution, 2, 0, flag, 1))
+                .replace(function!(
+                    S.thermal_distribution,
+                    2,
+                    0,
+                    flag,
+                    1,
+                    sign(EdgeIndex(2))
+                ))
                 .with(Atom::one());
             assert_eq!(
                 partial,
@@ -615,16 +633,18 @@ mod tests {
                 for edge in 0..4 {
                     for sign in [-1, 1] {
                         for derivative_order in 0..4 {
-                            atom = atom
-                                .replace(
-                                    ThermalDistributionFactor {
-                                        edge_id: EdgeIndex(edge),
-                                        sign,
+                            for orientation in [-1, 1] {
+                                atom = atom
+                                    .replace(function!(
+                                        S.thermal_distribution,
+                                        edge,
                                         derivative_order,
-                                    }
-                                    .to_atom(medium_mode.is_finite_temperature()),
-                                )
-                                .with(Atom::num(i64::from(sign == 1 && derivative_order == 0)));
+                                        i64::from(medium_mode.is_finite_temperature()),
+                                        sign,
+                                        orientation
+                                    ))
+                                    .with(Atom::num(i64::from(sign == 1 && derivative_order == 0)));
+                            }
                         }
                     }
                 }

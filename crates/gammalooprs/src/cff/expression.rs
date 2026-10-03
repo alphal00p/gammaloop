@@ -18,7 +18,10 @@ use symbolica::{
     id::Replacement,
 };
 
-use super::{esurface::Esurface, hsurface::Hsurface, surface::GammaLoopLinearEnergyExpr};
+use super::{
+    esurface::Esurface, hsurface::Hsurface, orientations::GraphOrientation,
+    surface::GammaLoopLinearEnergyExpr,
+};
 use crate::{
     graph::Graph,
     utils::{GS, W_, ose_atom_from_index},
@@ -124,11 +127,15 @@ pub trait GammaLoopOrientationExpression {
 
 impl GammaLoopOrientationExpression for OrientationExpression {
     fn to_atom_gs(&self) -> Atom {
-        self.variants
+        let expression = self
+            .variants
             .iter()
             .map(GammaLoopCFFVariant::to_atom_gs)
             .reduce(|acc, atom| acc + atom)
-            .unwrap_or_else(Atom::new)
+            .unwrap_or_else(Atom::new);
+        // Each coefficient must carry its own chemical-potential orientation
+        // before an explicit sum removes the residue-map selectors.
+        self.data.orientation.select(expression)
     }
 
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement> {
@@ -327,6 +334,7 @@ mod tests {
                 .map(GammaLoopOrientationExpression::to_atom_gs)
                 .fold(Atom::Zero, |sum, orientation| sum + orientation);
             assert_eq!(atom, expression.to_atom(AllOrientations));
+            assert!(!atom.contains_symbol(GS.sign));
 
             // Typed weights emit distributions directly; surface conversion must
             // preserve them without the former thermal-numerator placeholders.

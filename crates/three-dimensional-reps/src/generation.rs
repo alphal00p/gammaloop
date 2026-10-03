@@ -5970,6 +5970,8 @@ mod causal_generation_tests {
                     derivative_order: 0,
                 }
                 .to_atom(medium.is_finite_temperature())
+                .replace(crate::symbols::sign(EdgeIndex(0)))
+                .with(Atom::num(sign))
             });
             let expected =
                 (symbolica::function!(crate::symbols::S.thermal_weight_wrapper, &weight[0])

@@ -236,6 +236,7 @@ impl CffGenerationGraph {
 
     fn strip_thermal_distribution_factors(
         &mut self,
+        parsed: &ParsedGraph,
         signs: &[i32],
     ) -> (Vec<ThermalDistributionFactor>, Rational) {
         let mut factors = Vec::new();
@@ -268,6 +269,7 @@ impl CffGenerationGraph {
             if self.has_directed_cycle()
                 && let Some(cycle) = self.vertices.iter().find_map(|vertex| {
                     self.detachable_cycle(
+                        parsed,
                         &vertex.nodes,
                         &vertex.nodes,
                         &mut vec![vertex.nodes.clone()],
@@ -275,9 +277,10 @@ impl CffGenerationGraph {
                     )
                 })
             {
-                // An m-edge cyclic chain contributes (-1)^(m-1)/(m-1)! times the
-                // ordinary (m-1)th energy derivative. Apply it only when removing
-                // the cycle; self-loops keep factor 1.
+                // An m-edge cyclic chain with a common pole contributes
+                // (-1)^(m-1)/(m-1)! times the ordinary (m-1)th energy derivative.
+                // Unequal poles stay in the recursion as divided differences;
+                // self-loops keep factor 1.
                 let derivative_order = cycle.len() - 1;
                 let sign = if derivative_order.is_multiple_of(2) {
                     1
@@ -316,6 +319,7 @@ impl CffGenerationGraph {
 
     fn detachable_cycle(
         &self,
+        parsed: &ParsedGraph,
         start: &BTreeSet<usize>,
         current: &BTreeSet<usize>,
         visited: &mut Vec<BTreeSet<usize>>,
@@ -349,13 +353,23 @@ impl CffGenerationGraph {
                         })
                     })
                     .count();
-                if attachments <= 1 {
+                let first = &parsed.internal_edges[cycle[0]];
+                let (signature, _) = first.signature.canonical_up_to_sign();
+                if attachments <= 1
+                    && cycle.iter().all(|&edge_id| {
+                        let edge = &parsed.internal_edges[edge_id];
+                        edge.mass_key == first.mass_key
+                            && edge.signature.canonical_up_to_sign().0 == signature
+                    })
+                {
                     return Some(cycle);
                 }
             } else if !visited.contains(&next.nodes) {
                 visited.push(next.nodes.clone());
                 path.push(edge.edge_id);
-                if let Some(cycle) = self.detachable_cycle(start, &next.nodes, visited, path) {
+                if let Some(cycle) =
+                    self.detachable_cycle(parsed, start, &next.nodes, visited, path)
+                {
                     return Some(cycle);
                 }
                 path.pop();
@@ -473,7 +487,7 @@ fn enumerate_cff_branches(
     let mut graph = graph.clone();
     let thermal = medium_mode != MediumMode::Vacuum;
     let (distributions, reduction_prefactor) = if thermal {
-        graph.strip_thermal_distribution_factors(edge_signs)
+        graph.strip_thermal_distribution_factors(parsed, edge_signs)
     } else {
         (Vec::new(), Rational::one())
     };
@@ -491,13 +505,32 @@ fn enumerate_cff_branches(
         return;
     }
     // First, try to find a source or sink with connected complement.
-    // Thermal orientations can have no source or sink; then contract a vertex
-    // of degree at least three with connected complement.
+    // Thermal orientations can have no source or sink. Two-edge boundaries
+    // also allow an unshifted E1-E2 contraction when the masses differ; equal
+    // poles must reach cyclic-chain reduction instead of a zero denominator.
     let Some(vertex) = graph.source_sink_greedy().or_else(|| {
         thermal
             .then(|| {
                 graph.vertices.iter().find(|vertex| {
-                    vertex.incoming.len() + vertex.outgoing.len() >= 3
+                    let unequal_mass_pair =
+                        match (vertex.incoming.as_slice(), vertex.outgoing.as_slice()) {
+                            ([incoming], [outgoing])
+                                if incoming.edge_type == EdgeType::Virtual
+                                    && outgoing.edge_type == EdgeType::Virtual =>
+                            {
+                                // Distinct symbolic mass keys are assumed to have
+                                // distinct numerical masses.
+                                parsed.internal_edges[incoming.edge_id].mass_key
+                                    != parsed.internal_edges[outgoing.edge_id].mass_key
+                                    && boundary_external_shift_from_internal_labels(
+                                        parsed,
+                                        &vertex.nodes,
+                                    )
+                                    .is_empty()
+                            }
+                            _ => false,
+                        };
+                    (vertex.incoming.len() + vertex.outgoing.len() >= 3 || unequal_mass_pair)
                         && graph.has_connected_complement(&vertex.nodes)
                 })
             })
@@ -698,6 +731,10 @@ fn boundary_external_shift_from_internal_labels(
 #[cfg(test)]
 mod thermal_tests {
     use super::*;
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        parse,
+    };
 
     #[test]
     fn thermal_detachable_cycles_respect_attachment_vertices() {
@@ -773,10 +810,21 @@ mod thermal_tests {
                 vertices[head].incoming.push(edge);
             }
             let graph = CffGenerationGraph::new(vertices);
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            // Cycle discovery only reads these pole identities. Nonvirtual
+            // fixture IDs occupy the leading slots but are never inspected.
+            parsed.internal_edges = (0..incoming.len() + edges.len())
+                .map(|edge_id| {
+                    let mut edge = parsed.internal_edges[0].clone();
+                    edge.edge_id = edge_id;
+                    edge
+                })
+                .collect();
             for (start, expected) in expected_cycles {
                 let start = BTreeSet::from([start]);
                 assert_eq!(
                     graph.detachable_cycle(
+                        &parsed,
                         &start,
                         &start,
                         &mut vec![start.clone()],
@@ -845,9 +893,21 @@ mod thermal_tests {
                 vertices[head].incoming.push(edge);
             }
             let mut graph = CffGenerationGraph::new(vertices);
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            parsed.internal_edges = edges
+                .iter()
+                .enumerate()
+                .map(|(edge_id, &(tail, head))| {
+                    let mut edge = parsed.internal_edges[0].clone();
+                    edge.edge_id = edge_id;
+                    edge.tail = tail;
+                    edge.head = head;
+                    edge
+                })
+                .collect();
             let signs = vec![1; edges.len()];
             assert_eq!(
-                graph.strip_thermal_distribution_factors(&signs).0,
+                graph.strip_thermal_distribution_factors(&parsed, &signs).0,
                 expected_factors
                     .into_iter()
                     .map(|(edge, derivative_order)| ThermalDistributionFactor {
@@ -893,7 +953,7 @@ mod thermal_tests {
             let fixed_point = graph.clone();
             assert!(
                 graph
-                    .strip_thermal_distribution_factors(&signs)
+                    .strip_thermal_distribution_factors(&parsed, &signs)
                     .0
                     .is_empty(),
                 "{name}"
@@ -933,8 +993,11 @@ mod thermal_tests {
         let vertex = graph.vertex(&BTreeSet::from([0, 1]));
         assert_eq!(vertex.incoming, vec![edge(0)]);
         assert_eq!(vertex.outgoing, vec![edge(0), edge(2)]);
+        let parsed = crate::graph_io::test_graphs::box_graph();
         assert_eq!(
-            graph.strip_thermal_distribution_factors(&[-1, 1, 1]).0,
+            graph
+                .strip_thermal_distribution_factors(&parsed, &[-1, 1, 1])
+                .0,
             vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(0),
                 sign: -1,
@@ -956,6 +1019,7 @@ mod thermal_tests {
         parsed.external_names.clear();
         for edge in &mut parsed.internal_edges {
             edge.signature.external_signature.clear();
+            edge.mass_key = Some("m".to_string());
         }
         for (count, derivative_order, numerator, denominator) in
             [(1, 0, 1, 1), (2, 1, -1, 1), (3, 2, 1, 2), (4, 3, -1, 6)]
@@ -979,6 +1043,163 @@ mod thermal_tests {
                     derivative_order,
                 }]
             );
+        }
+    }
+
+    #[test]
+    fn thermal_cycles_with_distinct_and_repeated_masses_are_divided_differences() {
+        for masses in [
+            vec![0, 1],
+            vec![0, 1, 2],
+            vec![0, 1, 2, 3],
+            vec![0, 0, 1],
+            vec![0, 1, 0],
+            vec![0, 0, 0],
+        ] {
+            let count = masses.len();
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            parsed.external_edges.clear();
+            parsed.external_names.clear();
+            parsed.internal_edges.truncate(count);
+            for (edge, mass) in parsed.internal_edges.iter_mut().zip(&masses) {
+                edge.head = (edge.edge_id + 1) % count;
+                edge.mass_key = Some(format!("m{mass}"));
+                edge.signature.external_signature.clear();
+            }
+            let signs = vec![1; count];
+            assert!(enumerate_cff_surface_chains(&parsed, &signs, MediumMode::Vacuum).is_empty());
+            let expected = if masses == [0, 0, 0] {
+                parse!("d2n0/2")
+            } else if masses.iter().filter(|&&mass| mass == 0).count() == 2 {
+                parse!("(n1-n0+(e0-e1)*dn0)/(e0-e1)^2")
+            } else {
+                // The ordinary residue sum is independent of contraction order.
+                masses.iter().fold(Atom::Zero, |sum, mass| {
+                    let energy = parse!(format!("e{mass}"));
+                    let denominator = masses
+                        .iter()
+                        .filter(|other| *other != mass)
+                        .fold(Atom::one(), |product, other| {
+                            product * (&energy - parse!(format!("e{other}")))
+                        });
+                    let sign = if count.is_multiple_of(2) { -1 } else { 1 };
+                    sum + Atom::num(sign) * parse!(format!("n{mass}")) / denominator
+                })
+            };
+            for mode in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                let finite = mode.is_finite_temperature();
+                let chains = enumerate_cff_surface_chains(&parsed, &signs, mode);
+                assert!(!chains.is_empty(), "{masses:?}, {mode:?}");
+                let mut actual = chains.iter().fold(Atom::Zero, |sum, chain| {
+                    let numerator = chain
+                        .thermal_weight
+                        .numerators
+                        .iter()
+                        .map(|numerator| numerator.to_atom(finite))
+                        .chain(
+                            chain
+                                .thermal_weight
+                                .distributions
+                                .iter()
+                                .map(|factor| factor.to_atom(finite)),
+                        )
+                        .fold(Atom::num(chain.prefactor.clone()), |product, factor| {
+                            product * factor
+                        });
+                    let denominator =
+                        chain.surfaces.iter().fold(Atom::one(), |product, surface| {
+                            product * surface.to_atom(&[])
+                        });
+                    sum + numerator / denominator
+                });
+                for (edge_id, mass) in masses.iter().enumerate() {
+                    for sign in [-1, 1] {
+                        for derivative_order in 0..count {
+                            let value = match derivative_order {
+                                0 => Atom::num((1 + sign) / 2) + parse!(format!("n{mass}")),
+                                1 => parse!(format!("dn{mass}")),
+                                order => parse!(format!("d{order}n{mass}")),
+                            };
+                            actual = actual
+                                .replace(
+                                    ThermalDistributionFactor {
+                                        edge_id: EdgeIndex(edge_id),
+                                        sign,
+                                        derivative_order,
+                                    }
+                                    .to_atom(finite),
+                                )
+                                .with(value);
+                        }
+                    }
+                    actual = actual
+                        .replace(LinearEnergyExpr::ose(EdgeIndex(edge_id), 1).to_atom(&[]))
+                        .with(parse!(format!("e{mass}")));
+                }
+                assert_eq!(
+                    (&actual - &expected).together(),
+                    Atom::Zero,
+                    "{masses:?}, {mode:?}: {actual} != {expected}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_cycle_stripping_skips_distinct_poles_and_finds_later_equal_cycles() {
+        for (first_masses, first_shifts, expected_edges) in [
+            (["m0", "m1"], [0, 0], vec![2]),
+            (["m0", "m0"], [0, 1], vec![2]),
+            (["m0", "m0"], [0, 0], vec![0, 2]),
+        ] {
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            parsed.external_edges.clear();
+            for (edge, (tail, head)) in
+                parsed
+                    .internal_edges
+                    .iter_mut()
+                    .zip([(0, 1), (1, 0), (0, 2), (2, 0)])
+            {
+                edge.tail = tail;
+                edge.head = head;
+                edge.mass_key = Some("m2".to_string());
+                edge.signature.external_signature.fill(0);
+            }
+            for (edge, (mass, shift)) in parsed
+                .internal_edges
+                .iter_mut()
+                .zip(first_masses.into_iter().zip(first_shifts))
+            {
+                edge.mass_key = Some(mass.to_string());
+                edge.signature.external_signature[0] = shift;
+            }
+            let mut graph = build_base_graph_from_parsed(&parsed);
+            let (distributions, prefactor) =
+                graph.strip_thermal_distribution_factors(&parsed, &[1; 4]);
+            assert_eq!(
+                distributions,
+                expected_edges
+                    .iter()
+                    .map(|&edge_id| ThermalDistributionFactor {
+                        edge_id: EdgeIndex(edge_id),
+                        sign: 1,
+                        derivative_order: 1,
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            assert_eq!(
+                prefactor,
+                Rational::from(if expected_edges.len() == 1 { -1 } else { 1 }),
+            );
+            if expected_edges.len() == 1 {
+                assert_eq!(graph.vertices.len(), 2);
+                assert!(graph.has_directed_cycle());
+            } else {
+                assert!(graph.vertices.is_empty());
+            }
         }
     }
 
@@ -1010,6 +1231,7 @@ mod thermal_tests {
                 edge.tail = tail;
                 edge.head = head;
                 edge.signature.external_signature.clear();
+                edge.mass_key = Some("m".to_string());
             }
             for mode in [
                 MediumMode::ThermodynamicEquilibrium,
@@ -1042,7 +1264,7 @@ mod thermal_tests {
         let mut graph = build_base_graph_from_parsed(&parsed);
         assert!(
             graph
-                .strip_thermal_distribution_factors(&[1; 4])
+                .strip_thermal_distribution_factors(&parsed, &[1; 4])
                 .0
                 .is_empty()
         );

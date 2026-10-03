@@ -190,10 +190,16 @@ where
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
+        orientation_sign: Atom,
         limit: ThermalDistributionLimit,
     ) -> Option<Atom> {
-        self.1
-            .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign, limit)
+        self.1.explicit_thermal_distribution_atom(
+            edge,
+            derivative_order,
+            thermal_sign,
+            orientation_sign,
+            limit,
+        )
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -252,13 +258,14 @@ where
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
+        orientation_sign: Atom,
         limit: ThermalDistributionLimit,
     ) -> Option<Atom> {
         match limit {
             ThermalDistributionLimit::Default => {
                 let chemical_potential = self[edge].chemical_potential_atom();
                 let shifted_ose = match chemical_potential {
-                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    Some(mu) => ose_atom_from_index(edge) - &orientation_sign * mu,
                     None => ose_atom_from_index(edge),
                 };
 
@@ -279,8 +286,13 @@ where
                     ),
                     (_, _) => {
                         let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
-                        let mut body =
-                            self.explicit_thermal_distribution_atom(edge, 2, thermal_sign, limit)?;
+                        let mut body = self.explicit_thermal_distribution_atom(
+                            edge,
+                            2,
+                            thermal_sign,
+                            orientation_sign,
+                            limit,
+                        )?;
                         for _ in 2..derivative_order {
                             body = body.derivative(&energy).expand();
                         }
@@ -291,7 +303,7 @@ where
             ThermalDistributionLimit::ZeroTemperature => {
                 let chemical_potential = self[edge].chemical_potential_atom();
                 let shifted_ose = match chemical_potential {
-                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    Some(mu) => ose_atom_from_index(edge) - orientation_sign * mu,
                     None => ose_atom_from_index(edge),
                 };
                 let chemical_potential = self[edge].chemical_potential_atom();
@@ -400,12 +412,14 @@ impl ParamBuilderGraph for Graph {
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
+        orientation_sign: Atom,
         limit: ThermalDistributionLimit,
     ) -> Option<Atom> {
         self.underlying.explicit_thermal_distribution_atom(
             edge,
             derivative_order,
             thermal_sign,
+            orientation_sign,
             limit,
         )
     }
@@ -1120,6 +1134,7 @@ mod tests {
                         edge,
                         order,
                         thermal_sign.clone(),
+                        GS.sign(edge),
                         ThermalDistributionLimit::Default,
                     )
                     .unwrap()
@@ -1168,15 +1183,14 @@ mod tests {
                         edge,
                         order,
                         thermal_sign.clone(),
+                        orientation.clone(),
                         ThermalDistributionLimit::Default,
                     )
                     .unwrap()
                     .replace(ose_atom_from_index(edge))
                     .with(energy.clone())
                     .replace(GS.inverse_temperature)
-                    .with(Atom::num(2))
-                    .replace(GS.sign(edge))
-                    .with(orientation.clone());
+                    .with(Atom::num(2));
                 if has_mu {
                     expression = expression
                         .replace(chemical_potential.clone().unwrap())
