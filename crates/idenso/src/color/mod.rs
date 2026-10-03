@@ -616,10 +616,10 @@ pub struct ColorSimplifySettings {
 impl Default for ColorSimplifySettings {
     fn default() -> Self {
         Self {
-            simplify_non_color: true,
             evaluate_traces: true,
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,
+            one_shot_traces: true,
         }
     }
 }
@@ -641,6 +641,13 @@ impl ColorSimplifySettings {
     /// Rewrites supported `cof(N)` invariants to explicit dimension formulas.
     pub fn with_cof_dimension_invariants(mut self) -> Self {
         self.substitute_cof_dimension_invariants = true;
+        self
+    }
+
+    /// Returns to the planner after each trace insertion and confirms every
+    /// colour fixed point with a no-op round.
+    pub fn without_one_shot_traces(mut self) -> Self {
+        self.one_shot_traces = false;
         self
     }
 }

@@ -504,18 +504,320 @@ impl<'a> Chain for AtomView<'a> {
             .replace_multiple_repeat(CHAIN_NORMALIZATIONS.as_ref())
     }
 
-    fn undo_single_length(&self) -> Atom {
-        self.to_owned()
-            .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
+    fn normalize_chain_identities(&self, representation: Option<LibraryRep>) -> Atom {
+        self.replace_map(|atom, _, out| {
+            let AtomView::Fun(chain) = atom else { return };
+            if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
+                return;
+            }
+            let mut factors = chain.iter();
+            let start = factors.next().unwrap();
+            let end = factors.next().unwrap();
+            if let Some(representation) = representation {
+                let selected = SlotMatcher::default()
+                    .port_representation(start)
+                    .map(|(rep, _)| rep);
+                if selected.is_none_or(|selected| selected.base() != representation.base()) {
+                    return;
+                }
+            }
+            // Empty words and words consisting only of identity lines have
+            // the physical endpoint metric, in every representation.
+            if factors.all(|factor| {
+                let AtomView::Fun(metric) = factor else { return false };
+                if metric.get_symbol() != ETS.metric || metric.get_nargs() != 2 {
+                    return false;
+                }
+                let mut endpoints = metric.iter();
+                matches!(endpoints.next(), Some(AtomView::Var(v)) if v.get_symbol() == T.chain_in)
+                    && matches!(endpoints.next(), Some(AtomView::Var(v)) if v.get_symbol() == T.chain_out)
+            }) {
+                **out = function!(ETS.metric, start, end);
+            }
+        })
     }
+
+    fn undo_single_length(&self) -> Atom {
+        undone_self_dual_single_length(*self).unwrap_or_else(|| {
+            self.to_owned()
+                .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
+        })
+    }
+}
+
+/// chainify's endpoints: a port of the representation and one of its dual,
+/// of one dimension. A port may be an explicit slot, an unresolved
+/// representation or a supplied compact rank-one tensor.
+fn chainify_endpoints(representation: LibraryRep) -> Condition<PatternRestriction> {
+    W_.i_.filter_cmp(W_.j_, move |left, right| {
+        let (Match::Single(left), Match::Single(right)) = (left, right) else {
+            return false;
+        };
+        let mut slots = SlotMatcher::default();
+        let Some(left) = slots.port_representation(*left) else {
+            return false;
+        };
+        let Some(right) = slots.port_representation(*right) else {
+            return false;
+        };
+        left.0 == representation && right.0 == representation.dual() && left.1 == right.1
+    })
+}
+
+/// chainify's endpoint rule: a function with two endpoints of the
+/// representation becomes a one-factor chain between them.
+fn chainify_rule(representation: LibraryRep) -> Replacement {
+    let in_index = Atom::var(W_.i_);
+    let out_index = Atom::var(W_.j_);
+
+    // Existing ports belong to an enclosing chain. A second representation
+    // must retain its explicit slots rather than reuse those untyped ports.
+    let no_ports = |matched: &Match<'_>| {
+        let args = match matched {
+            Match::Multiple(_, args) => args.as_slice(),
+            Match::Single(arg) => std::slice::from_ref(arg),
+            Match::FunctionName(_) => return false,
+        };
+        let mut slots = SlotMatcher::default();
+        let mut found = false;
+        for argument in args {
+            argument.visitor(&mut |value| {
+                if !matches!(slots.classify(value), SlotMatch::Other) {
+                    return false;
+                }
+                found |= matches!(value, AtomView::Var(var)
+                    if var.get_symbol() == T.chain_in || var.get_symbol() == T.chain_out);
+                !found
+            });
+            if found {
+                return false;
+            }
+        }
+        true
+    };
+    Replacement::new(
+        function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
+        function!(
+            T.chain,
+            in_index,
+            out_index,
+            function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
+        ),
+    )
+    .when(
+        chainify_endpoints(representation)
+            & W_.a_.filter_match(move |a| {
+                matches!(a, Match::FunctionName(a)
+                if *a != T.chain && *a != T.trace && *a != ETS.metric
+                    && !T.is_scalar_metadata(*a))
+            })
+            & W_.a___.filter_match(no_ports)
+            & W_.b___.filter_match(no_ports)
+            & W_.c___.filter_match(no_ports),
+    )
+    .max_level(0)
+}
+
+/// The first match of chainify's endpoint rule on a function whose arguments
+/// are all explicit slots, in a self-dual representation: the rightmost slot
+/// of the representation that a later slot of the same dimension follows,
+/// and the rightmost such later slot. `Some(None)` when nothing matches;
+/// `None` when the rule must decide.
+fn chainified_slot_function(
+    atom: AtomView<'_>,
+    representation: LibraryRep,
+) -> Option<Option<Atom>> {
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    // Scalar metadata can contain representation arguments without owning
+    // matrix endpoints. Its genuine tensor children are still visited below.
+    if T.is_scalar_metadata(function.get_symbol()) {
+        return Some(None);
+    }
+    if !representation.is_self_dual()
+        || [T.chain, T.trace, ETS.metric].contains(&function.get_symbol())
+    {
+        return None;
+    }
+    let mut slots = SlotMatcher::default();
+    let arguments = function.iter().collect::<Vec<_>>();
+    if !arguments
+        .iter()
+        .all(|argument| matches!(slots.classify(*argument), SlotMatch::Explicit(_)))
+    {
+        return None;
+    }
+    // The dimension of a port of this self-dual representation, as the
+    // rule's endpoint condition reads it.
+    let dimensions = arguments
+        .iter()
+        .map(|argument| {
+            slots
+                .port_representation(*argument)
+                .and_then(|(rep, dimension)| (rep == representation).then_some(dimension))
+        })
+        .collect::<Vec<_>>();
+    // Sequence wildcards try their longest spans first.
+    let Some((start, end)) = (0..arguments.len()).rev().find_map(|start| {
+        let dimension = dimensions[start]?;
+        (start + 1..arguments.len())
+            .rev()
+            .find(|&end| dimensions[end] == Some(dimension))
+            .map(|end| (start, end))
+    }) else {
+        return Some(None);
+    };
+    let mut matrix = FunctionBuilder::new(function.get_symbol());
+    for (position, argument) in arguments.iter().enumerate() {
+        matrix = if position == start {
+            matrix.add_arg(Atom::var(T.chain_in))
+        } else if position == end {
+            matrix.add_arg(Atom::var(T.chain_out))
+        } else {
+            matrix.add_arg(*argument)
+        };
+    }
+    Some(Some(chain!(
+        arguments[start],
+        arguments[end],
+        matrix.finish()
+    )))
+}
+
+/// `chain(s, e, F(.., in, .., out, ..))` as `F(.., s, .., e, ..)` for slots
+/// of one self-dual representation of one dimension; `None` otherwise, for
+/// the general rule.
+fn undone_self_dual_single_length(chain: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(chain) = chain else {
+        return None;
+    };
+    if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
+        return None;
+    }
+    let mut arguments = chain.iter();
+    let (start, end, factor) = (
+        arguments.next().unwrap(),
+        arguments.next().unwrap(),
+        arguments.next().unwrap(),
+    );
+    let (AtomView::Fun(start_slot), AtomView::Fun(end_slot), AtomView::Fun(factor)) =
+        (start, end, factor)
+    else {
+        return None;
+    };
+    if start_slot.get_symbol() != end_slot.get_symbol()
+        || !start_slot.get_symbol().has_tag(&T.self_dual)
+        || start_slot.get_nargs() != 2
+        || end_slot.get_nargs() != 2
+        || start_slot.iter().next() != end_slot.iter().next()
+    {
+        return None;
+    }
+    let is = |argument: AtomView<'_>, symbol: Symbol| matches!(argument, AtomView::Var(variable) if variable.get_symbol() == symbol);
+    let position_in = factor
+        .iter()
+        .position(|argument| is(argument, T.chain_in))?;
+    let position_out = factor
+        .iter()
+        .position(|argument| is(argument, T.chain_out))?;
+    if position_out <= position_in {
+        return None;
+    }
+    let mut undone = FunctionBuilder::new(factor.get_symbol());
+    for (position, argument) in factor.iter().enumerate() {
+        undone = if position == position_in {
+            undone.add_arg(start)
+        } else if position == position_out {
+            undone.add_arg(end)
+        } else {
+            undone.add_arg(argument)
+        };
+    }
+    Some(undone.finish())
+}
+
+/// Rewrite every product with at least two chain factors, children first:
+/// `join` receives the product of its chains, the other factors stay. `None`
+/// when nothing changed. Slots are left unopened.
+fn joining_products(expression: AtomView<'_>, join: &mut impl FnMut(Atom) -> Atom) -> Option<Atom> {
+    fn visit(
+        expression: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        join: &mut impl FnMut(Atom) -> Atom,
+    ) -> Option<Atom> {
+        if !matches!(slots.classify(expression), SlotMatch::Other) {
+            return None;
+        }
+        let children = match expression {
+            AtomView::Fun(function) => function.iter().collect::<Vec<_>>(),
+            AtomView::Add(sum) => sum.iter().collect(),
+            AtomView::Mul(product) => product.iter().collect(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                vec![base, exponent]
+            }
+            _ => return None,
+        };
+        let rewritten = children
+            .iter()
+            .map(|child| visit(*child, slots, join))
+            .collect::<Vec<_>>();
+        let changed = rewritten.iter().any(Option::is_some);
+        let children = children
+            .iter()
+            .zip(rewritten)
+            .map(|(child, rewritten)| {
+                rewritten.map_or_else(|| AtomOrView::from(*child), AtomOrView::from)
+            })
+            .collect::<Vec<_>>();
+        let is_chain = |factor: &AtomView<'_>| matches!(factor, AtomView::Fun(function) if function.get_symbol() == T.chain);
+        let rebuilt = match expression {
+            AtomView::Mul(product) if !changed && product.iter().filter(is_chain).count() < 2 => {
+                return None;
+            }
+            _ if !changed && !matches!(expression, AtomView::Mul(_)) => return None,
+            AtomView::Fun(function) => {
+                let mut output = FunctionBuilder::new(function.get_symbol());
+                for child in children {
+                    output = output.add_arg(child);
+                }
+                return Some(output.finish());
+            }
+            AtomView::Add(_) => return Some(Atom::add_many(children)),
+            AtomView::Pow(_) => return Some(children[0].as_view().pow(children[1].as_view())),
+            AtomView::Mul(_) if changed => Atom::mul_many(children),
+            _ => expression.to_owned(),
+        };
+        let AtomView::Mul(product) = rebuilt.as_view() else {
+            return changed.then_some(rebuilt);
+        };
+        let (chains, others): (Vec<_>, Vec<_>) = product.iter().partition(is_chain);
+        if chains.len() < 2 {
+            return changed.then_some(rebuilt);
+        }
+        let chains = Atom::mul_many(chains);
+        let joined = join(chains.clone());
+        if joined == chains {
+            return changed.then_some(rebuilt);
+        }
+        Some(Atom::mul_many(
+            others
+                .into_iter()
+                .map(AtomOrView::from)
+                .chain([joined.into()]),
+        ))
+    }
+    visit(expression, &mut SlotMatcher::default(), join)
 }
 
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
     use spenso::g;
+    use spenso::structure::OrderedStructure;
     use spenso::{chain, slot};
-    use symbolica::{parse, parse_lit};
+    use symbolica::{parse, parse_lit, symbol};
     use symbolica_utils::AtomPrintExt;
 
     use crate::representations::{Bispinor, ColorFundamental};
@@ -523,6 +825,196 @@ mod tests {
     use crate::{bis, gamma};
 
     use super::*;
+
+    #[test]
+    fn compact_metric_chainifies_mixed_gamma_vector_operands() {
+        use crate::{dirac::GammaSimplifySettings, tensor::SymbolicTensor};
+        use spenso::structure::partial::PartialStructure;
+
+        let reps = test_initialize();
+        let left = bis!(4, 93701);
+        let inner = bis!(4, 93702);
+        let right = bis!(4, 93703);
+        for compact in [reps.mink4.to_symbolic([]), reps.mink_d.to_symbolic([])] {
+            let momentum = spenso::p!(&compact);
+            let expected = function!(T.dot, &momentum, &momentum) * g!(&left, &right);
+            for chained in [false, true] {
+                let gamma = |start: &Atom, end: &Atom| {
+                    if chained {
+                        chain!(start, end, gamma!(&compact))
+                    } else {
+                        gamma!(start.as_view(), end.as_view(), &compact)
+                    }
+                };
+                let expression = function!(ETS.metric, gamma(&left, &inner), &momentum)
+                    * function!(ETS.metric, &momentum, gamma(&inner, &right));
+                let source = SymbolicTensor::<PartialStructure>::infer(expression.clone()).unwrap();
+                assert_eq!(source.rank(), 2);
+                assert_eq!(
+                    source.structure,
+                    SymbolicTensor::<PartialStructure>::infer(g!(&left, &right))
+                        .unwrap()
+                        .structure
+                );
+                let chainified = expression.chainify(Bispinor {}.into());
+                assert!(!chainified.contains_symbol(T.dot));
+                let result = source
+                    .simplify_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                assert_eq!(result.structure, source.structure);
+                assert_eq!(
+                    result.to_dots().unwrap().expression,
+                    expected,
+                    "compact={compact}, chained={chained}\ninput={expression}\nchainify={chainified}\njoin={}\nmetric-first={:?}\nchains={:?}\nexplicit-gamma={:?}",
+                    chainified.join_chains(Bispinor {}.into()),
+                    source
+                        .contract(Default::default())
+                        .map(|value| value.expression),
+                    source
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(GammaSimplifySettings {
+                                output: crate::dirac::GammaOutput::Chains,
+                                ..Default::default()
+                            }),
+                            epsilon: false,
+                            ..Default::default()
+                        })
+                        .map(|value| value.expression),
+                    source
+                        .undo_dots()
+                        .and_then(
+                            |value| value.simplify_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                        )
+                        .map(|value| value.expression),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn compact_dot_chainification_keeps_scalar_and_foreign_products_opaque() {
+        use std::sync::{Arc, Mutex};
+
+        let reps = test_initialize();
+        let compact = reps.mink4.to_symbolic([]);
+        let scalar_dot = function!(T.dot, spenso::p!(&compact), spenso::q!(&compact));
+        let foreign = function!(
+            symbol!("chainify_foreign_dot"),
+            spenso::p!(&compact),
+            spenso::q!(&compact)
+        );
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let callback = symbolica::symbol!("chainify_compact_scalar_callback"; Scalar;
+            norm = move |node, _| recorded.lock().unwrap().push(node.to_owned())
+        );
+        let spectator = function!(callback, &scalar_dot) * &foreign;
+        let raw = gamma!(bis!(4, 93711), bis!(4, 93712), spenso::mink!(4, 93713));
+        let input = &spectator * &raw;
+        let expected = &spectator * raw.chainify(Bispinor {}.into());
+        calls.lock().unwrap().clear();
+        assert_eq!(input.chainify(Bispinor {}.into()), expected);
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn compact_metric_chainification_preserves_weighted_scalar_dot_coefficients() {
+        use std::sync::{Arc, Mutex};
+
+        let reps = test_initialize();
+        let compact = reps.mink4.to_symbolic([]);
+        let scalar_dot = function!(T.dot, spenso::p!(&compact), spenso::q!(&compact));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let callback = symbolica::symbol!("chainify_weighted_compact_callback"; Scalar;
+            norm = move |node, _| recorded.lock().unwrap().push(node.to_owned())
+        );
+        let coefficient = function!(callback, &scalar_dot)
+            * (Atom::var(symbol!("compact_weight_x")) + Atom::var(symbol!("compact_weight_y")))
+                .pow(3);
+        let input = function!(
+            ETS.metric,
+            &coefficient * gamma!(bis!(4, 93731), bis!(4, 93732), &compact),
+            spenso::p!(&compact)
+        );
+        calls.lock().unwrap().clear();
+        let actual = input.chainify(Bispinor {}.into());
+        assert_ne!(actual, input);
+        assert!(calls.lock().unwrap().is_empty());
+        assert!(
+            actual
+                .replace(coefficient.to_pattern())
+                .with(Atom::Zero)
+                .is_zero()
+        );
+        let mut dots = Vec::new();
+        actual.visitor(&mut |node| {
+            if matches!(node, AtomView::Fun(fun) if fun.get_symbol() == T.dot) {
+                dots.push(node.to_owned());
+            }
+            true
+        });
+        assert_eq!(dots, vec![scalar_dot]);
+    }
+
+    #[test]
+    fn compact_metric_chain_words_retain_explicit_spectators() {
+        use crate::{dirac::GammaSimplifySettings, tensor::SymbolicTensor};
+        use spenso::structure::partial::PartialStructure;
+
+        let reps = test_initialize();
+        let left = bis!(4, 93741);
+        let right = bis!(4, 93742);
+        for rep in [reps.mink4, reps.mink_d] {
+            let compact = rep.to_symbolic([]);
+            let spectator = rep.to_symbolic([Atom::num(93743)]);
+            let momentum = spenso::p!(&compact);
+            let forward = chain!(&left, &right, gamma!(&compact), gamma!(&spectator));
+            let reverse = chain!(&left, &right, gamma!(&spectator), gamma!(&compact));
+            let expression = function!(ETS.metric, forward, &momentum)
+                + function!(ETS.metric, &momentum, reverse);
+            let source = SymbolicTensor::<PartialStructure>::infer(expression.clone()).unwrap();
+            assert_eq!(source.rank(), 3);
+            let chained = expression.chainify(Bispinor {}.into());
+            assert!(!chained.contains_symbol(T.dot));
+            assert_eq!(
+                SymbolicTensor::<PartialStructure>::infer(chained)
+                    .unwrap()
+                    .structure,
+                source.structure
+            );
+            let actual = source
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(actual.structure, source.structure);
+            let expected = Atom::num(2) * spenso::p!(&spectator) * g!(&left, &right);
+            assert_eq!((actual.expression - expected).expand(), Atom::Zero);
+        }
+    }
 
     #[test]
     fn mixed_representation_chains_preserve_slots_and_round_trip() {
@@ -556,6 +1048,205 @@ mod tests {
             // factor, without distributing any numerator products or powers.
             assert_eq!(net.simple_execute::<()>().unwrap(), input);
         }
+    }
+
+    #[test]
+    fn chainify_keeps_scalar_representation_metadata_out_of_matrix_words() {
+        use crate::{color::CS, representations::ColorAdjoint};
+
+        let reps = test_initialize();
+        let adjoint = reps.coad_da.to_symbolic([]);
+        let invariant = CS.gram(Atom::num(4), &adjoint, &adjoint);
+        let scalar = symbol!("chainify_scalar_representation_metadata"; Scalar);
+        let indexed_metadata = function!(
+            scalar,
+            reps.coad_da.to_symbolic([Atom::num(99501)]),
+            reps.coad_da.to_symbolic([Atom::num(99502)])
+        );
+        for metadata in [invariant, indexed_metadata] {
+            assert_eq!(metadata.chainify(ColorAdjoint {}.into()), metadata);
+            let tensor = crate::color_f!(
+                slot!(reps.coad_da, 99503),
+                slot!(reps.coad_da, 99504),
+                slot!(reps.coad_da, 99505)
+            );
+            assert_eq!(
+                (&metadata * &tensor).chainify(ColorAdjoint {}.into()),
+                &metadata * tensor.chainify(ColorAdjoint {}.into()),
+            );
+        }
+    }
+
+    #[test]
+    fn chainify_pruning_keeps_scalar_normalizers_untouched() {
+        use crate::shorthands::UndoShorthands;
+        use spenso::structure::abstract_index::AbstractIndex;
+        use std::sync::{Arc, Mutex};
+        let r = test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let callback = symbolica::symbol!("chainify_scalar_callback"; Scalar;
+            norm = move |node, _| recorded.lock().unwrap().push(node.to_owned())
+        );
+        let word = trace!(
+            r.bis4.to_symbolic([]),
+            gamma!(slot!(r.mink4, 99411)),
+            gamma!(slot!(r.mink4, 99412))
+        );
+        let input = function!(callback, function!(callback, &word));
+        calls.lock().unwrap().clear();
+        assert_eq!(input.chainify(Bispinor {}.into()), input);
+        assert!(calls.lock().unwrap().is_empty());
+        let raw = gamma!(
+            slot!(r.bis4, 99413),
+            slot!(r.bis4, 99414),
+            slot!(r.mink4, 99415)
+        );
+        let input = function!(callback, &raw);
+        calls.lock().unwrap().clear();
+        let result = input.chainify(Bispinor {}.into());
+        // The one changed argument invokes its containing callback once.
+        assert_eq!(calls.lock().unwrap().len(), 1);
+        // Undo preserves Scalar-tagged wrappers as opaque. Check the changed
+        // argument at its own tensor boundary instead of changing that policy.
+        let AtomView::Fun(wrapped) = result.as_view() else {
+            panic!("the scalar callback must retain its wrapper");
+        };
+        let body = wrapped.iter().next().unwrap();
+        assert_eq!(body.undo_chain::<AbstractIndex>().unwrap(), raw);
+        assert_eq!(*calls.lock().unwrap(), vec![result.clone()]);
+    }
+
+    #[test]
+    fn chainify_changed_rounded_ancestors_match_the_original_map_primitive() {
+        use spenso::shadowing::IntoAtom;
+        use std::sync::{Arc, Mutex};
+        let r = test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let callback = symbolica::symbol!("chainify_changed_callback"; Scalar;
+            norm = move |node, _| recorded.lock().unwrap().push(node.to_owned())
+        );
+        let start = slot!(r.bis4, 99421).into_atom();
+        let end = slot!(r.bis4, 99422).into_atom();
+        let first = slot!(r.mink4, 99423).into_atom();
+        let second = slot!(r.mink4, 99424).into_atom();
+        let raw = [gamma!(&start, &end, &first), gamma!(&start, &end, &second)];
+        let expected_words = [
+            chain!(&start, &end, gamma!(&first)),
+            chain!(&start, &end, gamma!(&second)),
+        ];
+        let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
+        let body = (&rounded * &raw[0] + rounded.pow(2) * &raw[1]) * (&raw[0] + &rounded * &raw[1]);
+        let input = function!(callback, body);
+        calls.lock().unwrap().clear();
+        let expected = input.replace_map(|node, _, output| {
+            if let Some(position) = raw.iter().position(|value| value.as_view() == node) {
+                **output = expected_words[position].clone();
+            }
+        });
+        let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
+        assert_eq!(expected_calls.len(), 1);
+        let actual = input.chainify(Bispinor {}.into());
+        assert_eq!(actual, expected);
+        assert_eq!(*calls.lock().unwrap(), expected_calls);
+    }
+
+    #[test]
+    fn chainify_preserves_chain_marker_names_inside_index_labels() {
+        use crate::{shorthands::UndoShorthands, tensor::SymbolicTensor};
+        use spenso::structure::{partial::PartialStructure, slot::ParseableAind};
+
+        let r = test_initialize();
+        let start = bis!(4, 99431);
+        let end = bis!(4, 99432);
+        for index in [
+            AbstractIndex::from(T.chain_in),
+            AbstractIndex::Normal(99433).scoped(T.chain_out),
+        ] {
+            let spectator = r.mink4.to_symbolic([index.to_atom()]);
+            let input = gamma!(&start, &end, &spectator);
+            let admitted = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+            let expected = chain!(&start, &end, gamma!(&spectator));
+            let result = input.chainify(Bispinor {}.into());
+            assert_eq!(result, expected);
+            assert_eq!(result.undo_chain::<AbstractIndex>().unwrap(), input);
+            assert_eq!(
+                SymbolicTensor::<PartialStructure>::infer(result)
+                    .unwrap()
+                    .structure,
+                admitted.structure
+            );
+        }
+    }
+
+    #[test]
+    fn chain_transpose_preserves_chain_marker_names_inside_index_labels() {
+        use spenso::structure::slot::ParseableAind;
+
+        let r = test_initialize();
+        let first = T.tensor_symbol("transpose_opaque_first");
+        let second = T.tensor_symbol("transpose_opaque_second");
+        let start = r.mink4.to_symbolic([Atom::num(99441)]);
+        let common = r.mink4.to_symbolic([Atom::num(99442)]);
+        let end = r.mink4.to_symbolic([Atom::num(99443)]);
+        let spectator = r
+            .bis4
+            .to_symbolic([AbstractIndex::Normal(99444).scoped(T.chain_in).to_atom()]);
+        let word = |head, input, output| function!(head, input, output, &spectator);
+        let input = chain!(&start, &common, word(first, T.chain_in, T.chain_out))
+            * chain!(&end, &common, word(second, T.chain_in, T.chain_out));
+        let forward = chain!(
+            &start,
+            &end,
+            word(first, T.chain_in, T.chain_out),
+            word(second, T.chain_out, T.chain_in)
+        );
+        let reverse = chain!(
+            &end,
+            &start,
+            word(second, T.chain_in, T.chain_out),
+            word(first, T.chain_out, T.chain_in)
+        );
+        let result = input.collect_chains(r.mink4.rep.into(), true, false, false);
+        assert!(result == forward || result == reverse, "{result}");
+    }
+
+    #[test]
+    fn chain_transpose_reuses_unchanged_callback_factors() {
+        use spenso::structure::slot::ParseableAind;
+        use std::sync::{Arc, Mutex};
+
+        let r = test_initialize();
+        let calls = Arc::new(Mutex::new(0));
+        let recorded = Arc::clone(&calls);
+        let scalar = symbol!("transpose_unchanged_callback"; Scalar;
+            norm = move |_, _| *recorded.lock().unwrap() += 1
+        );
+        let spectator = r
+            .bis4
+            .to_symbolic([AbstractIndex::Normal(99454).scoped(T.chain_in).to_atom()]);
+        let coefficient = function!(scalar, spectator);
+        let first = T.tensor_symbol("transpose_callback_first");
+        let second = T.tensor_symbol("transpose_callback_second");
+        let start = r.mink4.to_symbolic([Atom::num(99451)]);
+        let common = r.mink4.to_symbolic([Atom::num(99452)]);
+        let end = r.mink4.to_symbolic([Atom::num(99453)]);
+        let source = chain!(
+            &start,
+            &common,
+            &coefficient,
+            function!(first, T.chain_in, T.chain_out)
+        ) * chain!(
+            &end,
+            &common,
+            &coefficient,
+            function!(second, T.chain_in, T.chain_out)
+        );
+        *calls.lock().unwrap() = 0;
+        let collected = source.collect_chains(r.mink4.rep.into(), true, false, false);
+        assert_ne!(collected, source);
+        assert_eq!(*calls.lock().unwrap(), 0);
     }
 
     #[test]

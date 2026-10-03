@@ -82,8 +82,20 @@ pub fn epsilon4<'a, 'b, 'c, 'd>(
         .finish()
 }
 
+/// Contracts the four-dimensional Minkowski epsilon with four covectors given
+/// by components, `ε^{ν1ν2ν3ν4} r1[ν1] r2[ν2] r3[ν3] r4[ν4] = ε^{0123} det(r)`
+/// with `ε^{0123} = −i` (see [`EPSILON_SYMBOL`]).
+///
+/// A row holds the covariant components `a_ν = g_νμ a^μ` of a contracted
+/// vector, or a unit row `δ_ν^μ` that keeps the contravariant index `μ`. For
+/// four vectors with contravariant components, `ε(a,b,c,d) = i det[a;b;c;d]`.
+pub fn contract_epsilon4(rows: &[[Atom; 4]; 4]) -> Atom {
+    -Atom::i() * EpsilonSimplifierPass::determinant(4, |i, j| rows[i][j].clone())
+}
+
 /// Simplifies epsilon-metric contractions and epsilon-pair contractions.
-pub trait EpsilonSimplifier {
+#[cfg(test)]
+pub(crate) trait EpsilonSimplifier {
     fn simplify_epsilon(&self) -> Atom;
 }
 
@@ -260,30 +272,30 @@ impl EpsilonSimplifierPass {
         }
     }
 
-    /// Emits the determinant `det(g(left_i,right_j))` by summing over all
-    /// signed permutations of the right indices.
+    /// Emits the determinant `det(g(left_i,right_j))`.
     fn metric_determinant(left: &[Atom], right: &[Atom]) -> Atom {
-        let mut permutation = (0..right.len()).collect::<Vec<_>>();
+        Self::determinant(right.len(), |i, j| ETS.metric_literal(&left[i], &right[j]))
+    }
+
+    /// Sums `sign(π) Π_i entry(i, π(i))` over all permutations `π`.
+    fn determinant(size: usize, entry: impl Fn(usize, usize) -> Atom) -> Atom {
+        let mut permutation = (0..size).collect::<Vec<_>>();
         let mut sum = Atom::Zero;
-        Self::determinant_terms(left, right, 0, &mut permutation, 1, &mut sum);
+        Self::determinant_terms(&entry, 0, &mut permutation, 1, &mut sum);
         sum
     }
 
     fn determinant_terms(
-        left: &[Atom],
-        right: &[Atom],
+        entry: &impl Fn(usize, usize) -> Atom,
         position: usize,
         permutation: &mut [usize],
         sign: i64,
         sum: &mut Atom,
     ) {
         if position == permutation.len() {
-            let term = left
-                .iter()
-                .enumerate()
-                .fold(Atom::num(sign), |product, (i, arg)| {
-                    product * g!(arg.clone(), right[permutation[i]].clone())
-                });
+            let term = (0..permutation.len()).fold(Atom::num(sign), |product, i| {
+                product * entry(i, permutation[i])
+            });
             *sum += term;
             return;
         }
@@ -291,7 +303,7 @@ impl EpsilonSimplifierPass {
         for i in position..permutation.len() {
             permutation.swap(position, i);
             let next_sign = if i == position { sign } else { -sign };
-            Self::determinant_terms(left, right, position + 1, permutation, next_sign, sum);
+            Self::determinant_terms(entry, position + 1, permutation, next_sign, sum);
             permutation.swap(position, i);
         }
     }
