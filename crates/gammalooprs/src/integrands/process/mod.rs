@@ -46,6 +46,7 @@ use typed_index_collections::TiVec;
 pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section;
+pub mod fermi_surface;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling;

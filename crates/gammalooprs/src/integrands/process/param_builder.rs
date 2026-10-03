@@ -106,6 +106,50 @@ pub enum ThermalDistributionReplacement {
     ConstantOnly,
 }
 
+/// The tagged arguments of an N call, before physical orientations are resolved.
+pub(crate) struct ThermalDistributionCall {
+    pub edge: EdgeIndex,
+    pub derivative_order: usize,
+    pub temperature_flag: Atom,
+    pub thermal_sign: Atom,
+    pub orientation_sign: Atom,
+}
+
+impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
+    type Error = color_eyre::Report;
+
+    fn try_from(atom: AtomView<'_>) -> Result<Self> {
+        let AtomView::Fun(function) = atom else {
+            return Err(color_eyre::eyre::eyre!(
+                "Expected a thermal distribution call, got {atom}"
+            ));
+        };
+        if function.get_symbol() != GS.thermal_distribution || function.get_nargs() != 5 {
+            return Err(color_eyre::eyre::eyre!(
+                "Thermal distribution must be an N call with five arguments, got {atom}"
+            ));
+        }
+        let mut args = function.iter();
+        let edge = args.next().unwrap();
+        let edge = usize::try_from(edge).map_err(|_| {
+            color_eyre::eyre::eyre!(
+                "Thermal distribution edge must be a non-negative integer, got {edge}"
+            )
+        })?;
+        let derivative_order = args.next().unwrap();
+        let derivative_order = usize::try_from(derivative_order).map_err(|_| color_eyre::eyre::eyre!(
+            "Thermal distribution derivative order must be a non-negative integer, got {derivative_order}"
+        ))?;
+        Ok(Self {
+            edge: EdgeIndex(edge),
+            derivative_order,
+            temperature_flag: args.next().unwrap().to_owned(),
+            thermal_sign: args.next().unwrap().to_owned(),
+            orientation_sign: args.next().unwrap().to_owned(),
+        })
+    }
+}
+
 pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
@@ -143,38 +187,23 @@ pub trait ParamBuilderGraph {
             if function.get_symbol() != GS.thermal_distribution {
                 return;
             }
-            if function.get_nargs() != 5 {
-                error = Some(color_eyre::eyre::eyre!(
-                    "Thermal distribution must have five arguments, got {}",
-                    function.get_nargs()
-                ));
-                return;
-            }
-
-            let mut args = function.iter();
-            let edge_arg = args.next().unwrap();
-            let Ok(edge_id) = usize::try_from(edge_arg) else {
-                error = Some(color_eyre::eyre::eyre!(
-                    "Thermal distribution edge must be a non-negative integer, got {edge_arg}"
-                ));
-                return;
+            let call = match ThermalDistributionCall::try_from(term) {
+                Ok(call) => call,
+                Err(parse_error) => {
+                    error = Some(parse_error);
+                    return;
+                }
             };
-            let edge = EdgeIndex::from(edge_id);
+            let ThermalDistributionCall {
+                edge,
+                derivative_order,
+                thermal_sign,
+                orientation_sign,
+                ..
+            } = call;
             if !edges.contains(&edge) {
                 return;
             }
-
-            let derivative_order_arg = args.next().unwrap();
-            let Ok(derivative_order) = usize::try_from(derivative_order_arg) else {
-                error = Some(color_eyre::eyre::eyre!(
-                    "Thermal distribution derivative order must be a non-negative integer, got \
-                     {derivative_order_arg}"
-                ));
-                return;
-            };
-            let _temperature_flag = args.next().unwrap();
-            let thermal_sign = args.next().unwrap().into();
-            let orientation_sign = args.next().unwrap().into();
             let Some(replacement) = self.explicit_thermal_distribution_atom(
                 edge,
                 derivative_order,

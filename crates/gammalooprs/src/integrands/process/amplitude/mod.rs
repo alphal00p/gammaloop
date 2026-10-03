@@ -21,7 +21,7 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::AtomCore,
+    atom::{Atom, AtomCore},
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -37,6 +37,7 @@ use crate::{
             RaisedEsurfaceId, get_representative,
         },
         expression::OrientationID,
+        orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
     graph::{
@@ -51,6 +52,7 @@ use crate::{
             SamplingChannelCompileContext, SamplingChannelId, SamplingMapDefinition,
             SurfaceRadialMap,
             evaluators::{ActiveF64Backend, EvaluatorStack},
+            fermi_surface::{FermiSurfaceEvaluator, FermiSurfaceSector},
             graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
@@ -84,7 +86,7 @@ use crate::{
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{
-        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, RuntimeCache, W_, compute_shift_part,
+        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, RuntimeCache, W_, compute_shift_part,
         serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
     },
 };
@@ -102,6 +104,7 @@ use super::{
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
     pub original_integrand: EvaluatorStack,
+    pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
@@ -290,8 +293,55 @@ impl AmplitudeGraphTerm {
             orientation_count = orientations.len(),
             "Generation timing milestone"
         );
+        let orientation_catalog = (!settings.generation.explicit_orientation_sum_only).then_some((
+            orientations.as_slice().as_ref(),
+            production_orientation_ids.as_slice(),
+        ));
+        let mut bulk_integrand = graph.derived_data.all_mighty_integrand.clone();
+        let mut fermi_surfaces = Vec::new();
+        if FermiSurfaceSector::is_present(&bulk_integrand)? {
+            let branches = if settings.generation.explicit_orientation_sum_only {
+                vec![(None, bulk_integrand.clone())]
+            } else {
+                orientations
+                    .iter_enumerated()
+                    .zip(&production_orientation_ids)
+                    .map(|((id, orientation), production_id)| {
+                        // Eliminate inactive residue maps before resolving edge
+                        // directions, just as the ordinary evaluator does.
+                        let selected = production_id.select(&bulk_integrand);
+                        (
+                            Some(id),
+                            GS.collect_orientation_if(orientation.select(selected)),
+                        )
+                    })
+                    .collect()
+            };
+            bulk_integrand = Atom::Zero;
+            for (orientation_id, branch) in branches {
+                let selector = orientation_id
+                    .map(|id| production_orientation_ids[id.0].atom())
+                    .unwrap_or_else(Atom::one);
+                let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
+                bulk_integrand += bulk * &selector;
+                for mut sector in sectors {
+                    sector.coefficient *= &selector;
+                    let (evaluator, timings) = FermiSurfaceEvaluator::new(
+                        &graph.graph,
+                        sector,
+                        &graph.graph.param_builder,
+                        &graph.derived_data.all_mighty_numerators,
+                        orientation_catalog,
+                        &settings.generation.evaluator,
+                    )?;
+                    stats.add_evaluator_build_timings(timings);
+                    stats.evaluator_count += evaluator.generic_evaluator_count();
+                    fermi_surfaces.push((orientation_id, evaluator));
+                }
+            }
+        }
         let (original_integrand, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-            &graph.derived_data.all_mighty_integrand,
+            &bulk_integrand,
             &graph.graph.param_builder,
             &graph.derived_data.all_mighty_numerators,
             (!settings.generation.explicit_orientation_sum_only).then_some((
@@ -603,6 +653,15 @@ impl AmplitudeGraphTerm {
             "Generation timing milestone"
         );
 
+        let mut runtime_graph = graph.graph.clone();
+        runtime_graph.param_builder.initialize_duals(
+            fermi_surfaces
+                .iter()
+                .map(|(_, sector)| sector.dual_len())
+                .max()
+                .unwrap_or(1),
+        );
+        let param_builder = runtime_graph.param_builder.clone();
         Ok((
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
@@ -610,8 +669,9 @@ impl AmplitudeGraphTerm {
                 production_orientation_keys,
                 explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 original_integrand,
+                fermi_surfaces,
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
-                graph: graph.graph.clone(),
+                graph: runtime_graph,
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     master_edge_masses: Default::default(),
                     sampling_bridge: Default::default(),
@@ -641,7 +701,7 @@ impl AmplitudeGraphTerm {
                     .surfaces
                     .esurface_cache
                     .clone(),
-                param_builder: graph.graph.param_builder.clone(),
+                param_builder,
                 real_mass_vec: None,
                 master_external_signature: graph.graph.get_external_signature(),
                 master_external_pdgs: graph
@@ -685,6 +745,9 @@ impl AmplitudeGraphTerm {
             &graph_path,
             frozen_mode,
         )?;
+        for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
+            sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
+        }
 
         self.threshold_counterterm
             .compile(&graph_path, override_existing, frozen_mode)?;
@@ -698,6 +761,9 @@ impl AmplitudeGraphTerm {
     ) -> Result<()> {
         self.original_integrand
             .for_each_generic_evaluator_mut(&mut f)?;
+        for (_, sector) in &mut self.fermi_surfaces {
+            sector.for_each_generic_evaluator_mut(&mut f)?;
+        }
         self.threshold_counterterm
             .for_each_generic_evaluator_mut(&mut f)?;
         Ok(())
@@ -705,6 +771,11 @@ impl AmplitudeGraphTerm {
 
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         self.original_integrand.generic_evaluator_count()
+            + self
+                .fermi_surfaces
+                .iter()
+                .map(|(_, sector)| sector.generic_evaluator_count())
+                .sum::<usize>()
             + self.threshold_counterterm.generic_evaluator_count()
     }
 
@@ -910,7 +981,7 @@ impl AmplitudeGraphTerm {
             None,
             None,
         );
-        let result = self
+        let mut result = self
             .original_integrand
             .evaluate(
                 input,
@@ -921,6 +992,21 @@ impl AmplitudeGraphTerm {
             .pop()
             .unwrap()
             .unwrap_real();
+        for (orientation_id, sector) in &mut self.fermi_surfaces {
+            if orientation_id
+                .is_some_and(|id| !orientations.iter().any(|(selected, _)| selected == id))
+            {
+                continue;
+            }
+            result += sector.evaluate(
+                momentum_sample,
+                &self.graph,
+                context.settings,
+                &mut self.param_builder,
+                orientations,
+                context.evaluation_metadata,
+            )?;
+        }
         // debug!("parambuilder 244: {}", self.param_builder);
         let counterterm_evaluation = self.threshold_counterterm.evaluate(
             momentum_sample,
@@ -3298,6 +3384,9 @@ impl HasIntegrand for AmplitudeIntegrand {
         }
     }
 }
+
+#[cfg(test)]
+mod fermi_tests;
 
 #[cfg(test)]
 mod sampling_tests {

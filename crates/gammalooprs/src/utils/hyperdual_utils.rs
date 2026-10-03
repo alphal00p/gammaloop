@@ -3,7 +3,7 @@ use std::ops::AddAssign;
 
 use crate::cff::CutCFFIndex;
 use crate::utils::{F, FloatLike, PrecisionUpgradable};
-use itertools::{Itertools, iproduct};
+use itertools::Itertools;
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
@@ -24,7 +24,31 @@ pub(crate) fn new_from_values<T: Clone>(shape: &HyperDual<T>, values: &[T]) -> H
 }
 
 pub(crate) fn simple_n_deriv_shape(num_derivatives: usize) -> Vec<Vec<usize>> {
-    (0..=num_derivatives).map(|order| vec![order]).collect()
+    mixed_derivative_shape(&[num_derivatives])
+}
+
+/// Retain every mixed Taylor coefficient up to each axis's requested order.
+/// Linear coefficients follow axis order; higher degrees use lexicographic order,
+/// preserving the existing LU and threshold evaluator layouts. Zero-order axes
+/// remain present, so callers must locate active variables by their multi-index.
+pub(crate) fn mixed_derivative_shape(max_orders: &[usize]) -> Vec<Vec<usize>> {
+    let mut shape = max_orders
+        .iter()
+        .map(|order| 0..=*order)
+        .multi_cartesian_product()
+        .collect_vec();
+    shape.sort_by(|left, right| {
+        let left_degree: usize = left.iter().sum();
+        let right_degree: usize = right.iter().sum();
+        left_degree.cmp(&right_degree).then_with(|| {
+            if left_degree == 1 {
+                right.cmp(left)
+            } else {
+                left.cmp(right)
+            }
+        })
+    });
+    shape
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,74 +96,18 @@ pub(crate) fn variable_indices_from_cut_cff_index(
 }
 
 pub(crate) fn shape_from_cut_cff_index(cut_cff_index: &CutCFFIndex) -> Option<Vec<Vec<usize>>> {
-    let max_derivative_shape = {
-        let mut max_derivative_shape = Vec::new();
+    let max_derivative_shape = [
+        cut_cff_index.lu_cut_order,
+        cut_cff_index.left_threshold_order,
+        cut_cff_index.right_threshold_order,
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|order| *order > 1)
+    .map(|order| order - 1)
+    .collect_vec();
 
-        if let Some(lu_cut_order) = cut_cff_index.lu_cut_order
-            && lu_cut_order > 1
-        {
-            max_derivative_shape.push(lu_cut_order - 1);
-        }
-
-        if let Some(left_th_order) = cut_cff_index.left_threshold_order
-            && left_th_order > 1
-        {
-            max_derivative_shape.push(left_th_order - 1);
-        }
-        if let Some(right_th_order) = cut_cff_index.right_threshold_order
-            && right_th_order > 1
-        {
-            max_derivative_shape.push(right_th_order - 1);
-        }
-
-        max_derivative_shape
-    };
-
-    if max_derivative_shape.is_empty() {
-        None
-    } else if max_derivative_shape.len() == 1 {
-        Some(
-            (0..=max_derivative_shape[0])
-                .map(|order| vec![order])
-                .collect(),
-        )
-    } else if max_derivative_shape.len() == 2 {
-        let mut result = iproduct!(0..=max_derivative_shape[0], 0..=max_derivative_shape[1])
-            .map(|(order1, order2)| vec![order1, order2])
-            .sorted()
-            .collect_vec();
-
-        result.sort_by(|a, b| {
-            let sum_a: usize = a.iter().sum();
-            let sum_b: usize = b.iter().sum();
-            sum_a.cmp(&sum_b)
-        });
-
-        result[1..3].sort_by(|a, b| b[0].cmp(&a[0]).then(b[1].cmp(&a[1])));
-
-        Some(result)
-    } else if max_derivative_shape.len() == 3 {
-        let mut result = iproduct!(
-            0..=max_derivative_shape[0],
-            0..=max_derivative_shape[1],
-            0..=max_derivative_shape[2]
-        )
-        .map(|(order1, order2, order3)| vec![order1, order2, order3])
-        .sorted()
-        .collect_vec();
-
-        result.sort_by(|a, b| {
-            let sum_a: usize = a.iter().sum();
-            let sum_b: usize = b.iter().sum();
-            sum_a.cmp(&sum_b)
-        });
-
-        result[1..4].sort_by(|a, b| b[0].cmp(&a[0]).then(b[1].cmp(&a[1])).then(b[2].cmp(&a[2])));
-
-        Some(result)
-    } else {
-        unreachable!("shape_from_cut_cff_index only supports up to 3 derivative orders")
-    }
+    (!max_derivative_shape.is_empty()).then(|| mixed_derivative_shape(&max_derivative_shape))
 }
 
 impl<T> PrecisionUpgradable for HyperDual<T>
@@ -378,6 +346,75 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mixed_derivative_shape_supports_constant_axes() {
+        assert_eq!(mixed_derivative_shape(&[]), vec![Vec::<usize>::new()]);
+        assert_eq!(mixed_derivative_shape(&[0, 0]), vec![vec![0, 0]]);
+        assert_eq!(simple_n_deriv_shape(0), vec![vec![0]]);
+        assert_eq!(
+            mixed_derivative_shape(&[0, 2, 0, 1]),
+            vec![
+                vec![0, 0, 0, 0],
+                vec![0, 1, 0, 0],
+                vec![0, 0, 0, 1],
+                vec![0, 1, 0, 1],
+                vec![0, 2, 0, 0],
+                vec![0, 2, 0, 1],
+            ]
+        );
+
+        for orders in [vec![], vec![0, 0], vec![0, 2, 0, 1]] {
+            let shape = mixed_derivative_shape(&orders);
+            let mut values = vec![F(0.0_f64); shape.len()];
+            values[0] = F(3.0_f64);
+            let constant = HyperDual::from_values(shape, values);
+            let square = constant.clone() * constant;
+            assert_eq!(square.values[0], F(9.0_f64));
+            assert!(square.values[1..].iter().all(|value| *value == F(0.0_f64)));
+        }
+    }
+
+    #[test]
+    fn mixed_derivative_shape_preserves_four_axis_polynomial_coefficients() {
+        let shape = mixed_derivative_shape(&[2, 1, 1, 2]);
+        let variables = [2.0_f64, 3.0_f64, 5.0_f64, 7.0_f64]
+            .into_iter()
+            .enumerate()
+            .map(|(axis, base)| {
+                let mut values = vec![F(0.0_f64); shape.len()];
+                values[0] = F(base);
+                let mut linear_order = vec![0; 4];
+                linear_order[axis] = 1;
+                let linear_index = shape
+                    .iter()
+                    .position(|order| *order == linear_order)
+                    .unwrap();
+                values[linear_index] = F(1.0_f64);
+                HyperDual::from_values(shape.clone(), values)
+            })
+            .collect_vec();
+        let polynomial = variables[0].clone()
+            * &variables[0]
+            * &variables[1]
+            * &variables[2]
+            * &variables[3]
+            * &variables[3];
+
+        // Coefficients, rather than ordinary derivatives: the highest mixed
+        // derivative is 2! * 1! * 1! * 2! times its stored coefficient.
+        for (orders, expected) in [
+            ([0, 0, 0, 0], 2940.0_f64),
+            ([1, 0, 1, 1], 168.0_f64),
+            ([2, 1, 1, 2], 1.0_f64),
+        ] {
+            let index = shape
+                .iter()
+                .position(|order| order.as_slice() == orders)
+                .unwrap();
+            assert_eq!(polynomial.values[index], F(expected));
+        }
+    }
+
+    #[test]
     fn dualize_dual_t_to_dual_r_t_uses_requested_target_variable() {
         let t_dual = HyperDual::new(simple_n_deriv_shape(1));
         let t_dual = new_from_values(&t_dual, &[F(3.0_f64), F(5.0_f64)]);
@@ -488,11 +525,42 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(three_axis_shape[0], vec![0, 0, 0]);
-        assert_eq!(three_axis_shape[1], vec![1, 0, 0]);
-        assert_eq!(three_axis_shape[2], vec![0, 1, 0]);
-        assert_eq!(three_axis_shape[3], vec![0, 0, 1]);
-        assert!(three_axis_shape.contains(&vec![0, 2, 1]));
+        assert_eq!(
+            three_axis_shape,
+            vec![
+                vec![0, 0, 0],
+                vec![1, 0, 0],
+                vec![0, 1, 0],
+                vec![0, 0, 1],
+                vec![0, 1, 1],
+                vec![0, 2, 0],
+                vec![1, 0, 1],
+                vec![1, 1, 0],
+                vec![0, 2, 1],
+                vec![1, 1, 1],
+                vec![1, 2, 0],
+                vec![1, 2, 1],
+            ]
+        );
+
+        assert_eq!(
+            shape_from_cut_cff_index(&CutCFFIndex {
+                left_threshold_order: Some(3),
+                right_threshold_order: None,
+                lu_cut_order: Some(3),
+            }),
+            Some(vec![
+                vec![0, 0],
+                vec![1, 0],
+                vec![0, 1],
+                vec![0, 2],
+                vec![1, 1],
+                vec![2, 0],
+                vec![1, 2],
+                vec![2, 1],
+                vec![2, 2],
+            ])
+        );
 
         assert_eq!(
             shape_from_cut_cff_index(&CutCFFIndex {

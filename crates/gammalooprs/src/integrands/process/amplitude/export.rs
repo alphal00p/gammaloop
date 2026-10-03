@@ -222,6 +222,16 @@ impl AmplitudeIntegrand {
         symbolica_state: S,
         numeric_target: StandaloneNumericTarget,
     ) -> Result<StandaloneEvaluatorArchive<S, T>> {
+        if self
+            .data
+            .graph_terms
+            .iter()
+            .any(|term| !term.fermi_surfaces.is_empty())
+        {
+            return Err(color_eyre::eyre::eyre!(
+                "Standalone evaluator export does not encode Fermi-surface localization; use the saved process state to retain its momentum maps and distribution derivatives"
+            ));
+        }
         let sample_inputs = match numeric_target {
             StandaloneNumericTarget::Double => self.representative_input_for::<f64>()?,
             StandaloneNumericTarget::Quad => self.representative_input_for::<f128>()?,
