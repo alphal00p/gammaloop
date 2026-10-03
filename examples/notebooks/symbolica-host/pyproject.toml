@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
+dependencies = ["anywidget>=0.9,<1; sys_platform == 'emscripten'"]
 license-files = ["licenses/*"]
 
 [project.optional-dependencies]
@@ -22,5 +23,5 @@ build = "cp314-*"
 # Pyodide's ABI-tag rewrite repacks the wheel with DEFLATE; compress afterwards.
 repair-wheel-command = 'python "{package}/compress_wheel.py" "{wheel}" "{dest_dir}"'
 environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }
-test-sources = ["crates/feynkit-py/tests/installed_offline_rendering.py"]
-test-command = "python crates/feynkit-py/tests/installed_offline_rendering.py"
+test-sources = ["crates/feynkit-py/tests/installed_offline_rendering.py", "crates/spynso3/tests/installed_tensor_paging.py"]
+test-command = "python crates/feynkit-py/tests/installed_offline_rendering.py && python crates/spynso3/tests/installed_tensor_paging.py"

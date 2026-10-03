@@ -1329,6 +1329,8 @@ fn render_atom_tree(atom: &Atom) -> PyResult<Vec<u8>> {
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
 }
 
+#[pyfunction]
+#[pyo3(signature = (main_source, format, notation_source=None, tree=None))]
 fn compile_typst(
     _py: Python<'_>,
     main_source: &str,

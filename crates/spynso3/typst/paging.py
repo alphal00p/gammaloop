@@ -42,27 +42,42 @@ except Exception as error:  # noqa: BLE001 - display errors belong inside the vi
 
 
 def compile_page(payload):
-    with tempfile.TemporaryDirectory(prefix="spenso-page-") as directory:
-        root = Path(directory)
-        (root / "tree.cbor").write_bytes(payload["tree"])
-        (root / "notation.typ").write_text(payload["notation"])
-        (root / "render.typ").write_text(payload["render"])
-        (root / "main.typ").write_text(_MAIN.format(settings=payload["settings"]))
-        with (root / "errors").open("wb") as errors:
-            job = subprocess.run(
-                [sys.executable, "-c", _WORKER, directory],
-                stdout=errors,
-                stderr=errors,
-                timeout=payload.get("timeout", 10),
-                check=False,
+    if sys.platform in ("emscripten", "wasi"):
+        # Browser Python cannot launch a worker process. Reuse the embedded
+        # export compiler with the same bounded tree and output budgets.
+        document = bytes(
+            compile_typst(  # noqa: F821 - supplied by the native module
+                _MAIN.format(settings=payload["settings"]),
+                "html",
+                payload["notation"],
+                payload["tree"],
             )
-        if job.returncode:
-            with (root / "errors").open("rb") as errors:
-                raise RuntimeError(errors.read(2048).decode(errors="replace"))
-        path = root / "out.html"
-        if path.stat().st_size > MAX_HTML:
+        )
+        if len(document) > MAX_HTML:
             return None
-        html = path.read_text()
+        html = document.decode()
+    else:
+        with tempfile.TemporaryDirectory(prefix="spenso-page-") as directory:
+            root = Path(directory)
+            (root / "tree.cbor").write_bytes(payload["tree"])
+            (root / "notation.typ").write_text(payload["notation"])
+            (root / "render.typ").write_text(payload["render"])
+            (root / "main.typ").write_text(_MAIN.format(settings=payload["settings"]))
+            with (root / "errors").open("wb") as errors:
+                job = subprocess.run(
+                    [sys.executable, "-c", _WORKER, directory],
+                    stdout=errors,
+                    stderr=errors,
+                    timeout=payload.get("timeout", 10),
+                    check=False,
+                )
+            if job.returncode:
+                with (root / "errors").open("rb") as errors:
+                    raise RuntimeError(errors.read(2048).decode(errors="replace"))
+            path = root / "out.html"
+            if path.stat().st_size > MAX_HTML:
+                return None
+            html = path.read_text()
     import re
 
     # Group only binary additions at the row's own level. Internal products,

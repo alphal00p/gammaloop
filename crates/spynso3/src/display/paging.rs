@@ -487,6 +487,7 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     }
     let code = CString::new(include_str!("../../typst/paging.py")).unwrap();
     let m = PyModule::from_code(py, &code, c"spenso_paging.py", c"_spenso_paging")?;
+    m.add_function(wrap_pyfunction!(compile_typst, &m)?)?;
     m.setattr("WIDGET_ESM", include_str!("../../typst/paging.js"))?;
     m.setattr("NOTEBOOK_STYLE", NOTEBOOK_STYLE)?;
     modules.set_item(name, &m)?;
