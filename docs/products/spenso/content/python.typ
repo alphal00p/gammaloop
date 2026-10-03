@@ -710,6 +710,15 @@ The default `ports` layout displays vectors inserted into tensors with bras and 
 Keep the default settings, or select `DisplaySettings.ports()`, for this notation.
 `DisplaySettings.schoonschip()` selects the alternative compact layout with bold momentum
 labels in the tensor's index positions. Both layouts retain unresolved AUTO ports.
+Schoonschip notation writes a vector in the position of an index contracted with it:
+$T(p, nu) = T_(mu nu) p^mu$. See
+#link("https://www.nikhef.nl/~form/maindir/documentation/tutorial/book.pdf#page=14")[A. Heck,
+_FORM for Pedestrians_, §1.2.2, pp. 9–10]. For the metric this gives
+$g(p, q) = g_(mu nu) p^mu q^nu = p dot q$. The notation showcase renders the indexed
+metric and vectors, the default bra-and-marker display, and the dot product directly
+from Spenso objects. Its foldout shows the generated Typst source and alternative
+layouts with vector arguments or vectors in index positions.
+`to_dots()` converts the compact metric form without evaluating component data.
 Compound graph indices and generated dummy indices use each representation's alphabet by default: Lorentz indices
 render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
 color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeated indices
@@ -741,12 +750,14 @@ latex = invariant.to_latex(settings=explicit)
 preview = invariant.formatted(settings=explicit)
 ```
 
-Choose `DisplaySettings(index_style="graph")` to retain graph identifiers, for example
+Graph-derived indices record their origin as an edge, half-edge or vertex identifier
+and a local index label. Choose `DisplaySettings(index_style="graph")` to display this
+origin in abbreviated form, for example
 $mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.
-The second index is implicit when it equals one; other values remain visible, as in
+The local index label is implicit when it equals one; other values remain visible, as in
 $mu_(upright("h4.2"))$ for `hedge(4,2)`.
 Use `index_style="alphabet"` for the compact default or `index_style="raw"` for the original
-symbolic index notation. Graph-index styles preserve the underlying expressions, tensor
+symbolic index notation. Changing the display style preserves the underlying expressions, tensor
 interfaces, and exact notebook payloads. In raw mode, endpoint labels retain their existing
 subscript notation, including distinct higher-spin and dummy slots.
 After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested

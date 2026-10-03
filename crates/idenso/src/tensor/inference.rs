@@ -781,6 +781,46 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 
+    /// Rename symbols in the payload and its interface. The renaming must be
+    /// injective and avoid symbols already present, so the established
+    /// interface and validation carry over unchanged.
+    pub(crate) fn with_renamed_symbols(
+        &self,
+        renaming: &HashMap<Symbol, Symbol>,
+    ) -> InferenceResult<Self> {
+        let rename = |atom: AtomView<'_>| {
+            atom.replace_map(|node, _context, out| {
+                if let AtomView::Var(variable) = node
+                    && let Some(target) = renaming.get(&variable.get_symbol())
+                {
+                    **out = Atom::var(*target);
+                }
+            })
+        };
+        let slots = self
+            .structure
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                if matches!(slot.aind, PartialIndex::Open(_)) {
+                    return Ok(slot);
+                }
+                let renamed = rename(composition::port_atom(slot).as_view());
+                let renamed = Slot::<LibraryRep, AbstractIndex>::try_from(renamed.as_view())
+                    .map_err(|error| {
+                        TensorInferenceError::invalid(format!(
+                            "cannot rename interface slot: {error}"
+                        ))
+                    })?;
+                Ok(renamed.rep().slot(PartialIndex::Explicit(renamed.aind())))
+            })
+            .collect::<InferenceResult<Vec<_>>>()?;
+        Ok(Self::from_validated_parts(
+            rename(self.expression.as_view()),
+            PartialStructure::from_logical_slots(slots),
+        ))
+    }
+
     /// Add tensors with compatible logical interfaces, retaining the left order.
     pub fn try_add(&self, right: &Self) -> InferenceResult<Self> {
         if !InterfaceInference::additive_interfaces_match(&self.structure, &right.structure) {
