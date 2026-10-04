@@ -6240,8 +6240,8 @@ mod tests {
         );
 
         assert!(values.contains(&"no_grouping".to_string()));
-        assert!(values.contains(&"only_detect_zeroes".to_string()));
         assert!(values.contains(&"group_identical_graphs_up_to_sign".to_string()));
+        assert!(values.contains(&"group_identical_graphs_up_to_scalar_rescaling".to_string()));
     }
 
     #[test]

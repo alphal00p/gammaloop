@@ -9505,10 +9505,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",
@@ -11024,10 +11053,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",

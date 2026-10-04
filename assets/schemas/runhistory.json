@@ -1919,7 +1919,6 @@
       "type": "string",
       "enum": [
         "NoGrouping",
-        "OnlyDetectZeroes",
         "GroupIdenticalGraphsUpToSign",
         "GroupIdenticalGraphsUpToScalarRescaling"
       ]
@@ -4963,6 +4962,11 @@
             "boolean",
             "null"
           ]
+        },
+        "filter_zero_color": {
+          "description": "Remove diagrams whose numerators vanish under color algebra before grouping.",
+          "type": "boolean",
+          "default": false
         },
         "filter_zero_flow_edges": {
           "type": [

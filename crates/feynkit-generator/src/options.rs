@@ -67,9 +67,6 @@ impl Default for GraphGroupingOptions {
 pub enum NumeratorGrouping {
     #[default]
     None,
-    /// Remove zeros using color algebra and exact factor cancellation.
-    /// Unproved zeros are retained; Lorentz numerators remain factorized.
-    OnlyDetectZeroes,
     Identical(GraphGroupingOptions),
     UpToSign(GraphGroupingOptions),
     UpToScalar(GraphGroupingOptions),
@@ -311,6 +308,8 @@ pub struct GenerationProgress {
     /// Unknown while enumerating topologies or merging diagram groups;
     /// numerator preparation, sampling, and comparison count input diagrams.
     pub total: Option<usize>,
+    /// Cumulative zero numerators removed so far in this generation run.
+    pub zero_numerator_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -357,6 +356,7 @@ pub struct GenerationOptions {
     pub(crate) graph_filters: Vec<GenerationFilter>,
     pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
     pub(crate) numerator_grouping: NumeratorGrouping,
+    pub(crate) filter_zero_color: bool,
     pub(crate) graph_prefix: String,
     pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
     pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
@@ -397,6 +397,8 @@ struct GenerationOptionsPersistent {
     graph_filters: Vec<GenerationFilter>,
     cut_amplitude_filters: Vec<GenerationFilter>,
     numerator_grouping: NumeratorGrouping,
+    #[serde(default)]
+    filter_zero_color: bool,
     graph_prefix: String,
     selected_diagram_ids: Option<BTreeSet<u128>>,
     selected_diagram_names: Option<BTreeSet<String>>,
@@ -424,6 +426,7 @@ impl From<&GenerationOptions> for GenerationOptionsPersistent {
             graph_filters: options.graph_filters.clone(),
             cut_amplitude_filters: options.cut_amplitude_filters.clone(),
             numerator_grouping: options.numerator_grouping.clone(),
+            filter_zero_color: options.filter_zero_color,
             graph_prefix: options.graph_prefix.clone(),
             selected_diagram_ids: options
                 .selected_diagram_ids
@@ -523,6 +526,7 @@ impl Default for GenerationOptions {
             graph_filters: Vec::new(),
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
+            filter_zero_color: false,
             graph_prefix: "FK".to_owned(),
             selected_diagram_ids: None,
             selected_diagram_names: None,
@@ -629,6 +633,7 @@ impl GenerationOptions {
             graph_filters: persistent.graph_filters,
             cut_amplitude_filters: persistent.cut_amplitude_filters,
             numerator_grouping: persistent.numerator_grouping,
+            filter_zero_color: persistent.filter_zero_color,
             graph_prefix: persistent.graph_prefix,
             selected_diagram_ids: persistent
                 .selected_diagram_ids
@@ -727,6 +732,7 @@ impl fmt::Debug for GenerationOptions {
             .field("graph_filters", &self.graph_filters)
             .field("cut_amplitude_filters", &self.cut_amplitude_filters)
             .field("numerator_grouping", &self.numerator_grouping)
+            .field("filter_zero_color", &self.filter_zero_color)
             .field("graph_prefix", &self.graph_prefix)
             .field("selected_diagram_ids", &self.selected_diagram_ids)
             .field("selected_diagram_names", &self.selected_diagram_names)
@@ -792,6 +798,13 @@ impl GenerationOptions {
 
     pub fn numerator_grouping(mut self, grouping: NumeratorGrouping) -> Self {
         self.numerator_grouping = grouping;
+        self
+    }
+
+    /// Remove diagrams whose numerators vanish under color algebra.
+    /// Disabled by default; unproved zeros are retained.
+    pub fn filter_zero_color(mut self, enabled: bool) -> Self {
+        self.filter_zero_color = enabled;
         self
     }
 
@@ -921,11 +934,22 @@ impl GenerationOptions {
         completed: usize,
         total: Option<usize>,
     ) {
+        self.report_progress_with_zero_count(stage, completed, total, 0);
+    }
+
+    pub(crate) fn report_progress_with_zero_count(
+        &self,
+        stage: &'static str,
+        completed: usize,
+        total: Option<usize>,
+        zero_numerator_count: usize,
+    ) {
         if self.progress.as_ref().is_some_and(|callback| {
             callback(GenerationProgress {
                 stage,
                 completed,
                 total,
+                zero_numerator_count,
             }) == GenerationControl::Cancel
         }) {
             self.cancellation.cancel();
@@ -946,16 +970,38 @@ impl GenerationOptions {
     }
 
     pub(crate) fn cancellation_requested(&self) -> bool {
-        self.cancellation.is_cancelled()
-            || self
+        if !self.cancellation.is_cancelled()
+            && self
                 .cancellation_check
                 .as_ref()
                 .is_some_and(|check| check())
+        {
+            // Work skipped after a transient application signal must never be
+            // treated as completed if a later poll clears that signal.
+            self.cancellation.cancel();
+        }
+        self.cancellation.is_cancelled()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn application_cancellation_remains_latched_after_the_signal_clears() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        let signal = Arc::new(AtomicBool::new(true));
+        let checked = signal.clone();
+        let options = GenerationOptions::default()
+            .cancellation_check(move || checked.swap(false, Ordering::AcqRel));
+        assert!(options.cancellation_requested());
+        assert!(!signal.load(Ordering::Acquire));
+        assert!(options.cancellation_requested());
+    }
+
     #[test]
     fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
         let options = GenerationOptions::default();
@@ -974,6 +1020,56 @@ mod tests {
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
     use crate::{ParticleSelector, VertexSelector};
     use feynkit_graph::{DiagramId, EdgeId};
+
+    #[test]
+    fn zero_color_filter_is_an_explicit_serialized_opt_in() {
+        let defaults = GenerationOptions::default();
+        assert!(!defaults.filter_zero_color);
+        let enabled = defaults.clone().filter_zero_color(true);
+        assert_ne!(defaults, enabled);
+        assert!(format!("{enabled:?}").contains("filter_zero_color: true"));
+        for enabled in [false, true] {
+            let options = defaults.clone().filter_zero_color(enabled);
+            let definition = serde_json::to_value(&options).unwrap();
+            assert_eq!(definition["filter_zero_color"], enabled);
+            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+            assert_eq!(decoded, options);
+        }
+        let mut definition = serde_json::to_value(&enabled).unwrap();
+        definition
+            .as_object_mut()
+            .unwrap()
+            .remove("filter_zero_color");
+        let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+        assert_eq!(decoded, defaults);
+    }
+
+    #[test]
+    fn zero_count_progress_preserves_callback_cancellation() {
+        use std::sync::{Arc, Mutex};
+
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&updates);
+        let options = GenerationOptions::default().progress(move |progress| {
+            captured.lock().unwrap().push(progress);
+            if progress.zero_numerator_count == 2 {
+                super::GenerationControl::Cancel
+            } else {
+                super::GenerationControl::Continue
+            }
+        });
+        options.report_progress("numerators", 4, Some(4));
+        options.report_progress_with_zero_count("filter_zero_color", 1, Some(4), 1);
+        assert!(!options.cancellation_requested());
+        options.report_progress_with_zero_count("filter_zero_color", 3, Some(4), 2);
+        assert!(options.cancellation_requested());
+        let updates = updates.lock().unwrap();
+        assert_eq!(updates[0].zero_numerator_count, 0);
+        assert_eq!(updates[1].zero_numerator_count, 1);
+        assert_eq!(updates[2].zero_numerator_count, 2);
+        assert_eq!(updates[2].completed, 3);
+        assert_eq!(updates[2].total, Some(4));
+    }
 
     #[test]
     fn runtime_callbacks_are_not_serialized() {
@@ -1007,6 +1103,7 @@ mod tests {
     fn bincode_roundtrip_uses_native_enum_encoding() {
         let options = GenerationOptions::default()
             .threads(3)
+            .filter_zero_color(true)
             .with_graph_filter(GenerationFilter::ParticleVeto(vec![
                 ParticleSelector::from("g"),
                 ParticleSelector::from(5_i64),

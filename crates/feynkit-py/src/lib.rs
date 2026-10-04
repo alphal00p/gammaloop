@@ -628,7 +628,7 @@ assert not hasattr(fk, "GenerationOptions")
 
 amplitude = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"])
 assert amplitude.generate_diagrams(max_vertices=3, **filter_arguments).report.completed
-for mode in ("none", "zeroes", "identical", "up_to_sign", "up_to_scalar"):
+for mode in ("none", "identical", "up_to_sign", "up_to_scalar"):
     grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
     assert amplitude.generate_diagrams(max_vertices=3, numerator_grouping=grouping).report.completed
 
