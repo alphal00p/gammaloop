@@ -161,13 +161,18 @@ temperature and the chemical potentials are runtime values that can change per i
 without regeneration.
 
 Chemical potentials are model parameters. Each particle may name one (`chemical_potential`
-in JSON models); a particle without one has zero chemical potential. In the bundled models,
-antiparticles use the negated `minus_<name>` parameter, and the
-`sm` model derives every particle's value from the external parameters `muB`, `muQ`, `muLe`,
-`muLmu`, and `muLtau` (LHA block `CHEMICALPOTENTIAL`) using its baryon number, electric
-charge, and lepton flavor. The `scalars` model has one `chemical_potential_scalar_<i>` per
-scalar. These defaults are nonzero (`muB = 3` and `1` per scalar), so set the values your
-calculation needs explicitly, for example with `set model muB=0.5` or in the run card:
+in JSON and UFO models); a particle without one has zero chemical potential. UFO import keeps
+these assignments and therefore requires `ufo-model-loader>=1.0.0`. In the bundled `sm`
+model, antiparticles use the negated `minus_<name>` parameter, and every particle's value is
+derived from the external parameters `muB`, `muQ`, `muLe`, `muLmu`, and `muLtau` (LHA block
+`CHEMICALPOTENTIAL`) using its baryon number, electric charge, and lepton flavor. The other
+bundled models declare no chemical potentials.
+
+With the default `--simplify-model=true`, a restriction card turns every parameter it sets to
+zero into a constant. `sm-default` therefore fixes all five chemical potentials at zero. Import
+`sm-thermal` instead, which sets `muB = 3` and keeps it adjustable, or `sm-full` when other
+chemical potentials must vary. Then set the values your calculation needs, for example with
+`set model muB=0.5` or in the run card:
 
 // docs-example: syntax
 ```toml
