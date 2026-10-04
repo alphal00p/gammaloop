@@ -64,6 +64,11 @@ enum SlotReplacement {
 // Chosen source and partner positions and their replacement.
 type ContractionCandidate = (usize, usize, Atom);
 
+struct ContractionRole {
+    source: bool,
+    partner: bool,
+}
+
 pub(crate) struct SlotContraction {
     metric: Symbol,
     metrics: bool,
@@ -179,7 +184,7 @@ impl SlotContraction {
         loop {
             if let AtomView::Mul(product) = current.as_view()
                 && let Some(next) =
-                    contractor.contract_product(product, chain_like, rank_one, &mut slots)
+                    contractor.contract_product(product, chain_like, rank_one, &mut slots, None)
             {
                 if next == current {
                     return next;
@@ -202,7 +207,13 @@ impl SlotContraction {
                 match atom {
                     AtomView::Mul(product) if !is_root => {
                         found = contractor
-                            .find_contraction(product.iter(), chain_like, rank_one, &mut slots)
+                            .find_contraction(
+                                product.iter(),
+                                chain_like,
+                                rank_one,
+                                &mut slots,
+                                None,
+                            )
                             .is_some();
                     }
                     AtomView::Fun(_) if !matches!(slots.classify(atom), SlotMatch::Other) => {
@@ -218,7 +229,7 @@ impl SlotContraction {
             let next = current.replace_map(|atom, _, out| match atom {
                 AtomView::Mul(product) => {
                     if let Some(contracted) =
-                        contractor.contract_product(product, chain_like, rank_one, &mut slots)
+                        contractor.contract_product(product, chain_like, rank_one, &mut slots, None)
                     {
                         **out = contracted;
                     }
@@ -235,6 +246,63 @@ impl SlotContraction {
         }
     }
 
+    /// A flat product of explicit ports needs only slot substitution. Sums,
+    /// powers, compact notation and scalar function payloads retain the general
+    /// scope planner. The caller must separately establish intrinsic admission.
+    pub(crate) fn explicit_product(view: AtomView<'_>) -> Option<MulView<'_>> {
+        let AtomView::Mul(product) = view else {
+            return None;
+        };
+        let mut slots = SlotMatcher::default();
+        product
+            .iter()
+            .all(|factor| match factor {
+                AtomView::Num(_) | AtomView::Var(_) => true,
+                AtomView::Fun(function) => function
+                    .iter()
+                    .all(|arg| matches!(slots.classify(arg), SlotMatch::Explicit(_))),
+                _ => false,
+            })
+            .then_some(product)
+    }
+
+    /// Absorb only sources incident to selected identity factors. As a metric
+    /// moves a selected port, the next metric on its path becomes incident;
+    /// disconnected sources and foreign tensors are never rewritten.
+    pub(crate) fn prerequisite_product(
+        &self,
+        source: AtomView<'_>,
+        selected: &mut dyn FnMut(AtomView<'_>) -> bool,
+        allowed_vector: &dyn Fn(LibraryRep) -> bool,
+        rank_one: bool,
+    ) -> Option<Atom> {
+        let product = Self::explicit_product(source)?;
+        let mut slots = SlotMatcher::default();
+        // Each entry records source eligibility and selected partner status.
+        let selection = product
+            .iter()
+            .map(|factor| {
+                let eligible = match factor {
+                    AtomView::Fun(function) => {
+                        function.get_symbol() == self.metric
+                            || self.rank_one_endpoint(function, &mut slots).is_some_and(
+                                |(_, endpoint)| allowed_vector(endpoint.representation),
+                            )
+                    }
+                    _ => false,
+                };
+                ContractionRole {
+                    source: eligible,
+                    partner: selected(factor),
+                }
+            })
+            .collect();
+        Some(
+            self.contract_product(product, true, rank_one, &mut slots, Some(selection))
+                .unwrap_or_else(|| source.to_owned()),
+        )
+    }
+
     // Normalize each changed tensor immediately, but rebuild the surrounding
     // product only after its contractions finish. Unchanged factors remain
     // borrowed, including potentially large scalar spectators.
@@ -244,8 +312,15 @@ impl SlotContraction {
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
+        mut selection: Option<Vec<ContractionRole>>,
     ) -> Option<Atom> {
-        let mut contraction = self.find_contraction(product.iter(), chain_like, rank_one, slots)?;
+        let mut contraction = self.find_contraction(
+            product.iter(),
+            chain_like,
+            rank_one,
+            slots,
+            selection.as_deref(),
+        )?;
         let mut factors: Vec<_> = product.iter().map(AtomOrView::View).collect();
         loop {
             let (source, partner, replacement) = contraction;
@@ -254,11 +329,15 @@ impl SlotContraction {
             }
             factors[partner] = AtomOrView::Atom(replacement);
             factors.remove(source);
+            if let Some(selection) = &mut selection {
+                selection.remove(source);
+            }
             let Some(next) = self.find_contraction(
                 factors.iter().map(AtomCore::as_atom_view),
                 chain_like,
                 rank_one,
                 slots,
+                selection.as_deref(),
             ) else {
                 let result = Atom::mul_many(factors);
                 return Some(result);
@@ -315,6 +394,7 @@ impl SlotContraction {
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
+        selection: Option<&[ContractionRole]>,
     ) -> Option<ContractionCandidate> {
         // Preserve metric-first contraction. Canonical products already expose
         // their factors, so finding a source needs no commutative pattern search.
@@ -322,7 +402,10 @@ impl SlotContraction {
             let AtomView::Fun(function) = factor else {
                 continue;
             };
-            if !self.metrics || function.get_symbol() != self.metric {
+            if !self.metrics
+                || function.get_symbol() != self.metric
+                || selection.is_some_and(|selection| !selection[position].source)
+            {
                 continue;
             }
             let mut arguments = function.iter();
@@ -345,7 +428,9 @@ impl SlotContraction {
                 if let Some(source) = source
                     && self.permits(source.representation)
                     && let Some(replaced) = self.replace_partner(
-                        factors.clone(),
+                        factors.clone().enumerate().filter(|(partner, _)| {
+                            selection.is_none_or(|selection| selection[*partner].partner)
+                        }),
                         position,
                         source,
                         &|| replacement.to_owned(),
@@ -365,12 +450,16 @@ impl SlotContraction {
                 let Some((slot_position, source)) = self.rank_one_endpoint(function, slots) else {
                     continue;
                 };
-                if !self.permits(source.representation) {
+                if !self.permits(source.representation)
+                    || selection.is_some_and(|selection| !selection[position].source)
+                {
                     continue;
                 }
                 // Construct the compact vector only after finding a partner.
                 if let Some(replaced) = self.replace_partner(
-                    factors.clone(),
+                    factors.clone().enumerate().filter(|(partner, _)| {
+                        selection.is_none_or(|selection| selection[*partner].partner)
+                    }),
                     position,
                     source,
                     &|| {
@@ -424,6 +513,7 @@ impl SlotContraction {
                     chain_like,
                     rank_one,
                     slots,
+                    None,
                 )
                 .map(|(_, _, result)| result)
             }
@@ -477,14 +567,14 @@ impl SlotContraction {
 
     fn replace_partner<'a>(
         &self,
-        factors: impl Iterator<Item = AtomView<'a>>,
+        factors: impl Iterator<Item = (usize, AtomView<'a>)>,
         source_position: usize,
         source: Endpoint<'_>,
         replacement: &(impl Fn() -> Atom + ?Sized),
         chain_like: bool,
         slots: &mut SlotMatcher,
     ) -> Option<ContractionCandidate> {
-        for (position, factor) in factors.enumerate() {
+        for (position, factor) in factors {
             if position == source_position {
                 continue;
             }

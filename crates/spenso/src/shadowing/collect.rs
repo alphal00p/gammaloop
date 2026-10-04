@@ -9,7 +9,6 @@ use crate::{
         parsing::{StrictTensorFilter, structure_inference::TensorialSyntax},
         tags::SPENSO_TAG,
     },
-    shadowing::static_symbols::W_,
     structure::{representation::LibraryRep, slot::SlotMatcher},
 };
 use symbolica::{
@@ -77,7 +76,7 @@ impl Collectable for AtomView<'_> {
     fn collect_collects(self) -> Atom {
         // A repeated tensor belongs to the complete collected monomial. Keep
         // its power compressed while exposing all copies to mapping callbacks.
-        self.replace_map(|arg, _context, out| {
+        let mut current = self.replace_map(|arg, _context, out| {
             let AtomView::Pow(power) = arg else { return };
             let (AtomView::Fun(base), AtomView::Num(exponent)) = power.get_base_exp() else {
                 return;
@@ -101,10 +100,35 @@ impl Collectable for AtomView<'_> {
                 .unwrap()
                 .pow(AtomView::Num(exponent))
                 .wrap_in_collect();
-        })
-        .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-        .repeat()
-        .with(COLLECT.call(W_.a_ * W_.b_))
+        });
+        // Fold all selected factors in one pass. Pairwise commutative matching
+        // repeatedly searches the same product as the collected term grows.
+        loop {
+            let mut changed = false;
+            let next = current.replace_map(|arg, _, out| {
+                let AtomView::Mul(product) = arg else { return };
+                let mut selected = Vec::new();
+                let mut spectators = Vec::new();
+                for factor in product.iter() {
+                    if let AtomView::Fun(function) = factor
+                        && function.get_symbol() == *COLLECT
+                        && function.get_nargs() == 1
+                    {
+                        selected.push(function.iter().next().unwrap());
+                    } else {
+                        spectators.push(factor);
+                    }
+                }
+                if selected.len() > 1 {
+                    changed = true;
+                    **out = Atom::mul_many(selected).wrap_in_collect() * Atom::mul_many(spectators);
+                }
+            });
+            if !changed {
+                return next;
+            }
+            current = next;
+        }
     }
 
     fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
@@ -496,6 +520,30 @@ impl TensorCollectExt for AtomView<'_> {
 mod scalar_domain_tests {
     use super::*;
     use crate::structure::representation::{Euclidean, Minkowski};
+
+    #[test]
+    fn collected_products_preserve_powers_and_sum_boundaries() {
+        let a = Atom::var(symbol!("collect_product_a"));
+        let b = Atom::var(symbol!("collect_product_b"));
+        let c = Atom::var(symbol!("collect_product_c"));
+        let ca = a.as_view().wrap_in_collect();
+        let cb = b.as_view().wrap_in_collect();
+        let cc = c.as_view().wrap_in_collect();
+        let sum = &ca + &cb;
+        for (source, expected) in [
+            (&ca * &cb * &c, (&a * &b).wrap_in_collect() * &c),
+            (ca.pow(3) * &cb, (a.pow(3) * &b).wrap_in_collect()),
+            (&sum * &cc, &sum * &cc),
+            (
+                (&ca * &cb).wrap_in_collect() * &cc,
+                ((&a * &b).wrap_in_collect() * &c).wrap_in_collect(),
+            ),
+        ] {
+            let result = source.collect_collects();
+            assert_eq!(result, expected);
+            assert_eq!(result.as_view().collect_collects(), result);
+        }
+    }
 
     #[test]
     fn representation_filter_selects_scalar_metadata_without_crossing_explicit_boundaries() {

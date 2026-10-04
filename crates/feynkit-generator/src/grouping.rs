@@ -450,6 +450,8 @@ pub(crate) fn group_diagrams(
                 // Isolate complete color products before tensor inference. The
                 // collector protects Lorentz/momentum coefficients as opaque
                 // factors, including the alternatives of four-gluon vertices.
+                // Keep them aliased until the color rewrite finishes so mapping
+                // tensor wrappers does not revisit the momentum numerator.
                 // Only color identities and their contraction prerequisites run;
                 // there is no separate signed-network canonicalization pass.
                 let mut error = None;
@@ -458,21 +460,23 @@ pub(crate) fn group_diagrams(
                     .collect_with_map(|factor| {
                         TensorCollectFilter::Reps(color_reps).matches(factor)
                     })
-                    .into_inner()
-                    .map_collects(|wrapped, _, out| {
-                        if error.is_some() {
-                            return;
-                        }
-                        let AtomView::Fun(wrapper) = wrapped else {
-                            unreachable!()
-                        };
-                        let selected = wrapper.iter().next().expect("collected color product");
-                        match simplify_color(selected) {
-                            Ok(tensor) => **out = cooking.uncook(tensor.expression().as_view()),
-                            Err(cause) => error = Some(cause),
-                        }
+                    .map_root(|root| {
+                        root.map_collects(|wrapped, _, out| {
+                            if error.is_some() {
+                                return;
+                            }
+                            let AtomView::Fun(wrapper) = wrapped else {
+                                unreachable!()
+                            };
+                            let selected = wrapper.iter().next().expect("collected color product");
+                            match simplify_color(selected) {
+                                Ok(tensor) => **out = cooking.uncook(tensor.expression().as_view()),
+                                Err(cause) => error = Some(cause),
+                            }
+                        })
+                        .unwrap_collect()
                     })
-                    .unwrap_collect();
+                    .into_inner();
                 if let Some(error) = error {
                     return Err(error);
                 }
