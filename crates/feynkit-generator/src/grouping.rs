@@ -1,7 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use feynkit_graph::{
@@ -16,7 +19,10 @@ use idenso::{
     dirac::{AGS, spinor_matrix_structure},
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
-    tensor::{SymbolicTensor, inference::TensorInferenceError},
+    tensor::{
+        AlgebraSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
+        inference::TensorInferenceError,
+    },
 };
 use spenso::{
     network::{
@@ -56,6 +62,9 @@ use symbolica::{
     symbol,
 };
 use thiserror::Error;
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
 
 use crate::{
     DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
@@ -362,7 +371,6 @@ pub(crate) fn group_diagrams(
 
     let total = diagrams.len();
     generation_options.report_progress("grouping_preparation", 0, Some(total));
-    let scalar_names = scalar_names(model);
     let compares_numerators = matches!(
         grouping,
         NumeratorGrouping::Identical(_)
@@ -381,96 +389,141 @@ pub(crate) fn group_diagrams(
         | NumeratorGrouping::UpToScalar(options) => options.symmetric_polarizations,
         NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => false,
     };
-    let mut retained = Vec::with_capacity(diagrams.len());
-    let mut source_diagrams = Vec::with_capacity(diagrams.len());
-    let mut prepared = Vec::with_capacity(diagrams.len());
-    let mut zero_numerator_count = 0;
+    let completed = Mutex::new(0);
+    #[cfg(target_arch = "wasm32")]
+    let diagrams = diagrams.into_iter();
+    #[cfg(not(target_arch = "wasm32"))]
+    let diagrams = diagrams.into_par_iter();
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
-    for (source_diagram, diagram) in diagrams.into_iter().enumerate() {
-        // Contract color before abstract-index canonicalization. Canonizing a
-        // raw product of color tensors can encounter the same concrete base
-        // slot more than once, while the projector closes precisely those
-        // external slots.
-        let raw_complete = model
-            .expand_couplings(
-                &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
-            )
-            .to_parametric_color();
-        // Keep compound dimensions such as Nc²−1 and structured indices reversible
-        // across the typed boundary; decode only when returning to the raw pipeline.
-        let cooked = cooking.try_cook(raw_complete.as_view()).map_err(|error| {
-            GroupingError::ColorSimplification {
-                diagram: diagram.name().to_owned(),
-                message: format!("{error:?}"),
-            }
-        })?;
-        let simplified = SymbolicTensor::infer(cooked)
-            .and_then(|tensor| {
-                tensor.simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                    ..Default::default()
-                })
-            })
-            .map_err(|error| GroupingError::ColorSimplification {
-                diagram: diagram.name().to_owned(),
-                message: error.to_string(),
+    let preparations = diagrams
+        .enumerate()
+        .map(|(source_diagram, diagram)| {
+            let raw_complete = model
+                .expand_couplings(
+                    &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
+                )
+                .to_parametric_color();
+            // Keep compound dimensions such as Nc²−1 and structured indices reversible
+            // across the typed boundary; decode only when returning to the raw pipeline.
+            let cooked = cooking.try_cook(raw_complete.as_view()).map_err(|error| {
+                GroupingError::ColorSimplification {
+                    diagram: diagram.name().to_owned(),
+                    message: format!("{error:?}"),
+                }
             })?;
-        let zero_check = simplified
-            .coefficients_are_zero(TensorCollectFilter::Reps([
-                ColorAdjoint {}.into(),
-                ColorFundamental {}.into(),
-                ColorSextet {}.into(),
-            ]))
-            .map_err(|error| GroupingError::ColorSimplification {
-                diagram: diagram.name().to_owned(),
-                message: error.to_string(),
-            })?;
-        // Keep unproved identities: a conservative coefficient proof must not
-        // expand the graph numerator or turn inconclusive sampling into a zero.
-        if zero_check.is_true() {
-            zero_numerator_count += 1;
-            generation_options.report_progress(
-                "grouping_preparation",
-                source_diagram + 1,
-                Some(total),
-            );
-            continue;
-        }
-        let sample_source = if compares_numerators {
-            // Keep symbolic color dimensions for exact rescaling ratios. Tensor
-            // samples substitute concrete color values at their own boundary.
-            let complete = cooking.uncook(simplified.expression().as_view());
-            normalize_momentum_routing(&diagram, complete)
-        } else {
-            Atom::one()
-        };
-        // Exact symbolic comparison needs alpha-renamed dummy indices.  Keep
-        // the routed, uncanonized expression separately for numerical tensor
-        // execution: canonicalization is an optional comparison strategy and
-        // historically was not applied to the numerical sample network.
-        let exact = if compares_canonical_numerators {
-            let exact_source = if symmetric_polarizations {
-                normalize_symmetric_polarizations(&sample_source)
+            let (simplified, is_zero) = if compares_numerators {
+                // Contract color before abstract-index canonicalization. Canonizing a
+                // raw product of color tensors can encounter the same concrete base
+                // slot more than once, while the projector closes precisely those
+                // external slots.
+                let tensor = SymbolicTensor::infer(cooked)
+                    .and_then(|tensor| {
+                        tensor.simplify_algebra(&AlgebraSettings {
+                            color: Some(
+                                ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                            ),
+                            ..Default::default()
+                        })
+                    })
+                    .map_err(|error| GroupingError::ColorSimplification {
+                        diagram: diagram.name().to_owned(),
+                        message: error.to_string(),
+                    })?;
+                let zero = tensor
+                    .coefficients_are_zero(TensorCollectFilter::Reps([
+                        ColorAdjoint {}.into(),
+                        ColorFundamental {}.into(),
+                        ColorSextet {}.into(),
+                    ]))
+                    .map_err(|error| GroupingError::ColorSimplification {
+                        diagram: diagram.name().to_owned(),
+                        message: error.to_string(),
+                    })?;
+                (tensor.expression().clone(), zero.is_true())
             } else {
-                sample_source.clone()
+                // Prove signed graph zeros without reducing nonzero color factors
+                // or distributing Lorentz sums. Opaque shorthands also avoid
+                // enumerating the permutations of symmetric trace projectors.
+                let mut network = cooked
+                    .parse_to_symbolic_net::<GroupingIndex>(&TensorParseSettings {
+                        shorthand_parsing: ShorthandParsing::Opaque,
+                        ..Default::default()
+                    })
+                    .map_err(|error| GroupingError::ColorSimplification {
+                        diagram: diagram.name().to_owned(),
+                        message: error.to_string(),
+                    })?;
+                let expression = if network.remove_antisymmetric_zero_terms() {
+                    network.simple_execute::<()>().map_err(|error| {
+                        GroupingError::ColorSimplification {
+                            diagram: diagram.name().to_owned(),
+                            message: error.to_string(),
+                        }
+                    })?
+                } else {
+                    cooked
+                };
+                let zero = expression.collect_factors().zero_test(0, 0.0).is_true();
+                (expression, zero)
             };
-            exact_source
-                .canonize(GroupingIndex::Dummy)
-                .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
-        } else {
-            Atom::one()
-        };
+            // Keep unproved identities: a conservative coefficient proof must not
+            // expand the graph numerator or turn inconclusive sampling into a zero.
+            if is_zero {
+                return Ok(None);
+            }
+            let sample_source = if compares_numerators {
+                // Keep symbolic color dimensions for exact rescaling ratios. Tensor
+                // samples substitute concrete color values at their own boundary.
+                let complete = cooking.uncook(simplified.as_view());
+                normalize_momentum_routing(&diagram, complete)
+            } else {
+                Atom::one()
+            };
+            // Exact symbolic comparison needs alpha-renamed dummy indices.  Keep
+            // the routed, uncanonized expression separately for numerical tensor
+            // execution: canonicalization is an optional comparison strategy and
+            // historically was not applied to the numerical sample network.
+            let exact = if compares_canonical_numerators {
+                let exact_source = if symmetric_polarizations {
+                    normalize_symmetric_polarizations(&sample_source)
+                } else {
+                    sample_source.clone()
+                };
+                exact_source
+                    .canonize(GroupingIndex::Dummy)
+                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+            } else {
+                Atom::one()
+            };
+            Ok(Some((
+                diagram,
+                source_diagram,
+                PreparedNumerator {
+                    exact,
+                    sample_source,
+                    samples: Vec::new(),
+                },
+            )))
+        })
+        .inspect(|_| {
+            // Serialize progress callbacks while preserving input order in the
+            // indexed collection, independently of worker completion order.
+            let mut completed = completed.lock().unwrap();
+            *completed += 1;
+            generation_options.report_progress("grouping_preparation", *completed, Some(total));
+        })
+        .collect::<Result<Vec<_>, GroupingError>>()?;
+    let mut retained = Vec::with_capacity(total);
+    let mut source_diagrams = Vec::with_capacity(total);
+    let mut prepared = Vec::with_capacity(total);
+    for (diagram, source_diagram, numerator) in preparations.into_iter().flatten() {
         retained.push(diagram);
         source_diagrams.push(source_diagram);
-        prepared.push(PreparedNumerator {
-            exact,
-            sample_source,
-            samples: Vec::new(),
-        });
-        generation_options.report_progress("grouping_preparation", source_diagram + 1, Some(total));
+        prepared.push(numerator);
     }
+    let mut zero_numerator_count = total - retained.len();
 
     let (options, mode) = match grouping {
         NumeratorGrouping::Identical(options) => (options, ComparisonMode::Identical),
@@ -484,6 +537,7 @@ pub(crate) fn group_diagrams(
             });
         }
     };
+    let scalar_names = scalar_names(model);
     let total = retained.len();
     generation_options.report_progress("grouping_samples", 0, Some(total));
     let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
@@ -2421,5 +2475,115 @@ mod tests {
 
         assert_eq!(grouped.zero_numerator_count, 1);
         assert!(grouped.diagrams.is_empty());
+    }
+
+    #[test]
+    fn zero_detection_prunes_signed_color_zeros_and_preserves_factorized_survivors() {
+        let model = Arc::new(model());
+        let [a, b, c, d, e] =
+            [1, 2, 3, 4, 5].map(|index| ColorAdjoint {}.new_rep(8).to_symbolic([Atom::num(index)]));
+        let bubble = idenso::color_f!(&a, &b, &c) * idenso::color_f!(&a, &b, &d);
+        let zero = &bubble * idenso::color_f!(&c, &d, &e);
+        assert!(!zero.is_zero());
+        let spectator = test_atom("(x+y)^30");
+        let inputs = vec![
+            diagram_with_atoms(&model, "color-zero", zero * &spectator, Atom::one(), 25, 25),
+            diagram_with_atoms(&model, "nonzero", bubble * &spectator, Atom::one(), 25, 25),
+            diagram(&model, "unproved", "(x+y)^2-x^2-2*x*y-y^2", 25, 25),
+        ];
+        let expected = inputs[1..]
+            .iter()
+            .map(|diagram| diagram.numerator().clone())
+            .collect::<Vec<_>>();
+        let grouped = group_diagrams(
+            inputs,
+            &model,
+            &NumeratorGrouping::OnlyDetectZeroes,
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 1);
+        assert_eq!(
+            grouped
+                .diagrams
+                .iter()
+                .map(|diagram| diagram.numerator().clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            grouped
+                .groups
+                .iter()
+                .map(|group| group.members[0].source_diagram)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn parallel_zero_detection_preserves_input_order_and_progress() {
+        let model = Arc::new(model());
+        let inputs = (0..32)
+            .map(|index| {
+                diagram(
+                    &model,
+                    &format!("g{index}"),
+                    if index % 3 == 0 { "0" } else { "(x+y)^30" },
+                    25,
+                    25,
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected_sources = (0..32).filter(|index| index % 3 != 0).collect::<Vec<_>>();
+        for threads in [1, 4] {
+            let updates = Arc::new(Mutex::new(Vec::new()));
+            let captured = updates.clone();
+            let options = GenerationOptions::default().progress(move |snapshot| {
+                captured.lock().unwrap().push(snapshot);
+                crate::GenerationControl::Continue
+            });
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let grouped = pool
+                .install(|| {
+                    group_diagrams(
+                        inputs.clone(),
+                        &model,
+                        &NumeratorGrouping::OnlyDetectZeroes,
+                        false,
+                        &options,
+                    )
+                })
+                .unwrap();
+            assert_eq!(grouped.zero_numerator_count, 11);
+            assert_eq!(
+                grouped
+                    .groups
+                    .iter()
+                    .map(|group| group.members[0].source_diagram)
+                    .collect::<Vec<_>>(),
+                expected_sources
+            );
+            for (diagram, &source) in grouped.diagrams.iter().zip(&expected_sources) {
+                assert_eq!(diagram.name(), inputs[source].name());
+                assert_eq!(diagram.numerator(), inputs[source].numerator());
+            }
+            assert_eq!(
+                updates
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|progress| (progress.stage, progress.completed, progress.total))
+                    .collect::<Vec<_>>(),
+                (0..=32)
+                    .map(|count| ("grouping_preparation", count, Some(32)))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 }

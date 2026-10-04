@@ -67,6 +67,8 @@ impl Default for GraphGroupingOptions {
 pub enum NumeratorGrouping {
     #[default]
     None,
+    /// Conservatively remove zeros using signed tensor symmetries and exact
+    /// factor cancellation, retaining unresolved traces and factorized numerators.
     OnlyDetectZeroes,
     Identical(GraphGroupingOptions),
     UpToSign(GraphGroupingOptions),
