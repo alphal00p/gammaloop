@@ -13,7 +13,7 @@ pub(in crate::tensor) struct ObservationScope {
     pub(super) pair_representation: Option<LibraryRep>,
 }
 
-type Cache = HashMap<ObservationScope, HashMap<Vec<u8>, ExplicitIndexOccurrences>>;
+type Cache = AHashMap<ObservationScope, AHashMap<Vec<u8>, ExplicitIndexOccurrences>>;
 
 impl InterfaceInference {
     /// Detect explicit index pairs in any additive branch without distributing it.
@@ -30,7 +30,7 @@ impl InterfaceInference {
         let occurrences = Self::observe_indices(
             value,
             &mut SlotMatcher::default(),
-            &mut HashMap::new(),
+            &mut AHashMap::new(),
             ObservationScope {
                 validate: true,
                 count_indices: true,
@@ -70,7 +70,7 @@ impl InterfaceInference {
         Self::observe_indices(
             value,
             slots,
-            &mut HashMap::new(),
+            &mut AHashMap::new(),
             ObservationScope {
                 validate: true,
                 count_indices: true,
@@ -126,7 +126,9 @@ impl InterfaceInference {
         }
         let result =
             Self::observe_indices_uncached(value, slots, cache, scope, excluded_tensor_heads)?;
-        if reusable && cache.values().map(HashMap::len).sum::<usize>() < Self::CACHE_ENTRIES {
+        if reusable
+            && cache.values().map(|values| values.len()).sum::<usize>() < Self::CACHE_ENTRIES
+        {
             // Scope is part of the key: a placeholder proven inside a chain is
             // not legal when the same literal subtree occurs outside it.
             cache
@@ -429,7 +431,7 @@ mod tests {
                     &mut SlotMatcher::default(),
                 )
                 .unwrap();
-                assert_eq!(occurrences.counts, HashMap::from([(slot, 1)]));
+                assert_eq!(occurrences.counts, AHashMap::from([(slot, 1)]));
                 let source = SymbolicTensor::infer(expression.clone()).unwrap();
                 assert_eq!(
                     source.structure.logical_slots(),
