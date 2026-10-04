@@ -3,6 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use ahash::AHashMap;
 use spenso::{
     network::{
         library::symbolic::ETS,
@@ -631,14 +632,14 @@ fn direct_structural_port(value: AtomView<'_>) -> bool {
 /// Opposite orientations share a key; representation dimensions remain distinct.
 #[derive(Clone, Default)]
 pub(super) struct ExplicitIndexOccurrences {
-    pub(super) counts: HashMap<Slot<LibraryRep, AbstractIndex>, usize>,
+    pub(super) counts: AHashMap<Slot<LibraryRep, AbstractIndex>, usize>,
     /// A queried pair may live in a closed power scope rather than the outer map.
     pub(super) selected_pair: bool,
 }
 
 impl ExplicitIndexOccurrences {
     pub(super) fn from_atom(value: AtomView<'_>, slots: &mut SlotMatcher) -> Self {
-        InterfaceInference::index_occurrences(value, slots, &mut HashMap::new())
+        InterfaceInference::index_occurrences(value, slots, &mut AHashMap::new())
     }
 
     /// A replacement may remove internal pairs, but cannot introduce a new
@@ -4267,7 +4268,7 @@ mod tests {
         calls.store(0, Ordering::Relaxed);
 
         let mut slots = SlotMatcher::default();
-        let mut cache = HashMap::new();
+        let mut cache = AHashMap::new();
         let mut occurrences = ExplicitIndexOccurrences::default();
         OCCURRENCE_FUNCTION_VISITS.set(0);
         occurrences.append(InterfaceInference::index_occurrences(
@@ -4308,7 +4309,7 @@ mod tests {
             .finish();
         let dot = FunctionBuilder::new(ETS.metric).add_args([p, q]).finish();
         let mut slots = SlotMatcher::default();
-        let mut cache = HashMap::new();
+        let mut cache = AHashMap::new();
         let mut occurrences = ExplicitIndexOccurrences::default();
         OCCURRENCE_FUNCTION_VISITS.set(0);
         occurrences.append(InterfaceInference::index_occurrences(

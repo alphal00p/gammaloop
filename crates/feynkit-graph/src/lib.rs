@@ -689,7 +689,7 @@ impl FeynmanDiagram {
             self.graph[EdgeIndex(edge.0)].numerator = numerator;
         }
         self.numerator = Self::fragment_numerator(&self.graph);
-        self.validate()?;
+        self.validate_with_fragment_numerator(Some(&self.numerator))?;
         Ok(self)
     }
 
@@ -1661,6 +1661,15 @@ impl FeynmanDiagram {
         if self.validation.get().is_some() {
             return Ok(());
         }
+        self.validate_with_fragment_numerator(None)
+    }
+
+    // Fragment edits already rebuild this product. Reuse it while checking all
+    // other invariants; public validation derives it independently from the graph.
+    fn validate_with_fragment_numerator(
+        &self,
+        fragment_numerator: Option<&Atom>,
+    ) -> Result<(), DiagramError> {
         let mut degrees = vec![0_usize; self.graph.n_nodes()];
         let mut external_indices = BTreeSet::new();
         let mut external_connections = BTreeSet::new();
@@ -1880,8 +1889,15 @@ impl FeynmanDiagram {
                 });
             }
         }
-        let fragment_numerator = Self::fragment_numerator(&self.graph);
-        if fragment_numerator != self.numerator
+        let reconstructed;
+        let fragment_numerator = match fragment_numerator {
+            Some(numerator) => numerator,
+            None => {
+                reconstructed = Self::fragment_numerator(&self.graph);
+                &reconstructed
+            }
+        };
+        if fragment_numerator != &self.numerator
             && fragment_numerator.expand() != self.numerator.expand()
         {
             return Err(DiagramError::NumeratorFragmentMismatch);
@@ -3790,6 +3806,20 @@ mod tests {
         assert!(matches!(
             inconsistent.validate(),
             Err(DiagramError::NumeratorFragmentMismatch)
+        ));
+        let repaired = inconsistent.with_numerator_fragments([], []).unwrap();
+        assert_eq!(repaired.numerator(), &Atom::num(10));
+
+        let external = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_some())
+            .unwrap()
+            .0;
+        assert!(matches!(
+            original
+                .clone()
+                .with_numerator_fragments([], [(external, Atom::num(2))]),
+            Err(DiagramError::ExternalEdgeNumerator { edge }) if edge == external.0
         ));
         updated.validate().unwrap();
         original.validate().unwrap();

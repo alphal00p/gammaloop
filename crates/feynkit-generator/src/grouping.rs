@@ -450,8 +450,9 @@ pub(crate) fn group_diagrams(
                 // Isolate complete color products before tensor inference. The
                 // collector protects Lorentz/momentum coefficients as opaque
                 // factors, including the alternatives of four-gluon vertices.
-                // Keep them aliased until the color rewrite finishes so mapping
-                // tensor wrappers does not revisit the momentum numerator.
+                // Keep them aliased through rewriting and recollection so
+                // combining equal color structures does not revisit the
+                // momentum numerator. Resolve coefficients before the zero test.
                 // Only color identities and their contraction prerequisites run;
                 // there is no separate signed-network canonicalization pass.
                 let mut error = None;
@@ -475,12 +476,12 @@ pub(crate) fn group_diagrams(
                             }
                         })
                         .unwrap_collect()
+                        .collect_reps(color_reps)
                     })
                     .into_inner();
                 if let Some(error) = error {
                     return Err(error);
                 }
-                let expression = expression.collect_reps(color_reps);
                 let zero = expression.collect_factors().zero_test(0, 0.0).is_true();
                 (expression, zero)
             };
@@ -2546,21 +2547,28 @@ mod tests {
         let bubble = idenso::color_f!(&a, &b, &c) * idenso::color_f!(&a, &b, &d);
         let metric = function!(spenso::network::library::symbolic::ETS.metric, &c, &d);
         let lorentz = Minkowski {}.new_rep(4);
-        let spectator = test_atom("(x+y)^30")
-            * function!(
-                spenso::network::library::symbolic::ETS.metric,
-                lorentz.to_symbolic([Atom::num(1)]),
-                lorentz.to_symbolic([Atom::num(2)])
-            );
-        // Both need actual color identities: neither is an odd graph symmetry.
+        let lorentz_metric = function!(
+            spenso::network::library::symbolic::ETS.metric,
+            lorentz.to_symbolic([Atom::num(1)]),
+            lorentz.to_symbolic([Atom::num(2)])
+        );
+        let spectator = test_atom("(x+y)^30") * &lorentz_metric;
+        // These zeros need actual color identities, beyond odd graph symmetries.
         // Different Lorentz coefficients of one color structure must combine
         // after reduction, while repeated color tensors must not be skipped.
         let mixed = &bubble * &spectator - Atom::num(3) * &metric * &spectator;
+        // The coefficient sum and its individual terms receive different
+        // aliases. Recollection must still expose their cancellation when the
+        // definitions are resolved after the color rewrite.
+        let other = test_atom("(u+v)^30") * lorentz_metric;
+        let aliased =
+            &bubble / Atom::num(3) * (&spectator + &other) - &metric * &spectator - &metric * other;
         let power = idenso::color_f!(&a, &b, &c).pow(Atom::num(2)) - Atom::num(24);
         let nonzero = &bubble * &spectator - Atom::num(2) * &metric * &spectator;
         let inputs = vec![
             diagram_with_atoms(&model, "mixed-zero", mixed, Atom::one(), 25, 25),
             diagram_with_atoms(&model, "power-zero", power, Atom::one(), 25, 25),
+            diagram_with_atoms(&model, "alias-zero", aliased, Atom::one(), 25, 25),
             diagram_with_atoms(&model, "nonzero", nonzero.clone(), Atom::one(), 25, 25),
         ];
         let grouped = group_diagrams(
@@ -2571,10 +2579,10 @@ mod tests {
             &GenerationOptions::default(),
         )
         .unwrap();
-        assert_eq!(grouped.zero_numerator_count, 2);
+        assert_eq!(grouped.zero_numerator_count, 3);
         assert_eq!(grouped.diagrams.len(), 1);
         assert_eq!(grouped.diagrams[0].numerator(), &nonzero);
-        assert_eq!(grouped.groups[0].members[0].source_diagram, 2);
+        assert_eq!(grouped.groups[0].members[0].source_diagram, 3);
     }
 
     #[cfg(not(target_arch = "wasm32"))]

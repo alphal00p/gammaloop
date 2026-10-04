@@ -1161,7 +1161,17 @@ impl ColorAlgebraSimplifier {
         complete: bool,
         whole_term: bool,
     ) -> Option<Atom> {
-        let mut order = (0..product.len()).collect::<Vec<_>>();
+        let mut order = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter(|(_, factor)| {
+                factor.chain.is_some()
+                    || factor.trace.is_some()
+                    || matches!(factor.atom, AtomView::Pow(_))
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
         order.sort_by_cached_key(|&index| product.factors[index].line_cost());
         for index in order {
             let factor = &product.factors[index];
@@ -1394,7 +1404,7 @@ impl ColorAlgebraSimplifier {
             );
         }
 
-        let args = structure_constant_args(base)?;
+        let args = StructureView::parse(base)?.args;
         let dimension = color_structure_dimension(&args)?;
         Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension)
     }
@@ -1790,7 +1800,7 @@ impl ColorAlgebraSimplifier {
                 let Some(structure) = &f_factor.structure else {
                     continue;
                 };
-                if color_structure_dimension(&structure.args.map(|arg| arg.to_owned())).is_none() {
+                if color_structure_dimension(&structure.args).is_none() {
                     continue;
                 }
                 // A repeated slot is bound inside the symmetric trace. It
@@ -1849,6 +1859,13 @@ impl ColorAlgebraSimplifier {
     /// is the same for the Hermitian symmetric trace of any representation.
     /// Raw adjoint words have no odd symmetric invariant.
     fn simplify_symmetric_structure_pair_product(product: &ProductView) -> Option<Atom> {
+        if !product
+            .factors
+            .iter()
+            .any(|factor| factor.symmetric_invariant.is_some())
+        {
+            return None;
+        }
         let structures = product
             .factors
             .iter()
@@ -1969,7 +1986,7 @@ impl ColorAlgebraSimplifier {
             .iter()
             .enumerate()
             .filter_map(|(index, factor)| {
-                let args = factor.structure.as_ref()?.args.map(|arg| arg.to_owned());
+                let args = factor.structure.as_ref()?.args;
                 let dimension = color_structure_dimension(&args)?;
                 Some((index, args, dimension))
             })
@@ -2006,7 +2023,7 @@ impl ColorAlgebraSimplifier {
             cycle
                 .iter()
                 .flat_map(|&vertex| &structures[vertex].1)
-                .filter(|arg| line_slots.contains(&arg.as_view()))
+                .filter(|arg| line_slots.contains(arg))
                 .count()
         };
         let mut cycle = Vec::new();
@@ -2083,7 +2100,7 @@ impl ColorAlgebraSimplifier {
                 return None;
             }
             let open = (0..3).find(|p| *p != incoming && *p != outgoing)?;
-            external.push(args[open].clone());
+            external.push(args[open].to_owned());
             prefactor *= StructureView::orientation(incoming, outgoing);
         }
         if prefactor.is_zero() {
@@ -2106,7 +2123,7 @@ impl ColorAlgebraSimplifier {
             [a, b, c, d] => {
                 // Keep the compact color.h quartic identity. Reuse a removed
                 // cycle edge for its new dummy; neither endpoint survives.
-                let dummy = &structures[cycle[0]].1[links[0].left];
+                let dummy = structures[cycle[0]].1[links[0].left];
                 let symmetric = trace_sym!(adjoint_rep(dimension.clone()); external.iter().map(|port| {
                     color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), port)
                 }));
@@ -2789,18 +2806,6 @@ pub(super) fn color_generator_adjoint_view(factor: AtomView<'_>) -> Option<AtomV
     Some(args[0])
 }
 
-fn structure_constant_args(factor: AtomView) -> Option<[Atom; 3]> {
-    let AtomView::Fun(f) = factor else {
-        return None;
-    };
-    if f.get_symbol() != CS.f || f.get_nargs() != 3 {
-        return None;
-    }
-
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    Some([args[0].clone(), args[1].clone(), args[2].clone()])
-}
-
 fn symmetric_trace_phase(rep: AtomView, rank: usize) -> i8 {
     if matches!(rep, AtomView::Fun(f) if f.get_symbol() == CS.adjoint_rep) {
         match rank % 4 {
@@ -2962,15 +2967,18 @@ fn color_fundamental_slot(slot: AtomView) -> Option<(Atom, Atom, bool)> {
 }
 
 fn color_adjoint_dimension(slot: &impl AtomCore) -> Option<Atom> {
-    representation_slot(slot.as_atom_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
+    representation_slot_view(slot.as_atom_view(), CS.adjoint_rep)
+        .map(|(dimension, _)| dimension.to_owned())
 }
 
 fn color_structure_dimension(args: &[impl AtomCore]) -> Option<Atom> {
-    let mut dimensions = args.iter().map(color_adjoint_dimension);
+    let mut dimensions = args.iter().map(|arg| {
+        representation_slot_view(arg.as_atom_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
+    });
     let dimension = dimensions.next()??;
     dimensions
-        .all(|candidate| candidate.is_some_and(|candidate| candidate == dimension))
-        .then_some(dimension)
+        .all(|candidate| candidate == Some(dimension))
+        .then(|| dimension.to_owned())
 }
 
 /// The dimension and index of a `symbol(dimension, index)` slot.
@@ -3583,13 +3591,13 @@ fn color_node_search(expr: AtomView<'_>, skip_invariants: bool) -> bool {
             if skip_invariants && [CS.gram, CS.cas, CS.idx].contains(&symbol) {
                 return false;
             }
-            selected = TensorCollectFilter::Reps([
-                ColorAdjoint {}.into(),
-                ColorFundamental {}.into(),
-                ColorSextet {}.into(),
-            ])
-            .matches(node)
-                || [CS.f, CS.d, CS.t, CS.gram, CS.cas, CS.idx].contains(&symbol);
+            selected = [CS.f, CS.d, CS.t, CS.gram, CS.cas, CS.idx].contains(&symbol)
+                || TensorCollectFilter::Reps([
+                    ColorAdjoint {}.into(),
+                    ColorFundamental {}.into(),
+                    ColorSextet {}.into(),
+                ])
+                .matches(node);
         }
         !selected
     });
