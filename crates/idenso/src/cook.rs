@@ -1,4 +1,5 @@
 use crate::tensor::inference::InterfaceInference;
+use ahash::HashMap;
 use spenso::network::tags::SPENSO_TAG;
 use std::sync::{Arc, Mutex};
 use symbolica::{
@@ -515,6 +516,9 @@ impl CookSettings {
         filter: Option<&CookTagFilter>,
     ) -> Result<Atom, CookingError> {
         let error = ArcMutexOption::empty();
+        // A contracted index appears on multiple tensor ports. Reuse its symbol
+        // within this expression instead of repeatedly encoding and registering it.
+        let mut cooked_indices = HashMap::default();
         let cooked = view.replace_map(|a, _, out| {
             let AtomView::Fun(rep) = a else {
                 return;
@@ -539,7 +543,11 @@ impl CookSettings {
                 None
             };
             let cooked_index = if indices && let Some(AtomView::Fun(index)) = index {
-                match self.cook_function_symbol(index, filter) {
+                match cooked_indices
+                    .entry(index.as_view().to_owned())
+                    .or_insert_with(|| self.cook_function_symbol(index, filter))
+                    .clone()
+                {
                     Ok(value) => value.map(Atom::var),
                     Err(e) => {
                         error.set_once(e);
@@ -1088,6 +1096,46 @@ mod tests {
         let settings = CookSettings::indices().with_input_tags(["idenso::index_payload"]);
 
         assert_eq!(expr.cook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn representation_payload_cooking_preserves_shared_index_identity() {
+        use crate::CookMode;
+        use symbolica::function;
+
+        test_initialize();
+        let index = parse_lit!(shared_payload(7));
+        let color = crate::coad!(8, index.clone());
+        let lorentz = spenso::mink!(4, index.clone());
+        let source = function!(
+            symbol!("shared_payload_tensor"),
+            color.clone(),
+            lorentz.clone()
+        ) * function!(
+            symbol!("shared_payload_spectator"),
+            color.clone(),
+            index.clone()
+        );
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            let cooked_color = settings.cook(color.as_view());
+            let cooked_lorentz = settings.cook(lorentz.as_view());
+            let expected = function!(
+                symbol!("shared_payload_tensor"),
+                cooked_color.clone(),
+                cooked_lorentz
+            ) * function!(
+                symbol!("shared_payload_spectator"),
+                cooked_color,
+                index.clone()
+            );
+            let cooked = settings.cook(source.as_view());
+            assert_eq!(cooked, expected);
+            assert_eq!(settings.cook(cooked.as_view()), cooked);
+            if mode == CookMode::ReversibleEncoding {
+                assert_eq!(settings.uncook(cooked.as_view()), source);
+            }
+        }
     }
 
     #[test]
