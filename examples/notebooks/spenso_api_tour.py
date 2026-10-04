@@ -91,13 +91,13 @@ def example_specification():
         (
             "TensorEvaluator",
             "Optimizes symbolic components for repeated numerical evaluation. Each input row follows the params order; each output is a Tensor with the original interface.",
-            "evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)\nevaluated = evaluator.evaluate([[2.0]])[0]",
+            "evaluator = tensor.evaluator([x], iterations=1, n_cores=1)\nevaluated = evaluator.evaluate([[2.0]])[0]",
             "evaluator",
         ),
         (
             "CompiledTensorEvaluator",
-            "The same component evaluator compiled to a C++ shared library. Both real and complex evaluation use the same batch contract as TensorEvaluator.",
-            'compiled = evaluator.compile("spenso_api_demo", str(build_directory / "tensor.cpp"), str(build_directory / "tensor.so"), inline_asm="none", optimization_level=0)\ncompiled_result = compiled.evaluate_complex([[2.0 + 0j]])[0]',
+            "The same component evaluator compiled to a C++ shared library. The number_type selects real or complex evaluation; evaluate returns tensors.",
+            'compiled = evaluator.compile("spenso_api_demo", str(build_directory / "tensor.cpp"), str(build_directory / "tensor.so"), number_type="complex", inline_asm="none", optimization_level=0)\ncompiled_result = compiled.evaluate([[2.0 + 0j]])[0]',
             "compiled",
         ),
         (

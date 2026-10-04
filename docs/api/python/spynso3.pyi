@@ -28,8 +28,7 @@ import numpy
 import numpy.typing
 import symbolica.core
 import typing
-from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
+from symbolica.core import ComplexFloat, Condition, Evaluator, Expression, Float, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -312,211 +311,41 @@ class CanonicalizationError(builtins.ValueError):
 @typing.final
 class CompiledTensorEvaluator:
     r"""
-    A tensor evaluator compiled into a loaded native library.
+    Native Symbolica evaluator returning tensors. Construct with TensorEvaluator.compile.
 
-    Create this object with ``TensorEvaluator.compile``. Its input ordering,
-    output shape, and real/complex evaluation rules match TensorEvaluator.
-    Compilation requires a C++ compiler and writes source and library files.
-
-    Examples
-    --------
-    >>> from symbolica import S
-    >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-    >>> x = S("x")
-    >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-    >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    >>> from tempfile import TemporaryDirectory
-    >>> directory = TemporaryDirectory()
-    >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-    >>> compiled.evaluate([[2.0]])[0][1]
-    4.0
-    >>> directory.cleanup()
+    evaluate uses the number_type selected at compilation, as in Symbolica's compiled
+    evaluators. scalar_evaluator exposes the underlying native evaluator.
     """
     @property
     def parameters(self) -> builtins.list[Expression]:
         r"""
-        Symbolic inputs in the required evaluation order.
-
-        Returns
-        -------
-        list of Expression
-            One entry for each value in an input row.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.parameters == [x]
-        True
-        >>> directory.cleanup()
+        Symbolic inputs in evaluation order.
         """
     @property
     def input_size(self) -> builtins.int:
         r"""
-        Number of values required in each evaluation row.
-
-        Returns
-        -------
-        int
-            Length of parameters.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.input_size
-        1
-        >>> directory.cleanup()
+        Number of entries in each input row.
         """
     @property
     def output_shape(self) -> tuple[int, ...]:
         r"""
-        Logical component shape of each result tensor.
-
-        Returns
-        -------
-        tuple of int
-            Shape excluding the batch dimension.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.output_shape
-        (2,)
-        >>> directory.cleanup()
+        Logical shape of each result tensor.
         """
     @property
     def supports_real(self) -> builtins.bool:
         r"""
-        Whether a real-valued evaluation path is available.
-
-        Returns
-        -------
-        bool
-            False when the formulas contain complex coefficients; use
-            evaluate_complex in that case.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.supports_real
-        True
-        >>> directory.cleanup()
+        Whether compilation selected a real number type.
         """
-    def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:
+    @property
+    def scalar_evaluator(self) -> typing.Any:
         r"""
-        Evaluate a batch of real input rows.
-
-        Parameters
-        ----------
-        inputs : sequence of sequences of float
-            One row per evaluation, with input_size entries in parameters order.
-
-        Returns
-        -------
-        list of Tensor
-            One real component tensor per input row, each with output_shape.
-
-        Raises
-        ------
-        ValueError
-            A row has the wrong size, or the formulas contain complex
-            coefficients. Use evaluate_complex for those formulas.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.evaluate([[2.0]])[0][1]
-        4.0
-        >>> directory.cleanup()
+        Underlying Symbolica compiled evaluator.
         """
-    def __repr__(self) -> builtins.str:
+    def evaluate(self, inputs: numpy.typing.ArrayLike) -> builtins.list[Tensor]:
         r"""
-        Return a description of the tensor layout and available numerical kernels.
-
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> from symbolica import E, S
-        >>> r = sp.Representation.euc(2)
-        >>> A = sp.TensorName("docs::A")(r, r)
-        >>> x = S("docs::x")
-        >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-        >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from pathlib import Path
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as directory:
-        ...     folder = Path(directory)
-        ...     compiled = evaluator.compile("docs_eval", str(folder / "eval.cpp"), str(folder / "eval.so"), inline_asm="none", optimization_level=0)
-        ...     results = compiled.evaluate([[2.0], [3.0]])
-        ...     text = repr(compiled)
+        Evaluate real or complex inputs, according to the compiled number type.
         """
-    def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:
-        r"""
-        Evaluate a batch of complex input rows.
-
-        Parameters
-        ----------
-        inputs : sequence of sequences of complex
-            One row per evaluation, with input_size entries in parameters order.
-
-        Returns
-        -------
-        list of Tensor
-            One complex component tensor per input row, each with output_shape.
-
-        Raises
-        ------
-        ValueError
-            A row has the wrong size.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.evaluate_complex([[2.0]])[0][1]
-        (4+0j)
-        >>> directory.cleanup()
-        """
+    def __repr__(self) -> builtins.str: ...
 
 class CookingError(builtins.TypeError):
     r"""
@@ -2717,6 +2546,22 @@ class Tensor:
         >>> tensor[1, 0]
         3.0
         """
+    def evaluator(self, params: typing.Sequence[Expression], functions: typing.Sequence[FunctionDefinition] = [], iterations: builtins.int = 1, cpe_iterations: typing.Optional[builtins.int] = None, n_cores: builtins.int = 4, verbose: builtins.bool = False, jit_compile: builtins.bool = True, direct_translation: builtins.bool = True, jit_direct_translation: builtins.bool = False, jit_optimization_level: builtins.int = 3, jit_options: typing.Mapping[builtins.str, builtins.str] = {}, max_horner_scheme_variables: builtins.int = 500, max_common_pair_cache_entries: builtins.int = 1000000, max_common_pair_distance: builtins.int = 100) -> TensorEvaluator:
+        r"""
+        Optimise all components together using Symbolica's evaluator.
+
+        Accepts the same parameters, FunctionDefinitions, optimisation controls,
+        and JIT settings as Expression.evaluator. Fixed values can be substituted
+        before construction. Evaluation returns one Tensor per input row, retaining
+        the logical axes and data identity. JIT compilation occurs on first use.
+
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
+        >>> x = S("x")
+        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
+        >>> values.evaluator([x]).evaluate([[2.0]])[0][1]
+        4.0
+        """
     def expression(self) -> TensorExpression:
         r"""
         Return the symbolic descriptor for these components.
@@ -3107,42 +2952,6 @@ class Tensor:
         >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
         >>> len(tensor)
         4
-        """
-    def evaluator(self, constants: typing.Mapping[Expression, Expression], funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression], params: typing.Sequence[Expression], iterations: builtins.int = 100, n_cores: builtins.int = 4, verbose: builtins.bool = False) -> TensorEvaluator:
-        r"""
-        Prepare repeated numerical evaluation of symbolic component formulas.
-
-        Parameters
-        ----------
-        constants : mapping of Expression to Expression
-            Fixed values that are exact rational real or complex numbers. Use
-            parameters for values that cannot be represented this way.
-        funs : mapping
-            Function definitions keyed by (function_symbol, name, argument_symbols),
-            with Expression bodies. The name field is accepted but not used.
-        params : sequence of Expression
-            Inputs in the exact order expected by every evaluation row.
-        iterations : int, default 100
-            Horner-optimization iterations.
-        n_cores : int, default 4
-            Number of cores for expression optimization.
-        verbose : bool, default False
-            Print optimization progress.
-
-        Returns
-        -------
-        TensorEvaluator
-            Optimized batch evaluator retaining this tensor's shape and identity.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.evaluate([[2.0]])[0][1]
-        4.0
         """
     def scalar(self) -> Expression:
         r"""
@@ -3897,222 +3706,66 @@ class Tensor:
 @typing.final
 class TensorEvaluator:
     r"""
-    Optimized numerical evaluation of a tensor's component formulas.
+    Symbolica evaluator returning component tensors in their original logical layout.
 
-    Create this object with ``Tensor.evaluator``. Each input row supplies values
-    for ``parameters`` and produces one Tensor with ``output_shape``. Real
-    coefficients support both real and complex evaluation; complex coefficients
-    require ``evaluate_complex``.
-
-    Examples
-    --------
-    >>> from symbolica import S
-    >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-    >>> x = S("x")
-    >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-    >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-    >>> evaluator.evaluate([[2.0], [3.0]])[1][1]
-    9.0
+    Construct with Tensor.evaluator. The scalar_evaluator property exposes the
+    underlying Symbolica Evaluator for precision evaluation, export and inspection.
     """
     @property
     def parameters(self) -> builtins.list[Expression]:
         r"""
-        Symbolic inputs in the required evaluation order.
-
-        Returns
-        -------
-        list of Expression
-            One entry for each value in an input row.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.parameters == [x]
-        True
+        Symbolic inputs in evaluation order.
         """
     @property
     def input_size(self) -> builtins.int:
         r"""
-        Number of values required in each evaluation row.
-
-        Returns
-        -------
-        int
-            Length of parameters.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.input_size
-        1
+        Number of entries in an input row.
         """
     @property
     def output_shape(self) -> tuple[int, ...]:
         r"""
-        Logical component shape of each result tensor.
-
-        Returns
-        -------
-        tuple of int
-            Shape excluding the batch dimension.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.output_shape
-        (2,)
+        Logical shape of each output tensor, excluding the batch dimension.
         """
     @property
     def supports_real(self) -> builtins.bool:
         r"""
-        Whether a real-valued evaluation path is available.
-
-        Returns
-        -------
-        bool
-            False when the formulas contain complex coefficients; use
-            evaluate_complex in that case.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.supports_real
-        True
+        Whether all exact coefficients are real.
         """
-    def __repr__(self) -> builtins.str:
+    @property
+    def scalar_evaluator(self) -> Evaluator:
         r"""
-        Return a readable object description for inspection.
+        Underlying Symbolica Evaluator, with outputs in logical component order.
 
-        Examples
-        --------
-        >>> from symbolica.community import tensor as sp
-        >>> from symbolica import E, S
-        >>> r = sp.Representation.euc(2)
-        >>> A = sp.TensorName("docs::A")(r, r)
-        >>> x = S("docs::x")
-        >>> tensor = sp.Tensor.dense(A, [x, E("0"), E("0"), x + 1])
-        >>> evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> text = repr(evaluator)
+        Use for arbitrary-precision evaluation, export, or instruction inspection.
+        These operations return scalar components; they do not wrap tensor metadata.
         """
-    def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:
+    def __repr__(self) -> builtins.str: ...
+    def evaluate(self, inputs: numpy.typing.ArrayLike) -> builtins.list[Tensor]:
         r"""
-        Evaluate a batch of real input rows.
+        Evaluate real inputs using Symbolica's ArrayLike input conventions.
 
-        Parameters
-        ----------
-        inputs : sequence of sequences of float
-            One row per evaluation, with input_size entries in parameters order.
-
-        Returns
-        -------
-        list of Tensor
-            One real component tensor per input row, each with output_shape.
-
-        Raises
-        ------
-        ValueError
-            A row has the wrong size, or the formulas contain complex
-            coefficients. Use evaluate_complex for those formulas.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.evaluate([[2.0]])[0][1]
-        4.0
+        Returns one Tensor per row. A flat input array is also accepted, with
+        the same reshaping and validation as Evaluator.evaluate.
         """
-    def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:
+    def evaluate_complex(self, inputs: numpy.typing.ArrayLike) -> builtins.list[Tensor]:
         r"""
-        Evaluate a batch of complex input rows.
-
-        Parameters
-        ----------
-        inputs : sequence of sequences of complex
-            One row per evaluation, with input_size entries in parameters order.
-
-        Returns
-        -------
-        list of Tensor
-            One complex component tensor per input row, each with output_shape.
-
-        Raises
-        ------
-        ValueError
-            A row has the wrong size.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> evaluator.evaluate_complex([[2.0]])[0][1]
-        (4+0j)
+        Evaluate complex inputs; returns one Tensor per input row.
         """
-    def compile(self, function_name: builtins.str, filename: builtins.str, library_name: builtins.str, inline_asm: builtins.str = 'default', optimization_level: builtins.int = 3, compiler_path: typing.Optional[builtins.str] = None, custom_header: typing.Optional[builtins.str] = None) -> CompiledTensorEvaluator:
+    def jit_compile(self, jit_compile: builtins.bool, direct_translation: typing.Optional[builtins.bool] = None, optimization_level: typing.Optional[builtins.int] = None, options: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> None:
         r"""
-        Compile and load native C++ code for repeated tensor evaluation.
+        Enable or disable JIT compilation with Symbolica's settings.
+        """
+    def set_real_params(self, real_params: typing.Sequence[builtins.int], sqrt_real: builtins.bool = False, log_real: builtins.bool = False, powf_real: builtins.bool = False, real_if_args_real: builtins.bool = False, verbose: builtins.bool = False) -> None:
+        r"""
+        Mark real parameters using the same assumptions as Evaluator.set_real_params.
+        """
+    def compile(self, function_name: builtins.str, filename: builtins.str, library_name: builtins.str, number_type: builtins.str, inline_asm: builtins.str = 'default', optimization_level: builtins.int = 3, native: builtins.bool = True, compiler_path: typing.Optional[builtins.str] = None, compiler_flags: typing.Optional[typing.Sequence[builtins.str]] = None, custom_header: typing.Optional[builtins.str] = None, cuda_number_of_evaluations: builtins.int = 1, cuda_block_size: builtins.int = 512) -> CompiledTensorEvaluator:
+        r"""
+        Compile a native evaluator with the same options as Evaluator.compile.
 
-        Parameters
-        ----------
-        function_name : str
-            Exported C++ function name.
-        filename : str
-            Path for generated complex-evaluation C++ source. When real evaluation
-            is supported, an additional file with suffix .real.cpp is written.
-        library_name : str
-            Output library path. A separate .real library is generated when supported.
-        inline_asm : str, default "default"
-            Assembly mode: "default", "x64", "aarch64", or "none".
-        optimization_level : int, default 3
-            Compiler optimization level.
-        compiler_path : str, optional
-            C++ compiler executable; omit to use Symbolica's default compiler.
-        custom_header : str, optional
-            Additional C++ header source included in the generated code.
-
-        Returns
-        -------
-        CompiledTensorEvaluator
-            Loaded native evaluator with the same input ordering and result shape.
-
-        Notes
-        -----
-        This writes source and compiled library files to the supplied paths.
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
-        >>> x = S("x")
-        >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
-        >>> from tempfile import TemporaryDirectory
-        >>> directory = TemporaryDirectory()
-        >>> compiled = evaluator.compile("eval", directory.name + "/eval.cpp", directory.name + "/eval", inline_asm="none")
-        >>> compiled.input_size
-        1
-        >>> directory.cleanup()
+        number_type selects real, complex, real_4x, complex_4x, cuda_real or
+        cuda_complex. The returned object's evaluate method uses that number type
+        and returns tensors. Source and library files are written to the given paths.
         """
 
 @typing.final
@@ -8794,7 +8447,7 @@ class TensorNetwork:
         >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> x = S("x")
         >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+        >>> evaluator = values.evaluator([x], iterations=1, n_cores=1)
         >>> from symbolica.community.tensor import TensorNetwork
         >>> network = TensorNetwork(values).replace(x, 2)
         >>> network.to_tensor()[0] == 2
@@ -8824,7 +8477,7 @@ class TensorNetwork:
         >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> x = S("x")
         >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-        >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+        >>> evaluator = values.evaluator([x], iterations=1, n_cores=1)
         >>> from symbolica.community.tensor import TensorNetwork
         >>> network = TensorNetwork(values).evaluate({x: 2.0}, {})
         >>> network.to_tensor()[1]

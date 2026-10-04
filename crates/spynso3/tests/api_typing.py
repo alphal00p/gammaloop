@@ -274,9 +274,18 @@ def check_types(
     assert_type(library.to_html(settings=settings), str)
     assert_type(tensor.expression(), sp.TensorExpression)
     assert_type(network.expression(), sp.TensorExpression)
+    assert_type(
+        tensor.evaluator(
+            [scalar],
+            functions=[FunctionDefinition(S("typing::f"), [scalar], scalar**2)],
+            jit_compile=False,
+        ),
+        sp.TensorEvaluator,
+    )
+    assert_type(evaluator.scalar_evaluator, Evaluator)
     assert_type(evaluator.evaluate([[2.0]]), list[sp.Tensor])
     assert_type(evaluator.evaluate_complex([[2j]]), list[sp.Tensor])
-    assert_type(compiled.evaluate_complex([[2j]]), list[sp.Tensor])
+    assert_type(compiled.evaluate([[2j]]), list[sp.Tensor])
     assert_type(compiled.evaluate([[2.0]]), list[sp.Tensor])
     assert_type(evaluator.parameters, list[Expression])
     assert_type(compiled.parameters, list[Expression])

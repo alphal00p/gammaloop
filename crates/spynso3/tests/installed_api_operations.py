@@ -876,47 +876,60 @@ class TensorOperationsTests(unittest.TestCase):
             [self.x * E("1i"), self.y, E("0"), self.x],
         ):
             tensor = sp.Tensor.dense(self.A(self.rep, self.rep), values).to_sparse()
-            evaluator = tensor.evaluator(
-                {}, {}, [self.y, self.x], iterations=1, n_cores=1
-            )
+            evaluator = tensor.evaluator([self.y, self.x], iterations=1, n_cores=1)
             self.assertEqual(evaluator.parameters, [self.y, self.x])
             self.assertEqual(evaluator.input_size, 2)
             self.assertEqual(evaluator.output_shape, (2, 2))
+            for jit in (False, True):
+                evaluator.jit_compile(jit)
+                self.assertEqual(evaluator.evaluate_complex(np.empty((0, 2))), [])
+                for batch in ([[1.0]], [[1.0, 2.0], [1.0, 2.0, 3.0]]):
+                    with self.assertRaises(ValueError):
+                        evaluator.evaluate_complex(batch)
+                if evaluator.supports_real:
+                    self.assertEqual(
+                        evaluator.evaluate([[2.0, 3.0]])[0][:], [3.0, 2.0, 6.0, 0.0]
+                    )
+                else:
+                    with self.assertRaisesRegex(ValueError, "complex coefficients"):
+                        evaluator.evaluate([[2.0, 3.0]])
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                compiled = evaluator.compile(
-                    "api_operations_eval",
-                    str(root / "eval.cpp"),
-                    str(root / "eval.so"),
-                    inline_asm="none",
-                    optimization_level=0,
-                )
-                self.assertEqual(compiled.parameters, evaluator.parameters)
-                self.assertEqual(compiled.supports_real, evaluator.supports_real)
-                for engine in (evaluator, compiled):
-                    self.assertEqual(engine.evaluate_complex([]), [])
-                    for batch in ([[1.0]], [[1.0, 2.0], [1.0, 2.0, 3.0]]):
-                        with self.assertRaisesRegex(ValueError, "input row"):
-                            engine.evaluate(batch)
-                        with self.assertRaisesRegex(ValueError, "input row"):
-                            engine.evaluate_complex(batch)
-                    if engine.supports_real:
-                        self.assertEqual(
-                            engine.evaluate([[2.0, 3.0]])[0][:], [3.0, 2.0, 6.0, 0.0]
-                        )
-                    else:
-                        with self.assertRaisesRegex(ValueError, "complex coefficients"):
-                            engine.evaluate([[2.0, 3.0]])
-                inputs = [[2 + 1j, 3 - 2j], [0j, 0j]]
-                for a, b in zip(
-                    evaluator.evaluate_complex(inputs),
-                    compiled.evaluate_complex(inputs),
-                    strict=True,
-                ):
-                    self.assertEqual(a[:], b[:])
-                    self.assertEqual(a.structure, b.structure)
+                modes = ("real", "complex") if evaluator.supports_real else ("complex",)
+                for mode in modes:
+                    compiled = evaluator.compile(
+                        "api_operations_eval",
+                        str(root / f"{mode}.cpp"),
+                        str(root / f"{mode}.so"),
+                        number_type=mode,
+                        inline_asm="none",
+                        optimization_level=0,
+                        native=False,
+                    )
+                    self.assertEqual(compiled.parameters, evaluator.parameters)
+                    self.assertEqual(compiled.output_shape, evaluator.output_shape)
+                    self.assertEqual(compiled.supports_real, mode == "real")
+                    dtype = np.float64 if mode == "real" else np.complex128
+                    self.assertEqual(
+                        compiled.evaluate(np.empty((0, 2), dtype=dtype)), []
+                    )
+                    with self.assertRaises(ValueError):
+                        compiled.evaluate([[1.0]])
+                    inputs = (
+                        [[2.0, 3.0], [0.0, 0.0]]
+                        if mode == "real"
+                        else [[2 + 1j, 3 - 2j], [0j, 0j]]
+                    )
+                    expected = (
+                        evaluator.evaluate(inputs)
+                        if mode == "real"
+                        else evaluator.evaluate_complex(inputs)
+                    )
+                    for a, b in zip(expected, compiled.evaluate(inputs), strict=True):
+                        np.testing.assert_allclose(a[:], b[:])
+                        self.assertEqual(a.structure, b.structure)
         constant = sp.Tensor.dense(self.A(self.rep), [1.0, 2.0]).evaluator(
-            {}, {}, [], iterations=1, n_cores=1
+            [], iterations=1, n_cores=1
         )
         self.assertEqual(constant.evaluate([[]])[0][:], [1.0, 2.0])
 

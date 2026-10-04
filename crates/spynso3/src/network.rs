@@ -995,7 +995,7 @@ impl SpensoNet {
     /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> x = S("x")
     /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator = values.evaluator([x], iterations=1, n_cores=1)
     /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> network = TensorNetwork(values).replace(x, 2)
     /// >>> network.to_tensor()[0] == 2
@@ -1138,7 +1138,7 @@ impl SpensoNet {
     /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> x = S("x")
     /// >>> values = Tensor.dense(TensorName.vector("eval_v")(Representation.euc(2)), [x, x**2])
-    /// >>> evaluator = values.evaluator({}, {}, [x], iterations=1, n_cores=1)
+    /// >>> evaluator = values.evaluator([x], iterations=1, n_cores=1)
     /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> network = TensorNetwork(values).evaluate({x: 2.0}, {})
     /// >>> network.to_tensor()[1]
