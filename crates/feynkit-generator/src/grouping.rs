@@ -20,8 +20,7 @@ use idenso::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
     tensor::{
-        AlgebraSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
-        inference::TensorInferenceError,
+        AlgebraContraction, AlgebraSettings, SymbolicTensor, inference::TensorInferenceError,
     },
 };
 use spenso::{
@@ -35,7 +34,7 @@ use spenso::{
         parsing::{ParseSettings as TensorParseSettings, ShadowedStructure, ShorthandParsing},
         store::NetworkStore,
     },
-    shadowing::TensorCollectFilter,
+    shadowing::{Collectable, TensorCollectExt, TensorCollectFilter},
     structure::{
         Canonicalized,
         representation::{LibraryRep, Minkowski, RepName},
@@ -403,73 +402,81 @@ pub(crate) fn group_diagrams(
             let raw_complete = model.expand_couplings(
                 &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
             );
-            // Signed-zero proofs only use slot identities and symmetries; keep
-            // their dimensions instead of introducing and cooking Nc²−1.
-            let raw_complete = if compares_numerators {
-                raw_complete.to_parametric_color()
-            } else {
-                raw_complete
-            };
-            // Keep compound dimensions such as Nc²−1 and structured indices reversible
-            // across the typed boundary; decode only when returning to the raw pipeline.
-            let cooked = cooking.try_cook(raw_complete.as_view()).map_err(|error| {
-                GroupingError::ColorSimplification {
-                    diagram: diagram.name().to_owned(),
-                    message: format!("{error:?}"),
-                }
-            })?;
-            let (simplified, is_zero) = if compares_numerators {
-                // Contract color before abstract-index canonicalization. Canonizing a
-                // raw product of color tensors can encounter the same concrete base
-                // slot more than once, while the projector closes precisely those
-                // external slots.
-                let tensor = SymbolicTensor::infer(cooked)
+            let color_reps = [
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ];
+            let simplify_color = |expression: AtomView<'_>| {
+                // Keep structured indices and compound dimensions reversible
+                // across the typed algebra boundary.
+                let cooked = cooking.try_cook(expression).map_err(|error| {
+                    GroupingError::ColorSimplification {
+                        diagram: diagram.name().to_owned(),
+                        message: error.to_string(),
+                    }
+                })?;
+                SymbolicTensor::infer(cooked)
                     .and_then(|tensor| {
                         tensor.simplify_algebra(&AlgebraSettings {
                             color: Some(
                                 ColorSimplifySettings::default().with_cof_dimension_invariants(),
                             ),
+                            contract: if compares_numerators {
+                                AlgebraContraction::Fully
+                            } else {
+                                AlgebraContraction::None
+                            },
                             ..Default::default()
                         })
                     })
                     .map_err(|error| GroupingError::ColorSimplification {
                         diagram: diagram.name().to_owned(),
                         message: error.to_string(),
-                    })?;
+                    })
+            };
+            let (simplified, is_zero) = if compares_numerators {
+                // Comparison retains symbolic color dimensions and contracts
+                // the projector before alpha-renaming dummy indices.
+                let tensor = simplify_color(raw_complete.to_parametric_color().as_view())?;
                 let zero = tensor
-                    .coefficients_are_zero(TensorCollectFilter::Reps([
-                        ColorAdjoint {}.into(),
-                        ColorFundamental {}.into(),
-                        ColorSextet {}.into(),
-                    ]))
+                    .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
                     .map_err(|error| GroupingError::ColorSimplification {
                         diagram: diagram.name().to_owned(),
                         message: error.to_string(),
                     })?;
                 (tensor.expression().clone(), zero.is_true())
             } else {
-                // Prove signed graph zeros without reducing nonzero color factors
-                // or distributing Lorentz sums. Opaque shorthands also avoid
-                // enumerating the permutations of symmetric trace projectors.
-                let mut network = cooked
-                    .parse_to_symbolic_net::<GroupingIndex>(&TensorParseSettings {
-                        shorthand_parsing: ShorthandParsing::Opaque,
-                        ..Default::default()
+                // Isolate complete color products before tensor inference. The
+                // collector protects Lorentz/momentum coefficients as opaque
+                // factors, including the alternatives of four-gluon vertices.
+                // Only color identities and their contraction prerequisites run;
+                // there is no separate signed-network canonicalization pass.
+                let mut error = None;
+                let expression = raw_complete
+                    .as_view()
+                    .collect_with_map(|factor| {
+                        TensorCollectFilter::Reps(color_reps).matches(factor)
                     })
-                    .map_err(|error| GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
-                        message: error.to_string(),
-                    })?;
-                let expression = if network.remove_antisymmetric_zero_terms() {
-                    network.simple_execute::<()>().map_err(|error| {
-                        GroupingError::ColorSimplification {
-                            diagram: diagram.name().to_owned(),
-                            message: error.to_string(),
+                    .into_inner()
+                    .map_collects(|wrapped, _, out| {
+                        if error.is_some() {
+                            return;
                         }
-                    })?
-                } else {
-                    cooked
-                };
+                        let AtomView::Fun(wrapper) = wrapped else {
+                            unreachable!()
+                        };
+                        let selected = wrapper.iter().next().expect("collected color product");
+                        match simplify_color(selected) {
+                            Ok(tensor) => **out = cooking.uncook(tensor.expression().as_view()),
+                            Err(cause) => error = Some(cause),
+                        }
+                    })
+                    .unwrap_collect();
+                if let Some(error) = error {
+                    return Err(error);
+                }
+                let expression = expression.collect_reps(color_reps);
                 let zero = expression.collect_factors().zero_test(0, 0.0).is_true();
                 (expression, zero)
             };
@@ -2483,7 +2490,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_detection_prunes_signed_color_zeros_and_preserves_factorized_survivors() {
+    fn zero_detection_reduces_color_and_preserves_factorized_survivors() {
         let model = Arc::new(model());
         let [a, b, c, d, e] =
             [1, 2, 3, 4, 5].map(|index| ColorAdjoint {}.new_rep(8).to_symbolic([Atom::num(index)]));
@@ -2525,6 +2532,45 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![1, 2]
         );
+    }
+
+    #[test]
+    fn zero_detection_combines_reduced_color_coefficients_and_tensor_powers() {
+        let model = Arc::new(model());
+        let [a, b, c, d] =
+            [1, 2, 3, 4].map(|index| ColorAdjoint {}.new_rep(8).to_symbolic([Atom::num(index)]));
+        let bubble = idenso::color_f!(&a, &b, &c) * idenso::color_f!(&a, &b, &d);
+        let metric = function!(spenso::network::library::symbolic::ETS.metric, &c, &d);
+        let lorentz = Minkowski {}.new_rep(4);
+        let spectator = test_atom("(x+y)^30")
+            * function!(
+                spenso::network::library::symbolic::ETS.metric,
+                lorentz.to_symbolic([Atom::num(1)]),
+                lorentz.to_symbolic([Atom::num(2)])
+            );
+        // Both need actual color identities: neither is an odd graph symmetry.
+        // Different Lorentz coefficients of one color structure must combine
+        // after reduction, while repeated color tensors must not be skipped.
+        let mixed = &bubble * &spectator - Atom::num(3) * &metric * &spectator;
+        let power = idenso::color_f!(&a, &b, &c).pow(Atom::num(2)) - Atom::num(24);
+        let nonzero = &bubble * &spectator - Atom::num(2) * &metric * &spectator;
+        let inputs = vec![
+            diagram_with_atoms(&model, "mixed-zero", mixed, Atom::one(), 25, 25),
+            diagram_with_atoms(&model, "power-zero", power, Atom::one(), 25, 25),
+            diagram_with_atoms(&model, "nonzero", nonzero.clone(), Atom::one(), 25, 25),
+        ];
+        let grouped = group_diagrams(
+            inputs,
+            &model,
+            &NumeratorGrouping::OnlyDetectZeroes,
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 2);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].numerator(), &nonzero);
+        assert_eq!(grouped.groups[0].members[0].source_diagram, 2);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
