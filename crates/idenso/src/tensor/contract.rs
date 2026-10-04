@@ -194,8 +194,8 @@ impl SymbolicTensor<PartialStructure> {
     /// Contract compatible structural connections without evaluating identities
     /// or traces. [`ContractSettings`] controls representations and notation.
     /// Setting `expand = false` retains independent sum alternatives; completion
-    /// is relative to that policy. Both policies reuse the outside-in planner and
-    /// shallow graph, opening only selected tensor scopes.
+    /// is relative to that policy. Both policies reuse the outside-in planner,
+    /// opening only selected tensor scopes.
     pub fn contract(&self, settings: ContractSettings<'_>) -> Result<Self, TensorInferenceError> {
         self.plan_reduction(super::simplification::ReductionRequest::Contract(settings))
     }
@@ -347,6 +347,22 @@ impl SymbolicTensor<PartialStructure> {
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
             .expanding(settings.expand)
             .observed(result.root.reduction_observations());
+        if self.reduction_observations().candidates.intrinsic
+            && let Some(expression) = contractor.prerequisite_product(
+                self.expression.as_view(),
+                selected,
+                allowed_vector,
+                settings.rank_one,
+            )
+        {
+            let expression = if self.reduction_observations().candidates.dots {
+                DotNormalizer::with_settings(expression.as_view(), settings)
+            } else {
+                expression
+            };
+            result.root = self.with_identity_result(expression, None)?;
+            return Ok(result);
+        }
         let contractor = match result.root.shallow_graph() {
             Ok(graph) => contractor.planned(
                 result.root.expression.clone(),
@@ -582,6 +598,23 @@ impl SymbolicTensor<PartialStructure> {
                         )
                     }),
                 )?,
+                status: ReductionStatus::Complete,
+                observations: None,
+            });
+        }
+        if order.is_none()
+            && observations.candidates.intrinsic
+            && SlotContraction::explicit_product(source.as_view()).is_some()
+        {
+            let expression =
+                SlotContraction::configured(settings.metrics, settings.representations)
+                    .contract_ordered(
+                        source.as_view(),
+                        settings.rank_one,
+                        Some(&observations.candidates),
+                    );
+            return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                root: self.with_identity_result(expression, None)?,
                 status: ReductionStatus::Complete,
                 observations: None,
             });
@@ -1580,6 +1613,82 @@ mod policy_tests {
     }
 
     #[test]
+    fn prerequisite_paths_stop_at_unselected_tensors() {
+        crate::test_support::test_initialize();
+        let [a, b, c, d, e] = [98541, 98542, 98543, 98544, 98545].map(|index| {
+            LibraryRep::from(Minkowski {})
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(index)
+                .to_atom()
+        });
+        let head = spenso::tensor_symbol!("prerequisite_path_selected");
+        let foreign = spenso::tensor_symbol!("prerequisite_path_foreign");
+        let vector = spenso::vector_symbol!("prerequisite_path_vector");
+        let selected = |port: &Atom| symbolica::function!(head, port);
+        let spectator = g!(&d, &e) * symbolica::function!(vector, &d);
+        let source = SymbolicTensor::infer(
+            selected(&a) * g!(&a, &b) * g!(&b, &c) * symbolica::function!(foreign, &c) * &spectator,
+        )
+        .unwrap();
+        let selects = |value: AtomView<'_>| matches!(value, AtomView::Fun(function) if function.get_symbol() == head);
+        let result = source
+            .contract_prerequisites(Default::default(), selects, |_| true)
+            .unwrap();
+        assert_eq!(
+            result.root.expression,
+            selected(&c) * symbolica::function!(foreign, &c) * spectator
+        );
+        assert_eq!(result.root.structure(), source.structure());
+        assert_eq!(
+            result
+                .root
+                .contract_prerequisites(Default::default(), selects, |_| true)
+                .unwrap()
+                .root,
+            result.root
+        );
+        assert_eq!(
+            source
+                .contract_prerequisites(
+                    ContractSettings {
+                        representations: Some(&[]),
+                        ..Default::default()
+                    },
+                    selects,
+                    |_| true
+                )
+                .unwrap()
+                .root,
+            source
+        );
+
+        let source =
+            SymbolicTensor::infer(selected(&a) * symbolica::function!(vector, &a)).unwrap();
+        assert_eq!(
+            source
+                .contract_prerequisites(Default::default(), selects, |_| false)
+                .unwrap()
+                .root,
+            source
+        );
+        let result = source
+            .contract_prerequisites(Default::default(), selects, |_| true)
+            .unwrap();
+        assert_eq!(
+            result.root.expression,
+            symbolica::function!(
+                head,
+                symbolica::function!(
+                    vector,
+                    LibraryRep::from(Minkowski {})
+                        .new_rep(4)
+                        .to_symbolic([] as [Atom; 0])
+                )
+            )
+        );
+    }
+
+    #[test]
     fn prerequisite_contraction_leaves_unrelated_metric_work_exact() {
         crate::test_support::test_initialize();
         let [a, b, c, d] = [98401, 98402, 98403, 98404].map(|index| {
@@ -1596,7 +1705,7 @@ mod policy_tests {
         let result = source
             .contract_prerequisites(
                 Default::default(),
-                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
+                |value: AtomView<'_>| matches!(value, AtomView::Fun(function) if function.get_symbol() == head),
                 |_| true,
             )
             .unwrap();
