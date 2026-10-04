@@ -41,20 +41,6 @@
       "expression": null
     },
     {
-      "name": "chemical_potential_scalar_0",
-      "lhablock": "CHEMICALPOTENTIAL",
-      "lhacode": [
-        1
-      ],
-      "nature": "external",
-      "parameter_type": "real",
-      "value": [
-        1.0,
-        0.0
-      ],
-      "expression": null
-    },
-    {
       "name": "mass_scalar_1",
       "lhablock": "SCALARS",
       "lhacode": [
@@ -83,20 +69,6 @@
       "expression": "UFO::{}::ZERO"
     },
     {
-      "name": "chemical_potential_scalar_1",
-      "lhablock": "CHEMICALPOTENTIAL",
-      "lhacode": [
-        2
-      ],
-      "nature": "external",
-      "parameter_type": "real",
-      "value": [
-        1.0,
-        0.0
-      ],
-      "expression": null
-    },
-    {
       "name": "mass_scalar_2",
       "lhablock": "SCALARS",
       "lhacode": [
@@ -123,20 +95,6 @@
         0.0
       ],
       "expression": "UFO::{}::ZERO"
-    },
-    {
-      "name": "chemical_potential_scalar_2",
-      "lhablock": "CHEMICALPOTENTIAL",
-      "lhacode": [
-        3
-      ],
-      "nature": "external",
-      "parameter_type": "real",
-      "value": [
-        1.0,
-        0.0
-      ],
-      "expression": null
     },
     {
       "name": "aEWM1",
@@ -228,11 +186,12 @@
       "width": "ZERO",
       "texname": "\\phi_0",
       "antitexname": "\\phi_0",
-      "charge": 0.0,
-      "chemical_potential": "chemical_potential_scalar_0",
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     },
     {
       "pdg_code": 1001,
@@ -244,11 +203,12 @@
       "width": "width_scalar_1",
       "texname": "\\phi_1",
       "antitexname": "\\phi_1",
-      "charge": 0.0,
-      "chemical_potential": "chemical_potential_scalar_1",
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     },
     {
       "pdg_code": 1002,
@@ -260,11 +220,12 @@
       "width": "width_scalar_2",
       "texname": "\\phi_2",
       "antitexname": "\\phi_2",
-      "charge": 0.0,
-      "chemical_potential": "chemical_potential_scalar_2",
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     }
   ],
   "propagators": [

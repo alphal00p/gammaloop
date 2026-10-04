@@ -1172,6 +1172,41 @@
   nextestPython = pkgs.python313.withPackages (pythonPackages: [
     pythonPackages.numpy
   ]);
+  # Use the same released packages as uv.lock for actual UFO-import tests.
+  # Wheels avoid a second build of Symbolica's Python extension in the CI graph.
+  ufoPython = let
+    pythonPackages = pkgs.python313Packages;
+    lock = builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"));
+    loader = lib.findFirst (package: package.name == "ufo-model-loader") null lock.package;
+    symbolica = lib.findFirst (package: package.name == "symbolica") null lock.package;
+    wheelPlatform = {
+      x86_64-linux = "manylinux2014_x86_64.whl";
+      aarch64-darwin = "macosx_11_0_arm64.whl";
+    }.${system};
+    symbolicaWheel = lib.findFirst (wheel: lib.hasSuffix wheelPlatform wheel.url) null symbolica.wheels;
+    symbolicaPython = pythonPackages.buildPythonPackage {
+      pname = "symbolica";
+      inherit (symbolica) version;
+      format = "wheel";
+      src = pkgs.fetchurl {
+        inherit (symbolicaWheel) url;
+        sha256 = lib.removePrefix "sha256:" symbolicaWheel.hash;
+      };
+      nativeBuildInputs = lib.optionals pkgs.stdenv.isLinux [pkgs.autoPatchelfHook];
+      buildInputs = [pkgs.stdenv.cc.cc.lib];
+    };
+    loaderWheel = builtins.head loader.wheels;
+    loaderPython = pythonPackages.buildPythonPackage {
+      pname = "ufo-model-loader";
+      inherit (loader) version;
+      format = "wheel";
+      src = pkgs.fetchurl {
+        inherit (loaderWheel) url;
+        sha256 = lib.removePrefix "sha256:" loaderWheel.hash;
+      };
+      dependencies = [symbolicaPython];
+    };
+  in pkgs.python313.withPackages (_: [loaderPython]);
 
   # Common arguments can be set here to avoid repeating them later
   commonArgs = {
@@ -2594,6 +2629,7 @@
         pkgs.gcc
         nextestFailureSummary
       ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
+      ++ lib.optionals (target.runtimeUfoLoader or false) [ufoPython]
       ++ (target.runtimeTools or []);
       CC = nixCc;
       CXX = nixCxx;
@@ -2637,6 +2673,8 @@
       # not mistaken for a general persistent-cache namespace.
       export TMPDIR="$PWD/target/nix-ci-tmp"
       mkdir -p "$TMPDIR"
+    '' + lib.optionalString (target.runtimeUfoLoader or false) ''
+      export PYTHONPATH=${ufoPython}/${pythonSitePackages}
     '' + lib.optionalString (nextestUsesPythonModule target) ''
       export PYO3_PYTHON=${nextestPython}/bin/python3
       export PYTHON=${nextestPython}/bin/python3

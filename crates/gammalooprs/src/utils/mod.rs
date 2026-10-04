@@ -3430,7 +3430,19 @@ pub(crate) fn parse_python_expression(expression: &str) -> Atom {
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
 
+    // Recent Symbolica exports use a standalone imaginary unit, while older
+    // exports attach it to a numeric coefficient (for example, `1𝑖`).
     parse!(processed_string)
+        .replace(parse!("𝑖"))
+        .with(Atom::i())
+}
+
+#[test]
+fn python_expression_imaginary_unit_is_numeric() {
+    for expression in ["𝑖", "1𝑖", "(𝑖)^5", "1+𝑖-1"] {
+        assert_eq!(parse_python_expression(expression), Atom::i());
+    }
+    assert_eq!(parse_python_expression("-𝑖/3"), -Atom::i() / 3);
 }
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.

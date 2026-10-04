@@ -1548,7 +1548,7 @@ fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
         run_commands(
             &mut cli,
             &[
-                "import model sm-default.json",
+                "import model sm-thermal.json",
                 "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
                 "set model aS=1.0",
                 "set model muB=3.0",

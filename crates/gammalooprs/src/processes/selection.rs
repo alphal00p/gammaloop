@@ -1602,10 +1602,11 @@ mod tests {
             width: ParameterName(UFOSymbol::zero()),
             texname: name.into(),
             antitexname: antiname.into(),
-            charge: 0.0,
+            charge: 0.into(),
             ghost_number,
             lepton_number: 0,
-            y_charge: 0,
+            y_charge: None,
+            y_charge_right: None,
             goldstone,
             chemical_potential: None,
         }

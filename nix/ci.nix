@@ -3,13 +3,18 @@
   workspacePackages ? workspaceGraph.packages,
   system ? "x86_64-linux",
 }: let
+  # Symbolica 3.0.0 has no aarch64-linux wheel. Exercise UFO imports on the
+  # platforms with a published wheel; the remaining model tests run everywhere.
+  hasUfoWheel = builtins.elem system ["x86_64-linux" "aarch64-darwin"];
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
+  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo_support"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
       name = "core";
+      runtimeUfoLoader = hasUfoWheel;
       packages = [
         "gammaloop-api"
         "gammaloop-tracing-filter"

@@ -1,5 +1,5 @@
 commands = [
-  "import model sm-default.json",
+  "import model sm-thermal.json",
   "import graphs ./tests/resources/graphs/bugblatters_qcd_vacuum.dot",
   "set model aS=1.0",
   "set model muB=0.0",

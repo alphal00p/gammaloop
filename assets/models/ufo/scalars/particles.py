@@ -23,5 +23,4 @@ for i_scalar in range(Param.N_SCALARS):
                                      charge=0,
                                      GhostNumber=0,
                                      LeptonNumber=0,
-                                     Y=0,
-                                     chemical_potential=Param.scalar_chemical_potential_parameters[i_scalar]))
+                                     Y=0))

@@ -1075,7 +1075,7 @@
     "name": "muB",
     "nature": "external",
     "parameter_type": "real",
-    "value": [3.0, 0.0]
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "CHEMICALPOTENTIAL",
@@ -1736,7 +1736,7 @@
   "particles": [{
     "antiname": "a",
     "antitexname": "{\\gamma}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
@@ -1747,11 +1747,12 @@
     "spin": 3,
     "texname": "{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "Z",
     "antitexname": "{Z}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
@@ -1762,11 +1763,12 @@
     "spin": 3,
     "texname": "{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "W-",
     "antitexname": "{W^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "muW",
     "color": 1,
     "ghost_number": 0,
@@ -1777,11 +1779,12 @@
     "spin": 3,
     "texname": "{W^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "W+",
     "antitexname": "{W^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "minus_muW",
     "color": 1,
     "ghost_number": 0,
@@ -1792,11 +1795,12 @@
     "spin": 3,
     "texname": "{W^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "g",
     "antitexname": "{g}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 8,
     "ghost_number": 0,
@@ -1807,11 +1811,12 @@
     "spin": 3,
     "texname": "{g}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghA~",
     "antitexname": "\\overline{\\tilde{\\gamma}}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 1,
@@ -1822,11 +1827,12 @@
     "spin": -1,
     "texname": "\\tilde{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghA",
     "antitexname": "\\tilde{\\gamma}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": -1,
@@ -1837,11 +1843,12 @@
     "spin": -1,
     "texname": "\\overline{\\tilde{\\gamma}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghZ~",
     "antitexname": "\\bar{\\tilde{Z}}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 1,
@@ -1852,11 +1859,12 @@
     "spin": -1,
     "texname": "\\tilde{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghZ",
     "antitexname": "\\tilde{Z}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": -1,
@@ -1867,11 +1875,12 @@
     "spin": -1,
     "texname": "\\bar{\\tilde{Z}}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghWp~",
     "antitexname": "{\\bar{\\tilde{W}}^+}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "mughWp",
     "color": 1,
     "ghost_number": 1,
@@ -1882,11 +1891,12 @@
     "spin": -1,
     "texname": "{\\tilde{W}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghWp",
     "antitexname": "{\\tilde{W}^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "minus_mughWp",
     "color": 1,
     "ghost_number": -1,
@@ -1897,11 +1907,12 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghWm~",
     "antitexname": "{\\bar{\\tilde{W}}^-}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "mughWm",
     "color": 1,
     "ghost_number": 1,
@@ -1912,11 +1923,12 @@
     "spin": -1,
     "texname": "{\\tilde{W}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghWm",
     "antitexname": "{\\tilde{W}^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "minus_mughWm",
     "color": 1,
     "ghost_number": -1,
@@ -1927,11 +1939,12 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghG~",
     "antitexname": "{\\bar{\\tilde{g}}}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 8,
     "ghost_number": 1,
@@ -1942,11 +1955,12 @@
     "spin": -1,
     "texname": "{\\tilde{g}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ghG",
     "antitexname": "{\\tilde{g}}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 8,
     "ghost_number": -1,
@@ -1957,11 +1971,12 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{g}}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "ve~",
     "antitexname": "{\\overline{\\nu}_e}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": "muve",
     "color": 1,
     "ghost_number": 0,
@@ -1972,11 +1987,12 @@
     "spin": 2,
     "texname": "{\\nu_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": null
   }, {
     "antiname": "ve",
     "antitexname": "{\\nu_e}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": "minus_muve",
     "color": 1,
     "ghost_number": 0,
@@ -1987,11 +2003,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": 1
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": "muvm",
     "color": 1,
     "ghost_number": 0,
@@ -2002,11 +2019,12 @@
     "spin": 2,
     "texname": "{\\nu_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": null
   }, {
     "antiname": "vm",
     "antitexname": "{\\nu_\\mu}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": "minus_muvm",
     "color": 1,
     "ghost_number": 0,
@@ -2017,11 +2035,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": 1
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": "muvt",
     "color": 1,
     "ghost_number": 0,
@@ -2032,11 +2051,12 @@
     "spin": 2,
     "texname": "{\\nu_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": null
   }, {
     "antiname": "vt",
     "antitexname": "{\\nu_\\tau}",
-    "charge": -0.0,
+    "charge": 0,
     "chemical_potential": "minus_muvt",
     "color": 1,
     "ghost_number": 0,
@@ -2047,11 +2067,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": 1
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "chemical_potential": "muu",
     "color": 3,
     "ghost_number": 0,
@@ -2062,11 +2083,12 @@
     "spin": 2,
     "texname": "{u}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "u",
     "antitexname": "{u}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "chemical_potential": "minus_muu",
     "color": -3,
     "ghost_number": 0,
@@ -2077,11 +2099,12 @@
     "spin": 2,
     "texname": "{\\overline{u}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "chemical_potential": "muc",
     "color": 3,
     "ghost_number": 0,
@@ -2092,11 +2115,12 @@
     "spin": 2,
     "texname": "{c}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "c",
     "antitexname": "{c}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "chemical_potential": "minus_muc",
     "color": -3,
     "ghost_number": 0,
@@ -2107,11 +2131,12 @@
     "spin": 2,
     "texname": "{\\overline{c}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "chemical_potential": "mut",
     "color": 3,
     "ghost_number": 0,
@@ -2122,11 +2147,12 @@
     "spin": 2,
     "texname": "{t}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "t",
     "antitexname": "{t}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "chemical_potential": "minus_mut",
     "color": -3,
     "ghost_number": 0,
@@ -2137,11 +2163,12 @@
     "spin": 2,
     "texname": "{\\overline{t}}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "chemical_potential": "mud",
     "color": 3,
     "ghost_number": 0,
@@ -2152,11 +2179,12 @@
     "spin": 2,
     "texname": "{d}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "d",
     "antitexname": "{d}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "chemical_potential": "minus_mud",
     "color": -3,
     "ghost_number": 0,
@@ -2167,11 +2195,12 @@
     "spin": 2,
     "texname": "{\\overline{d}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "chemical_potential": "mus",
     "color": 3,
     "ghost_number": 0,
@@ -2182,11 +2211,12 @@
     "spin": 2,
     "texname": "{s}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "s",
     "antitexname": "{s}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "chemical_potential": "minus_mus",
     "color": -3,
     "ghost_number": 0,
@@ -2197,11 +2227,12 @@
     "spin": 2,
     "texname": "{\\overline{s}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "chemical_potential": "mub",
     "color": 3,
     "ghost_number": 0,
@@ -2212,11 +2243,12 @@
     "spin": 2,
     "texname": "{b}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "b",
     "antitexname": "{b}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "chemical_potential": "minus_mub",
     "color": -3,
     "ghost_number": 0,
@@ -2227,11 +2259,12 @@
     "spin": 2,
     "texname": "{\\overline{b}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "H",
     "antitexname": "{H}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
@@ -2242,11 +2275,12 @@
     "spin": 1,
     "texname": "{H}",
     "width": "WH",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": null
   }, {
     "antiname": "G0",
     "antitexname": "{G_0}",
-    "charge": 0.0,
+    "charge": 0,
     "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
@@ -2258,11 +2292,12 @@
     "spin": 1,
     "texname": "{G_0}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": null
   }, {
     "antiname": "G-",
     "antitexname": "{G^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "muG",
     "color": 1,
     "ghost_number": 0,
@@ -2274,11 +2309,12 @@
     "spin": 1,
     "texname": "{G^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": 1,
+    "y_charge_right": null
   }, {
     "antiname": "G+",
     "antitexname": "{G^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "minus_muG",
     "color": 1,
     "ghost_number": 0,
@@ -2290,11 +2326,12 @@
     "spin": 1,
     "texname": "{G^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": null
   }, {
     "antiname": "e+",
     "antitexname": "{e^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "mue",
     "color": 1,
     "ghost_number": 0,
@@ -2305,11 +2342,12 @@
     "spin": 2,
     "texname": "{e^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": -2
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "minus_mue",
     "color": 1,
     "ghost_number": 0,
@@ -2320,11 +2358,12 @@
     "spin": 2,
     "texname": "{e^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 2,
+    "y_charge_right": 1
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "mumu",
     "color": 1,
     "ghost_number": 0,
@@ -2335,11 +2374,12 @@
     "spin": 2,
     "texname": "{\\mu^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": -2
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "minus_mumu",
     "color": 1,
     "ghost_number": 0,
@@ -2350,11 +2390,12 @@
     "spin": 2,
     "texname": "{\\mu^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 2,
+    "y_charge_right": 1
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
-    "charge": -1.0,
+    "charge": -1,
     "chemical_potential": "muta",
     "color": 1,
     "ghost_number": 0,
@@ -2365,11 +2406,12 @@
     "spin": 2,
     "texname": "{\\tau^-}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": -1,
+    "y_charge_right": -2
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
-    "charge": 1.0,
+    "charge": 1,
     "chemical_potential": "minus_muta",
     "color": 1,
     "ghost_number": 0,
@@ -2380,7 +2422,8 @@
     "spin": 2,
     "texname": "{\\tau^+}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": 2,
+    "y_charge_right": 1
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

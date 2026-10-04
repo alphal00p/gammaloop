@@ -227,7 +227,7 @@ WTau = Parameter(name='WTau',
 muB = Parameter(name='muB',
                 nature='external',
                 type='real',
-                value=3.0,
+                value=0.0,
                 texname='\\text{muB}',
                 lhablock='CHEMICALPOTENTIAL',
                 lhacode=[1])

@@ -128,10 +128,16 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
 fn production_fermi_uv_contributions_match_factorized_pointwise_oracle() -> Result<()> {
     test_initialise()?;
     let mut model = load_generic_model("sm");
+    let mut card = crate::model::InputParamCard::from_file(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/models/json/sm/restrict_thermal.json"),
+    )?;
+    model.simplify(&mut card)?;
     let chemical_potential = 5.0;
     let scalar_mass = 3.0;
-    model.get_parameter_mut("mud")?.value = Some(Complex::new_re(F(chemical_potential)));
-    model.get_parameter_mut("MH")?.value = Some(Complex::new_re(F(scalar_mass)));
+    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
+    card.insert("MH".into(), Complex::new_re(F(scalar_mass)));
+    model.apply_param_card(&card)?;
     let mut global: GlobalSettings = toml::from_str(
         r#"
 [generation]

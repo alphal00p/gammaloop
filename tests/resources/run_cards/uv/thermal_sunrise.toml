@@ -1,7 +1,7 @@
 [[command_blocks]]
 name = "generate"
 commands = [
-  "import model sm-default.json",
+  "import model sm-thermal.json",
   "remove processes",
   """generate amp {} > {} [{2}] | g u
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling

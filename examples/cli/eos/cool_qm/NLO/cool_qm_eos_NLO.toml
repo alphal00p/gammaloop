@@ -8,7 +8,7 @@ name = "cool_qm_eos_NLO"
 [[command_blocks]]
 name = "generate"
 commands = [
-    "import model sm-default.json",
+    "import model sm-thermal.json",
 
     "remove processes",
     """generate amp {} > {} | u u~ d d~ b b~ g ghG ghG~ [{2}]

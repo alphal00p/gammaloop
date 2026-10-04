@@ -15,10 +15,16 @@ use crate::{
 fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Result<()> {
     test_initialise()?;
     let mut model = load_generic_model("sm");
+    let mut card = crate::model::InputParamCard::from_file(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/models/json/sm/restrict_thermal.json"),
+    )?;
+    model.simplify(&mut card)?;
     let mass = 3.0_f64;
     let chemical_potential = 5.0_f64;
-    model.get_parameter_mut("MB")?.value = Some(Complex::new_re(F(mass)));
-    model.get_parameter_mut("mub")?.value = Some(Complex::new_re(F(chemical_potential)));
+    card.insert("MB".into(), Complex::new_re(F(mass)));
+    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
+    model.apply_param_card(&card)?;
     let graphs = Graph::from_string(
         r#"digraph fermi_vacuum_cycle {
             node [num=1]; edge [num=1 particle="b"];
@@ -185,7 +191,9 @@ sampling_multichanneling = false
         );
 
         let mut shifted_model = model.clone();
-        shifted_model.get_parameter_mut("mub")?.value = Some(Complex::new_re(F(7.0)));
+        let mut shifted_card = card.clone();
+        shifted_card.insert("muB".into(), Complex::new_re(F(21.0)));
+        shifted_model.apply_param_card(&shifted_card)?;
         restored.warm_up(&shifted_model)?;
         let shifted = restored
             .evaluate_momentum_configuration(&shifted_model, &input, false)?

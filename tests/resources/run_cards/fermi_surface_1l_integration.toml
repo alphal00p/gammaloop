@@ -1,5 +1,5 @@
 commands = [
-  "import model sm-default.json",
+  "import model sm-thermal.json",
   "set model MB=3.0 muB=15.0",
   "import graphs ./tests/resources/graphs/fermi_triple_pole.dot",
   "generate",

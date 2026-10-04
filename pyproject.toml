@@ -24,8 +24,8 @@ dependencies = [
   "pydot",
   "pytest",
   "pyyaml>=6.0.1",
-  "symbolica>=0.14.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=3.0.0",
+  "ufo-model-loader>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -42,8 +42,8 @@ dev = [
   "inline-snapshot>=0.21.2",
   "marimo>=0.24,<0.25",
   "pytest>=8.3.5,<9",
-  "symbolica>=0.16.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=3.0.0",
+  "ufo-model-loader>=1.0.0",
 ]
 
 [build-system]

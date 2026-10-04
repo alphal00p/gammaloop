@@ -1,3 +1,7 @@
+mod charge;
+
+use charge::SerializedCharge;
+
 use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
@@ -888,10 +892,11 @@ pub struct SerializableParticle {
     width: SmartString<LazyCompact>,
     texname: SmartString<LazyCompact>,
     antitexname: SmartString<LazyCompact>,
-    charge: f64,
+    charge: SerializedCharge,
     ghost_number: isize,
     lepton_number: isize,
-    y_charge: isize,
+    y_charge: Option<SerializedCharge>,
+    y_charge_right: Option<SerializedCharge>,
     #[serde(default, alias = "goldstoneboson", alias = "GoldstoneBoson")]
     goldstone: bool,
     chemical_potential: Option<SmartString<LazyCompact>>,
@@ -909,10 +914,11 @@ impl SerializableParticle {
             width: particle.width.namespaceless_string().into(),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
-            charge: particle.charge,
+            charge: SerializedCharge(particle.charge.clone()),
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
-            y_charge: particle.y_charge,
+            y_charge: particle.y_charge.clone().map(SerializedCharge),
+            y_charge_right: particle.y_charge_right.clone().map(SerializedCharge),
             goldstone: particle.goldstone,
             chemical_potential: particle
                 .chemical_potential
@@ -933,10 +939,11 @@ pub struct Particle {
     pub width: ParameterName,
     pub texname: SmartString<LazyCompact>,
     pub antitexname: SmartString<LazyCompact>,
-    pub charge: f64,
+    pub charge: Rational,
     pub ghost_number: isize,
     pub lepton_number: isize,
-    pub y_charge: isize,
+    pub y_charge: Option<Rational>,
+    pub y_charge_right: Option<Rational>,
     pub goldstone: bool,
     pub chemical_potential: Option<ParameterName>,
 }
@@ -1345,7 +1352,7 @@ impl Particle {
         };
 
         // Determine color based on charge using the shared physics palette.
-        let color = if self.charge.abs() > 0.0 {
+        let color = if !self.charge.is_zero() {
             "palette.accent"
         } else {
             "palette.ink"
@@ -1364,13 +1371,13 @@ impl Particle {
             (base_source, base_sink)
         } else if self.is_vector() {
             // Vector bosons: differentiate based on charge and color properties
-            if self.charge == 0.0 && self.color == 1 {
+            if self.charge.is_zero() && self.color == 1 {
                 // Neutral color singlet (photon): wavy line
                 (
                     format!("{} + wave", base_source),
                     format!("{} + wave", base_sink),
                 )
-            } else if self.charge == 0.0 && self.color == 8 {
+            } else if self.charge.is_zero() && self.color == 8 {
                 // Neutral color octet (gluon): coiled line
                 (
                     format!("{} + coil", base_source),
@@ -1437,10 +1444,14 @@ impl Particle {
             width: ParameterName((&particle.width).into()),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
-            charge: particle.charge,
+            charge: particle.charge.0.clone(),
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
-            y_charge: particle.y_charge,
+            y_charge: particle.y_charge.as_ref().map(|charge| charge.0.clone()),
+            y_charge_right: particle
+                .y_charge_right
+                .as_ref()
+                .map(|charge| charge.0.clone()),
             goldstone: particle.goldstone,
             chemical_potential: particle
                 .chemical_potential

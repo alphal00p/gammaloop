@@ -1,5 +1,5 @@
 commands = [
-  "import model sm-default.json",
+  "import model sm-thermal.json",
   "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot",
   "import graphs ./tests/resources/graphs/mercedes_qcd_vacuum.dot",
   "import graphs ./tests/resources/graphs/tennis_ball_qcd_vacuum.dot",

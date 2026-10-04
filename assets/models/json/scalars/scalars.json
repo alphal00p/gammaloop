@@ -60,14 +60,6 @@
     "value": [1.0, 0.0]
   }, {
     "expression": null,
-    "lhablock": "CHEMICALPOTENTIAL",
-    "lhacode": [1],
-    "name": "chemical_potential_scalar_0",
-    "nature": "external",
-    "parameter_type": "real",
-    "value": [1.0, 0.0]
-  }, {
-    "expression": null,
     "lhablock": "SCALARS",
     "lhacode": [2002],
     "name": "mass_scalar_1",
@@ -84,14 +76,6 @@
     "value": [0.0, 0.0]
   }, {
     "expression": null,
-    "lhablock": "CHEMICALPOTENTIAL",
-    "lhacode": [2],
-    "name": "chemical_potential_scalar_1",
-    "nature": "external",
-    "parameter_type": "real",
-    "value": [1.0, 0.0]
-  }, {
-    "expression": null,
     "lhablock": "SCALARS",
     "lhacode": [2003],
     "name": "mass_scalar_2",
@@ -106,14 +90,6 @@
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
-  }, {
-    "expression": null,
-    "lhablock": "CHEMICALPOTENTIAL",
-    "lhacode": [3],
-    "name": "chemical_potential_scalar_2",
-    "nature": "external",
-    "parameter_type": "real",
-    "value": [1.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -174,8 +150,8 @@
   "particles": [{
     "antiname": "scalar_0",
     "antitexname": "\\phi_0",
-    "charge": 0.0,
-    "chemical_potential": "chemical_potential_scalar_0",
+    "charge": 0,
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -185,12 +161,13 @@
     "spin": 1,
     "texname": "\\phi_0",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "scalar_1",
     "antitexname": "\\phi_1",
-    "charge": 0.0,
-    "chemical_potential": "chemical_potential_scalar_1",
+    "charge": 0,
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -200,12 +177,13 @@
     "spin": 1,
     "texname": "\\phi_1",
     "width": "width_scalar_1",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }, {
     "antiname": "scalar_2",
     "antitexname": "\\phi_2",
-    "charge": 0.0,
-    "chemical_potential": "chemical_potential_scalar_2",
+    "charge": 0,
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -215,7 +193,8 @@
     "spin": 1,
     "texname": "\\phi_2",
     "width": "width_scalar_2",
-    "y_charge": 0
+    "y_charge": 0,
+    "y_charge_right": null
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
