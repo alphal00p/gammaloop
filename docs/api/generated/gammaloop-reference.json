@@ -17745,7 +17745,7 @@
       "value_type": "string",
       "description": "External C++ compiler executable used by C++ and assembly modes.",
       "required": false,
-      "default": "clang++",
+      "default": "g++",
       "possible_values": []
     },
     {
