@@ -400,11 +400,16 @@ pub(crate) fn group_diagrams(
     let preparations = diagrams
         .enumerate()
         .map(|(source_diagram, diagram)| {
-            let raw_complete = model
-                .expand_couplings(
-                    &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
-                )
-                .to_parametric_color();
+            let raw_complete = model.expand_couplings(
+                &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
+            );
+            // Signed-zero proofs only use slot identities and symmetries; keep
+            // their dimensions instead of introducing and cooking Nc²−1.
+            let raw_complete = if compares_numerators {
+                raw_complete.to_parametric_color()
+            } else {
+                raw_complete
+            };
             // Keep compound dimensions such as Nc²−1 and structured indices reversible
             // across the typed boundary; decode only when returning to the raw pipeline.
             let cooked = cooking.try_cook(raw_complete.as_view()).map_err(|error| {
