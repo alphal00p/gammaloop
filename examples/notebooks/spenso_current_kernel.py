@@ -91,9 +91,9 @@ def _():
     from symbolica.community.tensor import TensorName as TN
 
     spinor, vector = Rep.bis(4), Rep.mink(4)
-    Q2 = TN.vector("Q")(2,spinor)
-    G4 = TN.vector("G")(4,vector)
-    q24 = TN.vector("q")(2,4,vector)
+    Q2 = TN.vector("Q")(2, spinor)
+    G4 = TN.vector("G")(4, vector)
+    q24 = TN.vector("q")(2, 4, vector)
 
     Q2, G4, q24
     return G4, Q2, Symbol, T, q24
@@ -113,6 +113,7 @@ def _(mo):
 @app.cell
 def _(G4, Q2, Symbol, T):
     from symbolica.community.tensor import AUTO as _
+
     gamma = T.dirac_gamma(4)
     i = Symbol.I
     join = i * gamma(1, _, 2) * Q2(1) * G4(2)
@@ -180,24 +181,21 @@ def _(current):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Spenso has supplied the component expressions; Symbolica now builds their
-    numerical evaluator. `Q24[:]` lists the four scalar outputs, while
-    `components()` provides the input symbols in component order. The
-    denominator is already expressed in the momentum components.
-    `Expression.evaluator_multiple` optimises the outputs together and uses
-    SymJIT to compile them for numerical evaluation. The evaluator can then
-    be reused at new input values without repeating the tensor contraction.
-    Each input row produces an array of four complex components.
+    The tensor's `evaluator` method passes its component expressions to
+    Symbolica, which optimises them together. It accepts the same options as
+    `Expression.evaluator`; `components()` supplies the input symbols in
+    component order. The denominator is already expressed in the momentum
+    components. SymJIT compiles the evaluator on its first numerical use.
+    Subsequent calls reuse it without repeating the tensor contraction.
+    Each input row produces a tensor with the same four spinor components.
     """)
     return
 
 
 @app.cell
 def _(G4, Q2, Q24, q24):
-    from symbolica import Expression
-
     parameters = [*Q2.components(), *G4.components(), *q24.components()]
-    evaluator = Expression.evaluator_multiple(Q24, parameters)
+    evaluator = Q24.evaluator(parameters)
 
     value = evaluator.evaluate_complex([[1, 0, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1]])[0]
     value

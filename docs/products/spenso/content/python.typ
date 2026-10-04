@@ -903,3 +903,66 @@ For exact parameters and defaults, use the
 The implementation starts in
 #source-link("crates/spynso3/src/lib.rs", label: "the Spenso Python adapter").
 ]
+
+== Tensor evaluation and Symbolica API parity
+
+`tensor.evaluator(params, functions=..., jit_compile=True, ...)` uses the same
+argument order, defaults, function definitions and optimisation settings as
+`Expression.evaluator`. It builds one Symbolica evaluator for all components in
+logical order. `evaluate` and `evaluate_complex` accept the same array-like inputs
+as Symbolica and return one `Tensor` per input row, preserving axes, name and
+arguments. Sparse input and permuted axes follow the same component ordering.
+SymJIT compilation occurs on first numerical use; `jit_compile=False` selects
+interpreted evaluation.
+
+The former `constants, funs, params` interface is removed. Substitute fixed values
+before constructing the evaluator, and pass `FunctionDefinition` objects through
+`functions`. `TensorEvaluator.compile` now follows `Evaluator.compile`, including
+its required `number_type`, compiler flags and native/SIMD/CUDA options. The
+compiled object's `evaluate` method uses the selected number type. The old
+compiled `evaluate_complex` method is removed. `scalar_evaluator` exposes the
+underlying Symbolica object for arbitrary-precision evaluation, instruction
+inspection, export and other scalar operations; these return component arrays
+without tensor metadata.
+
+An audit against Symbolica 3.0.1 found matching signatures for the explicitly
+wrapped `TensorExpression` algebra operations: `apart`, `cancel`, `collect`,
+`collect_by_coefficient`, `collect_factors`, `collect_horner`, `collect_num`,
+`collect_symbol`, `derivative`, `expand`, `expand_num`, `factor`, `map`,
+`replace_multiple` and `together`. Their tensor results additionally validate the
+external interface. `TensorExpression.evaluator` is inherited from `Expression`
+and evaluates its symbolic payload; use `to_tensor().evaluator(...)` to evaluate
+materialized components.
+
+The remaining differences are:
+
+- `TensorNetwork.replace` still uses `level_range` and optional booleans, lacks
+  `partial`, `once`, `bottom_up` and `nested`, and rejects replacement callbacks.
+  `TensorExpression.replace` already delegates those controls to Symbolica;
+  making its `rhs` optional is intentional, to accept whole-tensor rules.
+- `TensorNetwork.evaluate` still accepts real constants and a map of Python
+  functions. `Expression.evaluate` accepts real or complex substitutions and an
+  optional decimal precision. The network route has different capabilities and
+  does not yet provide scalar API parity.
+- Tensor indexing, powers and calls carry tensor semantics. Tensor display methods
+  add representation and layout settings; `to_typst` takes `show_dimensions`
+  where the scalar method takes `show_namespaces`. These are intentional
+  specialisations, not interchangeable scalar operations.
+- Inherited scalar inspection and transformation methods can return ordinary
+  `Expression` values. Use the explicitly wrapped algebra methods when the result
+  must retain a checked tensor interface.
+
+The audit also reproduced a shared Symbolica 3.0.1 C++ export failure at kernel
+revision `942bd2c` for a non-real coefficient: compiling `Symbol.I * x` with `number_type="complex"`
+generates `T(T(0e0), T(1e0))`, which is invalid for `std::complex<double>`.
+Both scalar and tensor evaluators fail, with either direct-translation setting.
+The older tensor-only exporter avoided this kernel bug through its own complex
+coefficient printer. Delegating native compilation exposes it; the existing
+complex-coefficient compilation regression remains failing until the shared
+exporter is fixed. Interpreted and SymJIT evaluation, including the current
+notebook, work. This is a backend defect, not an argument-signature mismatch.
+
+`crates/spynso3/tests/installed_evaluator_parity.py` checks the shared signatures
+and compares component results for function definitions, JIT and interpreted
+execution, sparse data, permuted axes and constant scalars. Native real/complex
+compilation is covered by `installed_api_operations.py`.
