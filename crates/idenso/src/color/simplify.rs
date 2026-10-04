@@ -1943,26 +1943,13 @@ impl ColorAlgebraSimplifier {
             let Some(left_structure) = &left_factor.structure else {
                 continue;
             };
-            let left = left_structure.args.map(|arg| arg.to_owned());
-            let Some(dimension) = color_structure_dimension(&left) else {
-                continue;
-            };
-
             for (right_index, right_factor) in
                 product.factors.iter().enumerate().skip(left_index + 1)
             {
                 let Some(right_structure) = &right_factor.structure else {
                     continue;
                 };
-                let right = right_structure.args.map(|arg| arg.to_owned());
-                if color_structure_dimension(&right).as_ref() != Some(&dimension) {
-                    continue;
-                }
-                let Some(replacement) = two_structure_loop_contraction(
-                    &left,
-                    &right,
-                    adjoint_casimir_for_dimension(dimension.clone()),
-                ) else {
+                let Some(replacement) = left_structure.contract_loop(right_structure) else {
                     continue;
                 };
                 return Some(product.replacing_pair(left_index, right_index, replacement));
@@ -2000,7 +1987,7 @@ impl ColorAlgebraSimplifier {
                 structures.iter().enumerate().skip(left + 1)
             {
                 if left_dimension == right_dimension
-                    && common_structure_positions(left_args, right_args).len() == 1
+                    && common_structure_positions(left_args, right_args).count() == 1
                 {
                     neighbours[left].push(right);
                     neighbours[right].push(left);
@@ -2081,7 +2068,9 @@ impl ColorAlgebraSimplifier {
                 common_structure_positions(
                     &structures[cycle[i]].1,
                     &structures[cycle[(i + 1) % cycle.len()]].1,
-                )[0]
+                )
+                .next()
+                .expect("adjacent cycle vertices share a port")
             })
             .collect::<Vec<_>>();
         let mut external = Vec::with_capacity(cycle.len());
@@ -2275,6 +2264,36 @@ struct StructureView<'a> {
 }
 
 impl<'a> StructureView<'a> {
+    fn contract_loop(&self, right: &Self) -> Option<Atom> {
+        // Most pairs share fewer than two ports. Reject those on borrowed
+        // indices before validating dimensions or constructing the Casimir.
+        let mut common = common_structure_positions(&self.args, &right.args);
+        let first = common.next()?;
+        let second = common.next()?;
+        let closed = common.next().is_some();
+        let dimension = color_structure_dimension(&self.args)?;
+        if color_structure_dimension(&right.args).as_ref() != Some(&dimension) {
+            return None;
+        }
+        let prefactor = Self::orientation(first.left, second.left)
+            * Self::orientation(first.right, second.right)
+            * adjoint_casimir_for_dimension(dimension.clone());
+        if closed {
+            Some(prefactor * dimension)
+        } else {
+            let left_open = (0..3).find(|index| *index != first.left && *index != second.left)?;
+            let right_open =
+                (0..3).find(|index| *index != first.right && *index != second.right)?;
+            Some(
+                prefactor
+                    * color_metric(
+                        self.args[left_open].to_owned(),
+                        right.args[right_open].to_owned(),
+                    ),
+            )
+        }
+    }
+
     fn orientation(first: usize, second: usize) -> Atom {
         // The third position is fixed. Read the antisymmetric permutation
         // directly; rebuilding f and extracting a coefficient must not depend
@@ -2290,9 +2309,13 @@ impl<'a> StructureView<'a> {
             return None;
         }
 
-        let args = f.iter().collect::<Vec<_>>();
+        let mut args = f.iter();
         Some(Self {
-            args: [args[0], args[1], args[2]],
+            args: [
+                args.next().unwrap(),
+                args.next().unwrap(),
+                args.next().unwrap(),
+            ],
         })
     }
 }
@@ -3573,61 +3596,24 @@ fn color_node_search(expr: AtomView<'_>, skip_invariants: bool) -> bool {
     selected
 }
 
-fn two_structure_loop_contraction(
-    left: &[Atom; 3],
-    right: &[Atom; 3],
-    adjoint_casimir: Atom,
-) -> Option<Atom> {
-    let common = common_structure_positions(left, right);
-    match common.as_slice() {
-        [first, second] => {
-            let left_open = (0..3).find(|index| *index != first.left && *index != second.left)?;
-            let right_open =
-                (0..3).find(|index| *index != first.right && *index != second.right)?;
-            let left_prefactor = StructureView::orientation(first.left, second.left);
-            let right_prefactor = StructureView::orientation(first.right, second.right);
-            Some(
-                left_prefactor
-                    * right_prefactor
-                    * adjoint_casimir
-                    * color_metric(left[left_open].clone(), right[right_open].clone()),
-            )
-        }
-        [first, second, _] => Some(
-            StructureView::orientation(first.left, second.left)
-                * StructureView::orientation(first.right, second.right)
-                * adjoint_casimir
-                * color_structure_dimension(left)?,
-        ),
-        _ => None,
-    }
-}
-
 #[derive(Clone, Copy)]
 struct CommonStructurePosition {
     left: usize,
     right: usize,
 }
 
-fn common_structure_positions(left: &[Atom; 3], right: &[Atom; 3]) -> Vec<CommonStructurePosition> {
+fn common_structure_positions<'a, A: AtomCore>(
+    left: &'a [A; 3],
+    right: &'a [A; 3],
+) -> impl Iterator<Item = CommonStructurePosition> + 'a {
     let mut right_used = [false; 3];
-    let mut common = Vec::new();
-
-    for (left_index, left_arg) in left.iter().enumerate() {
-        if let Some((right_index, _)) = right
-            .iter()
-            .enumerate()
-            .find(|(right_index, right_arg)| !right_used[*right_index] && *right_arg == left_arg)
-        {
-            right_used[right_index] = true;
-            common.push(CommonStructurePosition {
-                left: left_index,
-                right: right_index,
-            });
-        }
-    }
-
-    common
+    left.iter().enumerate().filter_map(move |(left, left_arg)| {
+        let right = right.iter().enumerate().position(|(right, right_arg)| {
+            !right_used[right] && right_arg.as_atom_view() == left_arg.as_atom_view()
+        })?;
+        right_used[right] = true;
+        Some(CommonStructurePosition { left, right })
+    })
 }
 
 type ColourPorts = std::collections::HashSet<Slot<LibraryRep, AbstractIndex>>;
@@ -3995,6 +3981,49 @@ mod reconstruction_tests {
             ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first)]),
             spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first + 1)])),
         )
+    }
+
+    #[test]
+    fn structure_loops_preserve_orientation_and_validate_all_ports() {
+        crate::test_support::test_initialize();
+        let [a, b, x, y, z] = adjoint_slots("borrowed_structure_loop", ["a", "b", "x", "y", "z"]);
+        let permutations = [
+            ([0, 1, 2], 1),
+            ([1, 2, 0], 1),
+            ([2, 0, 1], 1),
+            ([1, 0, 2], -1),
+            ([0, 2, 1], -1),
+            ([2, 1, 0], -1),
+        ];
+        let casimir = adjoint_casimir_for_dimension(Atom::num(8));
+        for (open, result) in [(&y, color_metric(x.clone(), y.clone())), (&x, Atom::num(8))] {
+            for (left_order, left_sign) in permutations {
+                for (right_order, right_sign) in permutations {
+                    let left = StructureView {
+                        args: left_order.map(|i| [&a, &b, &x][i].as_view()),
+                    };
+                    let right = StructureView {
+                        args: right_order.map(|i| [&a, &b, open][i].as_view()),
+                    };
+                    assert_eq!(
+                        left.contract_loop(&right),
+                        Some(Atom::num(left_sign * right_sign) * &casimir * &result)
+                    );
+                }
+            }
+        }
+        let left = StructureView {
+            args: [&a, &b, &x].map(Atom::as_view),
+        };
+        let single = StructureView {
+            args: [&a, &y, &z].map(Atom::as_view),
+        };
+        assert!(left.contract_loop(&single).is_none());
+        let wrong_dimension = ColorAdjoint {}.to_symbolic([Atom::num(15), Atom::num(701)]);
+        let mixed = StructureView {
+            args: [&a, &b, &wrong_dimension].map(Atom::as_view),
+        };
+        assert!(left.contract_loop(&mixed).is_none());
     }
 
     #[test]
