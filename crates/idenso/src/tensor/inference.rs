@@ -1806,13 +1806,16 @@ impl InterfaceInference {
                 if syntax_error.is_none()
                     && checked_functions.len() < InterfaceInference::CACHE_ENTRIES
                     && value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
-                    && ((builtin.is_some() && arguments.iter().all(|argument| {
-                            self.slots.parse::<LibraryRep, AbstractIndex>(*argument)
-                                .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
-                        }))
-                        || self.direct_leaf_interface(function, self.leaf_inference).is_some())
                 {
-                    checked_functions.insert(value);
+                    if let Some(structure) = &builtin
+                        && arguments.iter().all(|argument| self.slots.parse::<LibraryRep, AbstractIndex>(*argument)
+                            .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. })))
+                    {
+                        self.builtin_interface(value, &arguments, structure);
+                        checked_functions.insert(value);
+                    } else if self.direct_leaf_interface(function, self.leaf_inference).is_some() {
+                        checked_functions.insert(value);
+                    }
                 }
             }
             _ => {}
@@ -2042,6 +2045,64 @@ impl InterfaceInference {
             }
         }
         Some(PartialStructure::from_logical_slots(logical))
+    }
+
+    /// Reuse a checked builtin signature without constructing its factory again.
+    /// Fully explicit ports need no callback or fresh dummy materialization.
+    fn builtin_interface(
+        &mut self,
+        atom: AtomView<'_>,
+        arguments: &[AtomView<'_>],
+        structure: &Canonicalized<ExplicitKey<AbstractIndex>>,
+    ) -> PartialStructure {
+        let canonical_ports = arguments
+            .iter()
+            .enumerate()
+            .map(|(position, argument)| {
+                if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
+                    let index = Self::partial_index(slot.aind(), self.leaf_inference);
+                    Some(slot.rep().slot(index))
+                } else {
+                    self.slots
+                        .parse_representation::<LibraryRep>(*argument)
+                        .ok()
+                        .map(|representation| representation.slot(PartialIndex::open(position)))
+                }
+            })
+            .collect::<Vec<_>>();
+        // Only fully explicit built-in leaves are independent of fresh
+        // port materialization and normalization callbacks.
+        let reusable = canonical_ports.iter().all(
+            |port| matches!(port, Some(slot) if matches!(slot.aind, PartialIndex::Explicit(_))),
+        );
+        // Compact arguments are contracted vectors, and chain placeholders
+        // are wiring labels. Neither exposes an external tensor port.
+        let logical_ports = if arguments
+            .iter()
+            .any(|argument| Self::is_chain_placeholder(*argument))
+        {
+            canonical_ports
+        } else {
+            structure.layout().canonical_to_logical(&canonical_ports)
+        };
+        let interface = PartialStructure::from_logical_slots(logical_ports.into_iter().flatten());
+        if reusable {
+            // Keep repeated indices and logical ordering intact: enclosing
+            // products still own contraction and multiplicity validation.
+            self.cache_interface(atom, &interface);
+            if !atom.needs_normalization()
+                && atom.get_byte_size() <= Self::CACHE_KEY_BYTES
+                && self.proven_leaf_interfaces.len() < Self::CACHE_ENTRIES
+                && interface
+                    .logical_slots()
+                    .iter()
+                    .all(|slot| slot.rep().rep.is_self_dual()
+                        && matches!(slot.aind, PartialIndex::Explicit(index) if !matches!(index, AbstractIndex::Open { .. })))
+            {
+                self.proven_leaf_interfaces.insert(atom.get_data().to_vec());
+            }
+        }
+        interface
     }
 
     fn cached_interface(&self, atom: AtomView<'_>) -> Option<&PartialStructure> {
@@ -2306,46 +2367,7 @@ impl InterfaceInference {
             }
 
             if let Some(structure) = self.builtin_tensor_structure(symbol, &arguments, false)? {
-                let canonical_ports = arguments
-                    .iter()
-                    .enumerate()
-                    .map(|(position, argument)| {
-                        if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
-                            let index = Self::partial_index(slot.aind(), self.leaf_inference);
-                            Some(slot.rep().slot(index))
-                        } else {
-                            self.slots
-                                .parse_representation::<LibraryRep>(*argument)
-                                .ok()
-                                .map(|representation| {
-                                    representation.slot(PartialIndex::open(position))
-                                })
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                // Only fully explicit built-in leaves are independent of fresh
-                // port materialization and normalization callbacks.
-                let reusable = canonical_ports.iter().all(|port| {
-                    matches!(port, Some(slot) if matches!(slot.aind, PartialIndex::Explicit(_)))
-                });
-                // Compact arguments are contracted vectors, and chain placeholders
-                // are wiring labels. Neither exposes an external tensor port.
-                let logical_ports = if arguments
-                    .iter()
-                    .any(|argument| Self::is_chain_placeholder(*argument))
-                {
-                    canonical_ports
-                } else {
-                    structure.layout().canonical_to_logical(&canonical_ports)
-                };
-                let interface =
-                    PartialStructure::from_logical_slots(logical_ports.into_iter().flatten());
-                if reusable {
-                    // Keep repeated indices and logical ordering intact: enclosing
-                    // products still own contraction and multiplicity validation.
-                    self.cache_interface(atom, &interface);
-                }
-                return Ok(interface);
+                return Ok(self.builtin_interface(atom, &arguments, &structure));
             }
 
             if symbol == SPENSO_TAG.chain {
