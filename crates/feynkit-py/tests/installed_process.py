@@ -1,10 +1,13 @@
 """A neutral process owns all public generation operations."""
 
 import inspect
+import sys
 from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
-from symbolica import S
+from symbolica import E, S
 from symbolica.community import hepkit as hep
 
 model = hep.Model.standard_model()
@@ -63,6 +66,71 @@ for method in (
     )
     assert signature.parameters["maximum_bridges"].default is Ellipsis
     assert signature.parameters["progress"].default == "auto"
+    assert signature.parameters["filter_zero_color"].default is False
+
+try:
+    hep.NumeratorGrouping("zeroes")
+except ValueError:
+    pass
+else:
+    raise AssertionError("zero filtering is still exposed as a grouping mode")
+
+# Color filtering is independently opt-in on all generation entry points.
+for method, kwargs, expected in (
+    (process.generate_diagrams, {}, result.diagrams),
+    (process.generate_amplitude, {}, amplitude.diagrams),
+    (
+        process.generate_cross_section,
+        {"loops": 1, "max_vertices": 4},
+        cross_section.diagrams,
+    ),
+):
+    updates = []
+    filtered = method(filter_zero_color=True, progress=updates.append, **kwargs)
+    assert [d.to_json() for d in filtered.diagrams] == [d.to_json() for d in expected]
+    assert any(p.stage == "filter_zero_color" for p in updates)
+    assert all(p.zero_numerator_count == 0 for p in updates)
+    assert updates[-1].stage == "complete"
+
+updates = []
+unfiltered_zeroes = process.generate_diagrams(numerator_prefactor=E("0"), progress=None)
+assert len(unfiltered_zeroes) == len(result)
+filtered_zeroes = process.generate_diagrams(
+    numerator_prefactor=E("0"), filter_zero_color=True, progress=updates.append
+)
+assert len(filtered_zeroes) == 0
+assert filtered_zeroes.report.zero_numerator_count == len(unfiltered_zeroes)
+assert updates[-1].zero_numerator_count == filtered_zeroes.report.zero_numerator_count
+filter_updates = [p for p in updates if p.stage == "filter_zero_color"]
+assert filter_updates and filter_updates[-1].completed == len(unfiltered_zeroes)
+assert filter_updates[-1].zero_numerator_count == len(unfiltered_zeroes)
+assert all(
+    before.zero_numerator_count <= after.zero_numerator_count
+    for before, after in zip(filter_updates, filter_updates[1:])
+)
+
+# Notebook progress displays the live zero count and closes every indicator.
+context = MagicMock()
+indicator = context.__enter__.return_value
+marimo = SimpleNamespace(
+    running_in_notebook=lambda: True,
+    status=SimpleNamespace(
+        spinner=MagicMock(return_value=context),
+        progress_bar=MagicMock(return_value=context),
+    ),
+    output=SimpleNamespace(_output=SimpleNamespace(flush=MagicMock())),
+)
+with patch.dict(sys.modules, {"marimo": marimo}):
+    process.generate_diagrams(numerator_prefactor=E("0"), filter_zero_color=True)
+filter_subtitles = [
+    call.args[-1]
+    for call in indicator.update.call_args_list
+    if call.args[-2] == "Filtering zero-color diagrams"
+]
+assert filter_subtitles
+assert f"{len(unfiltered_zeroes)} zero graphs filtered" in filter_subtitles[-1]
+assert context.__exit__.call_count == context.__enter__.call_count
+context.__exit__.assert_called_with(None, None, None)
 
 cancel = hep.CancellationToken()
 cancel.cancel()
