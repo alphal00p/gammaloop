@@ -1,9 +1,10 @@
 //! Run with `cargo run --profile dev-optim -p feynkit-generator --example
-//! four_loop_numerator -- [threads=1] [diagrams.jsonl]`.
+//! four_loop_numerator -- [threads=1] [diagrams.jsonl|-] [none|zeroes]`.
 use std::{io::Write, sync::Mutex, time::Instant};
 
 use feynkit_generator::{
-    GenerationControl, GenerationFilter, GenerationOptions, Process, SnailFilterOptions,
+    GenerationControl, GenerationFilter, GenerationOptions, NumeratorGrouping, Process,
+    SnailFilterOptions,
 };
 use feynkit_model::Model;
 
@@ -15,9 +16,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .transpose()?
         .unwrap_or(1);
     let output = arguments.next().filter(|path| path != "-");
+    let grouping = match arguments.next().as_deref().unwrap_or("none") {
+        "none" => NumeratorGrouping::None,
+        "zeroes" => NumeratorGrouping::OnlyDetectZeroes,
+        mode => return Err(format!("unknown grouping mode: {mode}").into()),
+    };
     let model = Model::qcd();
     let process = Process::new(["g"], ["g"]).with_filters(
-        ["u", "d", "c", "s", "t"]
+        ["u", "c", "s", "t", "b"]
             .into_iter()
             .map(Into::into)
             .collect(),
@@ -27,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stage = Mutex::new(("start", Instant::now()));
     let options = GenerationOptions::default()
         .threads(threads)
+        .numerator_grouping(grouping)
         .with_loop_count(4, 4)?
         .max_vertices(8)
         .with_graph_filter(GenerationFilter::MaxNumberOfBridges(0))
@@ -45,12 +52,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let result = process.generate_diagrams(model, &options)?;
     eprintln!(
-        "{} diagrams in {:.3}s",
+        "{} diagrams, {} zero numerators in {:.3}s",
         result.diagrams.len(),
+        result.report.zero_numerator_count,
         start.elapsed().as_secs_f64()
     );
     assert!(result.report.completed);
-    assert_eq!(result.diagrams.len(), 4970);
+    assert_eq!(
+        result.diagrams.len() + result.report.zero_numerator_count,
+        4970
+    );
     if let Some(output) = output {
         let mut output = std::io::BufWriter::new(std::fs::File::create(output)?);
         for diagram in result.diagrams {
