@@ -4,6 +4,7 @@ use std::{
 };
 
 use color_eyre::Result;
+use feynkit_model::Model;
 use gammaloop_api::{
     commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
     integrand_info::{IntegrandEsurfaceClassification, IntegrandKind, IntegrandThresholdStatus},
@@ -12,8 +13,94 @@ use gammaloop_integration_tests::{
     CLIState, clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
     get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
+use gammalooprs::{
+    graph::{Graph, LMBext, edge::PossibleParticle},
+    model::VertexRuleIdGammaLoopExt,
+};
 use ndarray::{Array1, Array2};
 use serial_test::serial;
+
+fn is_multichannel_fixture_topology(graph: &Graph, model: &Model) -> bool {
+    let vertex_classes = ["V_141", "V_134", "V_137", "V_98"];
+    let mut vertex_groups = Vec::with_capacity(vertex_classes.len());
+    for vertex_class in vertex_classes {
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .filter_map(|(node, _, vertex)| {
+                vertex
+                    .vertex_rule
+                    .is_some_and(|rule| rule.resolve(model).name == vertex_class)
+                    .then_some(node)
+            })
+            .collect::<Vec<_>>();
+        if nodes.len() != 2 {
+            return false;
+        }
+        vertex_groups.push(nodes);
+    }
+
+    // Colored, undirected connectivity of the historical multichannel graph.
+    // The swaps make this independent of native node and edge numbering.
+    let mut expected_edges = vec![
+        (6, 7, 11),
+        (6, 7, 11),
+        (0, 1, 25),
+        (0, 3, 6),
+        (0, 5, 6),
+        (1, 2, 6),
+        (1, 5, 6),
+        (2, 4, 6),
+        (2, 7, 22),
+        (3, 4, 6),
+        (3, 6, 22),
+        (4, 5, 21),
+    ];
+    expected_edges.sort_unstable();
+
+    for swaps in 0..(1 << vertex_groups.len()) {
+        let mut node_map = BTreeMap::new();
+        for (class, nodes) in vertex_groups.iter().enumerate() {
+            let swap = (swaps >> class) & 1;
+            node_map.insert(nodes[swap], class * 2);
+            node_map.insert(nodes[1 - swap], class * 2 + 1);
+        }
+
+        let mut actual_edges = Vec::with_capacity(expected_edges.len());
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            if !pair.is_paired() {
+                return false;
+            }
+            let source = pair.any_hedge();
+            let sink = graph.underlying.inv(source);
+            let Some(&source_node) = node_map.get(&graph.underlying.node_id(source)) else {
+                return false;
+            };
+            let Some(&sink_node) = node_map.get(&graph.underlying.node_id(sink)) else {
+                return false;
+            };
+            let particle = match &edge.data.particle {
+                PossibleParticle::Particle(particle)
+                | PossibleParticle::MassOverriddenParticle { particle, .. } => *particle,
+                PossibleParticle::JustMass { .. } => return false,
+            };
+            let Ok(particle) = model.particle_by_id(particle) else {
+                return false;
+            };
+            actual_edges.push((
+                source_node.min(sink_node),
+                source_node.max(sink_node),
+                particle.pdg_code.abs(),
+            ));
+        }
+        actual_edges.sort_unstable();
+        if actual_edges == expected_edges {
+            return true;
+        }
+    }
+
+    false
+}
 
 fn configure_jet_quantities(cli: &mut CLIState) -> Result<()> {
     configure_jet_quantities_with_clustered_pdgs(cli, None)
@@ -308,7 +395,7 @@ fn event_signature(event: &gammalooprs::observables::Event) -> String {
         .join("|");
     let lmb_channel = event
         .cut_info
-        .sampling_channel_edge_ids
+        .lmb_channel_edge_ids
         .as_ref()
         .map(|edge_ids| {
             edge_ids
@@ -532,6 +619,50 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         true,
     )?;
 
+    // Select the historical multichannel topology by interaction names,
+    // particle content, and colored connectivity rather than a GL number.
+    let selected_master = {
+        let process = cli
+            .state
+            .process_list
+            .processes
+            .iter()
+            .find(|process| process.definition.folder_name == "epem_a_tth")
+            .expect("the ttH process should have been generated");
+        let cross_section = match &process.collection {
+            gammalooprs::processes::ProcessCollection::CrossSections(cross_sections) => {
+                cross_sections
+                    .get("NLO")
+                    .expect("the NLO cross section should have been generated")
+            }
+            gammalooprs::processes::ProcessCollection::Amplitudes(_) => {
+                panic!("the ttH fixture must be a cross section")
+            }
+        };
+        let candidates = cross_section
+            .supergraphs
+            .iter()
+            .filter_map(|supergraph| {
+                let graph = &supergraph.graph;
+                (is_multichannel_fixture_topology(graph, &cli.state.model)
+                    && graph.loop_momentum_basis.loop_edges.len() == 3
+                    && graph.underlying.generate_loop_momentum_bases().len() == 255
+                    && supergraph.cuts.len() == 4)
+                    .then(|| graph.name.clone())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            candidates.len(),
+            1,
+            "the colored multichannel topology must have a unique native master"
+        );
+        candidates.into_iter().next().unwrap()
+    };
+    cli.run_command(&format!(
+        "select -p epem_a_tth -i NLO --with-graph-names {selected_master}"
+    ))?;
+    cli.run_command("generate existing -p epem_a_tth -i NLO")?;
+
     let info = cli.state.get_integrand_info(None, None)?;
     assert_eq!(info.graph_groups.len(), 1);
     let group = &info.graph_groups[0];
@@ -541,7 +672,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
             .iter()
             .find(|graph| graph.is_master)
             .map(|graph| graph.name.as_str()),
-        Some("GL38"),
+        Some(selected_master.as_str()),
     );
     let active_channel_bases = group
         .loop_momentum_bases
@@ -549,10 +680,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         .filter(|basis| basis.channel_id.is_some())
         .map(|basis| basis.edge_ids.clone())
         .collect::<BTreeSet<_>>();
-    assert!(
-        active_channel_bases.len() > 1,
-        "GL38 snapshot fixture must exercise explicit LMB multichanneling"
-    );
+    assert_eq!(active_channel_bases.len(), 4);
 
     // This is the former GL20 high-weight point, now on the same topology labeled GL38.
     // The edge relabeling preserves all directed momenta. It exercises every summed LMB channel and all
@@ -593,7 +721,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
                 .map(|(event_index, event)| {
                     let channel_edges = event
                         .cut_info
-                        .sampling_channel_edge_ids
+                        .lmb_channel_edge_ids
                         .as_ref()
                         .expect("summed LMB events must carry their effective channel basis")
                         .iter()
@@ -624,7 +752,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
 
     assert_eq!(
         represented_channels, active_channel_bases,
-        "the snapshot must include events from every active GL38 LMB channel"
+        "the snapshot must include events from every active native-master LMB channel"
     );
     assert_eq!(
         metadata.generated_event_count,
@@ -651,10 +779,6 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         },
         "event_groups": event_groups,
     });
-    // The public x-space result includes its sampling Jacobian; event weights are
-    // also complete. This reference uses the common-point OSE partition and the
-    // per-surface SOCP constraints. Their redundant cones shift approximate centers
-    // slightly; main and this route agree below 3e-12 with identical forced centers.
     // Retain signed absorptive weights: the corrected left/right threshold prescription
     // flips cut 2 imaginary parts while the three-loop graph normalization stays fixed.
     // Edge relabeling can change CFF discovery and event enumeration; physical cut IDs
@@ -676,11 +800,11 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
                 event["cut_info"]
                     .as_object_mut()
                     .unwrap()
-                    .remove("sampling_channel_id");
+                    .remove("lmb_channel_id");
             }
             events.sort_by_cached_key(|event| {
                 (
-                    event["cut_info"]["sampling_channel_edge_ids"]
+                    event["cut_info"]["lmb_channel_edge_ids"]
                         .as_array()
                         .unwrap()
                         .iter()
@@ -772,34 +896,38 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
 
     assert_eq!(metadata(&result).generated_event_count, 3);
     assert_eq!(metadata(&result).accepted_event_count, 3);
-    assert_eq!(
-        event_groups
-            .iter()
-            .map(|group| group.len())
-            .collect::<Vec<_>>(),
-        vec![1, 2]
-    );
+    let mut group_sizes = event_groups
+        .iter()
+        .map(|event_group| event_group.0.len())
+        .collect::<Vec<_>>();
+    group_sizes.sort_unstable();
+    assert_eq!(group_sizes, vec![1, 2]);
 
-    let first_event = &event_groups[0][0];
-    assert_eq!(first_event.cut_info.graph_id, 0);
-    assert_eq!(first_event.cut_info.cut_id, 0);
-    assert_eq!(
-        first_event
+    let events = event_groups
+        .iter()
+        .flat_map(|event_group| event_group.0.iter())
+        .collect::<Vec<_>>();
+    let mut graph_ids = BTreeSet::new();
+    for event_group in event_groups.iter() {
+        let graph_id = event_group
+            .0
+            .first()
+            .expect("generated event groups must not be empty")
             .cut_info
-            .particle_pdgs
+            .graph_id;
+        graph_ids.insert(graph_id);
+        let cut_ids = event_group
             .0
             .iter()
-            .copied()
-            .collect::<Vec<_>>(),
-        vec![-11, 11]
-    );
-
-    let second_group_cut_ids = event_groups[1]
-        .iter()
-        .map(|event| (event.cut_info.graph_id, event.cut_info.cut_id))
-        .collect::<Vec<_>>();
-    assert_eq!(second_group_cut_ids, vec![(1, 0), (1, 1)]);
-    for event in event_groups[1].iter() {
+            .map(|event| {
+                assert_eq!(event.cut_info.graph_id, graph_id);
+                event.cut_info.cut_id
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(cut_ids, BTreeSet::from_iter(0..event_group.0.len()));
+    }
+    assert_eq!(graph_ids, BTreeSet::from([0, 1]));
+    for event in events {
         assert_eq!(
             event
                 .cut_info
@@ -1230,8 +1358,8 @@ fn lu_rust_explicit_lmb_multichanneling_groups_channel_events_and_tags_metadata(
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
 '"#,
     )?;
 
@@ -1275,7 +1403,7 @@ sampling_channels = "summed"
         .map(|event| {
             event
                 .cut_info
-                .sampling_channel_edge_ids
+                .lmb_channel_edge_ids
                 .as_ref()
                 .expect("explicit multi-channeling events should carry LMB channel metadata")
                 .iter()
@@ -1303,8 +1431,8 @@ sampling_channels = "summed"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
 '"#,
     )?;
 
@@ -1320,7 +1448,7 @@ sampling_channels = "monte_carlo"
             for event in group.iter() {
                 let lmb_channel_edge_ids = event
                     .cut_info
-                    .sampling_channel_edge_ids
+                    .lmb_channel_edge_ids
                     .as_ref()
                     .expect("discrete multi-channeling events should carry LMB channel metadata")
                     .iter()
@@ -1351,8 +1479,8 @@ sampling_channels = "monte_carlo"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
 lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 '"#,
     ))?;
@@ -1379,7 +1507,7 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
         let result = results.samples.remove(0);
         let lmb_channel_edge_ids = result.evaluation.event_groups[0][0]
             .cut_info
-            .sampling_channel_edge_ids
+            .lmb_channel_edge_ids
             .as_ref()
             .expect("overridden discrete LMB channel events should carry channel metadata")
             .iter()
@@ -1476,8 +1604,8 @@ fn amplitude_group_members_resolve_lmb_overrides_through_the_master() -> Result<
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
 lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
 '"#,
     ))?;
@@ -1526,7 +1654,7 @@ lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
         assert_eq!(
             event
                 .cut_info
-                .sampling_channel_edge_ids
+                .lmb_channel_edge_ids
                 .as_ref()
                 .expect("grouped LMB events should carry channel metadata")
                 .iter()
@@ -1604,13 +1732,7 @@ fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
             {
                 event_weight.0 += event.weight.re.0;
                 event_weight.1 += event.weight.im.0;
-                // Auxiliary terms remain factorized; compare their complete event
-                // contributions, including the common flux/Jacobian/partition factor.
-                let factor = &event.additional_weights.weights[
-                    &gammalooprs::observables::events::AdditionalWeightKey::FullMultiplicativeFactor
-                ];
                 for (key, value) in &event.additional_weights.weights {
-                    let value = value * factor;
                     match key {
                         gammalooprs::observables::events::AdditionalWeightKey::Original => {
                             original_weight.0 += value.re.0;
@@ -1662,8 +1784,8 @@ fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = false
-sampling_channels = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
 lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 '"#,
         ))?;
@@ -1685,9 +1807,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "monte_carlo"
-sampling_channel_weight = "{channel_weight}"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -1758,9 +1880,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "summed"
-sampling_channel_weight = "{channel_weight}"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -1816,9 +1938,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 [sampling]
 graphs = "summed"
 orientations = "summed"
-sampling_multichanneling = true
-sampling_channels = "summed"
-sampling_channel_weight = "{channel_weight}"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],

@@ -1,5 +1,5 @@
 [project]
-name = "linnet-py"
+name = "linnet"
 version = "0.1.0"
 description = "Native Python bindings and in-process Typst rendering for Linnet graphs"
 readme = "README.md"
@@ -9,12 +9,13 @@ license-files = [
   "vendor/typst-packages/PROVENANCE.typ",
   "vendor/typst-packages/preview/cetz/0.5.1/LICENSE",
   "vendor/typst-packages/preview/oxifmt/1.0.0/LICENSE*",
+  "vendor/typst-packages/preview/mitex/0.2.6/LICENSE",
 ]
 requires-python = ">=3.10"
-dependencies = ["typst==0.15.0"]
+dependencies = []
 
 [tool.maturin]
-module-name = "linnet_py"
+module-name = "linnet"
 features = ["extension-module", "abi3-py310"]
 
 [tool.cibuildwheel]

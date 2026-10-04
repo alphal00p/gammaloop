@@ -9,6 +9,7 @@
 
 from __future__ import absolute_import
 import cmath
+from fractions import Fraction
 
 
 class UFOBaseClass(object):
@@ -141,10 +142,15 @@ class Particle(UFOBaseClass):
         if self.selfconjugate:
             raise Exception('%s has no anti particle.' % self.name) 
         outdic = {}
-        for k,v in self.__dict__.items():
-            if k not in self.require_args_all:                
-                outdic[k] = -v
-        if self.color in [1,8]:
+        for k, v in self.__dict__.items():
+            if k not in self.require_args_all:
+                if k in ("Y", "YRight", "charge_exact"):
+                    outdic[k] = None if v is None else str(-Fraction(str(v)))
+                else:
+                    outdic[k] = -v
+        if self.spin == 2 and "YRight" in outdic:
+            outdic["Y"], outdic["YRight"] = outdic["YRight"], outdic["Y"]
+        if self.color in [1, 8]:
             newcolor = self.color
         else:
             newcolor = -self.color

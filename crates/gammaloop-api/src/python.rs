@@ -1,28 +1,25 @@
+use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
-    feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{FeynmanGraph, Graph, LMBext},
+    graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
-        GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
-        ThresholdCountertermComponentOccurrence,
     },
-    processes::{
-        DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
-        ThresholdCountertermComponentKind, ThresholdCountertermComponentMetadata,
-        ThresholdCountertermEvaluatorMetadata, ThresholdCountertermMetadataRegistry,
-        ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin,
-        ThresholdCountertermSide, ThresholdCountertermVariantMetadata,
-    },
-    settings::RuntimeSettings,
+    processes::{DotExportSettings, ProcessCollection},
+    settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
-use linnet::half_edge::involution::Orientation;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::{ModifySubSet, SuBitGraph},
+};
+use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 
 use crate::{
@@ -33,8 +30,7 @@ use crate::{
     integrand_info::{
         IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
         IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
-        IntegrandOrientationInfo, IntegrandThresholdCountertermDirectiveInfo,
-        IntegrandThresholdEsurfaceInfo,
+        IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
@@ -141,7 +137,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-/// Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+/// Contract repeated tensor indices using Idenso's structural contraction.
 ///
 /// Parameters
 /// ----------
@@ -151,7 +147,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Returns
 /// -------
 /// str
-///     The equivalent expression using Idenso dot-product notation.
+///     The contracted expression, with compatible vector pairs written as dots.
 ///
 /// Raises
 /// ------
@@ -163,17 +159,20 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Rewrite a contraction before passing it to an Idenso workflow:
 ///
 /// ```python
-/// to_dots("p(mu) * q(mu)")
+/// contract("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(name = "to_dots")]
-pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = to_dots_impl(
-        parse!(atom_str, default_namespace = "python")
-            .to_dots()
-            .as_view(),
-    );
+#[pyo3(name = "contract")]
+pub(crate) fn atom_contract(atom_str: &str) -> Result<String> {
+    let dotted = SymbolicTensor::infer(parse!(atom_str, default_namespace = "python"))?
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
+        .to_dots()?
+        .into_expression();
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {
@@ -199,21 +198,11 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySampleEvaluationResult>()?;
     m.add_class::<PyEventGroup>()?;
     m.add_class::<PyEvent>()?;
-    m.add_class::<PyThresholdCountertermEventInfo>()?;
-    m.add_class::<PyThresholdCountertermComponentWeight>()?;
-    m.add_class::<PyThresholdCountertermComponentOccurrence>()?;
     m.add_class::<PyFourMomentum>()?;
     m.add_class::<PyCutInfo>()?;
     m.add_class::<PyIntegrandInfo>()?;
     m.add_class::<PyIntegrandGraphGroupInfo>()?;
     m.add_class::<PyIntegrandGraphInfo>()?;
-    m.add_class::<PyThresholdCountertermDirectiveInfo>()?;
-    m.add_class::<PyThresholdCountertermMetadataRegistry>()?;
-    m.add_class::<PyThresholdCountertermVariantMetadata>()?;
-    m.add_class::<PyThresholdCountertermAssociationMetadata>()?;
-    m.add_class::<PyThresholdCountertermMultiplierMetadata>()?;
-    m.add_class::<PyThresholdCountertermEvaluatorMetadata>()?;
-    m.add_class::<PyThresholdCountertermComponentMetadata>()?;
     m.add_class::<PyIntegrandOrientationInfo>()?;
     m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
@@ -234,7 +223,6 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyDiscreteBreakdownEntry>()?;
     m.add_class::<PyDiscreteBreakdown>()?;
     m.add_class::<PyComponentDiscreteBreakdown>()?;
-    m.add_class::<PyAbsoluteIntegrationResult>()?;
     m.add_class::<PySlotIntegrationResult>()?;
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
@@ -253,7 +241,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
-    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
+    m.add_wrapped(wrap_pyfunction!(atom_contract))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
@@ -616,191 +604,6 @@ mod settings_wrapper_tests {
                 .unwrap());
         });
     }
-
-    #[test]
-    fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
-        use gammalooprs::settings::runtime::{
-            MultiChannelingSettings, SamplingChannelDefinition, SamplingChannelWeight,
-            SamplingSettings,
-        };
-
-        Python::initialize();
-
-        let mut settings = RuntimeSettings::default();
-        let mut multi_channeling = MultiChannelingSettings::default();
-        multi_channeling
-            .parameterization_settings
-            .sampling_channels
-            .weight = SamplingChannelWeight::SingularityProxy;
-        let selection = &mut multi_channeling.parameterization_settings.sampling_channels;
-        selection.default_channel_selection = vec!["auto:surfaces".to_owned()];
-        selection
-            .channel_selection
-            .insert("GL638".to_owned(), vec!["HZ".to_owned()]);
-        selection.channel_definitions.insert(
-            "GL638".to_owned(),
-            [(
-                "HZ".to_owned(),
-                SamplingChannelDefinition {
-                    around: "surface(2,4,12)".to_owned(),
-                    channel_weight: None,
-                    radial_profile: None,
-                    subspace_lmb: vec![3],
-                    parent_lmb: vec![3, 6, 7, 10],
-                    on_cut: vec![2, 6, 10],
-                    singularity_proxy: None,
-                },
-            )]
-            .into_iter()
-            .collect(),
-        );
-        settings.sampling = SamplingSettings::MultiChanneling(multi_channeling);
-
-        let wrapped =
-            PySettingsValue::from_settings(&settings, "runtime settings", "runtime_settings")
-                .unwrap();
-        Python::attach(|py| {
-            let sampling = wrapped.get(py, "sampling").unwrap();
-            assert!(sampling
-                .getattr("sampling_multichanneling")
-                .unwrap()
-                .extract::<bool>()
-                .unwrap());
-            assert_eq!(
-                sampling
-                    .getattr("sampling_channel_weight")
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                "singularity_proxy"
-            );
-            assert_eq!(
-                sampling
-                    .getattr("default_channel_selection")
-                    .unwrap()
-                    .extract::<Vec<String>>()
-                    .unwrap(),
-                vec!["auto:surfaces"]
-            );
-            let channel_selection = sampling.getattr("channel_selection").unwrap();
-            assert_eq!(
-                channel_selection
-                    .getattr("GL638")
-                    .unwrap()
-                    .extract::<Vec<String>>()
-                    .unwrap(),
-                vec!["HZ"]
-            );
-            let definitions = sampling.getattr("channel_definitions").unwrap();
-            let gl638 = definitions.getattr("GL638").unwrap();
-            let hz = gl638.getattr("HZ").unwrap();
-            assert_eq!(
-                hz.getattr("parent_lmb")
-                    .unwrap()
-                    .extract::<Vec<usize>>()
-                    .unwrap(),
-                vec![3, 6, 7, 10]
-            );
-            assert!(sampling.getattr("lmb_multichanneling").is_err());
-        });
-    }
-
-    #[test]
-    fn threshold_counterterm_event_python_view_roundtrips_all_numeric_fields() {
-        let info = GenericThresholdCountertermEventInfo {
-            original: spenso::algebra::complex::Complex::new(
-                gammalooprs::utils::F(2.0),
-                gammalooprs::utils::F(0.25),
-            ),
-            components: vec![GenericThresholdCountertermComponentWeight {
-                component_id: 7,
-                occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                    overlap_groups: [1, 3].into_iter().collect(),
-                    left_threshold_order: Some(1),
-                    right_threshold_order: Some(2),
-                    lu_cut_order: Some(3),
-                },
-                multiplier_values: [gammalooprs::utils::F(0.5), gammalooprs::utils::F(0.25)]
-                    .into_iter()
-                    .collect(),
-                effective_multiplier: gammalooprs::utils::F(0.125),
-                bare: Some(spenso::algebra::complex::Complex::new(
-                    gammalooprs::utils::F(8.0),
-                    gammalooprs::utils::F(-2.0),
-                )),
-                weighted: spenso::algebra::complex::Complex::new(
-                    gammalooprs::utils::F(1.0),
-                    gammalooprs::utils::F(-0.25),
-                ),
-                evaluation_skipped: false,
-            }],
-        };
-
-        let roundtrip =
-            threshold_counterterm_event_from_py(&py_threshold_counterterm_event_from_event(&info));
-        assert_eq!(roundtrip.original, info.original);
-        assert_eq!(roundtrip.components[0].component_id, 7);
-        assert_eq!(
-            roundtrip.components[0].multiplier_values,
-            info.components[0].multiplier_values
-        );
-        assert_eq!(roundtrip.components[0].bare, info.components[0].bare);
-        assert_eq!(
-            roundtrip.components[0].weighted,
-            info.components[0].weighted
-        );
-        assert_eq!(roundtrip.total(), info.total());
-    }
-
-    #[test]
-    fn absolute_integration_result_python_view_preserves_bundle() {
-        let result = gammalooprs::settings::runtime::AbsoluteIntegrationResult {
-            integral: gammalooprs::settings::runtime::IntegralEstimate {
-                neval: 17,
-                ..Default::default()
-            },
-            table_results: vec![
-                gammalooprs::settings::runtime::IntegrationTableComponentResult {
-                    component: "|re|".to_string(),
-                    value: gammalooprs::utils::F(3.25),
-                    error: gammalooprs::utils::F(0.5),
-                    ..Default::default()
-                },
-            ],
-            max_weight_info: vec![gammalooprs::settings::runtime::MaxWeightInfoEntry {
-                component: "re".to_string(),
-                sign: "+".to_string(),
-                max_eval: gammalooprs::utils::F(9.0),
-                coordinates: Some("channel=2".to_string()),
-            }],
-            grid_breakdown: gammalooprs::settings::runtime::ComponentDiscreteBreakdown {
-                re: Some(gammalooprs::settings::runtime::DiscreteBreakdown {
-                    axis_label: "channel".to_string(),
-                    entries: vec![gammalooprs::settings::runtime::DiscreteBreakdownEntry {
-                        bin_index: 2,
-                        value: gammalooprs::utils::F(1.75),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                }),
-                im: None,
-            },
-        };
-
-        let python_result = py_absolute_integration_result_from_result(result);
-        assert_eq!(python_result.integral.neval, 17);
-        assert_eq!(python_result.table_results[0].component, "|re|");
-        assert_eq!(python_result.table_results[0].value, 3.25);
-        assert_eq!(python_result.max_weight_info[0].sign, "+");
-        assert_eq!(
-            python_result.max_weight_info[0].coordinates.as_deref(),
-            Some("channel=2")
-        );
-        assert_eq!(
-            python_result.grid_breakdown.re.unwrap().entries[0].value,
-            1.75
-        );
-    }
 }
 
 #[pyclass(from_py_object, name = "ComplexValue", get_all)]
@@ -876,10 +679,10 @@ pub struct PyCutInfo {
     pub graph_group_id: Option<usize>,
     /// Causal-flow orientation identifier, when sampled explicitly.
     pub orientation_id: Option<usize>,
-    /// Canonical sampling channel identifier, when sampled explicitly.
-    pub sampling_channel_id: Option<usize>,
-    /// Edge identifiers defining the selected sampling channel basis, when available.
-    pub sampling_channel_edge_ids: Option<Vec<usize>>,
+    /// Loop-momentum-basis multichannel identifier, when sampled explicitly.
+    pub lmb_channel_id: Option<usize>,
+    /// Edge identifiers defining the selected loop-momentum basis, when available.
+    pub lmb_channel_edge_ids: Option<Vec<usize>>,
 }
 
 /// Identity and master-graph status of one graph in an integrand.
@@ -893,123 +696,6 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
-    /// Threshold directives requested for this graph, including implicit defaults.
-    pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
-    /// Resolved graph-local threshold registry, when generated metadata is available.
-    pub threshold_counterterms: Option<PyThresholdCountertermMetadataRegistry>,
-}
-
-/// Requested threshold variant, selected edges, and optional multiplier before generation.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "ThresholdCountertermDirective", get_all)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermDirectiveInfo {
-    pub cut_edge_ids: Vec<usize>,
-    pub threshold_edge_ids: Vec<usize>,
-    pub name: String,
-    pub implicit_default: bool,
-    pub requested_subspace: Option<Vec<usize>>,
-    pub requested_parent_lmb: Option<Vec<usize>>,
-    pub disabled: bool,
-    pub multiplier: Option<PyThresholdCountertermMultiplierMetadata>,
-}
-
-/// Association of a threshold surface with an eligible physical cut and its origin.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    from_py_object,
-    name = "ThresholdCountertermAssociationMetadata",
-    get_all
-)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermAssociationMetadata {
-    pub cut_id: Option<usize>,
-    pub cut_edges: Vec<usize>,
-    pub threshold_edges: Vec<usize>,
-    pub esurface_id: usize,
-    pub eligible: bool,
-    pub origin: String,
-}
-
-/// Symbolic multiplier expression and its function definitions and derivative policy.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    from_py_object,
-    name = "ThresholdCountertermMultiplierMetadata",
-    get_all
-)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermMultiplierMetadata {
-    pub expression: String,
-    pub function_map: std::collections::BTreeMap<String, String>,
-    pub symmetrize: bool,
-    pub opaque_derivatives: bool,
-}
-
-/// Requested and resolved subspaces, associations, and activation of one threshold variant.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "ThresholdCountertermVariantMetadata", get_all)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermVariantMetadata {
-    pub variant_id: usize,
-    pub name: String,
-    pub group_id: Option<usize>,
-    pub cut_group_id: Option<usize>,
-    pub associations: Vec<PyThresholdCountertermAssociationMetadata>,
-    pub side: String,
-    pub threshold_esurface_ids: Vec<usize>,
-    pub requested_subspace: Option<Vec<usize>>,
-    pub resolved_subspace: Vec<usize>,
-    pub requested_parent_lmb: Option<Vec<usize>>,
-    pub resolved_parent_lmb: Vec<usize>,
-    pub subspace_loop_count: usize,
-    pub multiplier: Option<PyThresholdCountertermMultiplierMetadata>,
-    pub generated: bool,
-    pub active: bool,
-}
-
-/// Compiled threshold expression and the variants sharing its graph-local evaluator.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    from_py_object,
-    name = "ThresholdCountertermEvaluatorMetadata",
-    get_all
-)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermEvaluatorMetadata {
-    pub evaluator_id: usize,
-    pub cut_group_id: Option<usize>,
-    pub collection_evaluator_id: usize,
-    pub expression: String,
-    pub variant_ids: Vec<usize>,
-}
-
-/// Signed threshold component with its contributing variants and evaluator references.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    from_py_object,
-    name = "ThresholdCountertermComponentMetadata",
-    get_all
-)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermComponentMetadata {
-    pub component_id: usize,
-    pub cut_group_id: Option<usize>,
-    pub kind: String,
-    pub variant_ids: Vec<usize>,
-    pub evaluator_ids: Vec<Option<usize>>,
-    pub sign: i8,
-}
-
-/// Graph-local threshold variants, compiled evaluators, and addable components.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "ThresholdCountertermMetadataRegistry", get_all)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermMetadataRegistry {
-    pub graph_name: String,
-    pub variants: Vec<PyThresholdCountertermVariantMetadata>,
-    pub evaluators: Vec<PyThresholdCountertermEvaluatorMetadata>,
-    pub components: Vec<PyThresholdCountertermComponentMetadata>,
 }
 
 /// Edge-direction signature for one causal-flow orientation.
@@ -1167,48 +853,6 @@ pub struct PyEvent {
     pub weight: PyComplexValue,
     /// Named auxiliary complex weights such as threshold-counterterm contributions.
     pub additional_weights: Vec<PyAdditionalWeight>,
-    /// Addable threshold decomposition with physical occurrence metadata, when retained.
-    pub threshold_counterterms: Option<PyThresholdCountertermEventInfo>,
-}
-
-/// Physical amplitude or local-unitarity occurrence of a threshold component.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    from_py_object,
-    name = "ThresholdCountertermComponentOccurrence",
-    get_all
-)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermComponentOccurrence {
-    pub kind: String,
-    pub raised_esurface_id: Option<usize>,
-    pub overlap_groups: Vec<usize>,
-    pub left_threshold_order: Option<usize>,
-    pub right_threshold_order: Option<usize>,
-    pub lu_cut_order: Option<usize>,
-}
-
-/// Fully normalized threshold weight and its optional evaluation before the user multiplier.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "ThresholdCountertermComponentWeight", get_all)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermComponentWeight {
-    pub component_id: usize,
-    pub occurrence: PyThresholdCountertermComponentOccurrence,
-    pub multiplier_values: Vec<f64>,
-    pub effective_multiplier: f64,
-    pub bare: Option<PyComplexValue>,
-    pub weighted: PyComplexValue,
-    pub evaluation_skipped: bool,
-}
-
-/// Original event contribution and the addable threshold-component decomposition.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "ThresholdCountertermEventInfo", get_all)]
-#[derive(Clone)]
-pub struct PyThresholdCountertermEventInfo {
-    pub original: PyComplexValue,
-    pub components: Vec<PyThresholdCountertermComponentWeight>,
 }
 
 /// Correlated accepted events produced by one graph group for one sample.
@@ -1689,17 +1333,6 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
-/// Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "AbsoluteIntegrationResult", get_all)]
-#[derive(Clone)]
-pub struct PyAbsoluteIntegrationResult {
-    pub integral: PyIntegralEstimate,
-    pub table_results: Vec<PyIntegrationTableComponentResult>,
-    pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
-    pub grid_breakdown: PyComponentDiscreteBreakdown,
-}
-
 /// Result, diagnostics, and discrete breakdown for one named integration slot.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
@@ -1714,8 +1347,6 @@ pub struct PySlotIntegrationResult {
     pub integration_statistics: PyIntegrationStatisticsSnapshot,
     pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
     pub grid_breakdown: PyComponentDiscreteBreakdown,
-    /// Estimates of componentwise absolute physical contributions.
-    pub absolute: PyAbsoluteIntegrationResult,
 }
 
 /// Collection of independently addressable integration-slot results.
@@ -1846,7 +1477,7 @@ pub struct PySampleEvaluationResult {
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySampleEvaluationResult {
-    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
+    /// Complex integrand value before applying the parameterization Jacobian.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         PyComplex::from_doubles(
@@ -1854,15 +1485,6 @@ impl PySampleEvaluationResult {
             self.inner.evaluation.integrand_result.re.0,
             self.inner.evaluation.integrand_result.im.0,
         )
-    }
-
-    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
-    #[getter]
-    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
-        self.inner
-            .evaluation
-            .absolute_integrand_result
-            .map(|value| PyComplex::from_doubles(py, value.re.0, value.im.0))
     }
 
     /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
@@ -1988,16 +1610,10 @@ impl PyEvaluationResult {
         }
     }
 
-    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
+    /// Complex integrand value before applying the parameterization Jacobian.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         self.sample().integrand_result(py)
-    }
-
-    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
-    #[getter]
-    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
-        self.sample().absolute_integrand_result(py)
     }
 
     /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
@@ -2167,134 +1783,6 @@ fn py_four_momentum_from_momentum(
     }
 }
 
-fn py_threshold_counterterm_occurrence_from_occurrence(
-    occurrence: &ThresholdCountertermComponentOccurrence,
-) -> PyThresholdCountertermComponentOccurrence {
-    match occurrence {
-        ThresholdCountertermComponentOccurrence::Amplitude {
-            raised_esurface_id,
-            overlap_group,
-        } => PyThresholdCountertermComponentOccurrence {
-            kind: "amplitude".to_string(),
-            raised_esurface_id: Some(*raised_esurface_id),
-            overlap_groups: vec![*overlap_group],
-            left_threshold_order: None,
-            right_threshold_order: None,
-            lu_cut_order: None,
-        },
-        ThresholdCountertermComponentOccurrence::LocalUnitarity {
-            overlap_groups,
-            left_threshold_order,
-            right_threshold_order,
-            lu_cut_order,
-        } => PyThresholdCountertermComponentOccurrence {
-            kind: "local_unitarity".to_string(),
-            raised_esurface_id: None,
-            overlap_groups: overlap_groups.to_vec(),
-            left_threshold_order: *left_threshold_order,
-            right_threshold_order: *right_threshold_order,
-            lu_cut_order: *lu_cut_order,
-        },
-    }
-}
-
-fn threshold_counterterm_occurrence_from_py(
-    occurrence: &PyThresholdCountertermComponentOccurrence,
-) -> ThresholdCountertermComponentOccurrence {
-    match occurrence.kind.as_str() {
-        "amplitude" => ThresholdCountertermComponentOccurrence::Amplitude {
-            raised_esurface_id: occurrence
-                .raised_esurface_id
-                .expect("Python amplitude threshold occurrence must have a raised E-surface ID"),
-            overlap_group: *occurrence
-                .overlap_groups
-                .first()
-                .expect("Python amplitude threshold occurrence must have one overlap group"),
-        },
-        "local_unitarity" => ThresholdCountertermComponentOccurrence::LocalUnitarity {
-            overlap_groups: occurrence.overlap_groups.iter().copied().collect(),
-            left_threshold_order: occurrence.left_threshold_order,
-            right_threshold_order: occurrence.right_threshold_order,
-            lu_cut_order: occurrence.lu_cut_order,
-        },
-        kind => panic!("Unknown Python threshold-counterterm occurrence kind '{kind}'"),
-    }
-}
-
-fn py_threshold_counterterm_component_from_component(
-    component: &GenericThresholdCountertermComponentWeight<f64>,
-) -> PyThresholdCountertermComponentWeight {
-    PyThresholdCountertermComponentWeight {
-        component_id: component.component_id,
-        occurrence: py_threshold_counterterm_occurrence_from_occurrence(&component.occurrence),
-        multiplier_values: component
-            .multiplier_values
-            .iter()
-            .map(|value| value.0)
-            .collect(),
-        effective_multiplier: component.effective_multiplier.0,
-        bare: component.bare.map(py_complex_from_complex),
-        weighted: py_complex_from_complex(component.weighted),
-        evaluation_skipped: component.evaluation_skipped,
-    }
-}
-
-fn threshold_counterterm_component_from_py(
-    component: &PyThresholdCountertermComponentWeight,
-) -> GenericThresholdCountertermComponentWeight<f64> {
-    GenericThresholdCountertermComponentWeight {
-        component_id: component.component_id,
-        occurrence: threshold_counterterm_occurrence_from_py(&component.occurrence),
-        multiplier_values: component
-            .multiplier_values
-            .iter()
-            .copied()
-            .map(gammalooprs::utils::F)
-            .collect(),
-        effective_multiplier: gammalooprs::utils::F(component.effective_multiplier),
-        bare: component.bare.as_ref().map(|value| {
-            spenso::algebra::complex::Complex::new(
-                gammalooprs::utils::F(value.re),
-                gammalooprs::utils::F(value.im),
-            )
-        }),
-        weighted: spenso::algebra::complex::Complex::new(
-            gammalooprs::utils::F(component.weighted.re),
-            gammalooprs::utils::F(component.weighted.im),
-        ),
-        evaluation_skipped: component.evaluation_skipped,
-    }
-}
-
-fn py_threshold_counterterm_event_from_event(
-    info: &GenericThresholdCountertermEventInfo<f64>,
-) -> PyThresholdCountertermEventInfo {
-    PyThresholdCountertermEventInfo {
-        original: py_complex_from_complex(info.original),
-        components: info
-            .components
-            .iter()
-            .map(py_threshold_counterterm_component_from_component)
-            .collect(),
-    }
-}
-
-fn threshold_counterterm_event_from_py(
-    info: &PyThresholdCountertermEventInfo,
-) -> GenericThresholdCountertermEventInfo<f64> {
-    GenericThresholdCountertermEventInfo {
-        original: spenso::algebra::complex::Complex::new(
-            gammalooprs::utils::F(info.original.re),
-            gammalooprs::utils::F(info.original.im),
-        ),
-        components: info
-            .components
-            .iter()
-            .map(threshold_counterterm_component_from_py)
-            .collect(),
-    }
-}
-
 fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
     match key {
         AdditionalWeightKey::FullMultiplicativeFactor => "full_multiplicative_factor".to_string(),
@@ -2306,11 +1794,6 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
             esurface_id,
             overlap_group,
         } => format!("threshold_counterterm:{esurface_id}:{overlap_group}"),
-        AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
-            variant_id,
-            esurface_id,
-            overlap_group,
-        } => format!("threshold_counterterm_variant:{variant_id}:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -2345,20 +1828,15 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            sampling_channel_id: event.cut_info.sampling_channel_id,
-            sampling_channel_edge_ids: event
+            lmb_channel_id: event.cut_info.lmb_channel_id,
+            lmb_channel_edge_ids: event
                 .cut_info
-                .sampling_channel_edge_ids
+                .lmb_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
         weight: py_complex_from_complex(event.weight),
         additional_weights,
-        threshold_counterterms: event
-            .additional_weights
-            .threshold_counterterms
-            .as_ref()
-            .map(py_threshold_counterterm_event_from_event),
     }
 }
 
@@ -2398,29 +1876,6 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             let key = match weight.key.as_str() {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
-                _ if weight.key.starts_with("threshold_counterterm_variant:") => {
-                    let mut indices = weight
-                        .key
-                        .trim_start_matches("threshold_counterterm_variant:")
-                        .split(':');
-                    AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
-                        variant_id: indices
-                            .next()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or_default(),
-                        esurface_id: indices
-                            .next()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or_default(),
-                        overlap_group: indices
-                            .next()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or_default(),
-                    }
-                }
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
                     Some(indices) => {
                         let mut indices = indices.split(':');
@@ -2463,10 +1918,10 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            sampling_channel_id: event.cut_info.sampling_channel_id,
-            sampling_channel_edge_ids: event
+            lmb_channel_id: event.cut_info.lmb_channel_id,
+            lmb_channel_edge_ids: event
                 .cut_info
-                .sampling_channel_edge_ids
+                .lmb_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
@@ -2476,10 +1931,6 @@ fn event_from_py_event(event: &PyEvent) -> Event {
         ),
         additional_weights: GenericAdditionalWeightInfo {
             weights: additional_weights,
-            threshold_counterterms: event
-                .threshold_counterterms
-                .as_ref()
-                .map(threshold_counterterm_event_from_py),
         },
         derived_observable_data: Default::default(),
     }
@@ -2726,25 +2177,6 @@ fn py_component_discrete_breakdown_from_breakdown(
     }
 }
 
-fn py_absolute_integration_result_from_result(
-    result: gammalooprs::settings::runtime::AbsoluteIntegrationResult,
-) -> PyAbsoluteIntegrationResult {
-    PyAbsoluteIntegrationResult {
-        integral: py_integral_estimate_from_estimate(result.integral),
-        table_results: result
-            .table_results
-            .into_iter()
-            .map(py_table_component_result_from_result)
-            .collect(),
-        max_weight_info: result
-            .max_weight_info
-            .into_iter()
-            .map(py_max_weight_info_entry_from_entry)
-            .collect(),
-        grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
-    }
-}
-
 fn py_slot_integration_result_from_result(
     result: gammalooprs::settings::runtime::SlotIntegrationResult,
 ) -> PySlotIntegrationResult {
@@ -2768,7 +2200,6 @@ fn py_slot_integration_result_from_result(
             .map(py_max_weight_info_entry_from_entry)
             .collect(),
         grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
-        absolute: py_absolute_integration_result_from_result(result.absolute),
     }
 }
 
@@ -2789,159 +2220,6 @@ fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGr
         graph_id: graph.graph_id,
         name: graph.name,
         is_master: graph.is_master,
-        threshold_counterterm_directives: graph
-            .threshold_counterterm_directives
-            .into_iter()
-            .map(py_threshold_counterterm_directive_from_info)
-            .collect(),
-        threshold_counterterms: graph
-            .threshold_counterterms
-            .map(py_threshold_counterterm_registry_from_metadata),
-    }
-}
-
-fn py_threshold_counterterm_directive_from_info(
-    directive: IntegrandThresholdCountertermDirectiveInfo,
-) -> PyThresholdCountertermDirectiveInfo {
-    PyThresholdCountertermDirectiveInfo {
-        cut_edge_ids: directive.cut_edge_ids,
-        threshold_edge_ids: directive.threshold_edge_ids,
-        name: directive.name,
-        implicit_default: directive.implicit_default,
-        requested_subspace: directive.requested_subspace,
-        requested_parent_lmb: directive.requested_parent_lmb,
-        disabled: directive.disabled,
-        multiplier: directive
-            .multiplier
-            .map(py_threshold_counterterm_multiplier_from_metadata),
-    }
-}
-
-fn threshold_counterterm_side_name(side: ThresholdCountertermSide) -> &'static str {
-    match side {
-        ThresholdCountertermSide::Amplitude => "amplitude",
-        ThresholdCountertermSide::Left => "left",
-        ThresholdCountertermSide::Right => "right",
-    }
-}
-
-fn threshold_counterterm_origin_name(origin: ThresholdCountertermOrigin) -> &'static str {
-    match origin {
-        ThresholdCountertermOrigin::Explicit => "explicit",
-        ThresholdCountertermOrigin::Autogenerated => "autogenerated",
-    }
-}
-
-fn threshold_counterterm_component_kind_name(
-    kind: ThresholdCountertermComponentKind,
-) -> &'static str {
-    match kind {
-        ThresholdCountertermComponentKind::Local => "local",
-        ThresholdCountertermComponentKind::Integrated => "integrated",
-        ThresholdCountertermComponentKind::LocalLocal => "local_local",
-        ThresholdCountertermComponentKind::LocalIntegrated => "local_integrated",
-        ThresholdCountertermComponentKind::IntegratedLocal => "integrated_local",
-        ThresholdCountertermComponentKind::IntegratedIntegrated => "integrated_integrated",
-    }
-}
-
-fn py_threshold_counterterm_association_from_metadata(
-    association: ThresholdCountertermAssociationMetadata,
-) -> PyThresholdCountertermAssociationMetadata {
-    PyThresholdCountertermAssociationMetadata {
-        cut_id: association.cut_id,
-        cut_edges: association.cut_edges,
-        threshold_edges: association.threshold_edges,
-        esurface_id: association.esurface_id,
-        eligible: association.eligible,
-        origin: threshold_counterterm_origin_name(association.origin).to_string(),
-    }
-}
-
-fn py_threshold_counterterm_multiplier_from_metadata(
-    multiplier: ThresholdCountertermMultiplierMetadata,
-) -> PyThresholdCountertermMultiplierMetadata {
-    PyThresholdCountertermMultiplierMetadata {
-        expression: multiplier.expression,
-        function_map: multiplier.function_map,
-        symmetrize: multiplier.symmetrize,
-        opaque_derivatives: multiplier.opaque_derivatives,
-    }
-}
-
-fn py_threshold_counterterm_variant_from_metadata(
-    variant: ThresholdCountertermVariantMetadata,
-) -> PyThresholdCountertermVariantMetadata {
-    PyThresholdCountertermVariantMetadata {
-        variant_id: variant.variant_id,
-        name: variant.name,
-        group_id: variant.group_id,
-        cut_group_id: variant.cut_group_id,
-        associations: variant
-            .associations
-            .into_iter()
-            .map(py_threshold_counterterm_association_from_metadata)
-            .collect(),
-        side: threshold_counterterm_side_name(variant.side).to_string(),
-        threshold_esurface_ids: variant.threshold_esurface_ids,
-        requested_subspace: variant.requested_subspace,
-        resolved_subspace: variant.resolved_subspace,
-        requested_parent_lmb: variant.requested_parent_lmb,
-        resolved_parent_lmb: variant.resolved_parent_lmb,
-        subspace_loop_count: variant.subspace_loop_count,
-        multiplier: variant
-            .multiplier
-            .map(py_threshold_counterterm_multiplier_from_metadata),
-        generated: variant.generated,
-        active: variant.active,
-    }
-}
-
-fn py_threshold_counterterm_evaluator_from_metadata(
-    evaluator: ThresholdCountertermEvaluatorMetadata,
-) -> PyThresholdCountertermEvaluatorMetadata {
-    PyThresholdCountertermEvaluatorMetadata {
-        evaluator_id: evaluator.evaluator_id,
-        cut_group_id: evaluator.cut_group_id,
-        collection_evaluator_id: evaluator.collection_evaluator_id,
-        expression: evaluator.expression,
-        variant_ids: evaluator.variant_ids,
-    }
-}
-
-fn py_threshold_counterterm_component_from_metadata(
-    component: ThresholdCountertermComponentMetadata,
-) -> PyThresholdCountertermComponentMetadata {
-    PyThresholdCountertermComponentMetadata {
-        component_id: component.component_id,
-        cut_group_id: component.cut_group_id,
-        kind: threshold_counterterm_component_kind_name(component.kind).to_string(),
-        variant_ids: component.variant_ids,
-        evaluator_ids: component.evaluator_ids,
-        sign: component.sign,
-    }
-}
-
-fn py_threshold_counterterm_registry_from_metadata(
-    registry: ThresholdCountertermMetadataRegistry,
-) -> PyThresholdCountertermMetadataRegistry {
-    PyThresholdCountertermMetadataRegistry {
-        graph_name: registry.graph_name,
-        variants: registry
-            .variants
-            .into_iter()
-            .map(py_threshold_counterterm_variant_from_metadata)
-            .collect(),
-        evaluators: registry
-            .evaluators
-            .into_iter()
-            .map(py_threshold_counterterm_evaluator_from_metadata)
-            .collect(),
-        components: registry
-            .components
-            .into_iter()
-            .map(py_threshold_counterterm_component_from_metadata)
-            .collect(),
     }
 }
 
@@ -3166,7 +2444,6 @@ fn build_python_integrate_command(
     min_time_between_status_updates: f64,
     max_table_width: usize,
     write_results_for_each_iteration: bool,
-    reference_gaussian: Option<(f64, Vec<f64>)>,
 ) -> PyResult<Integrate> {
     let mut integrate = if let Some(slots) = slots {
         if process.is_some() || integrand_name.is_some() {
@@ -3186,12 +2463,6 @@ fn build_python_integrate_command(
         integrate
     };
 
-    integrate.reference_gaussian = reference_gaussian
-        .map(|(width, center)| {
-            gammalooprs::integrands::process::GaussianReferenceFunction::new(width, center)
-                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
-        })
-        .transpose()?;
     integrate.n_cores = n_cores;
     integrate.workspace_path = workspace_path;
     integrate.restart = restart;
@@ -3537,6 +2808,175 @@ struct GammaLoopAPI {
     session_state: CliSessionState,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum CffDotInputError {
+    #[error("could not parse CFF DOT input: {message}")]
+    Parse { message: String },
+    #[error("CFF DOT input does not contain a graph")]
+    EmptyGraph,
+    #[error("edge {edge} has invalid `{attribute}` value `{value}`: {message}")]
+    InvalidEdgeAttribute {
+        edge: EdgeIndex,
+        attribute: &'static str,
+        value: String,
+        message: String,
+    },
+    #[error("could not generate CFF expression: {0}")]
+    Generation(#[from] CffError),
+}
+
+fn parse_cff_dot_graph(dot: &str) -> Result<DotGraph, CffDotInputError> {
+    DotGraphSet::from_string(dot)
+        .map_err(|error| CffDotInputError::Parse {
+            message: error.to_string(),
+        })?
+        .into_iter()
+        .next_back()
+        .ok_or(CffDotInputError::EmptyGraph)
+}
+
+fn select_cff_dot_subgraph(graph: &DotGraph, subgraph_nodes: &[String]) -> SuBitGraph {
+    if subgraph_nodes.is_empty() {
+        return graph.full_filter();
+    }
+
+    let mut selected: SuBitGraph = graph.empty_subgraph();
+    for (node, neighbors, vertex) in graph.iter_nodes() {
+        let name = vertex
+            .name()
+            .map(str::to_owned)
+            .unwrap_or_else(|| node.to_string());
+        if subgraph_nodes.contains(&name) {
+            neighbors.for_each(|hedge| selected.add(hedge));
+        }
+    }
+    selected
+}
+
+fn cff_dot_options(graph: &DotGraph) -> Result<CffOptions, CffDotInputError> {
+    let mut options = CffOptions::default();
+    for (_, edge, data) in graph.iter_edges() {
+        let Some(value) = data.data.statements.get("is_cut") else {
+            continue;
+        };
+        value
+            .parse::<usize>()
+            .map_err(|error| CffDotInputError::InvalidEdgeAttribute {
+                edge,
+                attribute: "is_cut",
+                value: value.clone(),
+                message: error.to_string(),
+            })?;
+        options = options.with_initial_state_edge(edge);
+    }
+    Ok(options)
+}
+
+fn build_cff_dot_topology(
+    dot: &str,
+    subgraph_nodes: &[String],
+    reversed_dangling: &[usize],
+) -> Result<(DotGraph, SuBitGraph, CffResult), CffDotInputError> {
+    let graph = parse_cff_dot_graph(dot)?;
+    let subgraph = select_cff_dot_subgraph(&graph, subgraph_nodes);
+    let reversed_dangling = reversed_dangling
+        .iter()
+        .copied()
+        .map(EdgeIndex::from)
+        .collect_vec();
+    let mut surface_cache = SurfaceCache::default();
+    let cff = graph.build_cff_from_subgraph(
+        &subgraph,
+        cff_dot_options(&graph)?,
+        &reversed_dangling,
+        &mut surface_cache,
+    )?;
+    Ok((graph, subgraph, cff))
+}
+
+#[cfg(test)]
+mod cff_dot_topology_tests {
+    use super::*;
+    use linnet::half_edge::subgraph::SubGraphLike;
+
+    const RAW_TOPOLOGY: &str = r#"
+        digraph raw_triangle {
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [id=0]
+            B [id=1]
+            C [id=2]
+            A -> C [id=0]
+            B -> C [id=1 is_cut=0]
+            A -> B [id=2]
+            C -> ext_out [id=3]
+            ext_in -> A [id=4]
+        }
+    "#;
+
+    #[test]
+    fn raw_dot_cff_needs_only_topology() {
+        let (graph, selected, cff) =
+            build_cff_dot_topology(RAW_TOPOLOGY, &["B".to_owned(), "C".to_owned()], &[2]).unwrap();
+
+        assert_eq!(graph.global_data.name, "raw_triangle");
+        // Linnet counts only the fully selected paired edge here; the three
+        // boundary/external edges are verified through the padded orientation.
+        assert_eq!(selected.nedges(&graph.graph), 1);
+        assert!(!cff.orientations().is_empty());
+        for orientation in cff.orientations() {
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(2)],
+                Orientation::Reversed
+            );
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(4)],
+                Orientation::Undirected
+            );
+            assert_ne!(
+                orientation.data.orientation[EdgeIndex(1)],
+                Orientation::Undirected
+            );
+        }
+        assert!(cff.surfaces.energy_surfaces().iter().all(|surface| {
+            !surface.energies.contains(&EdgeIndex(1))
+                && surface
+                    .vertex_set
+                    .iter()
+                    .all(|vertex| [1, 2].contains(&vertex.0))
+        }));
+        assert!(
+            cff.surfaces
+                .energy_surfaces()
+                .iter()
+                .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+                || cff
+                    .surfaces
+                    .h_surfaces()
+                    .iter()
+                    .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+        );
+    }
+
+    #[test]
+    fn malformed_dot_and_cut_attributes_are_structured_errors() {
+        assert!(matches!(
+            parse_cff_dot_graph("digraph broken { A ->"),
+            Err(CffDotInputError::Parse { .. })
+        ));
+
+        let invalid_cut = RAW_TOPOLOGY.replace("is_cut=0", "is_cut=left");
+        assert!(matches!(
+            build_cff_dot_topology(&invalid_cut, &[], &[]),
+            Err(CffDotInputError::InvalidEdgeAttribute {
+                edge: EdgeIndex(1),
+                attribute: "is_cut",
+                ..
+            })
+        ));
+    }
+}
+
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -3602,9 +3042,7 @@ impl GammaLoopAPI {
         read_only_state=false,
         settings_global_path=None,
         settings_runtime_defaults_path=None,
-        clean_state=false,
-        processes=None,
-        integrands=None
+        clean_state=false
     ))]
     pub fn new_python(
         state_folder: Option<PathBuf>,
@@ -3622,8 +3060,6 @@ impl GammaLoopAPI {
         settings_global_path: Option<PathBuf>,
         settings_runtime_defaults_path: Option<PathBuf>,
         clean_state: bool,
-        processes: Option<Vec<String>>,
-        integrands: Option<Vec<String>>,
     ) -> Result<Self> {
         let LoadedState {
             state,
@@ -3644,8 +3080,6 @@ impl GammaLoopAPI {
             read_only_state,
             settings_global_path,
             settings_runtime_defaults_path,
-            processes,
-            integrands,
         }
         .load()
         .map_err(|e| {
@@ -4008,8 +3442,11 @@ impl GammaLoopAPI {
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -4019,8 +3456,11 @@ impl GammaLoopAPI {
                     ));
                 }
 
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 (graphs, process_name)
             }
             other => {
@@ -4080,13 +3520,19 @@ impl GammaLoopAPI {
                     return Err(eyre!("Path does not exist: {}", dot_path.display()));
                 }
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 graphs
             }
             "string" => {
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 graphs
             }
             other => {
@@ -4237,8 +3683,7 @@ impl GammaLoopAPI {
     ///     JSON representation of the model currently owned by this session.
     #[pyo3(name = "get_model")]
     pub(crate) fn get_model(&self) -> PyResult<String> {
-        let serializable_model = self.gammaloop_state.model.to_serializable();
-        serde_json::to_string(&serializable_model).map_err(|e| {
+        serde_json::to_string(&self.gammaloop_state.model).map_err(|e| {
             exceptions::PyException::new_err(format!("Could not serialize model: {}", e))
         })
     }
@@ -4735,6 +4180,122 @@ impl GammaLoopAPI {
             .map(|_| ())
     }
 
+    /// Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// list[tuple[dict[int, int], str]]
+    ///     Edge-direction maps paired with their energy-denominator expressions.
+    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
+    pub(crate) fn generate_cff(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
+        let (graph, subgraph, cff) =
+            build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let or_pattern = orientation_pattern
+            .as_deref()
+            .map(OrientationPattern::from_user_pattern)
+            .transpose()
+            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
+            .unwrap_or_default();
+
+        let atoms = cff.orientations().iter().map(|orientation| {
+            let atom = if or_pattern.filter(&orientation.data.orientation) {
+                orientation.expression.to_atom_inverse()
+            } else {
+                symbolica::atom::Atom::Zero
+            };
+            (atom, orientation.data.clone())
+        });
+        let replacements = cff.surfaces.replacements_with(
+            gammalooprs::utils::ose_atom_from_index,
+            gammalooprs::utils::external_energy_atom_from_index,
+        );
+        let inverse_energies =
+            graph::get_cff_inverse_energy_product_impl(&graph.graph, &subgraph, &[]);
+
+        let result = atoms
+            .into_iter()
+            .map(|(atom, orientation_data)| {
+                let energy_sub = atom.replace_multiple(&replacements) * &inverse_energies;
+                let string_atom = energy_sub.to_string();
+
+                let mut orientation_as_hashmap = HashMap::new();
+                for (edge_id, direction) in orientation_data.orientation.into_iter() {
+                    let direction = match direction {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => 0,
+                    };
+                    orientation_as_hashmap.insert(edge_id.0, direction);
+                }
+                (orientation_as_hashmap, string_atom)
+            })
+            .collect_vec();
+
+        Ok(result)
+    }
+
+    /// Serialize a causal-flow expression and its surfaces as JSON.
+    ///
+    /// This accepts the same graph, subgraph, and dangling-edge inputs as
+    /// ``generate_cff``. The current JSON representation is intended for GammaLoop
+    /// tooling and may contain internal structural details.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     JSON representation of the causal-flow expression and E-surfaces.
+    #[pyo3(
+        name = "generate_cff_as_json_string",
+        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
+    )]
+    pub(crate) fn generate_cff_as_json_string(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<String> {
+        let _ = orientation_pattern;
+        let (_, _, cff) = build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let json_string = serde_json::to_string(&cff).map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
+        })?;
+
+        Ok(json_string)
+    }
+
     /*
 
     #[allow(clippy::too_many_arguments)]
@@ -4891,8 +4452,7 @@ impl GammaLoopAPI {
             batch_timing = 5.0,
             min_time_between_status_updates = 0.0,
             max_table_width = 250,
-            write_results_for_each_iteration = false,
-            reference_gaussian = None
+            write_results_for_each_iteration = false
         )
     )]
     pub fn integrate(
@@ -4921,7 +4481,6 @@ impl GammaLoopAPI {
         min_time_between_status_updates: f64,
         max_table_width: usize,
         write_results_for_each_iteration: bool,
-        reference_gaussian: Option<(f64, Vec<f64>)>,
     ) -> Result<PyIntegrationOutput> {
         let integrate = build_python_integrate_command(
             &self.gammaloop_state,
@@ -4948,7 +4507,6 @@ impl GammaLoopAPI {
             min_time_between_status_updates,
             max_table_width,
             write_results_for_each_iteration,
-            reference_gaussian,
         )?;
 
         Ok(PyIntegrationOutput {

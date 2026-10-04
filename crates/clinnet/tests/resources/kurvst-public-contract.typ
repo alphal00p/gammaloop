@@ -18,7 +18,8 @@
 
 // Positive point outsets are capped; negative outsets remain signed.
 #assert.eq(kurvst.outset-point((0, 0), (10, 0), distance: 2), (2, 0))
-#assert.eq(kurvst.outset-point((0, 0), (10, 0), distance: 8), (4.5, 0))
+#assert.eq(kurvst.outset-point((0, 0), (10, 0), distance: 8), (8, 0))
+#assert.eq(kurvst.outset-point((0, 0), (10, 0), distance: 12), (10, 0))
 #assert.eq(kurvst.outset-point((0, 0), (10, 0), distance: -2), (-2, 0))
 #assert.eq(kurvst.outset-point((1, 2), (1, 2), distance: 8), (1, 2))
 

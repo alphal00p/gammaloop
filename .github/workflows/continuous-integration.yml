@@ -2,9 +2,16 @@ name: Continuous integration
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
+    branches:
+      - main
+      - codex/raised-energy-cff-reviewed
   push:
     branches:
       - main
+      - feynkit
+  merge_group:
 env:
   CARGO_TERM_COLOR: always
   SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
@@ -14,12 +21,15 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.run_id }}
-  cancel-in-progress: false
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
     name: Detect relevant changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review'))
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.rust == 'true' }}
@@ -75,7 +85,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: symbolica-dev/symbolica-typst-plugin
-          ref: 18e0491628f9eac5c788659cabfcdb7575f6986d
+          ref: cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main
@@ -138,7 +148,9 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     needs: [changes, test-matrix, checks, tydenso]
-    if: always()
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
     steps:
       - name: Tests successful
         if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
@@ -159,8 +171,6 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
-      # Hosted runners have fewer CPUs than the local CI profile's 16-test cap.
-      NEXTEST_TEST_THREADS: num-cpus
     steps:
       - uses: actions/checkout@v4
         with:
@@ -236,7 +246,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, fmt, doc]
+        check: [boundaries, clippy, fmt, doc, stubs]
     steps:
       - uses: actions/checkout@v4
 
@@ -267,6 +277,12 @@ jobs:
         if: matrix.check == 'clippy'
         run: just --unstable clippy -- -D warnings
 
+      - name: Check FeynKit dependency boundaries
+        if: matrix.check == 'boundaries'
+        run: |
+          python3 .github/scripts/check-feynkit-boundaries.py --self-test
+          python3 .github/scripts/check-feynkit-boundaries.py
+
       - name: Run fmt
         if: matrix.check == 'fmt'
         run: just --unstable fmt -- --check
@@ -275,11 +291,19 @@ jobs:
         if: matrix.check == 'doc'
         run: just --unstable doc
 
+      - name: Check FeynKit Python stubs
+        if: matrix.check == 'stubs'
+        run: |
+          cargo run --locked -p feynkit-py --features python_stubgen --bin feynkit-stubgen
+          test -z "$(git status --porcelain -- crates/feynkit-py/python/symbolica)"
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
     needs: [changes, checks-matrix]
-    if: always()
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
     steps:
       - name: Checks successful
         if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}

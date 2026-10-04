@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
@@ -248,171 +244,6 @@ pub struct ProcessList {
     pub processes: Vec<Process>,
 }
 
-/// Restricts which saved processes and integrands are loaded into a process list.
-///
-/// An unqualified integrand selector applies to every process containing an
-/// integrand with that name, while a qualified selector applies only to its
-/// named process. Process selectors take precedence and load every integrand
-/// in the selected process.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ProcessLoadSelection {
-    pub process_names: BTreeSet<String>,
-    pub integrand_selectors: Vec<ProcessLoadIntegrandSelector>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProcessLoadIntegrandSelector {
-    Name(String),
-    Qualified {
-        process_name: String,
-        integrand_name: String,
-    },
-}
-
-impl ProcessLoadSelection {
-    pub fn is_unrestricted(&self) -> bool {
-        self.process_names.is_empty() && self.integrand_selectors.is_empty()
-    }
-
-    pub fn selected_integrand_names<'a, I>(
-        &self,
-        process_name: &str,
-        available_names: I,
-    ) -> BTreeSet<String>
-    where
-        I: IntoIterator<Item = &'a str>,
-    {
-        let available_names = available_names.into_iter();
-        if self.process_names.contains(process_name) {
-            return available_names.map(str::to_string).collect();
-        }
-
-        available_names
-            .filter(|integrand_name| {
-                self.integrand_selectors
-                    .iter()
-                    .any(|selector| match selector {
-                        ProcessLoadIntegrandSelector::Name(name) => name == *integrand_name,
-                        ProcessLoadIntegrandSelector::Qualified {
-                            process_name: selected_process,
-                            integrand_name: selected_integrand,
-                        } => {
-                            selected_process == process_name
-                                && selected_integrand == *integrand_name
-                        }
-                    })
-            })
-            .map(str::to_string)
-            .collect()
-    }
-}
-
-#[cfg(test)]
-mod process_load_selection_tests {
-    use super::{ProcessLoadIntegrandSelector, ProcessLoadSelection};
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn process_and_integrand_selectors_are_unioned() {
-        let selection = ProcessLoadSelection {
-            process_names: BTreeSet::from(["all".to_string()]),
-            integrand_selectors: vec![
-                ProcessLoadIntegrandSelector::Name("shared".to_string()),
-                ProcessLoadIntegrandSelector::Qualified {
-                    process_name: "one".to_string(),
-                    integrand_name: "specific".to_string(),
-                },
-            ],
-        };
-
-        assert_eq!(
-            selection.selected_integrand_names("all", ["a", "b"]),
-            BTreeSet::from(["a".to_string(), "b".to_string()])
-        );
-        assert_eq!(
-            selection.selected_integrand_names("one", ["shared", "specific", "other"]),
-            BTreeSet::from(["shared".to_string(), "specific".to_string()])
-        );
-        assert_eq!(
-            selection.selected_integrand_names("two", ["shared", "specific"]),
-            BTreeSet::from(["shared".to_string()])
-        );
-    }
-}
-
-fn validate_process_load_selection(
-    processes_root: &Path,
-    selection: &ProcessLoadSelection,
-) -> Result<()> {
-    let mut available: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (directory, binary, kind) in [
-        ("amplitudes", "amp.bin", "amplitude"),
-        ("cross_sections", "cs.bin", "cross section"),
-    ] {
-        let root = processes_root.join(directory);
-        if !root.exists() {
-            continue;
-        }
-        for entry in
-            fs::read_dir(&root).with_context(|| format!("Error reading {}", root.display()))?
-        {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let Some(process_name) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-            let child_dirs = process::saved_child_dirs(&entry.path(), binary, kind)?;
-            let names = available.entry(process_name).or_default();
-            names.extend(child_dirs.into_iter().filter_map(|path| {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .map(str::to_owned)
-            }));
-        }
-    }
-
-    let mut errors = Vec::new();
-
-    for process_name in &selection.process_names {
-        if !available.contains_key(process_name) {
-            errors.push(format!("process '{process_name}' was not found"));
-        }
-    }
-    for selector in &selection.integrand_selectors {
-        match selector {
-            ProcessLoadIntegrandSelector::Name(integrand_name) => {
-                if !available.values().any(|names| names.contains(integrand_name)) {
-                    errors.push(format!("integrand '{integrand_name}' was not found"));
-                }
-            }
-            ProcessLoadIntegrandSelector::Qualified {
-                process_name,
-                integrand_name,
-            } => match available.get(process_name) {
-                None => errors.push(format!(
-                    "process '{process_name}' in selector '{process_name}@{integrand_name}' was not found"
-                )),
-                Some(names) if !names.contains(integrand_name) => errors.push(format!(
-                    "integrand '{integrand_name}' was not found in process '{process_name}'"
-                )),
-                Some(_) => {}
-            },
-        }
-    }
-
-    if errors.is_empty() {
-        return Ok(());
-    }
-
-    Err(eyre!(
-        "Cannot load the requested process/integrand selection: {}. Available integrands by process: {:?}",
-        errors.join("; "),
-        available,
-    ))
-}
-
 /// Controls which graph details and algebraic transformations are included in DOT exports.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
@@ -545,21 +376,9 @@ impl ProcessList {
     }
 
     pub fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        Self::load_with_selection(path, context, None)
-    }
-
-    pub fn load_with_selection(
-        path: impl AsRef<Path>,
-        context: GammaLoopContextContainer,
-        selection: Option<&ProcessLoadSelection>,
-    ) -> Result<Self> {
         let mut process_list = Self::new();
-        let selection = selection.filter(|selection| !selection.is_unrestricted());
 
         let path = path.as_ref().join("processes");
-        if let Some(selection) = selection {
-            validate_process_load_selection(&path, selection)?;
-        }
         let amplitudes_path = path.join("amplitudes");
         if amplitudes_path.exists() {
             debug!("Looking for amplitudes in {}", amplitudes_path.display());
@@ -571,31 +390,9 @@ impl ProcessList {
                     continue;
                 };
                 let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands = match (selection, process_name) {
-                    (Some(selection), Some(process_name)) => {
-                        let available = process::saved_child_dirs(&path, "amp.bin", "amplitude")?;
-                        Some(
-                            selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ),
-                        )
-                    }
-                    _ => None,
-                };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process = Process::load_amplitude(path, context, selected_integrands.as_ref())
-                    .context("Error loading amplitude")?;
-                process_list.processes.push(process);
+                process_list.processes.push(
+                    Process::load_amplitude(path, context).context("Error loading amplitude")?,
+                );
             }
         }
 
@@ -609,42 +406,14 @@ impl ProcessList {
             for entry in fs::read_dir(cross_sections_path)? {
                 let entry = entry?;
                 let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands =
-                    match (selection, process_name) {
-                        (Some(selection), Some(process_name)) => {
-                            let available =
-                                process::saved_child_dirs(&path, "cs.bin", "cross section")?;
-                            Some(selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ))
-                        }
-                        _ => None,
-                    };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process =
-                    Process::load_cross_section(path, context, selected_integrands.as_ref())?;
-                process_list.processes.push(process);
+                process_list
+                    .processes
+                    .push(Process::load_cross_section(path, context)?);
             }
         }
         process_list
             .processes
             .sort_by_key(|p| p.definition.process_id);
-
-        if selection.is_some() {
-            for (process_id, process) in process_list.processes.iter_mut().enumerate() {
-                process.definition.process_id = process_id;
-            }
-        }
 
         Ok(process_list)
     }
@@ -737,6 +506,7 @@ impl ProcessList {
 
     pub fn export_uv_forests(
         &self,
+        model: &Model,
         path: impl AsRef<Path>,
         process_id: usize,
         integrand_name: &str,
@@ -752,7 +522,7 @@ impl ProcessList {
                 self.processes.len()
             )
         })?;
-        process.export_uv_forests(&path, integrand_name, graph_ids, settings)
+        process.export_uv_forests(model, &path, integrand_name, graph_ids, settings)
     }
 
     pub fn export_standalone(
@@ -853,29 +623,16 @@ pub mod amplitude;
 pub use amplitude::*;
 pub mod cross_section;
 pub use cross_section::*;
-pub mod threshold_counterterms;
-pub use threshold_counterterms::*;
-
-#[cfg(test)]
-mod no_directive_equivalence_tests;
-#[cfg(test)]
-mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {
     use std::fs::OpenOptions;
 
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{SuBitGraph, SubSetLike},
-    };
-
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
-        momentum::signature::LoopExtSignature,
+        GammaLoopContextContainer, finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         settings::{
             RuntimeSettings,
             global::{
@@ -894,38 +651,26 @@ mod tests {
 
         #[test]
         fn test_encode_decode_amplitude_graph() {
+            crate::initialisation::test_initialise().unwrap();
             // load the model and hack the masses, go through serializable model since arc is not mutable
             let model = load_generic_model("sm");
 
-            let mut graph: Graph = dot!(
+            let graph: Graph = finalized_runtime_dot!(
                 digraph G{
-                    e1      [flow=sink]
-                    e2      [flow=source]
-                    e3      [flow=source]
-                    e1 -> n1  [particle=h]
-                    e2 -> n4    [particle=h]
-                    n1 -> n2    [particle=h]
-                    n1 -> n3    [particle=h]
-                    n2 -> n3    [particle=t]
-                    n3 -> n4    [particle=t]
-                    n4 -> n2    [particle=t]
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
+                    ext [style=invis]
+                    ext -> n1  [particle=H sink="{ufo_order:0}"]
+                    ext -> n4  [particle=H sink="{ufo_order:0}"]
+                    n1 -> n2  [particle=H lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                    n1 -> n3  [particle=H source="{ufo_order:2}" sink="{ufo_order:0}"]
+                    n2 -> n3  [particle=t lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                    n3 -> n4  [particle=t source="{ufo_order:2}" sink="{ufo_order:1}"]
+                    n4 -> n2  [particle=t source="{ufo_order:2}" sink="{ufo_order:2}"]
                 }
             )
             .unwrap();
-            let loop_momentum_basis = LoopMomentumBasis {
-                tree: SuBitGraph::empty(0),
-                loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
-                ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-                edge_signatures: graph
-                    .underlying
-                    .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-            };
-
-            // loop_momentum_basis
-            //     .set_edge_signatures(&graph.underlying)
-            //     .unwrap();
-
-            graph.loop_momentum_basis = loop_momentum_basis;
 
             let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 

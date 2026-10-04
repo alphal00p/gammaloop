@@ -93,7 +93,9 @@ dependencies = [
  "typst",
  "typst-bundle",
  "typst-kit",
+ "typst-library",
  "typst-pdf",
+ "typst-svg",
  "walkdir",
 ]
 
@@ -121,6 +123,14 @@ dependencies = [
  "alphal00p-docs-catalogs",
  "alphal00p-docs-schema",
  "eyre",
+ "feynkit",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
  "gammaloop-api",
  "gammalooprs",
  "idenso",
@@ -152,8 +162,8 @@ dependencies = [
 name = "alphal00p-docs-python-exporter"
 version = "0.1.0"
 dependencies = [
+ "feynkit-py",
  "gammaloop-api",
- "idenso",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
@@ -251,7 +261,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -262,7 +272,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -324,9 +334,9 @@ checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
 
 [[package]]
 name = "astro-float"
-version = "0.9.5"
+version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96034cc871c05bb65ad7fb77e6a8bebf45d8b055ed0311769e2f83a1d373c1ec"
+checksum = "2cf6ecd69dd6fbe3763187ff2fa2b0e475b79f04ed86f631a7bc6b04ede0355e"
 dependencies = [
  "astro-float-macro",
  "astro-float-num",
@@ -334,9 +344,9 @@ dependencies = [
 
 [[package]]
 name = "astro-float-macro"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05cfe0f6df5a74fb25b9e713470ad77e091f35f798730673c8772f26ed438963"
+checksum = "9c007205ae7076600c8a59022866990afac02ff186f9031839f67ecce4df2146"
 dependencies = [
  "astro-float-num",
  "proc-macro2",
@@ -346,9 +356,9 @@ dependencies = [
 
 [[package]]
 name = "astro-float-num"
-version = "0.3.6"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86887daca11d02e0b04f37a9cb81888aae881397fb48ff66494e356aea97554a"
+checksum = "bc7f6a0312e8f5845f84241b21bd2394d49940b6bc333c6a84f992e6dc9ebb85"
 dependencies = [
  "itertools 0.10.5",
  "lazy_static",
@@ -874,8 +884,6 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 [[package]]
 name = "clarabel"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d950c870fad4feed732bc3f7da489d223ba3911eac0522e6512eed7e659cfafe"
 dependencies = [
  "amd",
  "cfg-if",
@@ -888,7 +896,6 @@ dependencies = [
  "serde-big-array",
  "serde_json",
  "thiserror 1.0.69",
- "web-time 0.2.4",
 ]
 
 [[package]]
@@ -1001,7 +1008,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1570,7 +1577,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1760,7 +1767,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1842,6 +1849,164 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83072b3c84e55f9d0c0ff36a4575d0fd2e543ae4a56e04e7f5a9222188d574e3"
 dependencies = [
  "bitflags 1.3.2",
+]
+
+[[package]]
+name = "feynkit"
+version = "0.1.0"
+dependencies = [
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
+]
+
+[[package]]
+name = "feynkit-amplitude"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-cff"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "feynkit-graph",
+ "feynkit-model",
+ "linnet",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+ "three-dimensional-reps",
+ "typed-index-collections",
+]
+
+[[package]]
+name = "feynkit-generator"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "feynkit-amplitude",
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "rayon",
+ "serde",
+ "serde_json",
+ "spenso",
+ "spenso-hep-lib",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-graph"
+version = "0.1.0"
+dependencies = [
+ "feynkit-kinematics",
+ "feynkit-model",
+ "itertools 0.14.0",
+ "linnest",
+ "linnet",
+ "nu-ansi-term",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "symbolica-utils",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-kinematics"
+version = "0.1.0"
+dependencies = [
+ "linnet",
+ "numerica",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-model"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "blake3",
+ "miniz_oxide 0.8.9",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "thiserror 2.0.18",
+ "vectorize",
+]
+
+[[package]]
+name = "feynkit-py"
+version = "0.1.0"
+dependencies = [
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
+ "linnest",
+ "linnet",
+ "pyo3",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "serde_json",
+ "spenso-macros",
+ "spynso3",
+ "symbolica",
+ "tempfile",
+ "typst-renderer",
+]
+
+[[package]]
+name = "feynkit-tensor"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-ufo"
+version = "0.1.0"
+dependencies = [
+ "feynkit-model",
+ "pyo3",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2057,6 +2222,10 @@ dependencies = [
  "crossterm 0.28.1",
  "dirs",
  "eyre",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-ufo",
  "figment",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
@@ -2112,9 +2281,13 @@ dependencies = [
  "color-eyre",
  "colored 3.1.1",
  "eyre",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-model",
  "gammaloop-api",
  "gammaloop-workspace-hack",
  "gammalooprs",
+ "idenso",
  "insta",
  "itertools 0.14.0",
  "linnet",
@@ -2234,9 +2407,14 @@ dependencies = [
  "derive_more 0.99.20",
  "dirs",
  "dot-parser",
- "dyn-clone",
  "enum_dispatch",
  "eyre",
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",
@@ -2414,9 +2592,9 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
+checksum = "118912fe5e24df9c7f36c1211bdeb1a803013b312cc149bd1794b9a0e4ef9c78"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2678,6 +2856,22 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hexf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6618f4550dcd7d9ddb5126ab18d48dfa31aa952159cb832390bda464d3bc827e"
+dependencies = [
+ "hexf-parse",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "httpdate"
@@ -2966,6 +3160,7 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.12",
  "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
@@ -2978,8 +3173,6 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
- "pyo3",
- "pyo3-stub-gen",
  "spenso",
  "spenso-macros",
  "symbolica",
@@ -3100,7 +3293,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "unit-prefix",
  "vt100",
- "web-time 1.1.0",
+ "web-time",
 ]
 
 [[package]]
@@ -3205,7 +3398,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3513,11 +3706,16 @@ dependencies = [
  "dot-parser",
  "figment",
  "getrandom 0.2.17",
+ "indexmap",
+ "kurbo",
+ "kurvst",
  "linnet",
  "rand 0.8.6",
  "rkyv",
+ "roxmltree 0.21.1",
  "self_cell",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "wasm-minimal-protocol",
 ]
@@ -3531,6 +3729,7 @@ dependencies = [
  "bincode-trait-derive",
  "bitvec",
  "cgmath",
+ "clarabel",
  "criterion",
  "dot-parser",
  "duplicate 2.0.1",
@@ -3549,11 +3748,13 @@ dependencies = [
  "rand 0.8.6",
  "rkyv",
  "serde",
+ "serde_json",
  "serde_repr",
  "similar-asserts",
  "symbolica",
  "symbolica-utils",
  "thiserror 2.0.18",
+ "twofloat",
 ]
 
 [[package]]
@@ -3569,10 +3770,12 @@ dependencies = [
  "pyo3-build-config",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "roxmltree 0.21.1",
  "rust-embed",
  "serde",
  "serde_json",
  "tempfile",
+ "typst-renderer",
  "walkdir",
 ]
 
@@ -3958,7 +4161,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4066,9 +4269,9 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd28aae6e022a7b5846a8ae40b2d41104f8d8cba38adbb02c0f7933f3ed7bb02"
+checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -5487,7 +5690,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6098,7 +6301,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -6110,7 +6313,6 @@ name = "spenso-hep-lib"
 version = "0.1.7"
 dependencies = [
  "ahash 0.8.12",
- "gammaloop-workspace-hack",
  "idenso",
  "insta",
  "spenso",
@@ -6140,19 +6342,25 @@ name = "spynso3"
 version = "0.1.2"
 dependencies = [
  "ahash 0.8.12",
+ "ciborium",
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnest",
+ "linnet",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "roxmltree 0.21.1",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
+ "typst-renderer",
  "xpct",
 ]
 
@@ -6172,7 +6380,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6314,9 +6522,8 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
+version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6354,10 +6561,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbolica-typst-atom-payload"
+name = "symbolica-typst-plugin"
 version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=18e0491628f9eac5c788659cabfcdb7575f6986d#18e0491628f9eac5c788659cabfcdb7575f6986d"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b37c30f4f87353c0073e49f5225e937ab"
 dependencies = [
+ "blake3",
  "ciborium",
  "symbolica",
 ]
@@ -6375,9 +6583,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.25.6"
+version = "2.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97114f6aba423d7a6a1336992ce0e5140e56a5176cce1a72ab252b5560ede2fe"
+checksum = "b3e0ed8cf2dd16f83f5393de7e34de02516bbcb2d7d0e85bb2a5615c665c947b"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -6549,7 +6757,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6568,7 +6776,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7146,6 +7354,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "twofloat"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f25f7bfd28a043cba51ea618ad2d29c5fa991a1237a4c0b592b466fbbb60c5c"
+dependencies = [
+ "hexf",
+ "libm",
+ "num-traits",
+]
+
+[[package]]
 name = "typed-arena"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7340,8 +7559,6 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12becd02464849f1507f3c4ef3f401a4d28d5938cc74b6acc6f1d703458bf393"
 dependencies = [
  "arrayvec",
  "az",
@@ -7488,10 +7705,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-renderer"
+version = "0.1.0"
+dependencies = [
+ "comemo",
+ "tempfile",
+ "typst",
+ "typst-html",
+ "typst-kit",
+ "typst-layout",
+ "typst-library",
+ "typst-pdf",
+ "typst-render",
+ "typst-svg",
+]
+
+[[package]]
 name = "typst-svg"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5df6dc785695aae085678bd6657aa04a1d26058a76ed042e738658078bca681e"
 dependencies = [
  "base64 0.22.1",
  "comemo",
@@ -7918,12 +8149,15 @@ dependencies = [
  "arrayvec",
  "colored 3.1.1",
  "eyre",
+ "feynkit-tensor",
  "log",
  "phf 0.13.1",
  "pyo3",
  "pyo3-stub-gen",
  "regex",
  "rug",
+ "spenso",
+ "spenso-macros",
  "string-template-plus",
  "symbolica",
  "test-log",
@@ -8270,16 +8504,6 @@ dependencies = [
 
 [[package]]
 name = "web-time"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-time"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
@@ -8427,7 +8651,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

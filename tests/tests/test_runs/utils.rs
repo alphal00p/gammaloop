@@ -268,12 +268,11 @@ disable_threshold_subtraction = false
             "remove processes",
             r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
                 --only-diagrams
-                --numerator-grouping only_detect_zeroes
-                --select-graphs GL15
-                --loop-momentum-bases GL15=8
-                --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                                                * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                                                * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+                --filter-zero-color --numerator-grouping no_grouping
+                --select-graphs GL42
+                --loop-momentum-bases GL42=2
+                --global-prefactor-num '1𝑖*(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
+                                                           spenso::coad(8,FeynKit::SourceIndex(6,1)))'
                 -p gg_hhh
                 -i 1L"#,
             "generate",
@@ -575,7 +574,7 @@ pub(super) fn assert_evaluation_outputs_match(
                     event.cut_info.graph_id,
                     event.cut_info.cut_id,
                     event.cut_info.orientation_id,
-                    event.cut_info.sampling_channel_id,
+                    event.cut_info.lmb_channel_id,
                 )
             })
             .collect_vec();
@@ -587,7 +586,7 @@ pub(super) fn assert_evaluation_outputs_match(
                     event.cut_info.graph_id,
                     event.cut_info.cut_id,
                     event.cut_info.orientation_id,
-                    event.cut_info.sampling_channel_id,
+                    event.cut_info.lmb_channel_id,
                 )
             })
             .collect_vec();

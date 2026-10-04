@@ -170,11 +170,11 @@ commands = [
     [sampling]
     graphs = "monte_carlo"
     orientations = "summed"
-    sampling_multichanneling = true
-    sampling_channel_weight = "map_density"
+    lmb_multichanneling = true
+	lmb_channel_weight = "ose"
     # For importance-sampling over channels, use the quantity below
-    # sampling_channels = "monte_carlo"
-    sampling_channels = "summed"
+    # lmb_channels = "monte_carlo"
+    lmb_channels = "summed"
     '""",
 
   """set process -p epem_a_tth string '

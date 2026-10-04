@@ -1,12 +1,11 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alphal00p/gammaloop/main/assets/gammalooplogo-dark.svg">
-  <img src="https://raw.githubusercontent.com/alphal00p/gammaloop/main/assets/gammalooplogo-light.svg" width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-dark.svg">
+  <img src="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-light.svg" width="300">
 </picture>
 
-<a href="https://nix-ci.com/gh:alphal00p:gammaloop/main"><img src="https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2" alt="Nix-CI" height="20"></a>
-<a href="https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml"><img src="https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main" alt="GitHub Actions" height="20"></a>
-<a href="https://www.alphaloop.ch/"><img src="https://img.shields.io/badge/docs-alphaloop.ch-blue" alt="Documentation" height="20"></a>
+[![Nix-CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
+[![GitHub Actions](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml)
 <!--[![crates.io](https://img.shields.io/crates/v/spenso.svg)](https://crates.io/crates/spenso)
 [![Build Status](https://github.com/alphal00p/spenso/actions/workflows/ci.yml/badge.svg)](https://github.com/alphal00p/spenso/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/alphal00p/spenso/graph/badge.svg?token=ST0XA54QSF)](https://codecov.io/github/alphal00p/spenso)
@@ -16,8 +15,8 @@
 # GammaLoop
 
 GammaLoop computes differential collider cross-sections with Local Unitarity. It combines a
-stateful command-line application with Rust and Python APIs and the Linnet, Spenso, Idenso, and
-Vakint research libraries.
+stateful command-line application with Rust and Python APIs and the FeynKit, Linnet, Spenso,
+Idenso, and Vakint research libraries.
 
 The [live αLoop documentation](https://alphal00p.github.io/gammaloop/) is the user entry point.
 Its canonical sources are Typst files under [`docs/products`](docs/products); this README is only
@@ -35,12 +34,22 @@ For a source checkout, the supported environment and a quick smoke test are:
 
 ```bash
 nix develop
-just build-cli-release
+just build-cli
 ./gammaloop --help
 ```
 
 The tutorial explains non-Nix prerequisites, the repository wrapper, state paths, run-card
 replay, and the cost of the maintained scientific examples.
+
+## Standalone FeynKit toolkit
+
+The `feynkit-*` crates expose reusable model loading, graph generation, CFF,
+kinematics, and tensor reduction through Rust and `symbolica.community.hepkit`.
+Start with the [FeynKit manual](https://alphal00p.github.io/gammaloop/products/feynkit/latest/),
+its [Rust quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/rust/),
+or its [Python quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/python/).
+The [canonical Typst manual](docs/products/feynkit/main.typ) also covers tensor selectors,
+notebook rendering, and registration in the combined Symbolica host.
 
 ## Related products
 
@@ -52,7 +61,7 @@ replay, and the cost of the maintained scientific examples.
 
 Spenso's matching Typst, HTML, SVG, and notebook display API is documented in the
 [Python guide](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/),
-including the optional `gammaloop[typst-display]` renderer.
+including its embedded Rust Typst renderer.
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and literature.
 

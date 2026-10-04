@@ -126,9 +126,9 @@
   )
 }
 
-/// Move `from` along the line toward `toward`, with a capped positive outset.
+/// Move `from` along the line toward `toward`, without passing the target.
 ///
-/// Positive distances are capped at 45% of the point separation. Negative
+/// Positive distances are capped at the point separation. Negative
 /// distances move away without a cap. Coincident points return `from`.
 /// -> array
 #let outset-point(

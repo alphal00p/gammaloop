@@ -15,6 +15,10 @@
 
 #let _settings(value) = _merge((
   tensor-layout: "ports",
+  component-style: "superscript",
+  invariant-style: "compact",
+  print-heads: (:),
+  print-calls: (),
   with-dim: false,
   parens: true,
   commas: none,
@@ -93,6 +97,15 @@
     none
   }
 }
+// Typst's HTML backend omits math.cancel's stroke, and browsers do not support
+// MathML menclose consistently. Keep native math layout and paint the stroke
+// with the notebook stylesheet; paged/SVG output uses Typst's own cancellation.
+#let _cancel(value) = context if target() == "html" {
+  html.elem("mrow", attrs: ("data-spenso-cancel": "updiagonal"), value)
+} else {
+  math.cancel(value)
+}
+
 #let _display-node(display) = {
   if type(display) != array or display.len() == 0 { return math.upright("?") }
   let kind = display.first()
@@ -162,7 +175,7 @@
   }
   if head == "underline" and args.len() == 1 { return math.underline(first()) }
   if head == "overline" and args.len() == 1 { return math.overline(first()) }
-  if head == "cancel" and args.len() == 1 { return math.cancel(first()) }
+  if head == "cancel" and args.len() == 1 { return _cancel(first()) }
   if head == "scripts" and args.len() == 1 { return math.scripts(first()) }
   if head == "limits" and args.len() == 1 { return math.limits(first()) }
   if head == "class" and args.len() == 2 {
@@ -192,7 +205,13 @@
     ctx.identity,
     (1,),
   )
-  if display == none { (ctx.default)() } else { _display-node(display) }
+  if display != none { return _display-node(display) }
+  let labels = ctx.tags.filter(tag => tag.starts-with("spenso::tensor-label:"))
+  if labels.len() > 0 {
+    _display-symbol(labels.first().slice("spenso::tensor-label:".len()))
+  } else {
+    (ctx.default)()
+  }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)
@@ -300,11 +319,39 @@
   let label = _display-node(labels.at(position))
   if cycle == 0 { label } else { math.attach(label, b: $ #cycle $) }
 }
-#let _slot-index(slot, ctx) = {
+#let _index-key(node) = {
+  if _is-variable(node) { return ("var", _name(node)) }
+  if _is-function(node) { return ("fun", _name(node), node.arguments.map(_index-key)) }
+  let natural = _natural-index(node)
+  if natural != none { natural } else { node.at("text", default: "?") }
+}
+#let _slot-index(slot, ctx, settings) = {
   let index = _natural-index(slot.index)
   if index != none {
     let display = _palette-index(slot.palette, index)
     if display != none { return display }
+  }
+  // Aliases affect only the visible slot. The complete tensor call keeps its
+  // original Atom annotation, including its named graph-index identities.
+  if _is-function(slot.index) or _is-variable(slot.index) {
+    // `none` distinguishes symbolic indices from zero-argument index calls.
+    let arguments = if _is-variable(slot.index) { none } else {
+      slot.index.arguments.map(_index-key)
+    }
+    if arguments == none or none not in arguments {
+      for alias in settings.at("index-aliases", default: ()) {
+        if (
+          alias.at(0) == slot.identity
+            and alias.at(1) == _name(slot.index)
+            and alias.at(2) == arguments
+        ) {
+          let label = alias.at(3)
+          if type(label) == content { return label }
+          let display = _palette-index(slot.palette, label)
+          if display != none { return display }
+        }
+      }
+    }
   }
   // Exact document heads are resolved by the common renderer before its
   // payload-head fallback, so they beat spenso.math-display overlays.
@@ -343,19 +390,52 @@
     t: math.attach(_head(ctx, slot.node), b: _visual(ctx, slot.dimension)),
   )
 }
+// A representation without an index and an occurrence-local open_index both
+// denote unresolved axes. The numbers below are local axis positions, not
+// contraction labels. Keep the original portable Atom tree untouched.
+#let _open-port(node, ctx) = {
+  let rep = _representation-value(node, ctx)
+  if rep != none { return rep }
+  let slot = _slot(node, ctx)
+  if (slot != none and _is-function(slot.index)
+    and _name(slot.index) == "spenso::open_index"
+    and slot.index.arguments.len() == 2) { slot } else { none }
+}
+#let _open-port-columns(arguments, ctx, settings) = {
+  let numbered = arguments.filter(arg => _open-port(arg, ctx) != none).len() > 1
+  let axis = 0
+  let columns = ()
+  for argument in arguments {
+    let rep = _open-port(argument, ctx)
+    let position = axis
+    if rep != none or _slot(argument, ctx) != none { axis += 1 }
+    if rep == none { columns.push(none); continue }
+    let source = sym.square.stroked
+    if numbered { source = math.attach(source, b: $ #position $) }
+    source = _qualified-index(rep, source, ctx, settings)
+    let dimension = rep.dimension.at("source", default: rep.dimension.at("text", default: "?"))
+    let title = ("Unresolved axis " + str(position) + " · " + rep.identity
+      + "(" + dimension + ")" + if rep.dual { " · dual" } else { "" })
+    let visual = source
+    source = context if target() == "html" {
+      html.elem("mrow", attrs: (title: title, "data-spenso-open-axis": str(position)), visual)
+    } else { visual }
+    columns.push((source: source, row: rep.row))
+  }
+  columns
+}
+
 #let _qualified-port(rep, ctx, settings) = {
+  // Filled positions retain representation shape and polarity. Unresolved
+  // AUTO positions use a hollow square instead.
   let port = if rep.class == "inline-metric" {
-    sym.square.stroked.small
+    sym.square.filled
   } else if rep.class == "self-dual" {
-    sym.circle.stroked.small
-  } else if rep.class == "dualizable" {
-    if rep.dual {
-      sym.triangle.r.small.stroked
-    } else {
-      sym.triangle.l.small.stroked
-    }
+    sym.circle.filled
+  } else if rep.dual {
+    sym.triangle.filled.r
   } else {
-    rep.class
+    sym.triangle.filled.l
   }
   if not settings.with-dim { return port }
   math.attach(
@@ -448,24 +528,24 @@
   (label: label, representation: rep)
 }
 
-#let _render-tensor(ctx, settings) = {
-  let node = ctx.node
-  if _has-tag(node, "rank1") {
-    let compact = _compact-vector(node, ctx, settings)
-    if compact != none { return compact.label }
-  }
-
+// Generic tensors and specialized heads share contraction and endpoint layout.
+#let _render-tensor-arguments(base, arguments, ctx, settings) = {
   let columns = ()
   let ordinary = ()
   let bras = ()
   let kets = ()
-  let markers = _chain-markers(node.arguments)
-  for (position, argument) in node.arguments.enumerate() {
+  let markers = _chain-markers(arguments)
+  let open-columns = _open-port-columns(arguments, ctx, settings)
+  for (position, argument) in arguments.enumerate() {
     if markers != none and position in (markers.input, markers.output) { continue }
+    if open-columns.at(position) != none {
+      columns.push(open-columns.at(position))
+      continue
+    }
     let slot = _slot(argument, ctx)
     if slot != none {
       columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+        source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
         row: slot.row,
       ))
       continue
@@ -492,7 +572,6 @@
     }
   }
 
-  let base = _head(ctx, node)
   if ordinary.len() > 0 {
     let separator = if settings.commas { $,$ } else { h(0.15em) }
     base = _tight((base, _parentheses(ordinary.join(separator))))
@@ -508,15 +587,48 @@
   if settings.tensor-layout == "ports" { _ports(base, bras, kets) } else { base }
 }
 
+#let _render-tensor(ctx, settings) = {
+  let node = ctx.node
+  for (atom, normal, power) in settings.print-calls {
+    if node.at("atom", default: none) == atom {
+      let visual = if ctx.power-base { power } else { normal }
+      if visual != none { return visual }
+    }
+  }
+  if node.arguments.len() > 0 {
+    let component = node.arguments.last()
+    if _is-function(component) and _name(component) == "spenso::cind" and (
+      component.arguments.all(index => _natural-index(index) != none)
+    ) {
+      let base = _head(ctx, node)
+      let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
+      if labels.len() > 0 {
+        // Component parameters are ordinary function arguments in every layout.
+        base = _tight((base, _parentheses(labels.join($,$))))
+      }
+      if component.arguments.len() == 0 { return base }
+      let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
+      if settings.component-style == "array" {
+        return _tight((base, math.lr($ [#coordinates] $)))
+      }
+      let body = math.attach(base, t: coordinates)
+      return if ctx.power-base { _parentheses(body) } else { body }
+    }
+  }
+  _render-tensor-arguments(_head(ctx, node), node.arguments, ctx, settings)
+}
+
 // A document tag or class attached to a tensor should see the same visual
 // arguments that Tydenso itself uses, rather than generic Atom calls such as
 // `mink(4, 1)`. The structured `arguments` remain untouched for callers that
 // need the exact tree.
 #let _tensor-document-context(ctx, settings) = {
-  let visual-arguments = ctx.arguments.map(argument => {
+  let open-columns = _open-port-columns(ctx.arguments, ctx, settings)
+  let visual-arguments = ctx.arguments.enumerate().map(((position, argument)) => {
+    if open-columns.at(position) != none { return open-columns.at(position).source }
     let slot = _slot(argument, ctx)
     if slot != none {
-      return _qualified-index(slot, _slot-index(slot, ctx), ctx, settings)
+      return _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings)
     }
     let compact = _compact-vector(argument, ctx, settings)
     if compact != none {
@@ -537,32 +649,12 @@
   let first = node.arguments.at(0)
   let second = node.arguments.at(1)
   let lorentz = node.arguments.at(2)
-  let forward = _is-marker(first, "in") and _is-marker(second, "out")
-  let transposed = _is-marker(first, "out") and _is-marker(second, "in")
-
-  if forward or transposed {
-    let compact = _compact-vector(lorentz, ctx, settings)
-    if compact != none {
-      let body = math.cancel(compact.label)
-      return if transposed { math.attach(body, t: math.upright("T")) } else { body }
-    }
-  }
-
-  let selected = if forward or transposed { (lorentz,) } else { node.arguments }
-  let columns = ()
-  for argument in selected {
-    let slot = _slot(argument, ctx)
-    if slot == none {
-      columns.push((source: _visual(ctx, argument), row: "bottom"))
-    } else {
-      columns.push((
-        source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
-        row: slot.row,
-      ))
-    }
-  }
-  let body = _row-attachment(_head(ctx, node), columns, settings)
-  if transposed { math.attach(body, t: math.upright("T")) } else { body }
+  let compact = _compact-vector(lorentz, ctx, settings)
+  let base = if compact != none { _cancel(compact.label) } else { _head(ctx, node) }
+  // The compact momentum fills the Lorentz port; only actual spinor ports
+  // receive indices or AUTO squares. Chain markers remain implicit.
+  let selected = if compact != none { (first, second) } else { node.arguments }
+  _render-tensor-arguments(base, selected, ctx, settings)
 }
 
 #let _same-representation(left, right) = (
@@ -581,7 +673,11 @@
   ) {
     return (ctx.default)()
   }
-  _tight((left.label, math.class("normal", $dot$), right.label))
+  // Momentum notation: a trailing power applies to the contraction of these
+  // vector labels, so the dot product needs no additional parentheses.
+  let body = _tight((left.label, math.class("normal", $dot$), right.label))
+  // Keep the contraction tight; separate only the next implicit multiplier.
+  if ctx.followed-by-factor { body + h(settings.factor-gap) } else { body }
 }
 
 #let _render-chain(ctx, settings) = {
@@ -595,13 +691,20 @@
   let columns = ()
   let prefix = none
   let suffix = none
+  let open-columns = _open-port-columns((start, end), ctx, settings)
   let compact = _compact-vector(start, ctx, settings)
   let slot = _slot(start, ctx)
   if compact != none {
     prefix = compact.label
+    columns.push((
+      source: _qualified-port(compact.representation, ctx, settings),
+      row: compact.representation.row,
+    ))
+  } else if open-columns.at(0) != none {
+    columns.push(open-columns.at(0))
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -612,9 +715,15 @@
   slot = _slot(end, ctx)
   if compact != none {
     suffix = compact.label
+    columns.push((
+      source: _qualified-port(compact.representation, ctx, settings),
+      row: compact.representation.row,
+    ))
+  } else if open-columns.at(1) != none {
+    columns.push(open-columns.at(1))
   } else if slot != none {
     columns.push((
-      source: _qualified-index(slot, _slot-index(slot, ctx), ctx, settings),
+      source: _qualified-index(slot, _slot-index(slot, ctx, settings), ctx, settings),
       row: slot.row,
     ))
   } else {
@@ -670,6 +779,56 @@
   }
 }
 
+// Invariant arguments describe representations, not tensor index positions.
+// Keep their degree and separators independent of tensor layout preferences.
+#let _color-representation(node, ctx, settings) = {
+  let rep = _representation-value(node, ctx)
+  if rep == none { return _visual(ctx, node) }
+  let label = if rep.identity == "spenso::cof" { $F$ }
+    else if rep.identity == "spenso::coad" { $A$ }
+    else { _head(ctx, rep.node) }
+  if rep.dual { label = math.accent(label, sym.macron) }
+  if settings.with-dim {
+    let dim = _visual(ctx, rep.dimension)
+    label = if settings.symbol-scripts { math.attach(label, b: dim) }
+      else { label + math.lr([\[] + dim + [\]]) }
+  }
+  label
+}
+
+#let _color-label(name, settings) = {
+  if settings.symbol-scripts {
+    (CA: $C_A$, CF: $C_F$, TR: $T_R$, Nc: $N_c$).at(name)
+  } else { math.op(name) }
+}
+
+#let _color-invariant(ctx, settings, kind) = {
+  let args = ctx.arguments
+  if args.len() != (if kind == "gram" { 3 } else { 2 }) { return (ctx.default)() }
+  let degree = args.first()
+  let rep = _representation-value(args.at(1), ctx)
+  if (
+    settings.invariant-style == "compact" and not settings.with-dim
+      and _kind(degree) == "number" and degree.at("source", default: none) == "2"
+      and rep != none and not rep.dual
+  ) {
+    let name = if kind == "cas" and rep.identity == "spenso::cof" { "CF" }
+      else if kind == "cas" and rep.identity == "spenso::coad" { "CA" }
+      else if kind == "idx" and rep.identity == "spenso::cof" { "TR" }
+      else { none }
+    if name != none { return _color-label(name, settings) }
+  }
+  let head = if kind == "cas" { $C$ } else if kind == "idx" { $I$ } else { $G$ }
+  let arguments = args.slice(1).map(arg => _color-representation(arg, ctx, settings))
+  if settings.symbol-scripts {
+    head = math.attach(head, b: _visual(ctx, degree))
+  } else {
+    head = math.op(kind)
+    arguments.insert(0, _visual(ctx, degree))
+  }
+  head + _parentheses(arguments.join($,$))
+}
+
 #let _default-heads = (
   "spenso::gamma": $gamma$,
   "spenso::gamma0": $gamma_0$,
@@ -688,6 +847,8 @@
 #let notation(
   settings: (:),
   tensor-layout: none,
+  component-style: none,
+  invariant-style: none,
   with-dim: none,
   parens: none,
   commas: none,
@@ -702,6 +863,8 @@
   let settings = _settings(settings)
   for (key, value) in (
     tensor-layout: tensor-layout,
+    component-style: component-style,
+    invariant-style: invariant-style,
     with-dim: with-dim,
     parens: parens,
     commas: commas,
@@ -713,6 +876,12 @@
   }
   if settings.tensor-layout not in ("ports", "schoonschip", "call") {
     panic("tensor-layout must be \"ports\", \"schoonschip\", or \"call\"")
+  }
+  if settings.component-style not in ("superscript", "array") {
+    panic("component-style must be \"superscript\" or \"array\"")
+  }
+  if settings.invariant-style not in ("compact", "explicit") {
+    panic("invariant-style must be compact or explicit")
   }
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
@@ -735,14 +904,51 @@
     (ctx.default)()
   }
   let defaults = core.notation(
-    heads: _default-heads,
+    heads: _merge(_merge(_default-heads, (
+      "spenso::Nc": ctx => _color-label("Nc", settings),
+    )), settings.print-heads),
     calls: (
+      "spenso::bracket": ctx => {
+        if ctx.arguments.len() == 0 { return (ctx.default)() }
+        let body = ctx.arguments.map(argument => {
+          let visual = _visual(ctx, argument)
+          if _kind(argument) == "sum" { _parentheses(visual) } else { visual }
+        }).join(h(settings.factor-gap))
+        if ctx.power-base { _parentheses(body) } else { body }
+      },
+      "spenso::cas": ctx => _color-invariant(ctx, settings, "cas"),
+      "spenso::idx": ctx => _color-invariant(ctx, settings, "idx"),
+      "spenso::gram": ctx => _color-invariant(ctx, settings, "gram"),
       "spenso::gamma": ctx => _render-gamma(ctx, settings),
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
       "spenso::trace": ctx => _render-trace(ctx, settings),
     ),
     tags: (
+      "spenso::index": ctx => {
+        let labels = ctx.tags.filter(tag => tag.starts-with("spenso::index-label:"))
+        if ctx.kind != "function" or labels.len() != 1 {
+          (ctx.default)()
+        } else {
+          let label = labels.first().split(":").last()
+          let arguments = ctx.visual-arguments
+          // The first endpoint slot is implicit; higher-spin slots and dummy
+          // identifiers remain visible, matching the native index printer.
+          if (
+            label in ("s", "t") and ctx.arguments.len() == 2
+              and _kind(ctx.arguments.at(1)) == "number"
+              and ctx.arguments.at(1).at("source", default: none) == "1"
+          ) {
+            arguments = arguments.slice(0, 1)
+          }
+          // Use a math symbol, not italic text: text boxes scale incorrectly
+          // when this label is itself nested inside a tensor's script.
+          let head = (ctx.render-visual)((kind: "variable", source: label, symbol: (name: label)))
+          // Math's smallest script style stops shrinking at deeper levels.
+          // Keep the numeric identifier subordinate even inside a fraction.
+          math.attach(head, b: text(size: 0.75em, arguments.join([.])))
+        }
+      },
       tensor: tensor,
       "spenso::tensor": tensor,
     ),

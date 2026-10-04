@@ -1,6 +1,6 @@
 commands = [
     "import model sm-default",
-   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --numerator-grouping only_detect_zeroes --clear-existing-processes ",
+   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --filter-zero-color --numerator-grouping no_grouping --clear-existing-processes ",
 ]
 
 [cli_settings.global]

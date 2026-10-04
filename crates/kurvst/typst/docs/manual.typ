@@ -228,10 +228,11 @@
   for native Typst drawing, and `to-cetz-data` or `to-cetz` for CeTZ.
 
   `outset-point(from, toward, distance:)` moves along the line between two points.
-  Positive distances are capped at 45% of their separation so endpoint adjustments
-  leave room between them. Negative distances move away from `toward` without a
-  cap; coincident points return `from`. For example, moving `(0, 0)` toward
-  `(10, 0)` by `8` gives `(4.5, 0)`, while requesting `-2` gives `(-2, 0)`.
+  Positive distances are capped at their separation, so a one-ended outset can
+  reach a large node boundary without passing `toward`. Negative distances move
+  away without a cap; coincident points return `from`. For example, moving
+  `(0, 0)` toward `(10, 0)` by `8` gives `(8, 0)`, requesting `12` gives
+  `(10, 0)`, and requesting `-2` gives `(-2, 0)`.
 
   A typical chain keeps the returned dictionaries intact until the final drawing
   step:

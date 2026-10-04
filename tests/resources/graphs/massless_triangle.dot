@@ -1,9 +1,19 @@
-digraph massless_triangle_0 {
-ext [style=invis]
-ext -> v4 [pdg=1000];
-v5 -> ext [pdg=1000];
-v6 -> ext [pdg=1000];
-v4 -> v5 [pdg=1000];
-v5 -> v6 [pdg=1000];
-v6 -> v4 [pdg=1000];
+digraph massless_triangle_0{
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  v4[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+  v5[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+  v6[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+
+  ext0	 [style=invis];
+  ext0	-> v4:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="scalar_0"];
+  v4:1	-> v5:2	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" lmb_rep="K(0,a___)+P(1,a___)" name="e1" num="1𝑖" particle="scalar_0"];
+  ext2	 [style=invis];
+  v5:3	-> ext2	 [id=2 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="P(1,a___)" name="e2" num="1𝑖" particle="scalar_0"];
+  v5:4	-> v6:5	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e3" num="1𝑖" particle="scalar_0"];
+  ext4	 [style=invis];
+  v6:6	-> ext4	 [id=4 dir=none source="{ufo_order:1}" dod="-2" lmb_rep="-1*P(1,a___)+P(0,a___)" name="e4" num="1𝑖" particle="scalar_0"];
+  v6:7	-> v4:8	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)+P(1,a___)" name="e5" num="1𝑖" particle="scalar_0"];
 }

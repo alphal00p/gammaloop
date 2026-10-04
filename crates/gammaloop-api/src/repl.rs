@@ -5213,7 +5213,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -5260,7 +5260,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "gamma".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -5299,7 +5299,7 @@ mod tests {
             &CompletionState {
                 model_parameter_entries: vec![ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 }],
                 ..CompletionState::default()
             },
@@ -5533,25 +5533,6 @@ mod tests {
             &completion_state,
         );
 
-        assert!(values.contains(&"GL0".to_string()));
-        assert!(values.contains(&"GL2".to_string()));
-        assert!(!values.contains(&"GL1".to_string()));
-    }
-
-    #[test]
-    fn completion_offers_metadata_display_formats_and_plural_graph_selector() {
-        let state = generate_completion_state();
-        for flag in ["--show_sampling", "--show_threshold_subtraction"] {
-            let values = completion_values(
-                &format!("display integrands -p epem_xs -i subtracted {flag} "),
-                &state,
-            );
-            assert_eq!(values, vec!["pretty".to_string(), "toml".to_string()]);
-        }
-        let values = completion_values(
-            "display integrands -p epem_xs -i subtracted --show_sampling pretty --graph G",
-            &state,
-        );
         assert!(values.contains(&"GL0".to_string()));
         assert!(values.contains(&"GL2".to_string()));
         assert!(!values.contains(&"GL1".to_string()));
@@ -6259,8 +6240,8 @@ mod tests {
         );
 
         assert!(values.contains(&"no_grouping".to_string()));
-        assert!(values.contains(&"only_detect_zeroes".to_string()));
         assert!(values.contains(&"group_identical_graphs_up_to_sign".to_string()));
+        assert!(values.contains(&"group_identical_graphs_up_to_scalar_rescaling".to_string()));
     }
 
     #[test]

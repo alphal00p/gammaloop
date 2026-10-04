@@ -19,7 +19,7 @@ use crate::{
     },
     settings::runtime::kinematic::improvement::{PhaseSpaceImprovementSettings, improve_ps},
     utils::{
-        ArbPrec, F, FloatLike, RuntimeCache, SamplingPrecision, f128,
+        F, FloatLike, f128,
         serde_utils::{IsDefault, is_float},
     },
 };
@@ -60,10 +60,10 @@ impl<'de> Deserialize<'de> for KinematicsSettings {
 }
 
 impl KinematicsSettings {
-    pub fn random(graph: &Graph, seed: u64) -> Self {
+    pub fn random(graph: &Graph, model: &crate::model::Model, seed: u64) -> Self {
         Self {
             e_cm: 64.,
-            externals: graph.random_externals(seed),
+            externals: graph.random_externals(model, seed),
         }
     }
 }
@@ -97,10 +97,6 @@ pub enum Externals {
         f_64_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f64>>>>,
         #[serde(skip)]
         f_128_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f128>>>>,
-        // Unlike the historical caches above, this new transient field writes
-        // no bytes, preserving the layout of existing saved state archives.
-        #[serde(skip)]
-        arb_cache: RuntimeCache<TiVec<ExternalIndex, FourMomentum<F<ArbPrec>>>>,
     },
     // add different type of pdfs here when needed
 }
@@ -141,19 +137,13 @@ impl Rotatable for Externals {
                 helicities,
                 f_64_cache,
                 f_128_cache,
-                arb_cache,
                 improvement_settings,
             } => {
                 let momenta = momenta.iter().map(|m| m.rotate(rotation)).collect();
-                let mut rotated_arb = RuntimeCache::default();
-                if let Some(cache) = arb_cache.as_ref() {
-                    rotated_arb.set(cache.iter().map(|m| m.rotate(rotation)).collect());
-                }
                 Externals::Constant {
                     momenta,
                     helicities: helicities.clone(),
                     improvement_settings: improvement_settings.clone(),
-                    arb_cache: rotated_arb,
                     f_64_cache: f_64_cache
                         .as_ref()
                         .map(|cache| cache.iter().map(|m| m.rotate(rotation)).collect()),
@@ -310,24 +300,6 @@ impl Externals {
         if let Some(cached) = T::try_extract_externals_from_cache(self) {
             return Ok(cached.clone());
         }
-        // Sampling has no separate improved-kinematics cache. Round the original
-        // Arb authority once, so its surface geometry uses the same improved
-        // externals as the canonical physical draw, including after rotations.
-        if T::sampling_precision() == SamplingPrecision::Fixed256
-            && let Some(cached) = ArbPrec::try_extract_externals_from_cache(self)
-        {
-            return cached
-                .iter()
-                .map(|p| {
-                    Ok(FourMomentum::from([
-                        F::from_arb(&p.temporal.value.0)?,
-                        F::from_arb(&p.spatial.px.0)?,
-                        F::from_arb(&p.spatial.py.0)?,
-                        F::from_arb(&p.spatial.pz.0)?,
-                    ]))
-                })
-                .collect();
-        }
 
         match self {
             Externals::Constant { momenta, .. } => {
@@ -483,20 +455,8 @@ impl Externals {
         masses: &TiVec<ExternalIndex, F<f64>>,
         e_cm: &F<f64>,
     ) -> Result<()> {
-        // Recompute from the supplied momenta, including after direct Rust
-        // edits. Reading an old improved cache would conceal those changes.
-        let Self::Constant {
-            f_64_cache,
-            f_128_cache,
-            arb_cache,
-            ..
-        } = self;
-        *f_64_cache = None;
-        *f_128_cache = None;
-        arb_cache.invalidate();
         let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor)?;
         let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor)?;
-        let dep_momenta_arb = self.get_dependent_externals::<ArbPrec>(constructor)?;
 
         match constructor {
             DependentMomentaConstructor::Amplitude(signature) => match self {
@@ -504,7 +464,6 @@ impl Externals {
                     improvement_settings,
                     f_64_cache,
                     f_128_cache,
-                    arb_cache,
                     ..
                 } => {
                     let improved_f64 = improve_ps(
@@ -524,20 +483,8 @@ impl Externals {
                         &F::<f128>::from_ff64(*e_cm),
                         improvement_settings,
                     )?;
-                    let arb_masses = masses
-                        .iter()
-                        .map(|mass| F::<ArbPrec>::from_ff64(*mass))
-                        .collect();
-                    let improved_arb = improve_ps(
-                        &dep_momenta_arb,
-                        &arb_masses,
-                        signature,
-                        &F::<ArbPrec>::from_ff64(*e_cm),
-                        improvement_settings,
-                    )?;
                     *f_64_cache = Some(improved_f64);
                     *f_128_cache = Some(improved_f128);
-                    arb_cache.set(improved_arb);
                     Ok(())
                 }
             },
@@ -554,7 +501,6 @@ fn external_inv() {
         helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
-        arb_cache: Default::default(),
         improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
@@ -572,7 +518,6 @@ fn external_inv() {
         helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
-        arb_cache: Default::default(),
         improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
@@ -588,7 +533,6 @@ impl Default for Externals {
             helicities: vec![],
             f_64_cache: None,
             f_128_cache: None,
-            arb_cache: Default::default(),
             improvement_settings: PhaseSpaceImprovementSettings::default(),
         }
     }

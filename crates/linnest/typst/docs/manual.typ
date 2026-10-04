@@ -631,14 +631,14 @@
   #draw(layout(styled), ..feynman.draw-style)
   ```
 
-  Call `feynman.graph-style()` for the original appearance; replace the former
+  Call `feynman.graph-style()` for the default appearance; replace the former
   dictionary spread `..feynman.graph-style` with `..feynman.graph-style()`.
   Its named options are:
 
   - `unit: 1.35`: graph coordinate unit; a number multiplies the current `1em`,
     or supply an absolute length such as `10pt`.
   - `line-width: 0.5pt`: ordinary particle stroke thickness.
-  - `node-radius: 0.18`: visible node radius in graph units.
+  - `node-radius: 0.08`: visible node radius in graph units.
   - `node-line-width: auto`: node outline, defaulting to `line-width`.
   - `massive-line-width: auto`: scalar/ghost stroke, defaulting to
     `2 * line-width`.
@@ -668,6 +668,44 @@
   while retaining the propagator and fermion arrow. It defaults to `true`.
   Set `default-edge-data: (show-momentum: false)` on `graph.build` to hide all
   momenta, then opt individual edges back in with `show-momentum: true`.
+
+  Ordinary dangling-edge labels without a stored `label-pos` clear their
+  external endpoint by `external-label-gap` (default `0.25` canvas units).
+  Linnest measures the text box, including its anchor, padding and rotation,
+  and moves it along the rendered carrier's outward endpoint tangent until
+  the nearest projection clears that endpoint. This applies to direct `draw`,
+  Python graphs, Feynman diagrams and process schematics. Existing explicit
+  or layout-produced label positions and path-attached labels retain their
+  placement. Set `draw(..., external-label-gap: 0.65)` in Typst, or
+  `RenderConfig(drawing=DrawOptions(external_label_gap=0.65))` in Python,
+  to change the clearance. The value must be non-negative; zero removes the
+  extra gap while still placing the text box outside the endpoint.
+
+  Momentum arrows and labels are placed together by the shared label annealing
+  step. The arrow offset and relative arc shift remain fixed; the optimizer
+  chooses a position along the full edge and may switch an automatic side.
+  It can move neighbouring annotations together to escape crowded placements.
+  The complete arrow stays within the carrier. The shared physics renderer
+  uses `momentum-arrow-offset: 0.35`, `momentum-arrow-length: 1.4`, and
+  `momentum-arrow-ratio: 0.5`: the requested length is capped at half the offset
+  carrier's arc length. Set the ratio to `none` for an absolute length without
+  this fractional cap. Sparse `momentum(...)` patches configure the arrow and
+  nested label options independently:
+
+  ```typ
+  #import "../examples/map-style.typ": momentum
+  #let options = momentum(
+    offset: 0.4, length: 1.0, shift: 0.2,
+    label: (gap: 0.2, slide: true),
+  )
+  ```
+
+  Use `label: (slide: false)` to pin the arrow and text at their requested
+  positions, or `side: "left"` / `"right"` to keep the annotation on that side
+  while still allowing arc movement. An explicit label anchor also pins it.
+  Collision padding and the debugging boxes use the same settings as ordinary
+  edge labels.
+
   Cut fragments inherit the flag like other edge data. Use `..feynman.draw-style`
   unchanged; `edge-style` no longer takes a `show-momentum` argument.
   Only drawing layers are suppressed: physical momentum data is retained, and
@@ -727,30 +765,40 @@
   at the shifted point; `auto` follows the side selected by ordinary edge-label
   layout.
   With `label-style.anchor` omitted or set to `auto` (also `"auto"`), the label
-  is centered and moved until its entire CeTZ box clears the local tangent line
-  by `label-gap`. This measures the box, including text bounds, wrapping,
-  padding and rotation, not the nearest point of the finite curved shaft.
+  is centered and moved outward along the normal until its measured CeTZ box
+  clears the finite attachment path by `label-gap`. This includes text bounds,
+  wrapping, padding and rotation. Momentum text clears its finite arrow and
+  also stays off its finite parent edge; when that edge binds, the arrow gap
+  can be larger. Imaginary extensions beyond path endpoints do not repel text.
   An explicit anchor, including `"center"`, instead sits at the shifted reference
   point plus `label-gap` along the chosen normal, without any box-clearance
   correction. Negative gaps are clamped to zero in both modes.
   Other `label-style` fields are forwarded to CeTZ content drawing.
-  Automatic clearance is a local tangent-line heuristic, not collision
-  avoidance; explicit anchors intentionally allow the box to cross that line.
+  Clearance uses an adaptive approximation of the actual curves. Explicit
+  anchors intentionally bypass this correction and may overlap the path.
   In `examples/map-style.typ`, `momentum-label-anchor` selects this behavior:
   omit it or use `auto` for box clearance, or choose e.g. `"east"` for direct
   anchor placement. `momentum-label-gap` supplies the gap in graph units.
-  The momentum label uses a separate full, unpainted offset-path layer, so
-  `momentum-label-shift` is independent of `momentum-arrow-length`, even when
-  arrow and label shifts are equal. It defaults to the requested
-  `momentum-arrow-shift`, not the arrow's clamped center. Near endpoints, the
-  label point can therefore travel farther than the finite arrow's center;
-  changing arrow length never moves the label.
+  The momentum annotation uses the full offset carrier for candidate placement.
+  `momentum-label-shift` defaults to the requested `momentum-arrow-shift`;
+  independent values set the preferred relative arc separation. Automatic
+  placement adds the same displacement to the arrow and label, preserving that
+  separation. Its allowed range keeps the entire arrow inside the carrier, so
+  changing the arrow length can change the pair's available positions.
+  `momentum-label-slide: false` pins the requested placement instead.
+  Collision checks use separate text boxes and rendered arrow shafts and heads.
+  Fixed offset arrows are obstacles too. Ordinary edges contribute only where
+  their painted paths intersect the measured text box, with no surrounding
+  repulsion band. This intersection test excludes `label-collision-padding`;
+  node boxes, neighbouring labels and self-loop bends retain their clearances.
+  Stroke width uses a conservative envelope around the text box; dash gaps are
+  treated continuously, so placement does not depend on the phase of a dash.
 
   Import `momentum as mom` from `examples/map-style.typ` for compact, sparse
   options. `mom(side: "right", length: .7, shift: -.4,
   label: (gap: .2, shift: -.75, anchor: "south-west"))` expands to the existing
   `momentum-arrow-*` and `momentum-label-*` fields. Arrow options are `side`,
-  `offset`, `length`, and `shift`; label options are `gap`, `shift`, and `anchor`.
+  `offset`, `length`, `ratio`, and `shift`; label options are `gap`, `shift`, and `anchor`.
   Only supplied options are emitted, so `mom(label: (gap: .2))` preserves an
   inherited arrow offset or label shift. Combine the result with other edge
   patches using dictionary addition, or spread it into `edge(..)`.
@@ -765,8 +813,11 @@
   Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
   so the layer is drawn on the same side of the curve as the edge label.
 
-  Pattern layers are generated over each continuous path, so internal curve
-  segments do not restart the phase or shorten the endpoint taper.
+  Pattern layers are generated over each continuous path before colour boundaries
+  or gaps divide the painted stroke. Internal curve segments, source/sink colours,
+  and crossing gaps do not restart the phase, shorten the endpoint taper, or
+  change the fitted coil. Split positions follow distances on the underlying
+  carrier, including when the decorated coil doubles back.
 
   `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
   (`"coil"`, `"helix"`, or `"spring"`) on complete continuous paths with both
@@ -777,16 +828,16 @@
   or connectors. This overrides `pattern-phase`, bypasses `pattern-fit` integer
   fitting, and ignores `pattern-endpoint-slope` (`endpoint-ramp: false`).
 
-  Other patterns ignore the flag. A fitted
+  Only automatic construction requires a built-in coil string. A fitted
   dictionary can be passed directly as `pattern` without this flag, with matching
   `pattern-*` settings; see the Kurvst manual's Path Patterns section for fitting
   and one-pass application. On curved carriers, fitted coils use local
   tangent/normal offsets, not evaluation at a corrected arc distance.
 
-  The gluons in `examples/xbox-common.typ` enable this option on top of the
-  `examples/map-style.typ` preset. Without it, anchored coils use a
-  75%-wavelength endpoint taper (capped at half the path length), with a squared
-  longitudinal envelope and no straight end sections. Without automatic fitting, `pattern-fit: true`
+  The gluon preset in `examples/map-style.typ` enables this option. Set
+  `pattern-natural-endpoints: false` to restore its earlier 75%-wavelength
+  endpoint taper (capped at half the path length), with a squared longitudinal
+  envelope and no straight end sections. Without automatic fitting, `pattern-fit: true`
   adjusts `pattern-wavelength` to the nearest whole number of periods on a
   complete edge; `pattern-phase` is in radians, with `calc.pi / 2` giving coils
   matching endpoint phases. Set `pattern-endpoint-slope: 1` on a layer to
@@ -795,15 +846,11 @@
   so the final direction also depends on phase, amplitude, and wavelength.
   Endpoints remain attached.
 
-  When `source-style` and `sink-style` share a pattern and differ only in
-  stroke, for example to colour the two halves of a gluon differently, the
-  whole edge is patterned once, fitted like a single edge, and cut at the edge
-  layout point. Each half keeps its own stroke while the coil runs continuously
-  through the split. Other split-style halves and partially anchored paths,
-  such as crossing-gap fragments, keep the requested wavelength, taper only
-  anchored endpoints, and preserve phase continuity across hidden spans.
-  Neither automatic coil construction nor integer fitting applies. A path with
-  gaps is patterned per continuous run, carrying the phase across each gap.
+  Source and sink styles with the same carrier and pattern geometry share this
+  complete decoration even when their paints differ. Different patterns or
+  carrier offsets define independent decorations on the two halves.
+  For a shared pattern with `offset-side: "label"`, the full carrier selects the
+  offset side once; both halves and their marks use that same signed offset.
 
   Paired edges are Kurvst paths split at their edge layout point. Set
   `edge-split-gap` on `draw` to open a centered arc-length gap there, or set
@@ -817,12 +864,13 @@
   integer edge id) or `crossing-under: <bridge>` (using its Typst edge name), and
   optionally `crossing-gap` (default `0.55`) on the style layer that should be
   interrupted. Targets are resolved independently of edge order.
-  Kurvst locates proper intersections and trims the current path by arc length;
-  wave and coil phases continue across every hidden span. This works for
-  dangling layers and for paired layers whose source and sink have one continuous
-  style. Both paired half styles must name the same target and gap. A cut layer's
-  mark is placed once on the original uncut carrier, while only its painted path
-  is split; this keeps the mark present without duplicating it on every fragment.
+  Kurvst locates proper intersections on the carrier and removes the corresponding
+  intervals from the finished decoration. This works for dangling layers and for
+  paired layers whose source and sink share carrier and pattern geometry;
+  their paints may differ. Both paired half styles must name the same target
+  and gap. A cut layer's mark is placed once on the original uncut carrier, while
+  only its painted path is split; this keeps the mark present without duplicating
+  it on every fragment.
   A cut layer cannot participate in a subgraph underlay. Self, unknown, and invisible references are reported as
   errors. A valid edge pair with no proper interior intersection, including one
   that only shares an endpoint, is left unchanged.
@@ -954,9 +1002,101 @@
 ]
 
 #let layout-concepts = [
-  === Layout Model
+  === Default diagram layout
 
-  `layout` starts from a traversal-tree placement, then optimizes the positions of
+  The shared renderer used by Python graph rendering, Feynman diagrams and
+  `just draw` defaults to `"impred"`. Direct Typst can request the same pipeline:
+
+  ```typ
+  #let g = layout(g,
+    layout-algo: "impred",
+    impred-parallel-balance: 1,
+    impred-pull: 0.45,
+  )
+  #draw(g)
+  ```
+
+  This runs EC-constrained planarization, then constrained ImPrEd relaxation.
+  Both stages execute inside the bundled `linnest.wasm` plugin. No Python
+  process or external layout service is needed. The seed keeps incoming and
+  outgoing exterior groups consecutive; individually optimal edge insertions
+  introduce necessary crossings. Their sequence is a heuristic for the complete
+  graph's crossing number. All-incoming and all-outgoing diagrams use radial
+  placement.
+
+  Relaxation preserves the carrier's crossing configuration while respecting
+  native pins and coordinate groups. Topology-normalized outward pull can
+  lengthen external legs, and long external segments may gain route points.
+  Parallel internal edges receive attraction divided by their multiplicity
+  raised to `impred-parallel-balance`; its default `1` enlarges self-energy
+  bundles relative to bridge edges. `0` disables that correction.
+
+  The final drawing uses Hobby through each complete physical route, then the
+  usual particle styling and joint momentum-arrow/label placement. Graph springs
+  and graph annealing are not additional default passes. Hobby smoothing and
+  decorative coils do not themselves carry the polyline crossing certificate.
+
+  ImPrEd relaxes no labels itself, so in every `label-layout` its internal
+  particle labels follow their carriers: the shared label annealing step
+  slides each along its edge and chooses a side. Their clearance is at least
+  the edge's `label-gap` (default `0.15`) and clears a coil or wave band,
+  `0.06` plus its amplitude. The `label-layout` relaxation models apply only
+  to the force and anneal layouts.
+
+  `impred-steps` sets the nominal cooling budget. The first 20% uses fine
+  integration steps; afterward `impred-step-scale` permits a larger stride,
+  scaling both the force displacement and movement cap. Strides stop at the
+  original 25-tick geometry/refinement checkpoints and 100-tick progress
+  checkpoints. Every movement still passes the native constraint certificate.
+  The native report's `iterations` counts actual solves; progress callbacks use
+  nominal ticks. `impred-step-scale: 1` retains the reference schedule, while
+  the default `2` reduces work with small numerical layout differences.
+
+  Distance-based forces cannot turn a drawing, and the weak outward pull turns
+  it only slowly; a long schedule mostly waits for that rotation. With mixed
+  incoming and outgoing legs, `impred-level` therefore rotates the whole drawing
+  about its vertex centroid to the exact external-pull optimum at every
+  refinement checkpoint, so the legs settle horizontally and the default budget
+  is `500` steps. A rotation is halved until directed coordinates and crossing
+  witnesses remain valid. Pinned or aligned coordinates define the frame and
+  skip levelling; `impred-level: false` restores the unrotated schedule.
+
+  #table(
+    columns: (auto, auto, 1fr),
+    [Option], [Default], [Meaning],
+    [`impred-spacing`], [`2.4`], [Characteristic force and movement length.],
+    [`impred-repulsion`], [`2.5`], [Point repulsion multiplier.],
+    [`impred-attraction`], [`2.5`], [Route-segment attraction multiplier.],
+    [`impred-parallel-balance`], [`1`], [Parallel-edge attraction exponent.],
+    [`impred-pull`], [`0.45`], [Base outward force on external endpoints.],
+    [`impred-pull-balance`], [`1`], [Topology-normalization exponent.],
+    [`impred-pull-attachment`], [`4`], [Extra demand from distributed attachments.],
+    [`impred-external-max-points`], [`2`], [Maximum extra external route points, from 0 to 3.],
+    [`impred-split-length-ratio`], [`1.5`], [External subdivision threshold relative to spacing.],
+    [`impred-contract-chord-ratio`], [`1.25`], [External contraction threshold; must be below the split threshold.],
+    [`impred-edge-clearance`], [`0.4`], [Node-to-edge clearance scale.],
+    [`impred-node-edge-strength`], [`4`], [Node-to-edge force multiplier.],
+    [`impred-steps`], [`500`], [Nominal cooling budget.],
+    [`impred-step-scale`], [`2`], [Positive maximum integration stride; `1` uses the reference schedule.],
+    [`impred-level`], [`true`], [Rotate mixed-flow drawings to the external-pull optimum at checkpoints.],
+  )
+
+  The same names work through CLI input overrides:
+
+  ```sh
+  just draw --input impred-parallel-balance=1 --input impred-pull=0.45 --input impred-step-scale=1
+  ```
+
+  Explicit `"force"`, `"anneal"`, `"tree"`, `"dot"`, and `"stable-layered"`
+  layouts remain available. The low-level `layout(g)` function retains its
+  force default; the shared drawing renderer selects ImPrEd explicitly.
+  ImPrEd currently lays out the complete graph. For a partial layout pass using
+  `layout(..., subgraph: ...)`, select one of the existing algorithms below.
+  Drawing or highlighting a subgraph still uses the complete graph layout.
+
+  === Spring and annealing layout model
+
+  The `"force"` and `"anneal"` algorithms start from a traversal-tree placement, then optimizes the positions of
   graph nodes and edge control points. The initial tree spacing is
 
   $ L = lambda sqrt((W H) / max(n, 1)) $,
@@ -1015,11 +1155,14 @@
 
   ```typ
   #let common = layouts.options(
-    spring: (strength: 8, length: 0.5),
+    spring: (strength: 8, length: 0.5, rest-length-scale: 0.75),
     repulsion: (edge-node: 0.05, dangling: 2),
-    constraints: (side-strength: 5),
+    constraints: (side-strength: 5, external-pull: 1, external-pull-balance: 1),
     labels: (steps: 0),
-    solver: (algorithm: "force", steps: 50),
+    solver: (
+      algorithm: "force", steps: 50,
+      initial-repulsion: 0.15, repulsion-growth: 0.7,
+    ),
   )
   #let spacious = layouts.options(
     base: common,
@@ -1033,6 +1176,44 @@
   changes `length` without losing the inherited `strength`. Grouped fields
   override their corresponding flat arguments. Flat arguments remain useful for
   numerical experiments and controls that do not have a semantic grouping.
+
+  An edge may carry any number of intermediate route points, independently of
+  other edges. Set `route-points` on `graph.source(...)` or `graph.sink(...)`,
+  or on a half-edge through `graph.map`. Each list runs from its incident node
+  toward the edge's central layout point, excluding those two endpoints.
+  In Python, use `half_edge.drawing.route_points = [(x, y), ...]`.
+  Coordinates use the same layout units as node and edge positions.
+
+  Force and annealing layouts retain these points as movable coordinates.
+  Springs measure the complete half-route length; adding collinear points does
+  not change the spring's preferred length or stiffness. The edge's repulsion
+  charge is shared equally between its central point and active route points,
+  so extra bends do not multiply its total charge. This retains the existing
+  local edge--edge, edge--vertex and vertex--vertex interactions. Fixed edge
+  axes freeze the corresponding bend coordinates; unselected half-routes stay
+  fixed. Grouped placement constraints still refer to the central edge point.
+  Routed annealing evaluates the full energy after proposals.
+
+  A full layout records its solved geometry. Subsequent force or annealing
+  passes start from those node positions, central edge points and half-routes;
+  they do not restart the traversal-tree initializer. The representation is
+  shared by layered layouts, manual geometry and solver refinement. Route
+  point counts may differ between edges, but stay fixed during each solver run.
+
+  Rendering fits a Hobby curve through the resulting points. Empty route lists
+  retain the usual single-point layout and curve construction. An explicitly
+  requested force pass may refine an ImPrEd result, but does not retain the
+  ImPrEd carrier's crossing certificate. A native
+  `ForceLayoutStream` can start from a routed `TypstGraph`; its frames include
+  complete source-to-sink `paths`, as well as node and central edge positions.
+
+  `spring-length-scale` (also `spring.rest-length-scale`) multiplies preferred
+  incidence spring lengths independently of repulsive strengths. It must be
+  positive and finite, defaults to `1`, and combines multiplicatively with each
+  edge's `spring-length`. This changes the graph's geometry rather than zooming
+  its rendering. In contrast, `length-scale` (also `spring.length`) sets the
+  common length scale $L$, which also determines charges and numerical scales.
+  Use the drawing `unit` to resize a finished diagram without changing layout.
 
   The shared spring/charge model uses the following coefficients:
 
@@ -1049,6 +1230,84 @@
   `gamma-dangling-centroid` for $gamma_("dangling-centroid")$. The spring
   stiffness $k$ is `k-spring`, and the softening constant $epsilon$ is `eps`.
 
+  `external-pull` (also `constraints.external-pull`) sets a base force
+  $F_0 = k L a$, where $a$ is this parameter. When both momentum directions
+  occur, incoming endpoints pull left and outgoing endpoints pull right. There
+  is no finite target position: a longer chain of interactions can stretch
+  farther. If every external momentum is incoming, or every one is outgoing,
+  the force instead points radially away from the node centroid. This display
+  rule uses momentum flow, independently of particle or fermion-arrow
+  orientation.
+
+  Connected components containing both directions normalize their pull by the
+  load carried through their springs. A unit total pull on each side is divided
+  equally among that side's external legs. A linear spring-network solve then
+  estimates the internal loads, accounting for parallel routes and cancellation
+  where incoming and outgoing legs share a node. The reciprocal of the largest
+  load, including the dangling springs, gives a width $W$. Each endpoint uses
+  the baseline multiplier $W / N_("side")$, where $N_("side")$ counts the
+  component's external legs with that endpoint's direction. Components with
+  only one external direction keep $w_e = 1$.
+
+  Endpoints constrained to move together in X can attach at different places
+  along the internal network. Their common external line must clear the
+  furthest attachment, rather than the average attachment. Let $u_v$ be the
+  unit-load spring-network displacement at an attachment node, and let $s$
+  be $-1$ for incoming legs and $+1$ for outgoing legs. Within each movable
+  X group, connected component, and direction, the multiplier is
+  $w_e = W / N_("side") + c W "mean"_i ("max"_j(s u_j) - s u_i)$.
+  The mean counts external legs, including repeated attachments at a node.
+  Independent endpoints and groups whose attachments have the same displacement
+  retain the baseline. Fixed X coordinates receive no group correction.
+  This uses connectivity and coordinate constraints, without measuring the
+  current drawing or adding a target position. The correction can exceed one,
+  and opposite sides need not receive equal total pull.
+
+  `external-pull-attachment` (also `constraints.external-pull-attachment`)
+  controls $c$, the strength of this distributed-attachment correction. Its
+  default is `1`. Set it to `0` to retain only bottleneck balancing, or above
+  `1` to increase pull where a shared external line spans distinct network
+  displacements. It accepts finite non-negative values. Unlike increasing the
+  balancing exponent, increasing this setting never decreases the corrected
+  multiplier, even when it is below one. Terminal groups, independent endpoints,
+  fixed X coordinates and one-direction radial pull receive no extra force.
+
+  A series chain with one external leg at each end keeps its original pull
+  regardless of its length. Parallel routes share the internal load, while
+  dangling springs still limit the normalization. For example, two incoming
+  and two outgoing legs separated by one internal bridge each receive $F_0 / 2$;
+  three parallel internal edges with one external leg on each side keep $F_0$
+  on those legs. Distributed attachments sharing an external line can need
+  more pull than these terminal attachments. This linear estimate does not
+  guarantee equal strain or outward endpoints in the nonlinear layout with
+  repulsion, curvature, and pins.
+
+  `external-pull-balance` (also `constraints.external-pull-balance`) controls
+  the strength of the topology adjustment. Its default is `1`, retaining the
+  balancing above. Set it to `0` for uniform pull per external endpoint,
+  a value between `0` and `1` for weaker balancing, or a value above `1` for
+  stronger balancing. It accepts finite non-negative values; combinations
+  whose effective force overflows are rejected. For example,
+  `2` gives the bridge example above one quarter of the base force per leg;
+  the Higgs sunset with one leg on each side keeps its base force.
+  This setting does not change one-direction radial pull or a series chain
+  with one external leg at each end. Values above `1` decrease multipliers
+  below one further and increase multipliers above one further. The reaction
+  on the nodes prevents translational drift.
+
+  Writing this balance as $b$, the endpoint force is
+  $F_e = F_0 w_e^b$. Using an exponent keeps the pull non-negative.
+  Its contribution to energy is
+  $-sum_e F_e s_e (x_e - overline(x))$ in the mixed case, where $s_e$ is $-1$
+  for incoming and $+1$ for outgoing; in the radial case it is
+  $-sum_e F_e d(e, overline(v))$. The weights depend on active topology and
+  coordinate groups, so moving points or changing per-edge rest lengths does
+  not change them.
+  The opposite reaction is shared over the nodes; pins are respected in both
+  force and anneal modes. The generic `external-pull` default is zero (disabled).
+  The shared physics template uses `external-pull: 1` and
+  `spring-length-scale: 0.75`.
+
   In `layout-algo: "anneal"`, linnest minimizes an energy:
 
   $ E =
@@ -1059,25 +1318,59 @@
   + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
   + sum_("dangling" e) c_("dangling-centroid") / (d(e, overline(v)) + epsilon)
   + sum_(i) 1/2 c_("center") d(v_i, 0)^2
-  + p_("cross") N_("cross") $.
+  + E_("pull") + p_("cross") N_("cross") $.
 
   Here $overline(v)$ is the mean node position. The centroid term pushes every
   dangling endpoint away from that mean; its equal-and-opposite reaction is
   shared over the nodes so it introduces no net force. $p_("cross")$ is
   `crossing-penalty` and $N_("cross")$ is the number of detected edge crossings.
+  $E_("pull")$ is the constant external-pull contribution defined above.
   The quadratic center term pulls nodes toward the origin at every radius.
   `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
   `accept-floor`, `step-shrink`, and `incremental-energy` belong to this
-  simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
-  does not currently add a crossing force.
+  simulated annealing mode. `crossing-penalty` also contributes to the discrete
+  reordering steps in force mode, described below.
 
   In `layout-algo: "force"`, linnest applies the direct forces corresponding to
   the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
-  dangling-edge, dangling-centroid, and center terms. `step` is the integration
-  step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
-  budget, and `cool` shrinks the step after each epoch. `early-tol` can stop the
-  run when movement is small only after the effective depth scale reaches zero;
-  small movement or a cooled-to-zero step cannot skip flattening.
+  dangling-edge, dangling-centroid, constant external-pull, and center terms.
+  `step` is the integration step, `delta` clamps per-step movement, and `steps`
+  and `epochs` set the iteration budget. `cool` shrinks the step after each epoch. `early-tol` can stop the
+  run when movement is small only after effective depth reaches zero and
+  repulsion reaches its final strength; small movement or a cooled-to-zero step
+  cannot skip either schedule.
+
+  During planar relaxation, force layout can exchange the free coordinates of
+  adjacent points on the same constrained line. This allows a crossed ordering
+  to change without forcing repelling points through one another. Nodes and
+  edge control points use the same rule: their common coordinate must be fixed
+  or grouped, and the coordinate being exchanged must be free. Fully pinned
+  points, groups on the exchanged axis, and inactive points cannot be swapped.
+  A swap is accepted only when it lowers the current planar layout energy,
+  including `crossing-penalty`. The solver tries these moves at epoch boundaries
+  and before stopping, then continues the same force run. There is no continuous
+  crossing force, and nonplanar graphs may retain crossings.
+
+  The force-only `initial-repulsion` and `repulsion-growth` controls produce a
+  single compact-to-relaxed run, without restarting or cycling. Both are finite
+  fractions in `0..=1` and can also be set in the `solver` record. For normalized
+  progress `u` across the `repulsion-growth` fraction of the iteration budget,
+  the multiplier is `initial-repulsion + (1 - initial-repulsion) * u^2 * (3 - 2*u)`.
+  It grows to exactly one, and the remaining iterations settle with the final
+  forces. It scales vertex-vertex, edge-vertex, local edge-edge, dangling-pair,
+  and dangling-centroid repulsion; springs, constant pull, and center gravity
+  retain their requested strengths. Cooling independently reduces the step size.
+
+  Generic defaults are `initial-repulsion: 1` and `repulsion-growth: 0.7`; setting
+  the initial fraction to one or the growth fraction to zero starts at full
+  strength. The physics template starts at `0.15` and reaches full repulsion
+  after `0.7` of the budget. A growth fraction of one still evaluates the last
+  iteration with full repulsion. These controls do not affect anneal mode.
+  The one-way change from attraction-dominated organization to stronger
+  repulsion is inspired by
+  #link("https://arxiv.org/abs/1509.05265")[Toosi and Nikolov's Sync-and-Burst]
+  (2015); this solver retains its own force laws, integration, and cooling,
+  rather than implementing their complete algorithm.
 
   The force-only `depth-scale` (default `1.0`) and `flattening-end` (default `0.5`)
   control auxiliary depth. `depth-scale` must be finite and non-negative;
@@ -1110,7 +1403,10 @@
   After either graph layout mode, labels are relaxed separately. If $L_l$ is the
   label target distance and $q_l$ is the label repulsion strength, then
   $L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
-  `label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
+  `internal-label-length-scale` for $alpha_l$ on paired edges,
+  `external-label-length-scale` on dangling edges, and `label-charge` for $beta_l$.
+  The semantic `labels` dictionary exposes these as `internal-distance` and
+  `external-distance`; changing either leaves the other target distance unchanged.
   `label-spring` is the spring constant pulling each label toward its target.
   `label-layout: "normal"` uses a perpendicular offset target. With
   `label-layout: "dangling-tangent"`, paired edges still use that perpendicular

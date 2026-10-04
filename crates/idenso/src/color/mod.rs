@@ -3,7 +3,10 @@ use std::sync::LazyLock;
 
 use spenso::{
     network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
-    shadowing::{Collectable, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
+    shadowing::{
+        IntoAtom,
+        symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
+    },
     structure::{
         Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -17,15 +20,12 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
     domains::rational::Rational,
-    function,
     printer::{PrintOptions, PrintState},
     symbol,
 };
 
 use crate::{
-    color::{casimir::CofDimensionInvariantRewriter, simplify::ColorAlgebraSimplifier},
-    representations::{ColorAntiFundamental, ColorSextet},
-    selective_expand::SelectiveExpand,
+    color::casimir::CofDimensionInvariantRewriter, representations::ColorAntiFundamental,
     shorthands::metric::PermuteWithMetric,
 };
 
@@ -35,7 +35,7 @@ use super::representations::{ColorAdjoint, ColorFundamental};
 mod casimir;
 mod conjugate;
 mod macros;
-mod simplify;
+pub(crate) mod simplify;
 
 pub use conjugate::color_conj_impl;
 
@@ -51,10 +51,6 @@ pub struct ColorSymbols {
     pub fundamental_rep: Symbol,
     /// Symbol backing the color adjoint representation function.
     pub adjoint_rep: Symbol,
-    /// The adjoint Casimir symbol, i.e. CA = Nc
-    pub ca: Symbol,
-    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = T_F d_A/d_F.
-    pub cf: Symbol,
     /// The generator symbol
     pub t: Symbol,
     /// The structure constant symbol i.e. [T^a, T^b] = i f^{abc} T^c
@@ -67,10 +63,6 @@ pub struct ColorSymbols {
     pub cas: Symbol,
     /// The degree-k Dynkin index symbol.
     pub idx: Symbol,
-    /// Dummy adjoint-index symbol used in color trace decompositions.
-    pub trace_dummy: Symbol,
-    /// The trace constant symbol i.e. Tr(T^a T^b) = TR delta^{ab}. Usually TR=1/2
-    pub tr: Symbol,
     /// The number of colors symbol (i.e. the dimension of the fundamental representation) usually Nc=3
     pub nc: Symbol,
 }
@@ -244,122 +236,148 @@ enum ColorInvariantPrintKind {
     Index,
 }
 
-fn print_color_invariant(
-    atom: AtomView<'_>,
-    opt: &PrintOptions,
-    kind: ColorInvariantPrintKind,
-) -> Option<String> {
-    match SpensoPrintSettings::resolve(opt) {
-        Some(resolved) => {
-            let SpensoPrintSettings {
-                parens,
-                symbol_scripts,
-                commas,
-                ..
-            } = resolved.presentation;
-
-            let AtomView::Fun(f) = atom else {
-                return None;
+impl ColorInvariantPrintKind {
+    fn print(self, atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        let resolved = SpensoPrintSettings::resolve(opt)?;
+        let settings = resolved.presentation;
+        let AtomView::Fun(f) = atom else { return None };
+        let args = f.iter().collect::<Vec<_>>();
+        let arity = if matches!(self, Self::Gram) { 3 } else { 2 };
+        if args.len() != arity {
+            return None;
+        }
+        if !settings.explicit_invariants && !settings.with_dim && small_integer(args[0]) == Some(2)
+        {
+            let alias = match self {
+                Self::Casimir if is_color_rep(args[1], "spenso::cof") => Some(("C_F", "CF")),
+                Self::Casimir if is_color_rep(args[1], "spenso::coad") => Some(("C_A", "CA")),
+                Self::Index if is_color_rep(args[1], "spenso::cof") => Some(("T_R", "TR")),
+                _ => None,
             };
-            let args = f.iter().collect::<Vec<_>>();
-            let expected_nargs = match kind {
-                ColorInvariantPrintKind::Gram => 3,
-                ColorInvariantPrintKind::Casimir | ColorInvariantPrintKind::Index => 2,
-            };
-            if args.len() != expected_nargs {
-                return None;
+            if let Some((script, plain)) = alias {
+                let label = if settings.symbol_scripts {
+                    script.to_owned()
+                } else {
+                    Self::function_head(plain, opt)
+                };
+                return Some(Self::colorize(&label, opt));
             }
-
-            if let Some(special) = invariant_print_special(&kind, &args, symbol_scripts) {
-                return Some(colorize_invariant_head(special, opt));
+        }
+        let (symbol, function) = match self {
+            Self::Gram => ("G", "gram"),
+            Self::Casimir => ("C", "cas"),
+            Self::Index => ("I", "idx"),
+        };
+        let mut degree = String::new();
+        args[0].format(&mut degree, opt, PrintState::new()).unwrap();
+        let head = if settings.symbol_scripts {
+            let (open, close) = resolved.script_delimiters();
+            // Group symbolic or multi-digit degrees so following powers apply to
+            // the complete invariant, never to part of its degree label.
+            if degree.chars().count() == 1 {
+                format!("{symbol}_{degree}")
+            } else {
+                format!("{symbol}_{open}{degree}{close}")
             }
+        } else {
+            Self::function_head(function, opt)
+        };
+        let mut arguments = args[1..]
+            .iter()
+            .map(|arg| Self::representation(*arg, opt))
+            .collect::<Vec<_>>();
+        if !settings.symbol_scripts {
+            arguments.insert(0, degree);
+        }
+        // These are scalar function arguments, not index lists: always delimit
+        // them, independently of the tensor parentheses/comma preferences.
+        Some(format!(
+            "{}({})",
+            Self::colorize(&head, opt),
+            arguments.join(",")
+        ))
+    }
 
-            let head = if symbol_scripts {
-                let mut rank = String::new();
-                args[0].format(&mut rank, opt, PrintState::new()).unwrap();
-                match kind {
-                    ColorInvariantPrintKind::Gram => format!("G_{rank}"),
-                    ColorInvariantPrintKind::Casimir => format!("C_{rank}"),
-                    ColorInvariantPrintKind::Index => format!("I_{rank}"),
+    fn representation(mut arg: AtomView<'_>, opt: &PrintOptions) -> String {
+        let resolved = SpensoPrintSettings::resolve(opt).unwrap();
+        let original = arg;
+        let mut dual = false;
+        if let AtomView::Fun(f) = arg
+            && f.get_symbol() == AIND_SYMBOLS.dind
+            && f.get_nargs() == 1
+        {
+            dual = true;
+            arg = f.iter().next().unwrap();
+        }
+        let mut out = String::new();
+        if let AtomView::Fun(rep) = arg
+            && rep.get_symbol().has_tag(&T.representation)
+            && rep.get_nargs() == 1
+        {
+            out = match rep.get_symbol().get_name() {
+                "spenso::cof" => "F".to_owned(),
+                "spenso::coad" => "A".to_owned(),
+                _ => {
+                    Atom::var(rep.get_symbol())
+                        .format(&mut out, opt, PrintState::new())
+                        .unwrap();
+                    out
                 }
-            } else {
-                match kind {
-                    ColorInvariantPrintKind::Gram => "gram".to_string(),
-                    ColorInvariantPrintKind::Casimir => "cas".to_string(),
-                    ColorInvariantPrintKind::Index => "idx".to_string(),
-                }
             };
-
-            let mut out = colorize_invariant_head(&head, opt);
-            let printed_args = if symbol_scripts {
-                &args[1..]
-            } else {
-                &args[..]
-            };
-            print_invariant_args(&mut out, printed_args, opt, parens, commas);
-            Some(out)
-        }
-        _ => None,
-    }
-}
-
-fn invariant_print_special(
-    kind: &ColorInvariantPrintKind,
-    args: &[AtomView<'_>],
-    symbol_scripts: bool,
-) -> Option<&'static str> {
-    if small_integer(args[0])? != 2 {
-        return None;
-    }
-
-    match kind {
-        ColorInvariantPrintKind::Casimir if is_color_rep(args[1], "cof") => {
-            Some(if symbol_scripts { "C_F" } else { "CF" })
-        }
-        ColorInvariantPrintKind::Casimir if is_color_rep(args[1], "coad") => {
-            Some(if symbol_scripts { "C_A" } else { "CA" })
-        }
-        ColorInvariantPrintKind::Index if is_color_rep(args[1], "cof") => {
-            Some(if symbol_scripts { "T_R" } else { "TR" })
-        }
-        _ => None,
-    }
-}
-
-fn print_invariant_args(
-    out: &mut String,
-    args: &[AtomView<'_>],
-    opt: &PrintOptions,
-    parens: bool,
-    commas: bool,
-) {
-    if parens {
-        out.push('(');
-    } else if !args.is_empty() {
-        out.push(' ');
-    }
-
-    for (position, arg) in args.iter().enumerate() {
-        if position > 0 {
-            if commas {
-                out.push(',');
-            } else {
-                out.push(' ');
+            if dual {
+                out = match resolved.backend {
+                    SpensoPrintBackend::Typst => format!("accent({out},macron)"),
+                    SpensoPrintBackend::Latex => format!("\\overline{{{out}}}"),
+                    SpensoPrintBackend::Plain => format!("bar({out})"),
+                };
             }
+            if resolved.presentation.with_dim {
+                let mut dimension = String::new();
+                rep.iter()
+                    .next()
+                    .unwrap()
+                    .format(&mut dimension, opt, PrintState::new())
+                    .unwrap();
+                if resolved.presentation.symbol_scripts {
+                    let (open, close) = resolved.script_delimiters();
+                    out.push_str(&format!("_{open}{dimension}{close}"));
+                } else {
+                    out.push_str(&format!("[{dimension}]"));
+                }
+            }
+        } else {
+            original.format(&mut out, opt, PrintState::new()).unwrap();
         }
-        arg.format(out, opt, PrintState::new()).unwrap();
+        out
     }
 
-    if parens {
-        out.push(')');
+    fn colorize(head: &str, opt: &PrintOptions) -> String {
+        if opt.color_builtin_symbols {
+            nu_ansi_term::Color::Magenta.paint(head).to_string()
+        } else {
+            head.to_owned()
+        }
     }
-}
 
-fn colorize_invariant_head(head: &str, opt: &PrintOptions) -> String {
-    if opt.color_builtin_symbols {
-        nu_ansi_term::Color::Magenta.paint(head).to_string()
-    } else {
-        head.to_string()
+    fn function_head(name: &str, opt: &PrintOptions) -> String {
+        match SpensoPrintSettings::resolve(opt).unwrap().backend {
+            SpensoPrintBackend::Typst => format!("op({name:?})"),
+            SpensoPrintBackend::Latex => format!("\\operatorname{{{name}}}"),
+            SpensoPrintBackend::Plain => name.to_owned(),
+        }
+    }
+
+    fn color_count(atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        if !matches!(atom, AtomView::Var(_)) {
+            return None;
+        }
+        let settings = SpensoPrintSettings::resolve(opt)?.presentation;
+        let out = if settings.symbol_scripts {
+            "N_c".to_owned()
+        } else {
+            Self::function_head("Nc", opt)
+        };
+        Some(Self::colorize(&out, opt))
     }
 }
 
@@ -376,7 +394,7 @@ fn small_integer(expr: AtomView<'_>) -> Option<i64> {
 fn is_color_rep(expr: AtomView<'_>, name: &str) -> bool {
     matches!(
         expr,
-        AtomView::Fun(rep) if rep.get_symbol().get_stripped_name() == name && rep.get_nargs() == 1
+        AtomView::Fun(rep) if rep.get_symbol().get_name() == name && rep.get_nargs() == 1
     )
 }
 
@@ -519,65 +537,64 @@ pub static CS, CS_INNER: ColorSymbols = || {
                 _=>None}
 
         }),
-        ca: symbol!("spenso::CA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
-        cf: symbol!("spenso::CF";Real; eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
-        gram: symbol!("spenso::gram"; Real; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Gram)
+        gram: symbol!("spenso::gram"; Real, Scalar; print = |a, opt, _state| {
+            ColorInvariantPrintKind::Gram.print(a, opt)
         }),
-        cas: symbol!("spenso::cas"; Real; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Casimir)
+        cas: symbol!("spenso::cas"; Real, Scalar; print = |a, opt, _state| {
+            ColorInvariantPrintKind::Casimir.print(a, opt)
         }),
-        idx: symbol!("spenso::idx"; Real; print = |a, opt, _state| {
-            print_color_invariant(a, opt, ColorInvariantPrintKind::Index)
+        idx: symbol!("spenso::idx"; Real, Scalar; print = |a, opt, _state| {
+            ColorInvariantPrintKind::Index.print(a, opt)
         }),
-        trace_dummy: symbol!("x"),
         fundamental_rep: representation_symbol(
             ColorFundamental {}.to_symbolic(std::iter::empty::<Atom>()),
         ),
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
-        nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        nc: symbol!("spenso::Nc";Real; print = |a, opt, _| ColorInvariantPrintKind::color_count(a, opt),eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
 };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorSimplifySettings {
-    /// Normalize non-color chains and metric contractions outside collected
-    /// color payloads. Disable this to preserve their factorized coefficients.
-    pub simplify_non_color: bool,
     /// Whether closed color chains should be evaluated as traces.
     pub evaluate_traces: bool,
-    /// Whether contractions between generators on different open chains should
+    /// Whether contractions between generators on different open chains or traces should
     /// be expanded with the fundamental Fierz identity.
     pub expand_cross_chain_fierz: bool,
     /// Whether invariant factors for `cof(N)` should be written directly in
     /// terms of the fundamental dimension.
     pub substitute_cof_dimension_invariants: bool,
+    /// Whether a trace line that nothing else in its term can reach is
+    /// decomposed completely in one kernel call. The kernel then also
+    /// certifies colour fixed points, so the planner needs no confirming
+    /// colour round, and distributes a colour sum with ports only when a
+    /// rule can span it. Without it, every insertion returns to the planner.
+    pub one_shot_traces: bool,
 }
 
 impl Default for ColorSimplifySettings {
     fn default() -> Self {
         Self {
-            simplify_non_color: true,
             evaluate_traces: true,
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,
+            one_shot_traces: true,
         }
     }
 }
 
 impl ColorSimplifySettings {
-    /// Leaves collected `trace(...)` nodes inert after chain collection.
+    /// Leaves collected `trace(...)` nodes unevaluated; Fierz contractions can still join them.
     pub fn without_trace_evaluation(mut self) -> Self {
         self.evaluate_traces = false;
         self
     }
 
-    /// Keeps separate open chains instead of applying cross-chain Fierz
+    /// Keeps separate open chains and traces instead of applying cross-chain Fierz
     /// expansion.
     pub fn without_cross_chain_fierz_expansion(mut self) -> Self {
         self.expand_cross_chain_fierz = false;
@@ -587,6 +604,13 @@ impl ColorSimplifySettings {
     /// Rewrites supported `cof(N)` invariants to explicit dimension formulas.
     pub fn with_cof_dimension_invariants(mut self) -> Self {
         self.substitute_cof_dimension_invariants = true;
+        self
+    }
+
+    /// Returns to the planner after each trace insertion and confirms every
+    /// colour fixed point with a no-op round.
+    pub fn without_one_shot_traces(mut self) -> Self {
+        self.one_shot_traces = false;
         self
     }
 }
@@ -622,23 +646,17 @@ impl ColorCasimirSettings {
     }
 }
 
-/// Trait for applying SU(N) color algebra simplification rules to a symbolic expression.
-///
-/// Implementors simplify expressions containing color factors such as structure constants
-/// (`f_abc`), generators (`T^a`), closed traces, the trace normalization (`TR`), and the
-/// number of colors (`Nc`).
+/// Rewrite color dimensions and scalar invariants between SU(N) conventions.
+/// Indexed generator, structure-constant and trace reduction belongs to
+/// `simplify_algebra` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
 pub trait ColorSimplifier {
-    /// Attempts to simplify the color structure of the expression.
+    /// Replace concrete QCD fundamental and adjoint dimensions by their
+    /// parametric SU(Nc) expressions while preserving all color indices.
     ///
-    /// Applies various identities of SU(N) algebra, including Fierz identities,
-    /// Casimir relations, and contractions involving `f_abc` and `T^a`.
-    ///
-    /// Returns a rewritten atom. Unsupported or open indexed structures may remain in the
-    /// result; their presence is not reported as an error.
-    fn simplify_color(&self) -> Atom;
-
-    /// Simplifies color structures with explicit chain/trace settings.
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom;
+    /// This is useful for exact color-algebra comparisons: public expressions
+    /// may use the physical `cof(3)` and `coad(8)` representations, while an
+    /// intermediate symbolic calculation should retain its `Nc` dependence.
+    fn to_parametric_color(&self) -> Atom;
 
     /// Rewrites the explicit representation dimensions into a Casimir basis.
     fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom;
@@ -653,26 +671,10 @@ pub trait ColorSimplifier {
 
     /// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
     fn to_cof_dimension_invariants(&self) -> Atom;
-
-    /// Expands factorized terms around color representation factors.
-    fn expand_color(&self) -> Vec<(Atom, Atom)>;
-
-    /// Collects factorized terms around color representation factors.
-    fn collect_color(&self) -> Atom;
-
-    fn collect_color_constants(&self) -> Atom;
-
-    // fn canonize_color(&self) -> Atom;
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom;
 }
 impl ColorSimplifier for Atom {
-    fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
-    }
-
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
-        self.as_view().simplify_color_with(settings)
+    fn to_parametric_color(&self) -> Atom {
+        self.as_view().to_parametric_color()
     }
 
     fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
@@ -699,54 +701,20 @@ impl ColorSimplifier for Atom {
 
     fn to_cof_dimension_invariants(&self) -> Atom {
         CofDimensionInvariantRewriter.run(self.as_atom_view())
-    }
-
-    fn expand_color(&self) -> Vec<(Atom, Atom)> {
-        self.as_view().expand_color()
-    }
-
-    fn collect_color(&self) -> Atom {
-        self.as_view().collect_color()
-    }
-
-    fn collect_color_constants(&self) -> Atom {
-        self.as_view().collect_color_constants()
-    }
-
-    // fn canonize_color(&self) -> Atom {
-    //     self.as_view().canonize_color()
-    // }
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.as_view().wrap_color(symbol)
     }
 }
 
 impl ColorSimplifier for AtomView<'_> {
-    fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
-    }
-
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
-        ColorAlgebraSimplifier { settings }.run(*self)
-    }
-
-    fn collect_color_constants(&self) -> Atom {
-        self.collect_with_map(
-            |a| {
-                matches!(a,AtomView::Var(a) if a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf )
-                    || matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
-            },
-        )
-        .unwrap_collect()
-    }
-
-    fn collect_color(&self) -> Atom {
-        self.collect_reps([
-            ColorAdjoint {}.into(),
-            ColorFundamental {}.into(),
-            ColorSextet {}.into(),
-        ])
+    fn to_parametric_color(&self) -> Atom {
+        let adjoint = ColorAdjoint {};
+        let fundamental = ColorFundamental {};
+        let nc = Atom::var(CS.nc);
+        self.replace(adjoint.to_symbolic([RS.d_, RS.a_]))
+            .with(
+                adjoint.to_symbolic([nc.clone().pow(Atom::num(2)) - Atom::one(), Atom::var(RS.a_)]),
+            )
+            .replace(fundamental.to_symbolic([RS.d_, RS.a_]))
+            .with(fundamental.to_symbolic([nc, Atom::var(RS.a_)]))
     }
 
     fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
@@ -773,50 +741,6 @@ impl ColorSimplifier for AtomView<'_> {
 
     fn to_cof_dimension_invariants(&self) -> Atom {
         CofDimensionInvariantRewriter.run(self.as_atom_view())
-    }
-
-    fn expand_color(&self) -> Vec<(Atom, Atom)> {
-        let cof = ColorFundamental {};
-        let coaf = ColorFundamental {}.dual();
-        let coad = ColorAdjoint {};
-
-        let color_trace_pat = function!(T.trace, cof.to_symbolic([RS.b__]), RS.a___).to_pattern();
-        let color_chain_pat = function!(
-            T.chain,
-            cof.to_symbolic([RS.b__]),
-            coaf.to_symbolic([RS.c__]),
-            RS.a___
-        )
-        .to_pattern();
-        let color_d_pat = function!(CS.d, RS.a___).to_pattern();
-        let color_gram_pat = function!(CS.gram, RS.a___).to_pattern();
-        let color_cas_pat = function!(CS.cas, RS.a___).to_pattern();
-        let color_idx_pat = function!(CS.idx, RS.a___).to_pattern();
-        let cof_pat = function!(RS.f_, RS.a___, cof.to_symbolic([RS.b__]), RS.c___).to_pattern();
-        let coaf_pat = function!(RS.f_, RS.a___, coaf.to_symbolic([RS.b__]), RS.c___).to_pattern();
-        let coad_pat = function!(RS.f_, RS.a___, coad.to_symbolic([RS.b__]), RS.c___).to_pattern();
-
-        self.expand_in_patterns(&[
-            color_trace_pat,
-            color_chain_pat,
-            color_d_pat,
-            color_gram_pat,
-            color_cas_pat,
-            color_idx_pat,
-            cof_pat,
-            coad_pat,
-            coaf_pat,
-        ])
-    }
-
-    // fn canonize_color(&self) -> Atom {
-    //     self..canonize_color()
-    // }
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.expand_color()
-            .into_iter()
-            .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
     }
 }
 

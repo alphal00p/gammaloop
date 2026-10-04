@@ -2,7 +2,7 @@
 
 The portraits below are size-optimized WebP derivatives of public professional profile images. Every SVG used by the website is generated from editable Typst under `docs/assets/typst/`, with graph layout shared from GammaLoop's `assets/embedded/drawing/templates/layout-core.typ`; run `nix develop --command just docs-svg-assets` after changing them.
 
-`STIXTwoMath-Regular.woff2` is the unmodified STIX Two Math 2.13 webfont from the [official STIX Fonts release](https://github.com/stipub/stixfonts/releases/tag/v2.13). It is distributed under the SIL Open Font License 1.1 in `STIX-Two-OFL.txt` and is bundled so MathML renders consistently without relying on a system font.
+`crates/spynso3/typst/STIXTwoMath-Regular.woff2` is the unmodified STIX Two Math 2.13 webfont from the [official STIX Fonts release](https://github.com/stipub/stixfonts/releases/tag/v2.13). It is distributed under the SIL Open Font License 1.1 in `STIX-Two-OFL.txt` and served as a shared asset by the documentation website. Spenso notebook output uses STIX Two Math when supplied by the page or system, otherwise the browser's math font; formula fragments do not embed font files.
 
 | Local asset | Subject | Public source |
 | --- | --- | --- |
@@ -13,12 +13,6 @@ The portraits below are size-optimized WebP derivatives of public professional p
 | `people/zeno.webp` | Zeno Capatti | [University of Bern profile](https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=262) · [original portrait](https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Capatti_Zeno.jpg) |
 | `people/ben.webp` | Ben Ruijl | [Symbolica profile](https://symbolica.io/about.html) · [original portrait](https://symbolica.io/ben.jpg) |
 | `spensologo.svg` | Spenso | Native Typst reconstruction of the [canonical logo at the pinned upstream revision](https://github.com/alphal00p/spenso/blob/c052f22dc98a18535e114eede758674befc2758f/spensologo.svg) |
-
-`showcase.js` and `showcase.css` are the source of the animated tour on the portal landing page. The stage is a pure function of time, so the same program drives the browser embed and the video export; no rendered video is checked in. `just showcase-video` renders the tour to `target/showcase/gammaloop-showcase.mp4` with Node, Playwright's Chromium, and ffmpeg (see `scripts/render-showcase-video.mjs`). The mark drawn in its opening is `assets/gammalooplogo-dark.svg`.
-
-| Local asset | Subject | Public source |
-| --- | --- | --- |
-| `showcase-hard-boiled.mp3` | "Hard Boiled" by Kevin MacLeod, the first 1:57.8 of the 3:01 track with a 2.5 s end fade, re-encoded at 160 kb/s | [Incompetech track page (ISRC USUAN1700076)](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the landing page and the video outro carry the required credit |
 
 The graph sources read the real generated-process and test-resource DOT files directly and pass them to Linnest from Typst; no Graphviz, `just draw`, or generated template bundle is part of the website build. Four sources enable Linnest momentum arrows explicitly, and the shared edge style owns the website-specific line weights and light/dark palette.
 

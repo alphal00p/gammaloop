@@ -3,14 +3,14 @@ use std::{
     ops::AddAssign,
 };
 
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::{Atom, AtomOrView, AtomView};
 
 use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
 use crate::{
     algebra::ScalarMul,
     network::{
-        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, Network, Ref, Sequential,
-        SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
+        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost,
+        Network, Ref, Sequential, TensorNetworkError, TensorOrScalarOrKey,
         library::{FunctionLibrary, Library, LibraryTensor},
         store::NetworkStore,
     },
@@ -32,8 +32,8 @@ use crate::{
 /// inference decides the exposed slots, then this trait decides how the target
 /// tensor type represents the original expression. Symbolic tensors can keep
 /// the expression directly, while concretized tensor types may parse and
-/// execute an expanded sub-network here.
-pub trait TensorFromExpression<S, Sc, K, FK, Aind, Lib, FunLib>: Sized
+/// execute an expanded sub-network here with the MinIntermediateCost policy.
+pub trait TensorFromExpression<'src, S, Sc, K, FK, Aind, Lib, FunLib>: Sized
 where
     S: TensorStructure,
     Self: HasStructure,
@@ -42,11 +42,22 @@ where
 {
     #[allow(clippy::result_large_err)]
     fn tensor_from_expression(
-        expression: AtomView<'_>,
+        expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display;
+
+    /// Realize an ordinary tensor leaf after the library has declined it.
+    /// Unlike an opaque composite, this leaf must not recursively parse itself.
+    #[allow(clippy::result_large_err)]
+    fn tensor_from_leaf(
+        expression: AtomOrView<'src>,
+        structure: Canonicalized<S>,
     ) -> Result<Self, TensorNetworkError<K, FK>>
     where
         K: Display,
@@ -85,8 +96,8 @@ impl<T, S> ExpandedTensorFromExpression for DataTensor<T, S> {}
 impl<T, S> ExpandedTensorFromExpression for DenseTensor<T, S> {}
 impl<T, S> ExpandedTensorFromExpression for SparseTensor<T, S> {}
 
-impl<S, Sc, T, K, Aind, Lib, FunLib>
-    TensorFromExpression<S, Sc, K, symbolica::atom::Symbol, Aind, Lib, FunLib> for T
+impl<'src, S, Sc, T, K, Aind, Lib, FunLib>
+    TensorFromExpression<'src, S, Sc, K, symbolica::atom::Symbol, Aind, Lib, FunLib> for T
 where
     S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
     TensorShell<S>: Concretize<T>,
@@ -102,7 +113,8 @@ where
         + FastTensorSum
         + ScalarMul<Sc, Output = T>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    Sc: for<'r> TryFrom<AtomView<'r>> + Clone + Into<T::Scalar>,
+    Sc: for<'r> TryFrom<AtomView<'r>> + TryFrom<Atom> + Clone + Into<T::Scalar>,
+    TensorNetworkError<K, symbolica::atom::Symbol>: From<<Sc as TryFrom<Atom>>::Error>,
     for<'r> TensorNetworkError<K, symbolica::atom::Symbol>:
         From<<Sc as TryFrom<AtomView<'r>>>::Error>,
     K: Display + Debug + Clone,
@@ -113,10 +125,19 @@ where
     FunLib: FunctionLibrary<T, Sc, Key = symbolica::atom::Symbol>,
     NetworkStore<T, Sc>:
         ExecuteOp<FunLib, Lib, K, symbolica::atom::Symbol, Aind, Tensor = T, Scalar = Sc>,
-    SmallestDegree: ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
+    MinIntermediateCost:
+        ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
 {
+    fn tensor_from_leaf(
+        _expression: AtomOrView<'src>,
+        structure: Canonicalized<S>,
+    ) -> Result<Self, TensorNetworkError<K, symbolica::atom::Symbol>> {
+        let (canonical, layout) = structure.into_parts();
+        Ok(canonical.to_shell().concretize_logical(&layout)?)
+    }
+
     fn tensor_from_expression(
-        expression: AtomView<'_>,
+        expression: AtomOrView<'src>,
         _structure: Canonicalized<S>,
         tensor_library: &Lib,
         function_library: &FunLib,
@@ -135,12 +156,12 @@ where
                 Lib,
                 FunLib,
             >(
-                expression,
+                expression.as_view(),
                 tensor_library,
                 function_library,
                 &expanded_settings,
             )?;
-        network.execute::<Sequential, SmallestDegree, Lib::LibraryTensor, Lib, FunLib>(
+        network.execute::<Sequential, MinIntermediateCost, Lib::LibraryTensor, Lib, FunLib>(
             tensor_library,
             function_library,
         )?;
@@ -195,10 +216,14 @@ mod tests {
         let slot = rep.slot(AbstractIndex::from(1));
         let structure: Canonicalized<Structure> =
             NamedStructure::from_iter([slot], symbol!("f"), None::<Vec<Atom>>);
-        let expression = function!(tensor_symbol!(opaque), slot.to_atom());
+        let expression = function!(
+            tensor_symbol!(param_tensor_inferred_structure_opaque),
+            slot.to_atom()
+        );
         type TensorLib = DummyLibrary<ParamTensor<Structure>, DummyKey>;
         type FunLib = ErroringLibrary<Symbol>;
         let tensor = <ParamTensor<Structure> as TensorFromExpression<
+            '_,
             Structure,
             Atom,
             DummyKey,
@@ -207,7 +232,7 @@ mod tests {
             TensorLib,
             FunLib,
         >>::tensor_from_expression(
-            expression.as_view(),
+            expression.as_view().into(),
             structure,
             &TensorLib::new(),
             &FunLib::new(),

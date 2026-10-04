@@ -211,7 +211,11 @@ macro_rules! g {
     };
 }
 
-/// Builds a two-argument compact dot-product atom.
+/// Builds the scalar inner product of two compatible rank-one tensors.
+///
+/// The symbol has Symbolica's `Scalar` and `Linear` attributes, so scalar
+/// coefficients factor out automatically. Use explicit index contractions or
+/// `g!` for partial contractions with remaining free indices.
 #[macro_export]
 macro_rules! dot {
     ($a:expr, $b:expr $(,)?) => {

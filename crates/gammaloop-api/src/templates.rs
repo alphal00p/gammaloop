@@ -83,6 +83,7 @@ fn extract_package<E: RustEmbed>(target: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gammalooprs::model::ModelGammaLoopExt;
 
     #[test]
     fn extract_templates_uses_canonical_package_layout() -> Result<()> {

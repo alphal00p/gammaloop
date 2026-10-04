@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, developer-link, product-link
+#import "../../shared.typ": callout, boundary, developer-link, product-link, source-link
 
 #let networks = [
 = Tensor data, contraction, and network execution
@@ -120,6 +120,39 @@ The implementation handoff from symbolic syntax into network nodes is traced in 
   "Symbolica syntax and rewrite guide",
 )
 records the contributor-facing matching and replacement conventions.
+
+== Inspect explicit indices before parsing
+
+With `shadowing`, import `spenso::network::parsing::AtomStructureExt` and call
+`expression.has_repeated_explicit_indices()` to check for repeated written index payloads.
+The scan borrows Symbolica arguments and does not build a network or rewrite the expression.
+It follows arbitrary function heads, checks each summand independently, and accounts for
+integer powers with magnitude greater than one. Products of factored sums are inspected
+without expansion. Compact representations such as `mink(4)` carry no explicit index.
+
+This is a syntactic candidate check: equal payloads count even when their representations,
+dimensions, or variances differ. A metric simplifier must subsequently establish contraction
+compatibility. A false result does not certify that compact notation or epsilon identities
+are normalized.
+
+The shared slot recognizer inspects the normalized Atom tree and accepts exactly
+`rep(dimension,index)`, optionally inside a single
+`dind(...)`, `uind(...)`, or `sind(...)` wrapper with exactly one argument. Malformed slot or
+wrapper arities are rejected. Symbolica may simplify nested variance wrappers before this
+check. Typed structure inference additionally validates representation,
+dimension, index, and variance; it uses the same borrowed syntax and caches representation
+resolution during the walk. Its existing conventions remain: sums use their first summand's
+structure, and contracted pairs are removed from the inferred open slots.
+
+`cargo run -p idenso --profile dev-optim --example structure_matching_benchmark -- /tmp/structure-matching` measures
+index discovery, fast structure inference, inference of each top-level term, and partial
+network parsing separately. The cases include open and contracted metrics, dual indices,
+factored sums, compact notation, powers, scalar-heavy expressions, long products, and axial
+gamma traces of lengths 6, 8, 10, and 12. Exact inputs and structure snapshots accompany the
+measurements so performance comparisons also check the inferred results. The
+benchmark writes its measurements to the selected output directory. In the
+historical comparison, the index-scan baseline was the isolated prototype,
+while inference used the preceding production implementation.
 
 == Custom representations and the HEP library
 

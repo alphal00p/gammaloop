@@ -37,7 +37,7 @@ rendering run has these steps:
 + `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
    incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
    Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
-   and oxifmt 1.0.0, stages them with the graph spec, and invokes `typst-py` 0.15.0 directly. It has
+   oxifmt 1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst compiler. It has
    no Clinnet library dependency and does not discover or launch a Typst executable.
 + Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
    statically import the selected template and each referenced user module once, materialize the
@@ -60,6 +60,13 @@ rendering run has these steps:
 + `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. GammaLoop's selected
    template installs the particle and momentum callbacks from `edge-style.typ`. It draws edges and
    labels first, then nodes last so nodes sit on top of edges.
++ FeynKit's Python diagram displays draw natively. `FeynmanDiagram::to_scene` describes the drawing
+   `to_linnest` asks Typst for: the graph spec with external-leg pins, particle strokes, decorations
+   and flow arrows, label sources, and inspection details. `linnest::svg` lays it out with ImPrEd,
+   paints Kurvst geometry, and places labels with the same annotation search; embedded Rust Typst only
+   typesets the label pages. Configurations that need Typst (templates, selectors, graph styles,
+   drawing options, titles) and cross sections, whose initial states open before layout, still
+   compile this Typst renderer.
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
@@ -150,9 +157,9 @@ digraph demo {
   edge [particle="a"];
 
   ext0 [style=invis];
-  ext0 -> v0:0 [id=0, is_cut=0];
+  ext0 -> v0:0 [id=0, is_cut=0, initial_state_connection=true];
   v0:1 -> v1:2 [id=1, particle="d", lmb_id=0];
-  v1:3 -> ext1 [id=2, particle="a"];
+  v1:3 -> ext1 [id=2, particle="a", is_cut=0, initial_state_connection=true];
   ext1 [style=invis];
 }
 ```
@@ -241,7 +248,12 @@ GraphViz-only presentation fields such as `label`, `shape`, `style`, `pos`,
 
 / `lmb_id`: Loop-momentum-basis id for a chosen loop edge.
 
-/ `is_cut`: Hedge id used to mark an initial-state cut/external cut.
+/ `is_cut`: Shared sewing key on both dangling halves of a forward-amplitude
+  initial-state connection. Both halves also set `initial_state_connection=true`.
+
+/ `initial_state_connection`: Identifies mechanical forward-amplitude sewing metadata.
+  Canonical cross-section cuts belong to the FeynKit `FeynmanDiagram` artifact
+  and are not inferred from runtime DOT.
 
 / `num`: Explicit edge numerator. The parser localizes `edgeid(...)`, `sourceid(...)`,
   and `sinkid(...)` placeholders to the concrete edge and hedge indices.
@@ -369,8 +381,10 @@ DOT graphs and graphs built directly in Typst:
 }
 ```
 
-Momentum arrows are opt-in. Their default combined label is the particle-map label followed by
-`$q_(#edge.eid)$`, in 10pt text by default; explicit labels take precedence. `show-momentum: false` and
+Momentum arrows are opt-in. Their default combined label stacks the particle-map label above
+`$q_(#edge.eid)$` or the routed momentum, in 10pt text by default; explicit labels take precedence.
+Routed sums of at least `label-stack-terms` (default `3`) terms split over two lines, and
+`label-stack: false` restores one line joined by `label-separator`. `show-momentum: false` and
 `show-particle: false` suppress the corresponding portion. Neither a cut sewing tag nor a
 momentum expression renumbers the edge ID.
 
@@ -437,18 +451,14 @@ to Kurvst's path-in/path-out helpers:
 - `length`: maximum visible arc length for a centered parallel path.
 - `ratio`: maximum visible fraction of the base edge length for a centered
   parallel path.
-- `resolve-length`: how to combine `length` and `ratio`; `"none"`/`"full"`
-  ignores both limits. A custom function receives one dictionary with
-  `base-length`, `length`, and `ratio`. The latter two entries are positive
-  absolute-length limits or `none`, with the ratio already multiplied by
-  `base-length`.
-- `shift`: arc-length displacement of the centered visible interval.
+- `resolve-length`: how to combine `length` and `ratio`.
 - `accuracy`: Kurbo fitting tolerance for the parallel path.
+- `optimize`: whether Kurbo should optimize the fitted path.
 - `offset-side: "label"`: choose the sign of `offset` so the path is on the
   same side as the edge label.
 
 `draw` also accepts `edge-offset`, `edge-length`, `edge-ratio`,
-`edge-resolve-length`, and `edge-accuracy` as defaults for both
+`edge-resolve-length`, `edge-accuracy`, and `edge-optimize` as defaults for both
 half edges. Derived paths are computed on the base edge geometry before patterns
 and other decorations; node outsets then trim the shifted path, so it remains
 shortened at node boundaries. When both length and ratio limits are set,

@@ -15,7 +15,7 @@ typed identifiers, and validated topology—carry across them.
 ])
 
 #boundary("Python", [
-  Use `linnet_py` for DOT-backed graph inspection and algorithms from Python. The binding is
+  Use `linnet` for DOT-backed graph inspection and algorithms from Python. The binding is
   currently a source-built developer preview rather than a published wheel.
 
   #link("quickstart/python/")[Use Linnet from Python →]

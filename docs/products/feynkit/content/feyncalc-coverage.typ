@@ -1,0 +1,2004 @@
+#import "../../shared.typ": source-link
+
+#let feyncalc-coverage = [
+= FeynCalc example coverage
+
+This audit follows the #link("https://feyncalc.github.io/examples")[FeynCalc example gallery]
+as retrieved on 21 September 2026. The machine-readable inventory is
+`docs/products/feynkit/feyncalc-gallery.json`: 86 distinct example links, of which
+85 were available. `EW/Tree/AnelEl-QubarQd` returned HTTP 404. The inventory
+records function calls and requirements for every example; it deliberately does
+not treat the presence of a primitive as an end-to-end validation.
+
+== Shared ownership
+
+#table(
+  columns: (1fr, 1fr, 2fr),
+  [Capability], [Owner], [Coverage and remaining work],
+  [Models and diagrams], [`feynkit-model`, `feynkit-ufo`, `feynkit-generator`],
+  [Existing validated models, UFO import and generation. A generated QED
+   electron-positron to muon-pair benchmark and a different-flavor QCD quark
+   annihilation benchmark check the sewn graph, physical cut, graph factors
+   and uncut propagators. Ordinary generated amplitudes also validate Compton,
+   diphoton, Bhabha, Møller, selected QCD channels, W-pair production and
+   on-shell Higgs and Z decays. The inventory records the validated scope of each process.],
+  [Dirac, color and Lorentz algebra], [Idenso and Spenso],
+  [Existing gamma, color, metric, epsilon and adjoint operations. Keep their
+   Symbolica expression interface; do not implement a second algebra in FeynKit.
+   Generated massive one-, three- and five-photon amplitudes validate Furry
+   cancellation with symbolic dimension and generic off-shell momenta.],
+  [Light-cone soft radiation], [Kinematics, Spenso, Idenso and Symbolica],
+  [Generated Born and real-emission amplitudes with collinear spinor projectors,
+   symbolic Lorentz dimension, open-current factorization and arbitrary-reference
+   gluon polarization sums. The leading unintegrated soft function matches the
+   reference; integrated SCET soft functions are not covered.],
+  [External spin sums], [`feynkit-amplitude::SpinSum`],
+  [Scalar, Dirac and vector completeness tensors and external wavefunction-pair
+   replacements. GammaLoop delegates both formulas and replacement construction
+   here. Massive Dirac density matrices select a physical spin vector through
+   the same owner. Higher-spin states and massless helicity projectors remain
+   outstanding.],
+  [External color sums], [`feynkit-amplitude::ColorSum`],
+  [Singlet, fundamental, sextet and adjoint completeness tensors reuse the
+   generator's representation mapping and Spenso metrics. The Python particle
+   API exposes optional initial-state averaging. Different-flavor QCD
+   annihilation validates the generated massive SU(N) result.],
+  [Symbolic kinematics], [`feynkit-kinematics::Kinematics`],
+  [Scoped scalar products in integer or symbolic dimensions and four-dimensional
+   unequal-mass Mandelstam substitutions. Scalar products expand bilinearly in
+   declared momenta using Symbolica. General momentum elimination still needs
+   coverage.],
+  [Covariant tensor reduction], [`feynkit-tensor`],
+  [Symmetry-aware vacuum projection and external-basis reduction. Symbolica
+   inverts the external Gram matrix; the existing projector averages the
+   transverse components. Integral-family reduction remains a separate step.],
+  [UV expansion], [`feynkit-graph` and Vakint],
+  [Graph and subgraph expansion and vacuum-integral infrastructure exist.
+   The one-loop QED and QCD renormalization workflows combine generated
+   self-energies, fermion vertices and the ghost-gluon vertex with symbolic gauge dependence and
+   counterterm linear solves. The generated two-loop massless electron
+   self-energy validates bare UV poles with a supplied counterterm sum.
+   The scalar self-energy and four-point examples generate their counterterm
+   insertions and determine the two-loop field, mass and coupling constants.
+   The two-loop photon example retains symbolic gauge dependence and calculates
+   its four one-loop counterterm insertions using signed propagator powers.
+   Analytic vacuum values remain explicit inputs.
+   Automatic forest generation stays separate.],
+  [Integral families and mappings], [`feynkit-graph::IntegralFamily`],
+  [Generated diagrams expose families through their shared denominator builder
+   and momentum routing. Affine propagator rank, partial fractions, scalar-product completion and
+   numerator mappings use Symbolica linear algebra. Verified affine momentum
+   shifts and subtopology embeddings are available, including automatic search
+   from quadratic propagators. Symanzik incidence graphs support parameter
+   permutations beyond fixed-external-momentum shifts. Family discovery and
+   subtopology minimization remain outstanding.],
+  [Feynman parameters], [`feynkit-graph::IntegralFamily`],
+  [Symanzik polynomials use Symbolica determinant and cofactor operations.
+   One- and two-loop reference polynomials and singular quadratic forms are
+   validated. Singular output is algebraic data, not an integration formula.
+   Complete parameter
+   measures and tensor numerators remain outstanding. Polynomial equivalence
+   alone does not establish contour or prescription equivalence.],
+  [Scaleless sectors], [`feynkit-graph::IntegralFamily`],
+  [Positive-power sector selection and exact parametric scaling certificates
+   reuse the Symanzik polynomials and Symbolica linear solves. Automatic sector
+   discovery, degenerate quadratic forms, UV/IR splitting and generator filter
+   integration remain outstanding.],
+  [IBP reduction], [RustRed's native HEP bridge],
+  [`rustred-feynkit` is now integrated into the Symbolica Community host.
+   `hep.IBPFamily` consumes the existing FeynKit family and exposes symbolic
+   identities, bounded Laporta elimination and parametric recurrences. Residual
+   integrals at a finite search depth are not certified masters. Two-loop
+   scalar self-energy and four-point renormalization, Feynman-gauge massless
+   electron self-energy, symbolic-gauge photon
+   renormalization, the electron Pauli form factor and unequal-mass bubble
+   regressions pass in the installed host.
+   Separate notebooks run on the existing Marimo instance. Of the gallery pages,
+   22 call Kira and four call FIRE through FeynHelpers; those external
+   interfaces are not FeynCalc-owned solvers.],
+  [Analytic loop evaluation], [Shared OneLOop integration in the HEP host],
+  [The HEP namespace exposes A0, B0, dB0, C0 and D0, including evaluable
+   Symbolica Laurent coefficients. A generated massive photon self-energy
+   validates the transverse form factor, UV pole and finite part through A0/B0.
+   The massive electron self-energy adds full symbolic-gauge finite terms,
+   raised photon denominators, threshold continuation and gauge checks.
+   The generated electron vertex also reproduces the Pauli form factor after
+   native IBP reduction. General reduction to these masters, higher epsilon orders
+   and separate UV/IR bookkeeping remain outstanding.],
+  [Cross sections and decay rates], [FeynKit kinematics and process APIs],
+  [Shared symbolic/numerical initial-state flux and four-dimensional two-body
+   and three-body Dalitz densities. Generated virtual-photon Born currents and
+   real QCD radiation validate the Born-normalized Dalitz distribution and its
+   regulated integral. The generated QED and QCD annihilation benchmarks include their
+   angular distributions and total unpolarized cross sections. Chiral Z decays
+   validate massive two-body widths for all four fermion classes; Higgs decays
+   cover charged leptons, quarks, WW and ZZ. General phase space, identical-particle
+   bookkeeping and the remaining gallery observables need further coverage.],
+)
+
+Among the available pages, 49 use fermion or vector spin sums, 46 use
+Mandelstam or scalar-product expansion helpers, 55 use color simplification,
+76 use Dirac simplification, 35 use non-vacuum tensor reduction, and 30 use
+integral-family mappings. These counts are requirements, not passed tests.
+The inventory recognizes bracketed, prefix and postfix Mathematica calls.
+
+== Use the shared external-state tensors
+
+`Particle.spin_sum(momentum, left, right)` returns an ordinary Symbolica
+expression. Supply bare index symbols and an unindexed momentum name. The
+fermion result uses Spenso bispinor slots; the vector result uses Minkowski
+slots. Both methods accept `dimension=D` for an integer or symbolic Lorentz
+dimension, defaulting to four. Dirac spinor slots retain dimension four.
+`average=True` divides by two for Dirac fermions, $D-2$ for massless vectors,
+or $D-1$ for massive vectors; scalars have one state. For a fixed two-state
+vector average at symbolic $D$, use `average=False` and divide by two.
+`installed_dimensional_spin_sums.py` verifies transverse projectors, their
+physical state counts and edge-specific sewing at $D$, four and six dimensions.
+`hep/polarization_sums.py` exposes these checks for photons, gluons and the
+massive Z with three normalization choices, using particle-name queries.
+The antiparticle record selects the negative mass term in the Dirac
+completeness relation.
+
+For a massive Dirac fermion, `spin_vector=s` selects one physical spin state
+in either `spin_sum` or `sum_spins`:
+$ rho_u = frac(1,2) (slash(p)+m)(1+gamma^5 slash(s)), quad
+  rho_v = frac(1,2) (slash(p)-m)(1+gamma^5 slash(s)). $
+Here $s$ is the dimensionless boosted rest-frame spin direction, with
+$p dot s=0$ and $s^2=-1$; the caller supplies these on-shell constraints to
+`Kinematics`. Particle and antiparticle use the same physical spin direction,
+as in the #link("https://sites.ualberta.ca/~gingrich/courses/phys512/node61.html")[covariant spin-projector convention].
+A selected state requires four Lorentz dimensions and cannot also be spin averaged. The model must declare a
+nonzero mass: a zero-valued mass parameter is treated as massless even when
+its symbolic parameter name exists. This does not implement massless helicity
+projectors or dimension-generic gamma-five schemes.
+
+`installed_polarized_spin_density.py` checks both charges, opposite-spin
+completeness, traces, rank-one purity, left and right Dirac equations, and
+edge-specific wavefunction replacement. A GammaLoop regression compares all
+128 complex density-matrix entries across two momentum directions, both
+helicities and both charges with its existing numerical spinors. It uses the
+shared HEP tensor library and adds no second spinor implementation.
+`hep/polarized_spin.py` displays the density matrix and constructs the spin
+vector with the existing shared `Boost` and `FourMomentum` APIs.
+
+Massive vector sums use the Proca projector. A massless vector without a
+reference uses the covariant projector. It reproduces physical polarizations
+when unphysical states decouple; summing several external gluons covariantly
+can require ghost subtraction, as demonstrated below. Supplying `reference=n`
+selects the axial projector, including
+the term proportional to the reference's squared norm. Its scalar product
+with the external momentum must be nonzero. `covariant=True` explicitly
+selects the Feynman-gauge numerator for a massive vector as well.
+
+For generated sewn graphs, `Particle.sum_spins(expression, momentum, edge=id)`
+applies the completeness relation directly to the matching wavefunction pair.
+Use `diagram.projector_expression()` as the starting expression and apply the
+sum once for each external edge. `average=True` supplies initial-state spin
+averaging. Other edge labels and unpaired wavefunctions remain unchanged;
+this operation does not conjugate an amplitude or sum color. Both FeynKit and
+GammaLoop use the same replacement construction.
+
+The generator retains provenance annotations for graph signs and multiplicities.
+`diagram.overall_factor_expression(evaluate=True)` evaluates these annotations
+through the shared graph implementation. It preserves arbitrary symbolic
+factors. Include this weight once when assembling a squared matrix element;
+`diagram.symmetry_factor` alone omits fermion signs and grouping weights. For amputated Grassmann two-point kernels,
+remove only the named `ExternalFermionOrderingSign` factor, for ghosts as well
+as Dirac fermions. Keep internal closed-loop signs and all multiplicities.
+The QCD renormalization and ghost-vertex regressions compare kernels in this
+canonical field order; counterterm amplitudes use the same normalization.
+
+Idenso's `to_dots` handles explicit vector slots even when the momentum head
+was created as an ordinary Symbolica symbol without tensor tags. GammaLoop
+uses the same contraction operation.
+
+== Keep kinematics local to a calculation
+
+`Kinematics.mandelstam([p1, p2, p3, p4], masses_squared, [s, t, u])` uses
+two incoming and two outgoing momenta. It sets the four on-shell products
+and six pair products without modifying Symbolica's global state. Apply
+the context to the output of Idenso contractions with `kinematics.apply(expr)`.
+The same context recognizes Spenso dot products and metric shorthand.
+
+The mass arguments are squared masses. The invariants satisfy
+`s + t + u = sum(masses_squared)`. Eliminate a chosen invariant using a
+normal Symbolica substitution. Separate contexts can describe separate
+processes without clearing a global scalar-product table.
+
+`kinematics.scalar_product(p1 + p2, p1 + p2)` expands to `s`. Setting an
+assumption declares the two momentum names. For combinations without assumptions,
+use `Kinematics(momenta=[p, q])`; other symbols in the combination are scalar
+coefficients. For example, `scalar_product(a*p + q, p)` produces
+`a*(p.p) + q.p`. Nonlinear momentum expressions are rejected instead of being
+interpreted as vectors. Labeled names such as `Q(1)` work in the same way.
+
+For dimensional regularization, construct `Kinematics(D)` with a Symbolica
+dimension symbol and set individual products with `with_scalar_product`.
+These assumptions do not match four-dimensional slots. Substitute
+`D = 4 - 2 eps` after contraction, since Spenso dimensions are symbols or
+nonnegative integers rather than compound expressions.
+
+The installed-host test `crates/feynkit-py/tests/installed_feyncalc_tree.py`
+combines particle spin sums, Idenso Dirac traces, and Mandelstam substitutions
+to reproduce the massive and massless unpolarized and chiral-projected
+squared-current results for
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu")[electron-positron annihilation to muons].
+The separate `installed_feyncalc_generated_qed.py` regression starts from the
+Standard Model fixture, restricts generation to the electron-photon and
+muon-photon vertices, and reproduces the same massive and massless squared
+matrix elements. The sewn graph has one loop, while each amplitude side has
+zero loops. Incoming wavefunctions are summed through `Particle.sum_spins`;
+cut fermion numerators already contain the final-state completeness factors.
+The test excludes cut denominators from the squared amplitude and retains the
+uncut photon denominators and complete graph weight. Its massless result is
+integrated with the two-body phase-space measure and Symbolica polynomial
+integration. Both the polar cosine and Mandelstam-t coordinates give the
+reference differential rates and the same unpolarized total cross section.
+
+The live `symbolica-community/examples/hep/qed_cross_section.py` notebook also constructs
+chiral-projected production directly from the generated vertices and propagators.
+Its massive and massless results agree with the reference. Physical final-state
+charges come from `cut.particles`; the stored species of a cut edge need not
+be the outgoing species.
+`cut.orientations` supplies the sign relating a selected loop coordinate to the
+positive-energy outgoing momentum. Apply that sign when assigning physical
+Mandelstam labels. These conventions leave native graph momentum routing intact;
+changing which cut edge carries the loop coordinate must not interchange the
+physical angular invariants.
+
+The `installed_feyncalc_polarized_qed.py` regression uses `community.hep`,
+physical cut charges and momentum orientations. It passes the massive and
+massless chiral-projected reference assertions with either final-state particle
+as the loop coordinate. Together these installed regressions cover the full
+annihilation example, including both differential-rate integration coordinates.
+
+Idenso now evaluates four-dimensional traces containing Spenso's `projp` and
+`projm` by reducing them through its existing gamma-five trace identities. Use
+`TensorExpression.projp(4)` or `TensorExpression.projm(4)` with `chain` to compose
+projected currents. Symbolic-dimensional traces remain inert; this does not
+choose a dimensional-regularization gamma-five scheme. Chirality specifies
+helicity only in the massless limit.
+
+== Generated Compton amplitudes
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa")[massive Compton reference]
+is reproduced by generating the two ordinary tree amplitudes, summing them,
+and contracting the operator with its `TensorExpression.dirac_adjoint` and
+physical `Particle.spin_sum` tensors. The installed-host regression is
+`crates/feynkit-py/tests/installed_feyncalc_compton.py`. It retains interference
+between the two diagrams and averages only the incoming spin states. Electron
+and positron amplitudes both give the same massive and massless result, with
+both covariant photon sums and axial sums using the incoming fermion momentum
+as a reference. The nonzero reference norm is retained. At $e = m_e = 1$,
+$s = 3$ and $u = 0$, all four calculations give $3$.
+
+External ports are aligned by matching generated wavefunctions with Symbolica;
+the calculation does not assume internal half-edge numbers. Idenso retains
+conjugation of scalar quantities explicitly, so the example declares its
+physical momenta, charge, mass and invariants real before contracting the
+adjoint. `wrap_indices` and `intern="flattened"` keep the adjoint's summed
+indices separate. Dirac adjunction exchanges the input/output matrix roles;
+fermion completeness tensors connect ket and Dirac-adjoint indices accordingly.
+The physical completeness relation remains the one shared with GammaLoop.
+
+== Generated Bhabha and Møller amplitudes
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-ElAel")[Bhabha]
+and #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElEl-ElEl")[Møller]
+workflows generate both ordinary tree amplitudes, retain their graph signs and
+propagators, average incoming spins and sum outgoing spins. The massive square
+includes interference between the two channels, with $s+t+u=4m_e^2$.
+`installed_feyncalc_identical_leptons.py` compares the massive reference
+expressions, their massless limits, separate interference terms, and Møller's
+final-electron exchange symmetry.
+
+`TensorExpression.dirac_adjoint(preserve_indices=True)` keeps labels attached
+to the same physical external legs. Unlike a matrix-adjoint endpoint convention,
+it distributes over sums whose diagrams pair the external fermions differently.
+The complete amplitude can therefore be conjugated in one call before applying
+shared particle spin sums. Conjugation, gamma-zero boundary factors and index
+handling remain in Idenso; the example needs no channel-specific endpoint swaps.
+The default `preserve_indices=False` retains the existing matrix convention and
+factored output. Shared Rust regressions verify conjugated complex coefficients,
+additivity, involution and the default behavior. The installed-host regression
+passes both complete massive references, the interference checks, massless
+limits and angular-cut cross sections through this shared adjoint path.
+
+For equal external masses, the shared two-body measure divided by the flux is
+$1/(64 pi^2 s)$. The massless event densities, in units of $alpha^2/s$ and with
+$x=cos theta$, are $(3+x^2)^2/(4(1-x)^2)$ for Bhabha scattering and
+$(3+x^2)^2/(2(1-x^2)^2)$ for Møller scattering. The latter includes $1/2!$ on
+the full sphere; using the labeled density on one hemisphere gives the same
+event count. This factor does not remove either exchange amplitude.
+The regression integrates a symmetric angular cut with Symbolica and compares
+the two Møller counting conventions. `hep/identical_leptons.py` displays both
+diagrams, the massive square, interference and angular densities, with reaction,
+CM-speed and scattering-angle controls. It retains the ordinary labeled
+amplitudes; external-fermion representative symmetrization transfers permutation
+sign handling to the caller and is not used in this calculation. Five live
+control configurations pass for both reactions, including equal Møller results
+at opposite scattering cosines with a nonzero electron mass.
+
+== Sewing-aware massive QED amplitudes
+
+The `hep/sewn_qed.py` notebook converts generated forward graphs into squared
+amplitudes using the physical `Particle.sum_spins` tensors. It checks the full
+massive electron and positron Compton results with both covariant and timelike
+axial incoming-photon projectors, as well as electron-positron annihilation into
+muons and electron-muon scattering. All six differences vanish exactly after
+the Mandelstam relation. Both Compton massless limits also agree with
+$-2 e^4 (s/u + u/s)$.
+
+The shared graph finalizer retains the incoming attachment when sewing the two
+amplitudes. Its physical left side contains that incoming endpoint. A
+source-oriented cut carries the stored particle into the final state; a
+target-oriented cut carries its antiparticle. Opening a sewn carrier therefore
+preserves its species and particle flow. Vertex-slot validation uses the same
+rule for ordinary and sewn edges.
+
+For $n$ open fermion chains joined into $c$ cycles, the generator supplies the
+relative permutation parity $(-1)^(n-c)$. Closing an external chain is distinct
+from creating a virtual fermion loop. The physical completeness tensors and
+existing antifermion factor remain shared with GammaLoop; no process-specific
+mass substitution or separate sewing spin-sum formula is needed.
+
+Select a cut coordinate with `with_loop_momentum_edges`, obtain its physical
+charge from `cut.particles`, and multiply its stored momentum by
+`cut.orientations[edge.id]` to define the positive-energy outgoing momentum.
+Exclude cut propagators from the squared-amplitude denominator. Neither a
+particular default loop edge nor a positive stored orientation is guaranteed.
+The generated unpolarized and chiral-projected annihilation regressions use
+this convention without changing their reference formulas. They also check
+the unpolarized angular distribution and total cross section, and both
+physical final-state momentum choices for the chiral projection.
+
+The isolated validation checkout passes all 179 model/graph/generator tests and
+GammaLoop's native-to-runtime parity check for both Compton charges. The two
+structural fixtures now encode the same incoming-carrier convention as the
+production graph. Its shared Python host also passes the exact massive QED,
+polarized QED, diphoton amplitude, and massive/massless QCD renormalization
+regressions. The validation build combines the previously verified baseline with the shared
+sewing correction and built-in model constructors.
+
+== Normalize and integrate two-body observables
+
+`Kinematics.flux(p1, p2)` returns the denominator
+$4 sqrt((p_1 dot p_2)^2 - m_1^2 m_2^2)$ of an invariant squared amplitude.
+`kin.two_body_phase_space(k1, k2)` returns the four-dimensional
+$d Phi_2 / d Omega$ in the final pair's rest frame. The measure includes the
+$(2 pi)^4$ multiplying the momentum-conservation delta function. Their ratio
+multiplies the squared matrix element to give a differential cross section in
+natural units. These conventions agree with the
+#link("https://pdg.lbl.gov/2025/reviews/rpp2025-rev-kinematics.pdf")[PDG kinematics review].
+
+Supply future-directed on-shell momenta in the physical region. Declare positive
+invariant symbols when known, so Symbolica can resolve square-root branches.
+A symbolic measure is not a numerical phase-space generator and does not insert
+threshold step functions. Spin/color averages and final-state identical-particle
+factors remain explicit; do not apply a factorial already included in a generated
+graph weight a second time.
+
+```python
+from symbolica import E, Expression, S
+from symbolica.community import hepkit as fk
+
+p1, p2, k1, k2, t, u, c, alpha = S(
+    "p1", "p2", "k1", "k2", "t", "u", "cos_theta", "alpha"
+)
+s = S("s", is_positive=True)
+pi = Expression.PI
+kin = fk.Kinematics.mandelstam(
+    [p1, p2, k1, k2], [E("0")] * 4, [s, t, u]
+)
+squared = 2 * (4*pi*alpha)**2 * (t**2 + u**2) / s**2
+angular = squared.replace(t, -s*(1-c)/2).replace(u, -s*(1+c)/2)
+differential = (angular * kin.two_body_phase_space(k1, k2) / kin.flux(p1, p2)).expand()
+primitive = differential.to_polynomial().integrate(c).to_expression()
+total = 2*pi*(primitive.replace(c, E("1")) - primitive.replace(c, E("-1")))
+assert (total - 4*pi*alpha**2/(3*s)).together() == E("0")
+```
+
+Polynomial integration is available directly in Symbolica and suffices for this
+angular dependence; it does not require an optional general symbolic integrator.
+The installed generated regression obtains `squared` from the graph instead of
+entering it by hand.
+
+For a decay, `kin.flux(parent)` returns the rest-frame denominator $2 M$.
+A constant squared amplitude into two distinct massless particles then gives
+$Gamma = abs(cal(M))^2/(16 pi M)$. Numerical `FourMomentum.flux()` instead uses
+the supplied frame's energy, returning $2 E$; `p.flux(q)` is Lorentz invariant.
+Both numerical and symbolic APIs, and GammaLoop's integrand, use the same
+`feynkit-kinematics::InitialStateFlux` implementation. GammaLoop retains its
+runtime model masses and barn conversion outside that shared boundary.
+
+== Generated electron–positron annihilation into photons
+
+`installed_feyncalc_diphoton.py` generates both tree diagrams for
+$e^- e^+ -> gamma gamma$ and retains their interference. The full-mass
+spin-averaged result agrees with the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa")[FeynCalc diphoton example].
+It is unchanged by choosing covariant photon sums, the other photon as a null
+reference, or the incoming electron as a timelike reference. The spin-summed
+square vanishes when either photon polarization tensor is replaced by its
+longitudinal momentum product. The massless limit and exchange of the two
+photons are checked separately.
+
+The ordinary amplitude labels both photons. Its spin-averaged square contains
+no final-state factorial; neither does `Kinematics.two_body_phase_space`.
+Integrating over both photon labels therefore requires $1/2!$. Equivalently,
+select the forward photon and integrate its angle over a single hemisphere.
+For $abs(cos(theta)) < C < 1$, the massless event cross section is
+$ sigma = frac(2 pi alpha^2, s) (ln frac(1+C, 1-C) - C). $
+This also agrees with the
+#link("https://arxiv.org/pdf/hep-ex/0409058")[DELPHI Born cross section, Eq. (2)].
+Symbolica integrates the rational angular distribution directly. The example
+also integrates the massive distribution at incoming speed
+$ beta = sqrt(1 - 4 m_e^2/s) $, checks the threshold normalization and recovers
+the massless limit. It selects the positive above-threshold flux branch
+explicitly. `hep/diphoton.py` offers polarization-reference, angular-cut and
+incoming-speed controls on the existing Marimo server.
+
+The separate `hep/sewn_diphoton.py` notebook and
+`installed_feyncalc_sewn_diphoton.py` regression now certify the sewn-forward
+calculation too. Both cut photons can serve as the loop coordinate. Convert
+its stored directed momentum with `cut.orientations` before substituting the
+physical Mandelstam labels, and omit cut denominators from the squared amplitude.
+Adding the exchanged photon assignment restores the labeled result.
+
+Ten exact comparisons check both coordinates with covariant, null-reference
+and timelike-reference photon projectors, plus both photon Ward identities.
+The massless limit also agrees. All three physical results equal $83/8$ at
+$e=m_e=1$, $t=-1$, $u=-7$. The shared finalizer and physical cut routing
+reproduce the ordinary-amplitude result. The notebook
+shows the coordinate orientations explicitly and compares massive and massless
+results interactively. Existing graph weights must not be multiplied by a
+second inverse automorphism factor, and the labeled squared amplitude does
+not yet include the final-state event-counting factor $1/2!$.
+
+== Generated charged-current decays
+
+`hep/weak_decays.py` generates eight W and top channels from the embedded
+Standard Model. Massive leptonic W decay and unequal-mass quark decay reproduce
+the #link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/W-ElAnel")[leptonic]
+and #link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/W-QiQjbar")[quark]
+references. The massive quark test uses charm and bottom fields to retain two
+independent masses; light up/down channels check the massless limit. Both W
+charges, top and antitop preserve a generic complex CKM element, and each
+charge-conjugate pair agrees exactly.
+
+Shared particle spin sums average the initial spin and retain every physical
+massive-vector polarization. Shared color sums distinguish the physical top
+width, averaged over initial colors, from the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Qt-QbW")[gallery top width],
+which sums them. Their exact ratio is three. The notebook defaults to the
+physical width and exposes the reference convention explicitly. W widths
+coincide under both choices.
+
+`Kinematics.two_body_phase_space` and `flux` supply the complete width factor
+on the domain $M>m_1+m_2$. The installed regression compares full symbolic
+mass dependence and 64 numerical cases, including a complex CKM phase and
+the top threshold limit. HTML export, strict Marimo checks and all 64 live
+channel, color and kinematic selections pass. These are on-shell two-body
+widths; off-shell W decay chains are separate.
+
+== Muon decay and recursive three-body phase space
+
+`hep/muon_decay.py` generates the full unitary-gauge W exchange in
+$mu^- -> e^- overline(nu)_e nu_mu$. Shared spin sums and Spenso traces reproduce
+the complete massive squared amplitude in the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Mu-ElAnelNmu")[muon-decay reference],
+including the longitudinal W term. Its low-energy expansion gives the Fermi
+amplitude with the initial muon spin averaged.
+
+`Kinematics.three_body_phase_space` supplies the measure. Two independent
+`Kinematics.two_body_phase_space` calls check it by recursive factorization.
+Pair-rest-frame energies determine the invariant bounds and angular
+Jacobian. Integrating the orientation and azimuth yields
+$dif Phi_3/(dif s dif t)=1/(128 pi^3 M^2)$; `flux` supplies $2M$.
+Symbolica derives the normalized massless Michel spectrum
+$2x^2(3-2x)$ and $Gamma_0=G_F^2 M^5/(192 pi^3)$.
+For $r=m_e^2/M^2$, exact integration retains
+$Gamma/Gamma_0=1-8r+8r^3-r^4-12r^2 ln(r)$ in the Fermi limit.
+Six independent quadratures check the mass dependence. Expanding and integrating
+the generated full amplitude at zero electron mass also derives
+$Gamma/Gamma_0=1+3M^2/(5m_W^2)+cal(O)(M^4/m_W^4)$.
+
+The installed regression, HTML export, strict Marimo checks and all eighteen
+live mass and W-scale selections pass. The notebook evaluates the finite-mass
+and finite-W results in their stated limits. This is a tree-level result with
+massless neutrinos; radiative corrections are separate.
+
+== W-pair production and electroweak cancellations
+
+`hep/ww_production.py` generates photon, Z, neutrino and Higgs exchange in
+$e^- e^+ -> W^- W^+$. Shared particle spin sums average the incoming spins
+and retain all physical W polarizations. All sixteen amplitude products,
+including reversed interference pairs, reproduce the complete massive
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/AnelEl-WW")[FeynCalc result]
+with the electron Yukawa coupling fixed by its mass.
+
+The generated longitudinal Z numerator is first certified to vanish against
+the two physical W sums. Spenso's existing compact/indexed conversion also
+allows the explicit relation $p_3=p_0+p_1-p_2$ to eliminate the residual
+four-momentum epsilon contraction. Scalar-product substitutions alone do not
+impose this relation inside an epsilon tensor. Both steps reuse shared tensor
+operations; the example adds no second algebra or spin-sum implementation.
+
+With a marker $H$ multiplying Higgs exchange, the coefficient growing as $s$
+at fixed angle is $e^4 m_e^2 (H-1)^2/(32 m_W^4 sin^4(theta_W))$.
+It vanishes for the Standard Model, and the quadratic growth cancels as well.
+The notebook exposes the separate diagonal and interference contributions and
+a diagnostic rate with Higgs exchange omitted.
+
+Symbolica integrates the full rational angular dependence and verifies the
+primitive by differentiation. The shared flux and two-body phase-space APIs
+give $dif sigma/dif t=overline(abs(cal(M))^2)/(16 pi s(s-4m_e^2))$.
+The reference retains the mass in its amplitude and endpoints but uses the
+massless flux prefactor $1/(16 pi s^2)$. Its massive rate is therefore the
+physical rate here times $1-4m_e^2/s$. The massless total agrees directly.
+Nine independent quadratures check massive rates, including three checks
+against the published massless total. The notebook keeps widths zero and
+uses illustrative tree-level inputs. The installed regression, HTML export,
+strict Marimo checks and all 36 live energy, mass and angular selections pass.
+The diagram cell uses the public `RenderConfig` generic layout independently
+of the algebra cells.
+
+== Generated chiral Z decays
+
+`installed_feyncalc_z_decay.py` reproduces all four classes in the
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Z-FFbar")[FeynCalc Z-decay example]:
+neutrinos, charged leptons, up-type quarks and down-type quarks. It generates
+ordinary amplitudes, retains the massive chiral interference, averages the
+three initial Z polarizations with the full Proca projector, and sums final
+spins and colors through the shared particle APIs.
+
+The calculation exposed missing special-matrix conjugation in Idenso.
+The existing conjugation operation now handles four-dimensional gamma-five
+and chiral projectors with its gamma-zero machinery. The physical adjoints
+are $overline(gamma^5)=-gamma^5$ and $overline(P_L)=P_R$.
+Exact Rust identities and 64 numerical matrix components check the adjoints.
+Dimension-generic gamma-five conventions remain unspecified.
+
+The shared two-body measure and rest-frame decay flux give
+$ Gamma = frac(N_c G_F M^3 beta, 6 pi sqrt(2))
+  (c_V^2 (1+2r) + c_A^2 (1-4r)), $
+where $r=m_f^2/M^2$, $beta=sqrt(1-4r)$,
+$c_V=T_3-2Q_f sin^2(theta_W)$ and $c_A=T_3$.
+The fermion and antifermion are distinct. Tests check the positive
+above-threshold phase-space branch, massless limits, and vector versus axial
+threshold powers. `hep/z_decay.py` offers all four channels in a separate
+notebook on the same server.
+
+== Generated massive Higgs decays
+
+`installed_feyncalc_higgs_decay.py` reproduces the gallery's
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-FFbar")[fermion],
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-WW")[WW] and
+#link("https://feyncalc.github.io/FeynCalcExamples/EW/Tree/H-ZZ")[ZZ] decays.
+All five representative channels use generated amplitudes, model parameter
+expressions, Idenso adjoints, shared particle spin/color sums, and the shared
+two-body phase space and decay flux. No extra amplitude evaluator is introduced.
+
+The fermion calculation explicitly identifies each UFO Yukawa mass with its
+pole mass for this tree-level comparison. The vector channels retain all
+three physical Proca polarizations. Only the identical ZZ final state receives
+an explicit phase-space factor of $1/2!$; it is not part of the labeled
+amplitude or spin sum. The tests compare the fully massive squared amplitudes
+and widths. `hep/higgs_decay.py` exposes all five channels in a separate
+notebook on the existing server.
+
+These are above-threshold, on-shell two-body decays. The WW and ZZ formulas
+do not cover off-shell vector decays at the physical 125 GeV Higgs mass.
+
+== Reduce tensors with external momentum dependence
+
+`TensorReducer(D, integrated=[k(mink(D))])` selects a loop vector.
+Supply independent denominator directions through the constructor keyword `external=[p(mink(D))]`.
+The reducer retains longitudinal components and applies its existing vacuum
+projection only in the transverse space. This supports free indices, multiple
+loop vectors and odd total ranks without a second projector implementation.
+See the #link("guides/tensor-reduction/")[tensor-reduction guide] for a complete
+example and the treatment of null external directions.
+
+The installed-host test `crates/feynkit-py/tests/installed_feyncalc_tensor.py`
+checks covariant moments through rank four in both explicit-index and compact-dot
+notation, scalar prefactor preservation and an auxiliary null basis. Compact dots
+between loop vectors and spectators are projected in the shared reducer without
+a separate index-expansion step; loop invariants and declared external-basis
+products stay scalar weights. Rust tests also cover two-direction Gram inversion,
+mixed loop momenta, and a basis spanning the full Lorentz space. These tests
+validate the projection identities, not the gallery's completed loop integrals.
+
+== Generated odd-photon cancellations
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/odd_photons.py")[hep/odd_photons.py]
+and the
+#source-link("crates/feynkit-py/tests/installed_feyncalc_odd_photons.py", label: "installed-host regression")
+reproduce the gallery's #link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga")[one-photon],
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGa")[three-photon]
+and #link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Ga-GaGaGaGa")[five-photon]
+identities. Typed model particles select the electron-photon interaction;
+generation retains the massive electron, every diagram and its native weight.
+The dimension remains symbolic and all independent external momenta are
+off shell. Contracting each Lorentz slot with a separate unconstrained probe
+tests the complete amputated tensor, without polarization or Gram constraints.
+
+The one-photon graph has a nonzero numerator odd under loop reflection.
+`IntegralFamily.mapping_to` verifies that reflection, and the shared vacuum
+`TensorReducer` gives zero. The two triangle orientations and all 24 pentagon
+diagrams have nonzero individual numerators. `IntegralFamily.find_mapping`
+finds one reversed partner for each diagram: one triangle pair and twelve
+pentagon pairs. Each verified map preserves the unit propagator powers and has
+unit absolute Jacobian. The paired weighted numerators cancel exactly in a
+common routing, establishing the zero amplitude before IBP or scalar-master
+evaluation.
+
+Idenso traces compact graph-edge momenta before the shared momentum basis
+expands their loop routings. Independent probe vectors are included among each
+family's external vectors so the same scalar map transports loop-probe products.
+The installed regression exhaustively checks every pair. The notebook first
+pairs families and then traces only the selected pair; a pentagon pair takes
+roughly twenty seconds on the validation host. These vector-coupled Dirac-loop
+checks do not establish general gamma-five or anomaly prescriptions, or
+Majorana fermion-flow support.
+
+The calculation also exposed a shared Graphica edge-automorphism error: a
+directed self-loop cannot acquire the endpoint-exchange factor of an undirected
+self-loop. The corrected shared Graphica owner restricts that factor to
+undirected self-loops; FeynKit retains the resulting native weight without a
+compensating factor. The Symbolica Community host selects this corrected owner.
+Standalone FeynKit still uses the registry dependency; adopting the fix there
+awaits upstream publication. The separate
+#source-link("crates/feynkit-py/tests/installed_tadpole_normalization.py", label: "Higgs-fermion tadpole regression")
+passes in the installed host for the nonzero quark tadpole and two scalar
+loop cases, independently checking the Wick weights $-1$, $1/2$ and $1/2$.
+The photon tadpole's vanishing integral alone cannot certify its individual
+symmetry factor.
+
+== Differentiate a generated massive tadpole
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/tadpole_mass_insertions.py")[hep/tadpole_mass_insertions.py]
+uses the nonzero top-quark contribution to the Higgs one-point function to
+connect graph normalization, mass differentiation and native IBP. With the
+generated tree coupling $-i y$ and $tr(1)=4$, the weighted tadpole is
+$T=-4N_c y m I_1$, with the common loop measure $i/(16pi^2)$ stripped off.
+For $I_n=integral_k (k^2-m^2+i 0)^(-n)$, the graph-owned family supplies
+$ I_2=frac(D-2,2m^2)I_1, quad
+  I_3=frac((D-4)(D-2),8m^4)I_1. $
+
+Differentiating the generated rational integrand raises its propagator power;
+native family coordinates and IBP reduce the result to
+$partial_m T=-4N_c y(D-1)I_1$. The derivative holds both $y$ and the scale fixed,
+without imposing $y=m/v$. Retaining $D=4-2epsilon$ through the Laurent expansion
+preserves its finite rational contribution. OneLOop supplies $I_1=A_0$ and the
+notebook compares the finite derivative with a numerical derivative of the
+complete finite tadpole. This is a finite Laurent coefficient, not a
+renormalized tadpole or a counterterm calculation.
+
+The notebook passes HTML export, its live default state and twelve reactive
+mass/scale states, including zeros of the finite tadpole and its derivative.
+The checks span $m=0.05$ to $500$ and $mu^2=0.01$ to $250000$. Five-point
+finite differences agree with the IBP/OneLOop derivative with scaled error
+below $2 times 10^(-9)$; the error normalization stays finite at derivative
+zeros.
+
+== Generated photon self-energy
+
+`crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py` runs in the
+installed `symbolica.community.hepkit` host, where FeynKit and OneLOop share the
+Symbolica runtime. It generates the electron loop, promotes Lorentz slots to
+symbolic dimension before the Dirac trace, projects the tensor numerator and
+rewrites scalar products with the diagram's integral family. Existing family
+maps and vacuum projection check the shifted tadpole moments. This equal-mass
+bubble needs only A0 and B0; no IBP adapter or second scalar evaluator is used.
+
+With $s=p^2$, $D=4-2 epsilon$ and $tr(1)=4$, the result is
+$(s g^(mu nu)-p^mu p^nu) F(D)$, where
+$ F(D) = frac(2 e^2, s (D-1))
+  (2 (D-2) A_0 - ((D-2)s+4m^2) B_0). $
+The expressions omit the common loop factor $i/(16 pi^2)$.
+The pole of $F$ is $-4 e^2/(3 epsilon)$, agreeing with the photon component of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the gallery's QED renormalization example].
+Keeping the dimension symbolic preserves the finite rational term from the
+product of dimension-dependent coefficients and scalar poles.
+
+Five finite-part checks use independently computed Feynman-parameter integrals,
+including spacelike momenta, points on both sides of the pair threshold, and
+unequal positive mass and renormalization scales. The above-threshold imaginary
+part is checked separately against the two-particle cut. Native OneLOop
+coefficient functions evaluate directly as Symbolica expressions. The benchmark
+assumes positive squared mass and scale and nonzero $s$; it does not establish
+the degenerate Gram limit. The one-loop renormalization workflow below adds
+the lepton self-energy, vertex UV pole and counterterm matching. Complete finite
+lepton self-energy and renormalized vertex form factors remain outside that
+workflow.
+
+== Generated finite Higgs-to-gluon amplitude
+
+The host notebook
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/higgs_gluons.py")[hep/higgs_gluons.py]
+and the companion
+#source-link("crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py", label: "installed-host regression")
+follow the #link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/H-GlGl")[one-loop Higgs-to-gluons reference].
+Typed model particles identify the top-Higgs and top-gluon `VertexRule` objects
+passed to `vertex_allow`. Both quark-loop orientations retain their generated
+fermion signs and color traces. The Yukawa coupling is defined by the generated
+tree vertex $-i y$; the width comparison explicitly sets $y=m/v$.
+
+Lorentz slots are promoted to $D$ before the Dirac trace, with $tr(1)=4$.
+`TensorReducer` uses both independent external directions, and the diagram's
+`IntegralFamily` feeds the scalar targets to native `IBPFamily.reduce_laporta`.
+For $k_1^2=k_2^2=0$ and $s=(k_1+k_2)^2$, the physical tensor is
+$ T^(mu nu)=frac(s,2)g^(mu nu)-k_2^mu k_1^nu. $
+The full open tensor can also contain $k_1^mu k_2^nu$; explicit shared physical
+polarization projectors annihilate this term. Both Ward contractions, Bose
+symmetry and the tensor norm are separate algebraic checks.
+
+In the native UFO convention, restoring the scalar loop measure gives
+$ i cal(M)_(a b)^(mu nu)=-frac(i g_s^2 y m,4 pi^2 s)
+  delta_(a b) T^(mu nu) K_D, $
+$ K_D=frac(2(4-D),D-2)B_0(s;m^2,m^2)
+  +(frac(8m^2,D-2)-s)C_0(0,0,s;m^2,m^2,m^2). $
+Keep $D=4-2epsilon$ until after inserting the bubble pole: the factor
+$2epsilon/(1-epsilon)$ multiplying $B_0=1/epsilon+O(1)$ supplies the finite
+constant $2$. The result has no UV pole and its finite kernel is
+$ K=2+(4m^2-s)C_0. $
+The gallery chooses `PreFactor -> -1`, so its displayed amplitude has the
+opposite overall phase; #link("https://feyncalc.github.io/FeynCalcBook/Extra/FeynArtsSigns.html")[the FeynArts convention]
+uses `PreFactor -> 1` for $i cal(M)$. Graph signs and model couplings are retained.
+
+Shared OneLOop supplies the finite triangle with squared masses and the
+Feynman prescription. Defining $A=3m^2 K/s$ gives $A -> 1$ for a heavy quark
+and $A=3/2$ at $s=4m^2$. Above this threshold $A$ is complex, so the width
+uses $A A^*$ rather than $A^2$. Shared `Particle.spin_sum`, `color_sum`,
+`Kinematics.two_body_phase_space` and the rest-frame flux give
+$ Gamma(H -> g g)=frac((N_c^2-1)alpha_s^2 m_H^3,576 pi^3 v^2) abs(A)^2. $
+The explicit $1/2!$ counts identical gluons and is not part of their labeled
+amplitude. This is one massive quark flavor at leading order; other flavors
+require a coherent amplitude sum before squaring, and QCD radiative corrections
+are outside this workflow.
+
+The installed-host regression passes 19 spacelike, threshold and timelike
+points, including scale independence and mass scaling. The live notebook
+passes its default state and 17 reactive mass, threshold and coupling
+combinations. The shared OneLOop owner restores the zero-root ordering in its
+three-mass triangle formula; separate native, expression and master-callback
+checks agree with independent analytic values to 110 decimal digits.
+
+== Generated one-loop QED renormalization
+
+`hep/qed_renormalization.py` and
+`installed_feyncalc_qed_renormalization.py` assemble the local UV structures of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the massive one-loop QED renormalization example].
+They generate the electron and photon self-energies, electron-photon vertex,
+and its tree normalization from the model. The internal photon propagator
+retains the symbolic covariant-gauge parameter $xi$; the electron mass stays
+symbolic throughout. Generated wavefunctions identify the open tensor ports.
+Only the external Wick-order sign is removed from the amputated electron
+self-energy; internal fermion-loop signs and other graph weights are retained.
+The vertex is normalized against the generated tree vertex.
+
+`diagram.uv_expansion` retains every term through the graph's UV degree.
+Idenso traces and the shared vacuum `TensorReducer` project the local
+structures, and `IntegralFamily` rewrites them in the common vacuum denominator
+$k^2-M$, where $M=m_"UV"^2$. Native `IBPFamily.reduce_laporta` reduces raised
+powers to the tadpole. Its analytic pole $A_0(M)=M/epsilon+O(1)$ is a supplied
+input, checked with OneLOop; it is not inferred by the IBP solver. Restoring the
+loop measure $i (4 pi)^(epsilon-2)$ and using $a_4=e^2/(16 pi^2)$ fixes the
+normalization. Lorentz contractions keep $D$ symbolic and use $tr(1)=4$;
+substitute $D=4-2 epsilon$ after reduction.
+
+The reference structures compared by the calculation are
+$ Sigma_"UV" = frac(i a_4,epsilon)
+  (xi slash(p)-(xi+3)m), quad
+  Pi_"UV"^(mu nu) = -frac(4 i a_4 N_f,3 epsilon)
+  (p^2 g^(mu nu)-p^mu p^nu), $
+and the vertex pole is $a_4 xi/epsilon$ times its tree value. The photon loop
+receives a symbolic flavor multiplicity $N_f$. Physical-mass and auxiliary-mass
+correction terms in the UV expansion cancel local $m^2 g^(mu nu)$ and
+$M g^(mu nu)$ poles; the auxiliary mass does not survive in the final poles.
+
+Six actual counterterm diagrams provide the coefficient matrix for a
+six-by-six Symbolica linear solve, with $Z_j=1+a_4 delta Z_j$. The structures
+follow from
+$psi_0=sqrt(Z_psi) psi$, $m_0=Z_m m$, $A_0=sqrt(Z_A) A$,
+$xi_0=Z_xi xi$ and $e_0=Z_e e$. The electron counterterm is proportional to
+$delta Z_psi slash(p)-m(delta Z_psi+delta Z_m)$, while the vertex coefficient is
+$delta Z_psi+delta Z_e+delta Z_A/2$. The photon longitudinal equation is
+$xi B+(xi-1)delta Z_A+delta Z_xi=0$, where $B$ multiplies $p^mu p^nu$ in the
+loop pole divided by $i a_4$. Solving with symbolic $xi$ gives a regular
+continuation to Landau gauge, $xi=0$.
+
+The comparison values are
+$ delta Z_psi=-frac(xi,epsilon), quad delta Z_m=-frac(3,epsilon), quad
+  delta Z_A=delta Z_xi=-frac(4 N_f,3 epsilon), quad
+  delta Z_e=frac(2 N_f,3 epsilon), quad delta Z_(A m)=0. $
+They obey the Ward relation $delta Z_e+delta Z_A/2=0$, or
+$delta Z_1=delta Z_psi$ for the vertex renormalization constant
+$Z_1=Z_psi Z_e sqrt(Z_A)$. The reference auxiliary-mass operator is
+$M(Z_(A m)^2-1)A_mu A^mu/2$, whose linear term is
+$a_4 M delta Z_(A m) A_mu A^mu$. The resulting two-point rule contains
+$2 delta Z_(A m)$; this factor matters for the massless comparison below.
+Its massive value is zero after retaining the mass-correction terms above.
+
+The local kinetic, mass, gauge-fixing and vertex operators are explicit model
+inputs, as in the reference's QED model. Symbolica expands their bare field
+and parameter factors through first order in $a_4$. The normalized model
+stores the resulting rules with a separate `CT` coupling order. Existing
+`Process.generate_diagrams` generates two electron, three photon and one vertex
+counterterm diagrams at topological loop count zero and `CT=1`. Setting
+`CT=0` removes them. Bound `max_vertices` explicitly: two-point insertions do
+not increase the loop count. Shared Dirac projection of these actual graph
+numerators yields every matrix entry; no matching matrix is supplied by hand.
+Their native weights and tree phase are checked before pole cancellation.
+
+Both
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization")[the IR-rearrangement reference] and
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2")[the one-loop MS/MSbar reference]
+are checked for their displayed UV-renormalization results. With
+$D=4-2 epsilon$, their $-2/(D-4)$ is $1/epsilon$ and
+$Delta=1/epsilon+c_Delta$, where $c_Delta=log(4 pi)-gamma_E$.
+#link("https://arxiv.org/abs/1007.4716")[OneLOop, Eq. (2)] divides its masters
+by $r_Gamma=Gamma(1-epsilon)^2 Gamma(1+epsilon)/Gamma(1-2 epsilon)$.
+Converting to the conventional loop measure multiplies by
+$(4 pi)^epsilon r_Gamma=1+c_Delta epsilon+O(epsilon^2)$, after stripping
+$i/(16 pi^2)$. Actual generated counterterm amplitudes cancel the loop's
+simple poles in MS and the pole plus $c_Delta$ terms in MSbar. Separate
+OneLOop tadpole and bubble checks retain the finite scheme shift in MS.
+The live notebook exposes both schemes. A full finite vertex, automatic
+NLO-UFO import and subtraction forests remain broader capabilities; they are
+not requirements of these one-loop UV examples.
+
+The installed regression passes the four UV-structure comparisons, all six
+generated counterterm references and the scheme-conversion identities with
+symbolic $xi$ in the installed HEP host. It also
+checks the exact linear-system residual, Ward relations, cancellation of
+physical and auxiliary mass dependence, and absence of double poles. An
+independent electron self-energy calculation verifies that the longitudinal
+photon denominator cancels after trace and vacuum projection, leaving no
+hidden loop-momentum dependence in the scalar-family coefficients. The earlier
+78 generator tests and ten installed physics regressions also passed. The
+updated notebook passes strict Marimo checks and headless export, plus all
+156 combinations of its thirteen gauge values, six flavor counts and two
+subtraction schemes in the same live instance. It checks both massive and
+massless constants and restores the default controls afterwards.
+
+== Massless QED infrared rearrangement
+
+The same QED regression and live notebook also implement
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/RenormalizationMassless")[the massless reference].
+Set the electron mass to zero before generating the calculation. Its
+`FCLoopAddAuxiliaryMass[..., 0]` prescription replaces every massless
+propagator denominator by a massive one, then Taylor-expands external
+momenta at fixed $M$. Separate the Feynman and longitudinal photon terms
+before this replacement.
+The first retains its single graph-edge denominator; promote only the
+longitudinal remainder to power two. This preserves the reference's
+massification prescription; promoting both terms together would preserve
+these UV poles but introduce finite differences.
+`FeynmanDiagram.denominator_expression` supplies the actual routed
+quadratics, while Symbolica series, shared tensor reduction and native IBP
+perform the remaining operations.
+
+This prescription gives
+$ Pi_"UV"^(mu nu)=frac(i a_4 N_f,epsilon)
+  (4M g^(mu nu)-frac(4,3)(p^2g^(mu nu)-p^mu p^nu)). $
+Its auxiliary mass term cancels against the generated counterterm with
+$delta Z_(A m)=-2N_f/epsilon$. The other four constants are
+$delta Z_psi=-xi/epsilon$,
+$delta Z_A=delta Z_xi=-4N_f/(3epsilon)$ and
+$delta Z_e=2N_f/(3epsilon)$. There is no mass-renormalization equation when
+the fermion mass is zero. The same generated counterterm operators determine
+this five-by-five system after removing the vanishing electron mass operator.
+
+A separate check applies the shared full UV expansion to the massless graphs.
+That operation retains the auxiliary-mass compensation terms promised by its
+contract. Their exact-dimensional photon contribution reduces to
+$-N_f(D-2)^2 A_0(M)g^(mu nu)$, cancelling the $4N_f M/epsilon$ pole.
+The physical kinetic and vertex poles agree in both prescriptions. The
+reference's directly massified Taylor expansion is also compared after
+vacuum tensor reduction and before IBP with the full UV expansion after its denominators have been frozen and only
+its explicit compensation terms removed. These checks distinguish the
+prescribed rearrangement from an accidental loss of mass terms; the shared
+UV expansion itself is unchanged.
+
+== Full massive electron self-energy
+
+`hep/electron_self_energy.py` and
+`installed_feyncalc_electron_self_energy.py` retain the finite off-shell
+self-energy instead of applying a UV expansion. The internal photon numerator
+keeps a symbolic covariant gauge parameter. The generated ordered tree
+amplitude fixes the external Wick sign; native graph factors are kept in the
+loop before the explicit conversion to the amputated inverse-propagator
+insertion $Gamma_2=-i Sigma=i a_4(V slash(p)+S m)$.
+
+Two Idenso trace projectors extract the scalar coefficients with
+$tr(1)=4$. The generated family has denominators $q^2-m^2$ and $(q-p)^2$;
+the longitudinal numerator raises the photon power. Six targets reduce to
+$A=A_0(m^2)$ and $B=B_0(s;m^2,0)$, with $s=p^2$. The family's Symanzik
+polynomials verify this master identification. Exact-dimensional checks give
+$ V=frac(xi(D-2),2s)((s+m^2)B-A), quad S=-(D-1+xi)B. $
+These agree with the Abelian limit of
+#link("https://arxiv.org/abs/hep-ph/0008171")[Davydychev, Osland and Saks,
+Eqs. (2.19)–(2.21)], whose gauge parameter is $1-xi$ in this convention.
+
+Expanding $D=4-2 epsilon$ only after reduction retains the finite rational
+terms $-xi$ and $+2$. Landau gauge makes the vector coefficient exactly zero.
+The on-shell sum has pole $-3/epsilon$ and finite coefficient
+$-4+3 log(m^2/mu^2)$, independent of gauge; the conventional mass shift
+$Sigma/m$ has the opposite signs. This is not an on-shell wavefunction
+renormalization calculation: its momentum derivative has an IR singularity.
+The finite coefficients are unrenormalized in the shared OneLOop convention.
+
+The installed regression checks sixty combinations of kinematics and gauge,
+including spacelike, below-threshold, threshold and above-threshold points,
+plus the symbolic $s -> 0$ limit. Independent scratch quadrature of
+$log((x m^2-x(1-x)s-i 0)/mu^2)$ and its $(1-x)$ moment passed 360 mass,
+scale, gauge and kinematic points. Splitting at the internal root preserves
+the branch prescription. The two quadrature orders agree within
+$2 times 10^(-13)$; their maximum absolute difference from OneLOop is
+$3.5 times 10^(-11)$. Near zero momentum the comparison accounts for the
+conditioning of the separate $A_0-B_0$ subtraction, and the exact limit is
+used at zero. The live notebook exposes all four inputs with the same
+independent check. Its HTML export and 125 live control combinations pass,
+including the endpoints of the mass/scale/gauge controls and exact zero
+and threshold momentum. Controls are restored to their defaults afterwards.
+
+This validates the electron component of
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization2")[the second one-loop QED renormalization example],
+which extracts UV poles after its massive self-energy intermediate. The
+generated counterterm diagrams and scheme matching are validated by the
+QED renormalization workflow above, including the distinct massless
+auxiliary-mass prescription.
+
+The custom gauge symbol exposed a shared model serialization defect:
+export stripped every namespace, changing user symbols into `UFO` symbols
+on reload and allowing distinct models to share a fingerprint. The existing
+`feynkit-model` serializer now hides only its implicit `UFO` namespace.
+Symbolica's existing printer preserves every other namespace; two owner-local
+regressions cover round-trip/restriction rebuilds and fingerprint distinction.
+GammaLoop uses the same model implementation.
+
+== Generated one-loop QCD renormalization
+
+`hep/qcd_renormalization.py` and
+`installed_feyncalc_qcd_renormalization.py` assemble the quark, gluon and ghost
+self-energies and the quark-gluon vertex for the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization")[massive one-loop QCD renormalization reference].
+The gluon two-point function includes gluon, ghost, quark and four-gluon
+tadpole diagrams. The vertex includes both its Abelian and non-Abelian
+contributions, normalized against the generated tree vertex. The internal
+gluon propagator keeps symbolic $xi$, and the quark mass remains symbolic.
+Shared particle color tensors close external color slots; Idenso's color
+simplification and representation-aware Casimir conversion retain $C_F$ and
+$C_A$. Quark-loop multiplicity is $N_f$, with $T_F=1/2$.
+
+The calculation reuses the graph UV expansion, vacuum tensor reduction and
+native IBP path described above. Four vacuum-integral powers reduce to the
+single tadpole with supplied pole $A_0(M)=M/epsilon+O(1)$, checked with OneLOop.
+The total gluon pole is transverse. In units of $a_4=g_s^2/(16 pi^2)$ relative
+to the tree vertex, the two vertex poles are
+$ frac(xi(C_F-C_A/2),epsilon) quad "and" quad
+  frac(3C_A(xi+1),4epsilon). $
+Their sum fixes the coupling counterterm together with the quark and gluon
+field counterterms.
+
+Eight generated counterterm diagrams supply an eight-by-eight Symbolica
+matching system. Local Lagrangian operators remain explicit model inputs;
+their couplings follow by expanding the bare factors with
+$Z_j=1+a_4 delta Z_j$. Typed particle and vertex selections generate two quark,
+three gluon, two ghost and one quark-gluon insertions at zero topological loops
+and bookkeeping order `CT=1`. The vertex copies every color/Lorentz slot of
+the model's quark-gluon rule. Shared particle color sums and the same trace
+projectors extract the matching coefficients from the generated numerators,
+retaining the distinct native quark and ghost ordering factors. Derivatives
+of these coefficients supply the matrix entries; exact reconstruction checks
+that no nonlinear or unmatched tensor terms remain. The six physical
+renormalization constants are compared with
+$ delta Z_q=-frac(C_F xi,epsilon), quad
+  delta Z_m=-frac(3C_F,epsilon), $
+$ delta Z_A=delta Z_xi=frac(C_A(13-3xi)-4N_f,6epsilon), quad
+  delta Z_c=frac(C_A(3-xi),4epsilon), $
+$ delta Z_g=-frac(11C_A-2N_f,6epsilon). $
+Here $Z_c$ renormalizes the ghost field and $Z_g$ the strong coupling. The
+quark-gluon counterterm coefficient is $delta Z_q+delta Z_g+delta Z_A/2$;
+the mass and coupling results are independent of $xi$.
+
+The two auxiliary mass coefficients are $delta Z_(A m)=delta Z_(c m)=0$ in
+this complete UV expansion. Terms correcting the auxiliary mass are retained
+through logarithmic order; even the expanded massless tadpole has cancelling
+UV poles. FeynCalc's auxiliary gluon mass counterterm
+$delta Z_(A m)=-C_A(1+3xi)/(8epsilon)$ belongs to its selective infrared
+rearrangement. The notebook now calculates this prescription independently:
+it adds $M$ only to massless propagators, retains the physical quark mass,
+and Taylor-expands external momenta to the superficial divergence degree.
+Every gluon's primitive longitudinal denominator is isolated before
+massification, including diagrams with two internal gluons. Recombining these
+pieces reconstructs the generated numerator. Symbolica partial fractions
+separate tadpoles at $M$ and $m_q^2$, with exact reconstruction of each rational
+integrand before native IBP. Five powers reduce to the tadpole at each mass.
+The resulting physical poles agree with the full UV expansion, while the
+extra gluon pole is $C_A(1+3xi)M g^(mu nu)/(4epsilon)$. Solving the same
+generated matrix reproduces all eight reference constants and cancels the
+complete projected tensor coefficients. Initially massless quarks require a
+separate calculation and are not covered by this massive prescription.
+The generated auxiliary rules
+follow $M(Z_(A m)^2-1)A^2/2$ and $M(Z_(c m)^2-1)bar(c)c/2$: identical gluons
+produce the matrix entry 2, while distinct ghost fields produce 1. Analytic
+master values and the local operator basis remain explicit inputs;
+automatic NLO-UFO import and subtraction forests are not covered.
+
+The
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization2")[MS/MSbar QCD reference]
+discards finite form factors and compares the local UV renormalization
+constants. Its displayed results pass with generated counterterms. As in the
+QED workflow, the shared OneLOop measure supplies
+$c_Delta=log(4pi)-gamma_E$. MS subtracts the pole; MSbar subtracts the pole
+and its associated $c_Delta$ term. Substituting both sets of constants into
+the actual generated coefficients cancels every required tensor structure.
+With one common loop measure, the MS result retains $c_Delta$ times the pole
+residue. This comparison does not claim the complete finite amplitudes.
+
+The full UV regression checks the symbolic-gauge pole comparisons, all eight
+counterterm equations and the exact linear-system residual. It checks that
+scalar-family coefficients contain no hidden loop momentum, the projected UV
+coefficients contain neither physical nor auxiliary mass dependence, and no
+double poles remain. Ruff, strict Marimo validation and a headless HTML export
+pass, as does the separate ghost/antighost vertex regression. The notebook
+passes 314 live combinations of gauge parameter, quark-flavor count, SU(N)
+color group and subtraction scheme, including a vanishing beta function.
+Its interactive counterterm table checks the vertex cancellation and the
+gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
+The direct massive IRR addition passes the installed regression and notebook
+export with all eight generated counterterm equations. All 628 live combinations
+of gauge, flavor count, color count, subtraction scheme and rearrangement pass;
+controls are restored to their defaults afterward. The rearrangement control
+exposes the nonzero auxiliary-mass result.
+
+== Generated massless one-loop QCD renormalization
+
+`hep/qcd_massless_renormalization.py` covers the displayed UV results of the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless")[massless infrared-rearrangement reference]
+and the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless2")[massless MS/MSbar reference].
+It composes the QCD notebook above through Marimo's `app.embed()` and consumes
+its symbolic results, so generation, tensor reduction, IBP and counterterm
+matching have one implementation across the two notebooks.
+
+The generated raw numerators and denominator masses are evaluated at $m_q=0$
+before adding $M$ to massless propagators. Primitive longitudinal gluon powers
+remain explicit. The same Taylor, vacuum tensor-reduction and partial-fraction
+workflow now yields tadpoles at only the auxiliary mass; all five target powers
+reduce to $A_0(M)$. A symbolic marker multiplies the first Taylor term beyond
+the superficial divergence degree. Every UV pole is independent of that marker,
+matching the reference's higher-order check.
+
+The massless quark loop contributes an additional
+$2N_f M g^(mu nu)/epsilon$. Removing the quark mass equation and its unknown
+from the generated matrix gives seven equations, with
+$ delta Z_(A m)=-frac(C_A(1+3xi)+8N_f,8epsilon), quad delta Z_(c m)=0. $
+The five physical constants agree with the massive calculation; the auxiliary
+gluon residue shifts by $-N_f$. Substituting the solutions into the generated
+coefficients cancels the complete projected tensor poles. Both MS and MSbar
+subtractions are checked, including the finite measure term retained in MS.
+The local operator basis and analytic tadpole pole remain explicit inputs;
+complete finite amplitudes and general subtraction forests are outside this
+validation.
+
+The installed regression and composed notebook HTML export pass. All 314 live
+gauge/flavor/color/scheme states pass, including a zero beta function, and the
+controls return to their defaults. The existing massive notebook also passes
+a focused 52-state sweep after sharing this workflow. The massless notebook
+checks the auxiliary residue shift and quark-gluon coupling relation interactively.
+
+== Generated ghost-gluon vertex and crossing
+
+`hep/qcd_ghost_vertex.py` and `installed_feyncalc_qcd_ghost_vertex.py` generate
+both one-loop vertex topologies and the ghost self-energy for incoming ghosts
+and antighosts. They reproduce the UV result of
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/GhGl-Gh")[the separate ghost-gluon vertex example]
+with symbolic $xi$. Every external color and Lorentz index remains open;
+the full pole tensor is compared with its generated tree tensor before taking
+a ratio. The two diagrams contribute, in units of $a_4$ relative to the tree,
+$ frac(C_A xi,8epsilon) quad "and" quad frac(3C_A xi,8epsilon). $
+Their sum is $C_A xi/(2epsilon)$ and vanishes in Landau gauge.
+
+The shared SM model supplies the canonical UFO `UUV1` rule
+`P(3,2) + P(3,3)`, equal to $-p_1$ when all vertex momenta are incoming.
+Both FeynKit and GammaLoop consume that rule; the notebook only specializes
+the gluon propagator's gauge parameter. Shared graph finalization remaps
+indices inside momentum arguments before transporting their momentum carriers.
+Each signed carrier is transported once, including when a sign change causes
+a product to collapse. This preserves linearity of sums for incoming neutral
+vectors as well as the charged-vector and ghost crossings.
+
+The model correction was also validated in all three crossings of the twelve
+electroweak and one QCD SM interactions using `UUV1`: 36 electroweak and three
+QCD cases. Those checks compared the generated tensor, particle order and
+couplings with the original UFO convention, retained the QCD
+structure-constant sign, and passed 15 additional Lorentz-linearity probes.
+They used the portable SM fixture without an external MadGraph installation.
+
+The vertex workflow reuses graph UV expansion, Spenso/Idenso color algebra,
+vacuum tensor reduction and native IBP. The two integral targets $I(2)$ and
+$I(3)$ reduce to $I(1)$; the tadpole pole $I(1)=M/epsilon+O(1)$ is an explicit
+analytic input with $M=m_("UV")^2$ and loop measure $i/(16pi^2)$.
+The regression checks the full crossed tensors, the absence of residual loop
+momentum and double poles, and cancellation of auxiliary mass dependence.
+The computed self-energy gives $delta Z_c=C_A(3-xi)/(4epsilon)$ with no
+auxiliary ghost mass pole.
+
+The gluon field counterterm $delta Z_A$ is supplied from the separate QCD
+renormalization calculation above. Combining it with the calculated ghost
+and vertex poles yields
+$ delta Z_g=-frac(C_A xi,2epsilon)-delta Z_c-frac(delta Z_A,2)
+  =-frac(11C_A-2N_f,6epsilon). $
+The notebook displays both crossing choices, the IBP reductions and the
+counterterm cancellation as the gauge parameter, color count and flavor
+count vary. The live notebook passes its default state and 18 combinations
+of crossing, gauge, color and flavor. This checks the coupling result
+independently of the quark-gluon
+vertex. Finite vertex form factors, other QCD vertices and automatic
+counterterm-diagram or subtraction-forest generation remain separate coverage.
+
+== Native IBP reduction through RustRed
+
+The Symbolica Community host now registers `rustred-feynkit` alongside FeynKit
+and OneLOop in `symbolica.community.hepkit`. `hep.IBPFamily(family)` reads the
+existing `IntegralFamily` boundary: denominator order and signs, masses,
+dimension and external Gram products are retained. The bridge passes native
+Symbolica expressions into RustRed in the same extension and kernel. Family
+construction, momentum mappings and tensor projection stay with their existing
+FeynKit owners; elimination and recurrence discovery stay with RustRed.
+
+Use `ibp_identities()` to inspect the ordinary integration-by-parts equations,
+`reduce_laporta(targets, max_depth=...)` for a bounded target search, and
+`solve_parametric(sector, ...)` for recurrence rules. The returned `residuals`
+are integrals unresolved at that search depth, not a proof of a minimal master
+basis. Parametric rules retain nonzero conditions and exceptional index loci.
+Neither reduction method supplies the analytic values of the residual integrals.
+
+Pass `integral=I` to the existing solution or rule method to obtain a native
+Symbolica sum of coefficients times `I(*powers)`. Omitting it retains the
+`(powers, coefficient)` list. For the two-denominator bubble family below:
+
+// docs-example: compile
+```python
+from symbolica import S
+
+I = S("I")
+laporta = bubble_ibp.reduce_laporta([[2, 1]], max_depth=2)
+reduced_expression = laporta.reduce([2, 1], integral=I)
+recurrence = bubble_ibp.solve_parametric([True, True], fixed=[None, 1], max_depth=1)
+one_step = recurrence.rules[0].apply([2, 1], integral=I)
+```
+
+This option changes the return form without bypassing sector, power or
+exception checks. Conditions still symbolic in kinematic parameters must remain
+nonzero when evaluated. Laporta rules already include back-substitution through
+solved targets; a parametric solution or rule performs one recurrence step per
+call. Returning an expression does not recursively reduce the remaining
+integrals or certify them as masters.
+
+`hep/ibp_phi4.py` and `installed_feyncalc_ibp_phi4.py` start from
+`Model.phi4()` and generate the two bare topologies of the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS")[two-loop scalar self-energy reference].
+Each unexpanded integrand, including its native symmetry factor and phase,
+matches a distinct reference topology. The shared graph UV expansion keeps
+terms through external momentum squared, and the vacuum tensor reducer
+projects them into the equal-mass family. Laporta reduction and six verified
+loop-momentum mappings identify equivalent residuals; a parametric recurrence
+reduces the doubled tadpole in the one-loop counterterm.
+
+Expand the bare kinetic, mass and quartic factors $Z_phi$, $Z_phi Z_m$ and
+$Z_g Z_phi^2$ to build local counterterm rules. The generator produces three
+one-loop counterterm diagrams and two local second-order diagrams. Their
+actual numerators determine the counterterm integral combination and the final
+two-by-two linear system, solved by Symbolica. Keeping the first-order field
+constant symbolic during generation checks its cancellation before inserting
+its vanishing reference value.
+
+Analytic tadpole and equal-mass vacuum Laurent coefficients and first-order
+renormalization constants remain explicit reference inputs, as in FeynCalc.
+With $a=g/(16 pi^2)$, the computed results are
+$Z_phi=1-a^2/(24 epsilon)$ and
+$Z_m=1+a/(2 epsilon)+a^2(1/(2 epsilon^2)-5/(24 epsilon))$,
+where $Z_m$ renormalizes the mass squared. Generated local counterterms cancel
+all momentum, mass and logarithmic poles exactly. The installed regression,
+strict Marimo check, HTML export and live execution pass. These checks cover
+the displayed two-loop self-energy renormalization example; the IBP solver
+does not evaluate analytic masters or certify a minimal master basis.
+
+`hep/phi4_two_loop_vertex.py` composes the self-energy notebook to reuse its
+model, vacuum family, verified momentum mappings, analytic inputs, counterterm
+rules and computed two-loop field constant. It generates twelve bare two-loop
+four-point diagrams, twelve one-loop counterterm insertions and one local
+second-order counterterm, matching the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SSSS")[four-point renormalization reference].
+Native UV expansion and Laporta reduction give the bare poles. The one-loop
+insertions retain their full zeroth Taylor coefficient in external momenta:
+the UV-finite mass insertion multiplies a divergent first-order counterterm
+and contributes $-3/(4 epsilon)$ in units of $i g^3/(16 pi^2)^2$.
+A parametric tadpole recurrence retains this term.
+
+The generated local vertex supplies the matching equation. Using the computed
+field constant gives
+$Z_g=1+3a/(2 epsilon)+a^2(9/(4 epsilon^2)-17/(12 epsilon))$.
+All poles, including the logarithmic terms, cancel exactly. Differentiating
+the bare coupling at fixed scale dependence yields
+$beta(a)=3a^2-17a^3/3$ in four dimensions. Analytic vacuum Laurent coefficients
+and first-order renormalization constants remain explicit reference inputs.
+The installed regression, strict Marimo checks, HTML export and all three live
+diagram selections pass.
+
+`hep/ibp_bubble.py` constructs a bubble with unequal nonzero masses and nonzero
+external momentum. The targets $I_(2 1)$, $I_(1 2)$ and $I_(2 2)$ reduce to the
+two tadpoles and the scalar bubble $B_(1 1)$. Expanding the dimension-dependent
+coefficients before removing dimensional regularization retains finite terms
+from the individual residual integrals' UV poles. OneLOop supplies their scalar
+values; independent Feynman-parameter quadrature below threshold checks the
+finite raised-power results. Generic kinematics avoid exceptional coefficient
+denominators; this example does not establish threshold continuation or
+exceptional-mass and Gram limits.
+
+`installed_feyncalc_ibp_phi4.py` and `installed_feyncalc_ibp_bubble.py` pass in
+the rebuilt, installed native host. All 36 bridge tests and 76 generator tests
+also pass. Both IBP notebooks execute without cell errors in the existing
+Marimo instance; the bubble checks all twelve combinations of its three raised
+integrals and four kinematic presets. Headless exports pass for both IBP
+notebooks and the Bhabha/Møller notebook. These checks validate the stated
+reductions and observables, not a general master-basis certification or the
+remaining gallery's IBP coverage.
+
+== Generated one-loop scalar renormalization and scattering
+
+`hep/phi4_renormalization.py` generates the tadpole, all three four-point
+channels, and three local counterterm diagrams from `Model.phi4()`. Each
+bubble's momentum signatures determine its channel invariant; its original
+propagators are reconstructed exactly before conversion to the shared
+one-loop reducer. Native numerators and graph factors give the scalar master
+coefficients. OneLOop supplies their Laurent coefficients.
+
+Expand $Z_phi$, $Z_phi Z_m$ and $Z_g Z_phi^2$ in the local operators. The
+actual generated counterterms supply a three-by-three matching matrix. With
+$a=g/(16 pi^2)$, its solution gives
+$Z_phi=1$, $Z_m=1+a Delta/2$ and $Z_g=1+3a Delta/2$.
+Here $Delta=1/epsilon$ in MS and
+$Delta=1/epsilon+ln(4 pi)-gamma_E$ in MSbar. The calculation checks pole
+cancellation and the finite scheme difference in a common loop measure,
+matching the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/Renormalization")[one-loop renormalization example].
+
+`hep/phi4_scattering.py` reuses the companion notebook through Marimo
+composition. The finite correction includes all three massive bubble
+channels with their physical complex branches. Independent Feynman-parameter
+integrals check eighteen channel values across six scattering points, including
+the massive threshold and massless limits. The compiled combined amplitude
+agrees with their sum. Both subtraction schemes and three coupling values are
+available for each preset.
+
+The massless symbolic expression comes from OneLOop's branch selection, with
+$s>0$, $t<0$, $u<0$ and $s+t+u=0$. At fixed $t$, the logarithmic derivative
+of its finite coefficient in units of $i g^2/(16 pi^2)$ approaches $-1$.
+This reproduces the #link("https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/PhiPhi-PhiPhi")[reference high-energy logarithm]
+$-i g^2 ln(s/mu^2)/(16 pi^2)$ while preserving the physical imaginary part.
+`installed_feyncalc_phi4_one_loop.py` checks the complete symbolic and
+numerical calculation. Generic massless channels exclude the scaleless
+zero-invariant point, where a separate UV/IR pole separation is required.
+
+== Generated cubic scalar renormalization
+
+`hep/phi3_renormalization.py` generates the bubble, triangle and three local
+counterterms from `Model.phi3()`. The actual routed propagators become doubled
+and tripled massive tadpoles at zero external momenta. Native parametric and
+Laporta reductions agree. OneLOop supplies the tadpole master, and expanding
+the dimension-dependent coefficients retains the finite triangle
+$-i g^3/(32 pi^2 m^2)$. The generic-momentum bubble verifies that its UV pole
+has no momentum dependence.
+
+The generated counterterm matrix gives $Z_phi=Z_g=1$ and
+$Z_m=1+g^2 Delta/(32 pi^2 m^2)$, matching the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi3/OneLoop/Renormalization")[cubic scalar reference].
+Here $Z_m$ renormalizes the mass squared and $g$ is dimensionful. Both MS and
+MSbar cancellation and their finite difference are checked. Four massive
+kinematic points compare the finite self-energy with independent parameter
+integrals. The installed regression and all eight live scheme/kinematics
+combinations pass. This covers the reference's two- and three-point functions
+in four dimensions; a one-point tadpole or a vacuum condition is separate.
+
+== Scalar and pseudoscalar Yukawa renormalization
+
+`hep/yukawa_renormalization.py` runs both Yukawa interactions through one
+calculation. The model definition combines the built-in quartic scalar with
+the Standard Model Dirac propagators. Only the Yukawa interaction and its
+projector differ between the scalar and pseudoscalar cases. Each generates
+thirteen bare graphs and six local counterterms. Shared graph UV expansion,
+Spenso traces, tensor projection and native tadpole IBP determine every pole;
+OneLOop supplies the master residue. The auxiliary-mass dependence cancels.
+
+The generated local operators supply a six-by-six matching system for the
+fermion and scalar field and mass constants and the Yukawa and quartic
+couplings. All six constants agree with each of the
+#link("https://feyncalc.github.io/FeynCalcExamples/YukawaS/OneLoop/Renormalization")[scalar]
+and #link("https://feyncalc.github.io/FeynCalcExamples/YukawaPS/OneLoop/Renormalization")[pseudoscalar]
+references. Bare and counterterm graphs retain the same external-fermion
+ordering; the pseudoscalar vertex projector removes its known overall phase
+before the rational matrix solve. Both subtraction schemes and their finite
+difference are checked.
+
+Differentiating the bare couplings derives
+$beta_g=5g^3/(16 pi^2)$ and
+$beta_lambda=(3 lambda^2+8g^2 lambda-48g^4)/(16 pi^2)$ for both interactions.
+The additive quartic counterterm remains finite at $lambda=0$, even though
+its multiplicative renormalization constant contains $1/lambda$. The mass
+constants distinguish the two theories. The installed regression, HTML
+export, strict Marimo checks and all 32 live interaction, scheme, process
+and diagram selections pass. This covers the reference two-, three- and
+four-point functions; vacuum and odd-scalar operators are separate. Paired
+gamma-five factors suffice for these leading poles; anomalous axial traces
+are outside this validation.
+
+== Generated electron anomalous magnetic moment
+
+`hep/gminus2.py` and `installed_feyncalc_gminus2.py` generate the tree and
+one-loop electron-photon vertices from the same model. They reproduce the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/El-GaEl")[gallery's one-loop anomalous magnetic moment]
+and retain a generic spacelike photon momentum. External electrons satisfy
+$p^2=p'^2=m^2$ and $t=(p-p')^2<0$. Shared particle spin sums close the two
+projector traces, and Symbolica solves their two-by-two Gram system for the
+coefficients of $gamma^mu$ and $(p+p')^mu/(2m)$. Normalizing against the generated
+tree vertex retains every graph weight and fixes the external-fermion phase.
+
+The diagram's integral family rewrites the projected numerator. Native Laporta
+reduction resolves nine targets to two shifted tadpoles and an equal-mass
+bubble. The tadpole identification uses their shift equivalence; residuals at
+this bounded search depth are not a general master-basis certification.
+With the common $e^2/(16 pi^2)$ removed, the coefficient of the second basis
+vector is
+$ b(D) = frac(2(D-5)(-(D-2)A_0+2m^2(D-3)B_0), (D-3)(t-4m^2)). $
+Expanding at $D=4-2 epsilon$ cancels its UV pole and retains the finite term
+$ b = frac(4(A_0^"fin"+m^2-m^2 B_0^"fin"), t-4m^2). $
+The Gordon decomposition gives $F_2=-alpha b/(4 pi)$, so taking the limit only
+after integration yields $F_2(0)=alpha/(2 pi)$ exactly, independently of the
+mass and renormalization scale. Taking $t=0$ before solving the Gram system
+would make those projectors degenerate.
+
+Five spacelike points, including unequal mass and scale, agree with independent
+96-node Feynman-parameter quadrature and OneLOop's bubble derivative to better
+than $2 times 10^(-12)$. The original live notebook varies $-t/m^2$ over five
+decades; its default and five slider states execute without cell errors.
+
+`hep/pauli_form_factor.py` composes that generated calculation and continues
+the Pauli form factor to the physical $t+i 0$ sheet. With $r=t/m^2$ and
+$R=F_2/(alpha/(2 pi))$, the independent parameter integral is
+$R=integral_0^1 dif x/(1-r x(1-x)-i 0)$.
+Above pair threshold, $beta=sqrt(1-4/r)$ gives
+$R=2/(r beta) [log((1-beta)/(1+beta))+i pi]$.
+The positive imaginary part agrees with the sum of the two parameter-pole
+residues. Two complex integration contours with fixed endpoints independently
+check the same physical branch, including a point just above threshold.
+Sixty mass, scale and momentum combinations agree with this quadrature, the
+closed form and the OneLOop bubble derivative. The renormalization scale cancels.
+
+Symbolica verifies the differential equation
+$r(r-4) R'(r)+(r-2)R(r)+2=0$ and integrates the low-energy expansion through
+$r^4$. Checks on both sides of threshold establish
+$sqrt(delta) Re R(4-delta) -> pi$,
+$sqrt(delta) Im R(4+delta) -> pi$, and $Re R(4+delta) -> -1$.
+The threshold point itself is singular and is excluded from the controls.
+The installed regression, strict Marimo check, HTML export and all 60 live
+control combinations pass.
+
+The gallery reference computes only $F_2(0)$; it does not require the complete
+renormalized Dirac form factor. Its anomalous-moment result is therefore
+validated, with nonzero spacelike and timelike Pauli form factors as additional
+coverage. The full $F_1$ remains a separate outstanding observable.
+
+== Generated two-loop massless electron self-energy
+
+`hep/electron_two_loop.py` and `installed_feyncalc_electron_two_loop.py` generate
+all three one-particle-irreducible two-loop QED electron diagrams. They validate
+the Feynman-gauge specialization $xi=1$ of the
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-LeAle-Massless")[massless electron self-energy reference].
+The graph's shared auxiliary-mass UV expansion, Idenso traces and vacuum tensor
+reduction produce 22 distinct powers in a common massive vacuum family.
+Verified momentum maps identify denominator orderings; native Laporta reduction
+leaves the equal-mass sunset and three equivalent products of tadpoles.
+
+The amputated two-point kernel removes only the generator's named external
+Wick-order sign. Internal fermion-loop signs and every other graph weight remain
+intact. The installed regression independently checks this kernel convention
+with a one-loop projector. The single closed fermion loop receives a symbolic
+flavor multiplicity $N_f$.
+
+Writing $a_4=e^2/(16 pi^2)$ and $M=m_"UV"^2$, the coefficient of
+$i a_4^2 slash(p)$ in the bare UV poles is
+$ frac(1,2 epsilon^2)
+  + frac(log(4 pi)-log(M)-17/12-7N_f/3,epsilon). $
+Analytic vacuum Laurent coefficients and the summed one-loop counterterm
+insertions are explicitly supplied reference inputs, including the auxiliary
+photon-mass counterterm. They yield
+$ Z_psi = 1-frac(a_4,epsilon)
+  + a_4^2 (frac(1,2 epsilon^2)+frac(4N_f+3,4 epsilon)), $
+with the auxiliary mass and loop-measure logarithms cancelling exactly.
+The notebook and installed-host regression pass; automatic subtraction forests,
+arbitrary gauge parameter and the finite off-shell self-energy remain separate
+work. The displayed reference counterterms are not inferred by the IBP solver.
+
+== Generated two-loop photon renormalization
+
+`hep/photon_two_loop.py` and `installed_feyncalc_photon_two_loop.py` reproduce
+#link("https://feyncalc.github.io/FeynCalcExamples/QED/TwoLoops/Renormalization-GaGa")[the massless two-loop photon example]
+with symbolic gauge parameter $xi$. All three native diagrams retain their
+closed-fermion-loop signs and both open Lorentz indices. Native IBP reduces
+112 vacuum targets to the sunset and equivalent tadpole products.
+
+The shared `uv_expansion` and `uv_counterterm` accept signed `edge_powers`,
+using the denominator API's edge IDs and selection semantics. The Feynman
+photon term uses power one; the longitudinal term uses a polynomial numerator
+and power two. Freezing the massive denominators before retaining the explicit
+auxiliary-mass zeroth coefficient implements the reference's selective infrared
+rearrangement. The default UV expansion still retains its mass compensation terms.
+
+Four local insertions on a generated one-loop bubble calculate the counterterm
+sum: two vertex factors and two fermion kinetic insertions with squared
+propagators. The supplied one-loop input is $delta Z_psi=delta Z_1=-xi/epsilon$.
+Five one-loop targets reduce to the tadpole. Its finite term and the analytic
+two-loop master poles are explicit inputs; coefficients are checked to be
+regular at $D=4$ before using these truncated series. Tensor basis elements
+remain fixed during the Laurent expansion.
+
+With $Z=1+a_4 delta Z_(1)+a_4^2 delta Z_(2)$, the calculated bubble and insertions
+give
+$ delta Z_(A,1)=-frac(4N_f,3epsilon), quad delta Z_(A,2)=-frac(2N_f,epsilon), $
+$ delta Z_("Am",1)=-frac(2N_f,epsilon), quad
+  delta Z_("Am",2)=frac(N_f xi,2epsilon)-frac(N_f(2N_f+xi),epsilon^2). $
+The auxiliary operator is $i M(Z_("Am")^2-1)g^(mu nu)$, including the square of the
+one-loop coefficient at second order. Both tensor coefficients cancel exactly;
+physical field renormalization is gauge independent and all logarithms cancel.
+These explicit insertions do not provide arbitrary counterterm models or forest
+enumeration. Finite two-loop amplitudes and general analytic master evaluation
+remain separate work. The notebook passes its default state and 18 live
+gauge/flavor/auxiliary-mass combinations; the installed regression and
+headless export pass as well.
+
+== Generated QCD annihilation
+
+`Particle.color_sum(left, right, average=False)` constructs the identity in
+that particle's color representation. Supply bare indices: the left slot carries
+its representation and the right slot its dual. Antiquarks and antisextets
+reverse the dual orientation. Singlets contribute one; averaging divides by
+1, 3, 6 or 8 according to the UFO representation. Closing existing color slots
+requires the dual slots. This operation uses the same representation mapping
+as generated vertices and returns a standard Symbolica expression for Spenso
+and Idenso to simplify. GammaLoop runtime color ports also use this table,
+through `ColorRepresentation::from_ufo(...).representation()`. The shared
+conversion returns a typed Spenso representation; source/sink flow selects
+whether to dualize it. A runtime regression compares both flows with the
+shared completeness tensors and checks their traces for every supported color
+code, including singlets and conjugate sextets.
+
+`installed_feyncalc_qcd_annihilation.py` generates
+$b bar(b) -> t bar(t)$ through gluon exchange with both masses retained.
+The cut supplies final-state completeness; `Particle.sum_spins` and
+`Particle.color_sum` supply initial-state averages. No color algebra is
+reimplemented in Python or GammaLoop. The full massive result agrees with the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QjQjbar")[different-flavor FeynCalc example],
+with $T_R=1/2$ and four-dimensional external spin states.
+
+For symbolic SU(N), Spenso takes named fundamental and adjoint dimensions.
+The relation $d_A=N_c^2-1$ is imposed after contraction. The massless result is
+$ abs(cal(M))^2 = frac((N_c^2-1) g_s^4, 2 N_c^2 s^2) (t^2+u^2). $
+At $N_c=3$, the existing flux and two-body phase-space APIs give
+$ frac(d sigma, d Omega) = frac(alpha_s^2, 18s) (1+cos^2 theta), quad
+  sigma = frac(8 pi alpha_s^2, 27s). $
+The separate `hep/qcd_annihilation.py` notebook runs these exact comparisons
+in the same Marimo instance as the other examples. Elastic quark channels are
+covered below. General QCD observables remain unvalidated.
+
+== Generated gluon scattering in symbolic dimension
+
+`hep/gluon_scattering.py` and `installed_feyncalc_gluon_scattering.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GlGl-GlGl")[the four-gluon tree example].
+The built-in model supplies the three exchange diagrams and four-gluon contact
+interaction. All sixteen amplitude products retain their generated signs,
+weights and coupling factors. Particle lookup uses `model.particle("g")`.
+
+The shared `Particle.spin_sum(..., dimension=D)` builds physical axial
+projectors in symbolic dimension. The incoming momenta are each other's
+reference, as are the outgoing pair. Spenso contracts the symbolic SU(N) color
+structure and Lorentz tensors; Symbolica collects their scalar coefficients.
+With incoming color averages and a fixed factor of one half for each incoming
+spin sum, the exact result is
+$ frac((D-2)^2 N_c^2 g_s^4 (t^2+t u+u^2)^3,
+       (N_c^2-1) s^2 t^2 u^2). $
+This is the convention used by the gallery. Averaging instead over the $D-2$
+physical states of each incoming gluon multiplies it by $4/(D-2)^2$.
+The regression checks the generic expression, the usual four-dimensional
+SU(3) result and exchange of the identical outgoing gluons exactly.
+
+The notebook also integrates the four-dimensional event rate with the shared
+flux and two-body phase space. Azimuth integration and the identical-final-state
+factor $1/2!$ give $d sigma / d cos(theta) = abs(cal(M))^2/(64 pi s)$.
+An angular cut $abs(cos(theta)) < c < 1$ excludes the massless exchange poles.
+Symbolica's antiderivative passes exact differentiation and boundary checks;
+nine independent Gaussian quadratures check $N_c=2,3,5$ at three cuts.
+The controls expose both spin-average conventions, symbolic or concrete Lorentz
+dimensions, color groups and angular cuts without repeating diagram generation.
+
+== Virtual-photon Born currents and real QCD radiation
+
+`hep/photon_radiation.py` and `installed_feyncalc_photon_radiation.py` cover
+the #link("https://feyncalc.github.io/FeynCalcExamples/QED/Tree/Ga-MuAmu")[muon-pair],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar")[quark-pair] and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl")[real-radiation]
+examples. The shared generator supplies both Born currents and both gluon
+emissions with their relative factors. Spenso and Idenso contract the shared
+particle spin and color sums. The full massive SU(N) squares agree exactly
+with the references. Photon and gluon Ward contractions vanish, and using
+either massive quark momentum as the gluon polarization reference reproduces
+the covariant result.
+
+Contract the timelike photon current with $-g_(mu nu)$ without an initial spin
+average, as in the references. With $Q=sqrt(q^2)>0$, the massless Born rates
+are $Gamma_mu=alpha Q$ and $Gamma_q=N_c Q_q^2 alpha Q$.
+These are current normalizations, not physical on-shell photon decays.
+The model's bottom field has $Q_q=-1/3$; its charge cancels from the normalized
+real-emission rate.
+
+The shared `Kinematics.three_body_phase_space(k1, k2, k3)` returns
+$dif Phi_3/(dif s_(12) dif s_(23))=1/(128 pi^3 q^2)$, with the overall
+orientation integrated. It uses the same invariant-measure convention as the
+two-body API and #link("https://pdg.lbl.gov/2025/reviews/rpp2025-rev-kinematics.pdf")[PDG kinematics review].
+Use an orientation-independent or orientation-averaged squared amplitude.
+Masses determine the physical Dalitz boundaries; this density does not impose
+them. Flux, initial averages and identical-particle factors remain explicit.
+Non-four-dimensional contexts are rejected. The implementation lives in
+`feynkit-kinematics`; Python only forwards the call. Its Rust tests verify
+permutation symmetry, massive invariants, dimension checks and the massless
+integrated volume $q^2/(256 pi^3)$.
+
+For massless final states, set $x_i=2E_i/Q$ with $sum_i x_i=2$.
+The Jacobian from pair invariants is $q^4$. Dividing by the generated Born rate
+gives
+$ frac(1, Gamma_q) frac(dif Gamma_(q bar(q) g), dif x_1 dif x_2)
+  = frac(alpha_s C_F, 2 pi) frac(x_1^2+x_2^2, (1-x_1)(1-x_2)). $
+The leading soft coefficient also agrees with the independent light-cone
+calculation below.
+
+The cut $y_1,y_2 >= beta$, $y_1+y_2 <= 1$, where $y_i=1-x_i$ and
+$0<beta<1/2$, excludes the soft and collinear singularities.
+Symbolica automatically integrates both stages. Differentiating each primitive
+checks it exactly. Euler's dilogarithm reflection gives a real expression for
+the dimensionless integral:
+$ I(beta)=2 ln^2(beta)+(3-4 beta+beta^2)(ln(beta)-ln(1-beta))
+  +5/2-5 beta+4 "Li"_2(beta)-pi^2/3. $
+Its cut derivative obeys the independent Leibniz boundary identity and its
+threshold value is zero. The small-cut expansion is
+$I(beta)=2 ln^2(beta)+3 ln(beta)+5/2-pi^2/3+cal(O)(beta ln(beta))$.
+Multiply by $alpha_s C_F/(2 pi)$ for the real/Born rate. This real-emission
+contribution remains infrared divergent when the cut is removed; virtual
+corrections are a separate calculation.
+
+Independent two-dimensional Gaussian quadratures check five cuts, with rate
+normalization at $N_c=2,3,5$. The live notebook exposes color, coupling, cut
+and two physical Dalitz coordinates. All 45 tested control combinations pass,
+along with the generated-amplitude regression and strict Marimo checks.
+
+== Crossed photon-gluon currents
+
+`hep/photon_gluon.py` and `installed_feyncalc_photon_gluon.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/GaGl-QQbar")[photon-gluon fusion],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGa-GlQ")[QCD Compton scattering], and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GaGl")[quark annihilation into a photon and gluon].
+Each channel is generated independently with two massive-quark exchange
+diagrams. Name-based vertex selection retains only photon-quark and
+gluon-quark interactions. Their full graph weights, Dirac adjoints and
+interference use the existing generator, Idenso and Spenso operations.
+
+The photon has arbitrary virtuality $v=q^2$ and its current is contracted
+with $-g_(mu nu)$, without a photon spin average. Incoming quark/gluon spins
+and colors are averaged through the shared particle API. Generic SU(N)
+dimensions are inserted before the color contraction. The massive results
+agree with all three references. Covariant gluon sums and physical projectors
+referenced to either the quark or photon agree exactly, including the
+reference-norm term for non-null vectors. Both photon and gluon Ward
+contractions vanish independently in every channel.
+
+If $F(s,t,u)$ denotes the fusion current contraction, the annihilation result
+is $(N_c^2-1)F(s,t,u)/(2N_c^2)$. The Compton result is
+$-(N_c^2-1)F(u,t,s)/N_c$, with the crossed fermion sign and incoming color
+averages included. These are checks of independently generated channels;
+crossing is not used to construct their amplitudes. Further exact comparisons
+check the massless limits and spacelike continuation $q^2=-Q^2$.
+
+For a real photon, the same results and native `Kinematics.flux` and
+`two_body_phase_space` give ordinary differential cross sections.
+An incoming photon then receives its missing factor $1/2$. All three final
+states contain distinct particles. Numerical checks cover 81 combinations
+of color, mass and angle, including energy scaling, and 54 off-shell
+center-of-mass points. The notebook separates the virtual-current contraction
+from real-photon angular rates and computes an angular-cut integral with
+converged Gaussian quadrature. A virtual-photon observable requires contraction
+with a lepton tensor; the notebook does not interpret $-g_(mu nu)$ as that tensor.
+All 27 live control combinations, strict Marimo checks, Ruff and HTML export pass.
+
+== Generated light-cone soft radiation
+
+`hep/soft_function.py` and `installed_feyncalc_soft_function.py` cover the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar-SoftFunction")[SCET soft-function example].
+The shared generator produces one virtual-photon Born diagram and both gluon
+emissions from a massless quark pair. The example uses the model's bottom
+field with zero mass; its electric charge cancels from the Born-normalized
+result. Particle and vertex selection use model names.
+
+Declare light-cone momenta with `TensorName.vector`, retaining Spenso's
+rank-one metadata for slashes and contractions. Scoped `Kinematics` assumptions
+set $n^2=bar(n)^2=k^2=0$, $n dot bar(n)=2$, $n dot k=k^+$ and
+$bar(n) dot k=k^-$. The two quark momenta have independent large components.
+Symbolica extracts the leading Laurent coefficient under $k -> lambda^2 k$;
+no soft emission rule is inserted into the generated amplitudes.
+
+Idenso checks the collinear projector, its orthogonal complement, its trace
+and Dirac annihilation identities in symbolic Lorentz dimension. The spinor
+representation remains four-dimensional. The transverse metric is idempotent,
+annihilates both light-cone directions and has trace $D-2$. Canonical gamma
+ordering and chain-aware Schoonschip contraction prove that each generated
+emission amplitude factors onto the same projected Born current. Both spinor
+ports and the virtual-photon Lorentz port remain open.
+
+The extracted eikonal current satisfies its Ward identity and loses all
+dependence on the hard collinear scales. Spenso evaluates the Born and emitted
+color norms as $N_c$ and $(N_c^2-1)/2$. The shared `Particle.spin_sum` gives
+the same squared current $4/(k^+ k^-)$ for covariant, either null light-cone
+reference, and a generic reference of arbitrary norm. The common open Born
+current cancels without averaging or summing the quark spin states.
+
+With $g_s^2=4 pi alpha_s$ and the reference's explicit $1/(32 pi^2)$ prefactor,
+the result is $C_F alpha_s/(2 pi k^+ k^-)$.
+This is an unintegrated leading soft kernel, not a dimensionally regulated
+phase-space integral. The notebook exposes the color group, polarization
+choice, coupling, gluon energy and emission angle. Independent checks verify
+light-cone basis rescaling, inverse-energy-squared scaling and 27 numerical
+points. All 36 live control combinations, strict Marimo checks and the HTML
+export pass. All physics operations reuse the existing shared owners; no
+separate light-cone algebra is introduced in Python or GammaLoop.
+
+== Generated quark-gluon scattering
+
+`hep/quark_gluon_scattering.py` and
+`installed_feyncalc_quark_gluon_scattering.py` cover the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl")[physical-polarization example]
+and its #link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl-2")[ghost-subtraction counterpart].
+The three ordinary amplitudes retain the quark mass, their relative graph
+factors and all interference. Both ghost channels are generated separately.
+Particles and vertices are selected by model names.
+
+Shared particle spin and color sums close the Dirac adjoint. Spenso and Idenso
+perform the color and Dirac algebra. Collecting Lorentz structures with
+`TensorExpression.collect` with a Minkowski representation filter keeps scalar coefficients factored while the
+physical projectors are contracted. Null and timelike gluon reference momenta
+give the same exact massive SU(N) expression.
+
+The covariant square includes unphysical states. Subtract the ghost and
+antighost contributions, each
+$g_s^4 (m^2-u)(s-m^2)/(2t^2)$, then divide by two for the incoming gluon spin
+average. The incoming quark spin and both color averages are already included.
+This produces the same massive expression as the physical projectors, while
+the covariant result alone differs by a nonzero correction. At zero mass and
+$N_c=3$, the result is
+$g_s^4 (s^2+u^2) (1/t^2 - 4/(9s u))$.
+
+The notebook also integrates massive elastic event rates. With
+$rho=m^2/s<1$ and $z=cos(theta)$, use
+$t=-s(1-rho)^2(1-z)/2$. Native flux and two-body phase space give
+$d sigma/d z = abs(cal(M))^2/(32 pi s)$. The final particles are distinct.
+Angular cuts exclude massless exchange poles. Symbolica's primitive passes
+exact differentiation and boundary checks, followed by 27 independent Gaussian
+quadratures for three color groups, mass ratios and cuts. Controls compare
+the physical and ghost-subtracted calculations and show $s sigma/alpha_s^2$.
+
+== Generated elastic quark scattering
+
+`hep/quark_scattering.py` and `installed_feyncalc_quark_scattering.py` cover
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQj-QiQj")[distinct quarks],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQjbar-QiQjbar")[distinct-flavor quark-antiquark scattering],
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQi-QiQi")[identical quarks], and
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QiQibar")[same-flavor quark-antiquark scattering].
+Only the two selected quark-gluon vertices of the built-in model participate.
+The bottom and top fields supply independent symbolic masses for the two
+flavor labels. The generated amplitudes retain their relative fermion signs
+and graph weights. Each distinct-flavor process has one diagram; each
+same-flavor process has two.
+
+Particle spin and color completeness tensors close the amplitude and its
+index-preserving Dirac adjoint. Incoming states are averaged and final states
+are summed. Spenso performs the color contractions with fundamental dimension
+$N_c$ and a symbolic adjoint dimension; substituting $d_A=N_c^2-1$ before the
+final Casimir conversion resolves the interference color trace. Both full
+massive SU(N) reference expressions and their massless limits agree exactly.
+The diagonal and interference pieces are also checked separately. The
+identical-quark result is invariant under exchange of $t$ and $u$.
+
+Native kinematics gives the elastic ratio of differential two-body phase
+space to initial flux, $1/(64 pi^2 s)$ per solid angle. Symbolica integrates
+the generated angular density over $abs(cos theta)<c<1$ after the substitution
+$t=-lambda(s,m_1^2,m_2^2)(1-cos theta)/(2s)$.
+The identical-quark event rate includes $1/2!$ for the full labeled phase
+space. Equal derivatives and the value at zero cut prove that this is the
+same rate as counting one forward quark per event. Distinct flavors retain
+their distinct-particle normalization even when their masses coincide.
+
+Exact antiderivative checks and 216 independent numerical quadratures cover
+four channels, three color numbers, three mass profiles, two energies and
+three angular cuts. The live notebook exposes the full, diagonal and
+interference angular distributions and the event rate normalized by
+$alpha_s^2/s$. Its 108 control combinations, installed regression, strict
+Marimo check and HTML export pass. The cuts exclude the forward or backward
+massless-exchange poles; no uncut finite total rate is claimed.
+
+== Generated quark annihilation into gluons
+
+`installed_feyncalc_qcd_gluons.py` generates the three ordinary tree amplitudes
+for $b bar(b) -> g g$, aligns their external ports, and forms the Dirac adjoint
+of their sum. All interference terms are retained. Initial spin and color
+averages use `Particle.spin_sum` and `Particle.color_sum`; final colors and
+physical polarizations are summed with the same shared APIs.
+
+The full massive SU(N) result is compared with
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl")[the FeynCalc two-gluon example].
+Choosing the opposite final gluon or the incoming massive quark as each
+polarization reference gives the same result, including the nonzero
+reference-norm terms for the latter choice. The massless SU(3) limit is
+$ abs(cal(M))^2 = frac(32 g_s^4, 27) frac(t^2+u^2, t u)
+  - frac(8 g_s^4, 3) frac(t^2+u^2, s^2). $
+The squared amplitude is symmetric under exchanging the labeled final gluons.
+Integrating over both labels requires the usual $1/2!$ identical-particle factor;
+this example does not supply a finite total massless cross section.
+
+The calculation exposed two shared Idenso gaps: the existing color-conjugation
+helper was disconnected from `spenso_conjugate` and `dirac_adjoint`, and color
+metrics were not contracted inside collected traces before applying terminal
+trace identities. Both paths now reuse their existing shared implementations.
+Contracted symmetric traces through degree four reuse Spenso's normalized
+projector expansion and Idenso's Casimir rules. Scalar representation labels
+remain unchanged under conjugation. Higher-degree symmetric invariants remain
+symbolic.
+
+Compact fundamental generator chains and ordered color traces now conjugate
+consistently with explicit networks, reversing the generator sequence and the
+open endpoints, as in the
+#link("https://feyncalc.github.io/FeynCalcBook/ComplexConjugate.html")[FeynCalc color-trace conjugation example]. `installed_color_conjugation.py` checks SU(2), SU(3) and SU(5),
+including the summed norm $(N_c^2-1)^2/(4 N_c)$ and conjugation twice. The live
+`hep/color_algebra.py` notebook demonstrates the existing tensor constructors,
+chain collection, conjugation and color contraction. Symmetric, antisymmetric
+and cyclic generator groups, including nested groups and complex coefficients,
+conjugate without expanding their permutations. Tests compare against Spenso's
+explicit projector expansion and verify reversal parity for three-generator
+traces. Scalar powers, inverse factors and scalar functions inside compact words
+use Symbolica's existing conjugation semantics, including symbolic exponents.
+Unknown matrix factors remain explicitly conjugated. Public Python regressions
+construct weighted words with the existing `chain` and `trace` APIs, check
+involution and Dirac adjoints, and independently evaluate a weighted SU(3) norm
+with explicit matrices. No separate FeynKit or GammaLoop conjugation
+implementation is introduced.
+
+`hep/qcd_gluons.py` presents the generated diagrams and both gauge-reference
+checks in a separate notebook on the same Marimo server.
+
+== Fierz contractions with closed color traces
+
+The existing shared Idenso Fierz implementation contracts generators between
+open fundamental chains, between a chain and a trace, and between two traces.
+A trace is cut at the contracted generator, preserving the cyclic order of its
+remaining factors. This reduction runs before terminal trace decomposition so
+that short traces do not hide a reducible contraction in symmetric invariants.
+Only matching fundamental representations use this identity.
+
+The #link("https://feyncalc.github.io/FeynCalcBook/SUNSimplify.html")[FeynCalc mixed trace example]
+is covered by exact Rust and public Python regressions. They check both trace
+evaluation settings, repeated simplification, and the option to keep separate
+color lines. `installed_color_fierz.py` checks SU(2), SU(3), and SU(5), including
+$ sum_(a,b,c) abs(op("Tr")(T^a T^b T^c))^2
+  = frac((N^2-1)(N^2-2), 8N). $
+An independent contraction with Spenso's numerical SU(3) matrices gives $7/3$.
+Numerical validation also checks every free-index component of the mixed
+trace/chain identity. The identity uses the existing typed metric factory as
+`TensorExpression.g(fund, fund.dual())("i", "j")`; the optional second
+representation preserves its supplied logical port order and validates exact
+dimension equality. The shared Spenso syntax classifier recognizes dual
+representation slots inside metrics, so a fundamental identity retains its
+oriented tensor ports when added to generator products. Regression tests cover
+all parser filters, expanded and opaque parsing, and scalar precontraction;
+a scalar cannot be added to an open identity tensor.
+`hep/color_fierz.py` presents the mixed identity and closed norm on the existing
+Marimo server. No separate FeynKit or GammaLoop Fierz formulas are introduced.
+
+== Generated symmetric color vertices
+
+The shared generator accepts the UFO color tensor `d(1,2,3)`. It uses the same
+adjoint-slot validation as `f` and lowers to four times Idenso's normalized
+symmetric fundamental generator trace. This implements the
+#link("https://feyncalc.github.io/FeynCalcBook/SUND.html")[standard symmetric SU(N) tensor]
+with $T_R=1/2$, without adding another color algebra implementation.
+The #link("https://link.springer.com/article/10.1140/epjc/s10052-023-11780-9")[UFO format]
+assigns positive indices to vertex legs and negative indices to summed slots;
+the existing shared index localization applies to `d` as well.
+
+The generator regression verifies permutation symmetry, reality, the SU(3)
+contractions $d^(a b c) d^(a b c)=40/3$ and
+$d^(a b c) d^(a b e)=5/3 delta^(c e)$, a vanishing repeated-index contraction,
+and rejection of an incompatible fundamental external slot.
+`installed_ufo_symmetric_color.py` generates a cubic adjoint-scalar test vertex
+through the public API and checks the three-port interface and exact norm.
+`hep/symmetric_color_vertex.py` presents it in a separate live notebook.
+The scalar records are reused from the stored model to define a toy adjoint
+interaction; this is a color-factor validation.
+
+== Generated antisymmetric color vertices
+
+The shared UFO lowering accepts `Epsilon(i,j,k)` for three triplet slots and
+`EpsilonBar(i,j,k)` for three antitriplet slots. Both use Idenso's existing
+antisymmetric epsilon symbol and determinant expansion. Color conjugation
+exchanges the two representations without reversing their index order; the
+Lorentz epsilon convention is unchanged. Pair reduction requires dual spaces
+with matching dimensions. Two same-orientation color epsilons, mismatched
+spaces and rank-three tensors in a different fundamental dimension do not
+acquire a determinant identity.
+
+Summed fundamental indices may join dual slots while external slots retain the
+orientation fixed by their particle records. Color identity chains transmit
+this orientation before lowering; this also permits contracted generator
+products such as `T(a,-1,-2)*T(b,-2,-1)`.
+
+`installed_ufo_color_epsilon.py` generates a conjugate pair of cubic interactions
+between three distinct complex scalar species. They are a toy color model, not
+a Standard Model interaction. The regression checks the three open color ports,
+conjugation twice and the positive norm $epsilon_(i j k) epsilon^(i j k)=6$.
+Shared Rust tests also verify $epsilon_(i j k) epsilon^(i j l)=2 delta_k^l$,
+permutation signs, incompatible representations and dummy-index contractions.
+`hep/color_epsilon.py` shows the generated diagrams, both tensors and the
+incoming-triplet color average $6/3=2$ in the same Marimo instance.
+This establishes symbolic epsilon interaction support; numerical tensor-library
+components and sextet interaction tensors remain outstanding.
+
+== Covariant gluon sums and ghost subtraction
+
+`installed_feyncalc_qcd_ghosts.py` validates
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl-2")[the ghost-subtraction variant]
+using the same shared generation, color, spin and tensor APIs. Both ghost
+orderings are generated independently, each with one diagram. Their external
+color ports are aligned through Linnet half-edge metadata, since ghost legs
+have no polarization wavefunctions.
+
+With initial spin and color averages, each ghost contribution is
+$ cal(G) = frac((N_c^2-1) g_s^4 (u-m^2)(t-m^2), 4 N_c s^2). $
+The physical result is the covariant two-gluon square minus the two ghost
+contributions. The exact massive SU(N) comparison, massless SU(3) limit and
+Bose exchange all pass. The ghost correction is explicitly checked to be
+nonzero: covariant gluon sums alone would give the wrong result for this
+process. No extra ghost spin multiplicity or final-state symmetry factor is
+inserted.
+
+`hep/qcd_ghosts.py` displays the generated gluon and ghost diagrams, both ghost
+contributions and the subtraction in its own notebook on the same server.
+
+== Two-loop mixed quadratic-eikonal topology preparation
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/TopologyIdentification/TwoLoops/B-EtaC")[B to eta-c topology example]
+supplies 251 integrals in 248 distinct families. The pinned mathematical fixture
+`crates/feynkit-py/tests/fixtures/feyncalc_etac_topologies.json` preserves every
+input power using a pool of 89 inverse propagators. It records the upstream
+commit and SHA-256 of the original input. The translation uses
+`SFAD`'s quadratic-plus-linear-minus-mass convention, with
+$n^2=bar(n)^2=0$ and $n dot bar(n)=2$. The common positive imaginary
+prescription is omitted for algebraic family operations; no contour identity
+is inferred from that omission.
+
+`installed_feyncalc_etac_topologies.py` reconstructs all 251 rational inputs
+exactly after native partial fractioning. This decomposition produces 677
+distinct sectors, all with independent denominators. Their Symanzik forms
+give 112 scaling certificates, each checked by differentiating $U+F$.
+For all 131 singular quadratic forms, the shared
+`scaleless_transverse_direction()` finds a real common null direction of every
+denominator's quadratic loop matrix. An independent simultaneous substitution
+checks that shifting the loops along this transverse direction leaves every
+denominator unchanged. The external light-cone Gram matrix is nonsingular,
+so the unconstrained polynomial transverse integral vanishes in dimensional
+regularization. A degenerate Symanzik polynomial alone is not used as proof.
+Another 434 sectors remain unclassified by either criterion.
+All 434 also pass automatic self-mapping with every mapped denominator checked
+exactly. This caught a row-normalization error in fractional light-cone shift
+reconstruction: the corrected coefficient extraction retains the original
+rational coefficients for mappings, Symanzik forms, and partial fractions.
+
+The shared `IntegralFamily.complete(candidates=pool)` now tries an ordered
+pool of inverse propagators before bare scalar products. It preserves original
+positions, skips dependencies, and rejects non-affine candidates. All 677
+sectors obtain complete independent seven-dimensional bases using only the
+source pool, with idempotence and exact reconstruction of every scalar product
+checked. The Rust implementation belongs to `feynkit-graph`; Python only
+forwards the candidate list. No GammaLoop-specific completion is introduced.
+
+`IntegralFamily.find_mappings` canonizes each Symanzik pair once with Symbolica,
+then searches for verified affine loop maps within matching groups. It maps
+434 surviving families directly into 223 retained representatives. Every
+propagator identity is checked exactly, as is each returned two-loop Jacobian
+and a scalar numerator substitution. Grouping the representatives again leaves
+them unchanged. Polynomial-only equivalences without a verified loop map are
+kept separate; Rust regressions exercise this boundary, incompatible kinematics,
+internal-label collisions, and candidate-budget errors.
+
+Every nonzero partial-fraction term from all 251 original integrals is aligned
+to its source-family ordering, mapped into its representative, and padded with
+zero auxiliary powers. Combining equal target terms leaves 551 terms, with 59
+input integrals vanishing. The full pinned-input regression locks these counts.
+`hep/topology_preparation.py` displays the source inputs, both scalelessness
+certificates, completed families, momentum maps and final representative powers.
+The shared implementation lives in `feynkit-graph`; Python only binds it.
+
+This remains *partial* gallery coverage: collection grouping currently keeps
+different propagator counts separate. Cross-size subtopology minimization
+remains to be integrated into this workflow; pairwise embeddings are already
+available through `find_mapping`. Counts depend on partial-fraction ordering,
+so 223 verified representatives are not claimed to reproduce FeynCalc's 241
+from its different decomposition. External-momentum exchanges are not enabled.
+Rust tests, Clippy, installed-host regressions, 28 input/sector and nine mapping
+control selections, strict Marimo checks, Ruff and HTML export pass.
+
+== Validation standard
+
+The #link("guides/integral-families/")[integral-family guide] describes the shared
+rank and completion APIs. Rust and installed-host tests cover a massive bubble,
+a two-loop incomplete family, eikonal forms, dependent propagators and invalid
+momentum declarations. These validate the algebraic family boundary separately
+from the RustRed reduction workflows described above.
+`installed_diagram_integral_families.py` generates a massless scalar bubble,
+extracts families in each routing, compares the Symanzik polynomials and checks
+the on-shell scaleless limit. A Rust regression covers a massive bubble.
+`installed_partial_fractions.py` additionally reconstructs the original rational
+functions and verifies independent propagator support after decomposition,
+including homogeneous relations and repeated powers.
+Mapping regressions include mixed loop bases, eikonal shifts, subtopology power
+maps, and a published three-loop example. These do not establish full topology
+minimization or the gallery's complete two-loop IBP workflows.
+Parameter-space regressions cover a published family pair that requires an
+external-momentum transformation for an affine map, all permutations of a
+massive vacuum family, and rejection of changed masses. These compare both
+Symanzik polynomials and exercise the same shared power-reordering implementation.
+Singular-form regressions compare cofactor results with a nonsingular regulator
+limit. Scaling and mapping APIs reject singular forms rather than interpreting
+vanishing polynomials as a proof.
+
+Charge conjugation now has a shared algebra and tensor-data implementation.
+Idenso's `GammaLibrary.charge_conjugation` registers
+`spenso::charge_conjugation` with the ALOHA Weyl convention
+$C = -i γ^2 γ^0$. It is real and antisymmetric, with $C^2 = -1$.
+Explicit-index products and compact chains use the same Idenso simplifier;
+charge-conjugation sandwiches transpose each supported matrix with its correct
+sign, preserving factor order. Four-dimensional gamma and slash arguments are
+supported, including `P(label,mink(4))`; symbolic-D gamma arguments remain
+opaque. Self-dual common-end chain joins transpose one ordered word without
+conjugating scalar coefficients.
+
+`spenso-hep-lib` owns the single sparse component definition used by the numeric
+and symbolic HEP libraries and generator grouping. Both the shared generator
+and GammaLoop's UFO reindexer lower `C(i,j)` to this registered tensor. The
+focused symbolic and common-end component tests pass, as do the shared Cargo
+check and Clippy checks. `installed_charge_conjugation.py` adds explicit-index,
+compact-slash and independent Weyl-component comparisons. Its initial symbolic
+identities pass in the rebuilt public host; full installed-host validation
+awaits fixture setup corrections. This primitive support does not close the
+Majorana-generation gap: general Majorana and fermion-number-violating diagrams
+still require changes to external fermion-flow normalization, which currently
+accepts particle/antiparticle pairs.
+
+An example counts as reproduced only after exercising the relevant shared
+components and comparing its final observable or symbolic identity with the
+published result. Remaining work includes tree-level QED/QCD/EW observables,
+polarized amplitudes, anomaly conventions, loop-renormalization examples,
+broader IBP reductions and analytic master evaluation, and the two-loop
+topology-minimization example.
+Full FeynCalc gallery parity is not yet achieved.
+]

@@ -1,6 +1,19 @@
 mod api;
+mod ec_seed;
+pub use ec_seed::{Diagram, Seed, SeedRequest};
 pub mod geom;
 mod graph_api;
+pub mod impred_projection;
+mod label_placement;
+#[cfg(feature = "svg")]
+pub mod svg;
+pub use label_placement::{
+    attachment_offset_bytes as label_attachment_offset_bytes,
+    candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
+    obstacle_boxes_bytes as label_obstacle_boxes_bytes,
+    path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
+    stroke_lines_bytes as label_stroke_lines_bytes,
+};
 mod pin;
 mod streaming;
 pub use streaming::{ForceLayoutStream, LayoutFrame};
@@ -14,36 +27,38 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    encode_graph_spec_bytes, graph_apply_structural_patches_bytes,
-    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
-    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
-    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
-    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_join_by_edge_key_bytes,
-    graph_join_by_hedge_key_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
+    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION, TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo,
+    TypstDotNode, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstGraphSpecEnvelope,
+    TypstNodeSpec, TypstPlacementSpec, TypstPoint, encode_graph_spec_bytes,
+    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
+    graph_archived_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
+    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
+    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
+    graph_impred_diagram_bytes, graph_impred_layout_bytes, graph_impred_seed_bytes,
+    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
+    graph_layout_snapshot_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
     graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
-    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
+    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes, ImpredRun,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes,
-    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge,
-    TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstEdgeSpec, TypstEndpointSpec,
-    TypstGraphSpec, TypstGraphSpecEnvelope, TypstNodeSpec, TypstPlacementSpec, TypstPoint,
-    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION,
+    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes,
 };
 pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
 use dot_parser::ast::CompassPt;
-use figment::{providers::Serialized, Figment, Profile};
+use figment::{Figment, Profile, providers::Serialized};
 use linnet::half_edge::swap::Swap;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
+        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
+        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution},
         layout::{
             force::{ForceLayoutConfig, ForceLayoutSession},
             layered::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
                 LayeredRankAlign, LayeredRouteExit,
             },
-            simulatedanneale::{anneal, GeoSchedule, SAConfig},
+            simulatedanneale::{GeoSchedule, SAConfig, anneal},
             spring::{
                 Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
                 PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
@@ -51,7 +66,6 @@ use linnet::{
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{SuBitGraph, SubSetLike},
-        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
 };
@@ -71,13 +85,55 @@ use wasm_minimal_protocol::*;
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 initiate_protocol!();
 
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_candidates(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_candidates_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_obstacle_boxes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_obstacle_boxes_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_path_lines(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_path_lines_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_stroke_lines(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_stroke_lines_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_attachment_offset(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_attachment_offset_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_first(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_first_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_search(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
+    label_search_bytes(arg, math)
+}
+
 // Custom getrandom implementation for WASM
 #[cfg(feature = "custom")]
 use getrandom::register_custom_getrandom;
 #[cfg(feature = "custom")]
 use wasm_random::custom_getrandom;
 
-use crate::geom::{tangent_angle_toward_c_side, GeomError};
+use crate::geom::{GeomError, tangent_angle_toward_c_side};
 
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
@@ -601,7 +657,9 @@ fn hedge_compass_to_string(compass: CompassPt) -> String {
     .to_string()
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[archive(check_bytes)]
 pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
@@ -612,6 +670,8 @@ pub struct TypstGraph {
     default_edge_statements: BTreeMap<String, String>,
     default_node_statements: BTreeMap<String, String>,
     layout_config: LayoutConfig,
+    #[serde(default)]
+    layout_initialized: bool,
 }
 
 impl Deref for TypstGraph {
@@ -1247,6 +1307,7 @@ impl TypstGraph {
                 })
                 .collect(),
             layout_config: config,
+            layout_initialized: false,
         }
     }
 }
@@ -1272,6 +1333,7 @@ enum LayoutAlgo {
     Anneal,
     Dot,
     Force,
+    Impred,
     #[serde(alias = "railroad")]
     StableLayered,
     Tree,
@@ -1451,6 +1513,7 @@ enum LabelLayout {
     DanglingTangent,
     FixedLength,
     Normal,
+    FixedGap,
 }
 
 fn default_label_layout() -> LabelLayout {
@@ -1487,6 +1550,21 @@ struct LayoutConfig {
     #[serde(default = "default_depth_scale", deserialize_with = "deserialize_f64")]
     depth_scale: f64,
     #[serde(
+        default = "default_initial_repulsion",
+        deserialize_with = "deserialize_f64"
+    )]
+    initial_repulsion: f64,
+    #[serde(
+        default = "default_repulsion_growth",
+        deserialize_with = "deserialize_f64"
+    )]
+    repulsion_growth: f64,
+    #[serde(
+        default = "default_spring_length_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    spring_length_scale: f64,
+    #[serde(
         default = "default_flattening_end",
         deserialize_with = "deserialize_f64"
     )]
@@ -1504,7 +1582,12 @@ struct LayoutConfig {
         default = "default_label_length_scale",
         deserialize_with = "deserialize_f64"
     )]
-    label_length_scale: f64,
+    internal_label_length_scale: f64,
+    #[serde(
+        default = "default_label_length_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    external_label_length_scale: f64,
     #[serde(default = "default_label_charge", deserialize_with = "deserialize_f64")]
     label_charge: f64,
     #[serde(default = "default_label_spring", deserialize_with = "deserialize_f64")]
@@ -1577,11 +1660,15 @@ impl Default for LayoutConfig {
             delta: default_delta(),
             directional_force: default_directional_force(),
             depth_scale: default_depth_scale(),
+            initial_repulsion: default_initial_repulsion(),
+            repulsion_growth: default_repulsion_growth(),
+            spring_length_scale: default_spring_length_scale(),
             flattening_end: default_flattening_end(),
             label_steps: default_label_steps(),
             label_layout: default_label_layout(),
             label_step: default_label_step(),
-            label_length_scale: default_label_length_scale(),
+            internal_label_length_scale: default_label_length_scale(),
+            external_label_length_scale: default_label_length_scale(),
             label_charge: default_label_charge(),
             label_spring: default_label_spring(),
             label_early_tol: default_label_early_tol(),
@@ -1625,6 +1712,9 @@ impl LayoutConfig {
                 | "g-center"
                 | "gamma-dangling"
                 | "gamma-dangling-centroid"
+                | "external-pull"
+                | "external-pull-balance"
+                | "external-pull-attachment"
                 | "gamma-ee"
                 | "gamma-ev"
                 | "incremental-energy"
@@ -1632,7 +1722,8 @@ impl LayoutConfig {
                 | "label-charge"
                 | "label-early-tol"
                 | "label-layout"
-                | "label-length-scale"
+                | "internal-label-length-scale"
+                | "external-label-length-scale"
                 | "label-max-delta-scale"
                 | "label-spring"
                 | "label-step"
@@ -1660,6 +1751,9 @@ impl LayoutConfig {
                 | "tree-dy"
                 | "viewport-h"
                 | "viewport-w"
+                | "initial-repulsion"
+                | "repulsion-growth"
+                | "spring-length-scale"
                 | "depth-scale"
                 | "flattening-end"
         )
@@ -1773,7 +1867,7 @@ fn default_crossing_penalty() -> f64 {
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 #[archive(check_bytes)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
     length_scale: f64,
@@ -1791,6 +1885,12 @@ struct SpringConfig {
         deserialize_with = "deserialize_f64"
     )]
     gamma_dangling_centroid: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    external_pull: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    external_pull_balance: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    external_pull_attachment: f64,
     #[serde(default = "default_gamma_ev", deserialize_with = "deserialize_f64")]
     gamma_ev: f64,
     #[serde(default = "default_gamma_ee", deserialize_with = "deserialize_f64")]
@@ -1814,6 +1914,9 @@ impl Default for SpringConfig {
             beta: default_beta(),
             gamma_dangling: default_gamma_dangling(),
             gamma_dangling_centroid: default_gamma_dangling_centroid(),
+            external_pull: 0.0,
+            external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             gamma_ev: default_gamma_ev(),
             gamma_ee: default_gamma_ee(),
             g_center: default_g_center(),
@@ -1831,6 +1934,9 @@ impl From<&SpringConfig> for ParamTuning {
             beta: cfg.beta,
             gamma_dangling: cfg.gamma_dangling,
             gamma_dangling_centroid: cfg.gamma_dangling_centroid,
+            external_pull: cfg.external_pull,
+            external_pull_balance: cfg.external_pull_balance,
+            external_pull_attachment: cfg.external_pull_attachment,
             gamma_ev: cfg.gamma_ev,
             gamma_ee: cfg.gamma_ee,
             g_center: cfg.g_center,
@@ -1886,6 +1992,18 @@ impl From<&ScheduleConfig> for GeoSchedule {
     }
 }
 
+fn default_initial_repulsion() -> f64 {
+    1.0
+}
+
+fn default_repulsion_growth() -> f64 {
+    0.7
+}
+
+fn default_spring_length_scale() -> f64 {
+    1.0
+}
+
 fn default_length_scale() -> f64 {
     0.5
 }
@@ -1923,7 +2041,7 @@ fn default_eps() -> f64 {
 }
 
 fn default_steps() -> usize {
-    30
+    100
 }
 
 fn default_epochs() -> usize {
@@ -2255,6 +2373,12 @@ where
     deserializer.deserialize_any(StringVecVisitor)
 }
 
+type LayoutPositions = (
+    NodeVec<Point2<f64>>,
+    EdgeVec<Point2<f64>>,
+    HedgeVec<Vec<Point2<f64>>>,
+);
+
 impl TypstGraph {
     pub fn layout(&mut self) {
         self.layout_with_subgraph(None)
@@ -2262,6 +2386,12 @@ impl TypstGraph {
     }
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
+        if matches!(self.layout_config.layout_algo, LayoutAlgo::Impred) {
+            return Err(
+                "ImPrEd requires the shared Typst pipeline to prepare a constrained EC seed"
+                    .to_owned(),
+            );
+        }
         self.validate_layout()?;
         if subgraph.is_some_and(SubSetLike::is_empty) {
             return Ok(());
@@ -2285,37 +2415,43 @@ impl TypstGraph {
             });
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, node_count);
-        // Isolated layouts move every edge with a selected hedge, so clear both hedges.
-        self.clear_hedge_route_points(selected_items.as_ref().map(|(_, edges)| edges));
+        if !iterative {
+            self.clear_hedge_route_points(isolated.then(|| subgraph.unwrap()));
+        }
 
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         if let Some(subgraph) = subgraph {
-            let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
-                LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
-                    if fixed_nodes {
-                        let (_, selected_edges) = self.selected_layout_items(subgraph);
-                        self.fixed_node_partial_layout_positions(
-                            tree_cfg,
-                            self.layout_config.layout_algo,
-                            Some(&selected_edges),
-                        )
-                    } else {
-                        self.partial_layout_positions(
-                            tree_cfg,
-                            self.layout_config.layout_algo,
-                            subgraph,
-                        )
+            let (mut vertex_points, mut edge_points, route_points) =
+                match self.layout_config.layout_algo {
+                    LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
+                        let (nodes, edges) = if fixed_nodes {
+                            let (_, selected_edges) = self.selected_layout_items(subgraph);
+                            self.fixed_node_partial_layout_positions(
+                                tree_cfg,
+                                self.layout_config.layout_algo,
+                                Some(&selected_edges),
+                            )
+                        } else {
+                            self.partial_layout_positions(
+                                tree_cfg,
+                                self.layout_config.layout_algo,
+                                subgraph,
+                            )
+                        };
+                        (nodes, edges, self.layout_route_points())
                     }
-                }
-                LayoutAlgo::Anneal | LayoutAlgo::Force => {
-                    self.partial_optimized_positions(tree_cfg, subgraph, &energy)
-                }
-            };
+                    LayoutAlgo::Anneal | LayoutAlgo::Force => {
+                        self.partial_optimized_positions(tree_cfg, subgraph, &energy)
+                    }
+                    LayoutAlgo::Impred => unreachable!("ImPrEd seed dispatch checked above"),
+                };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(
                 vertex_points,
                 edge_points,
+                route_points,
                 selected_items.as_ref().map(|(nodes, edges)| (nodes, edges)),
+                isolated.then_some(subgraph),
             );
             if matches!(
                 self.layout_config.layout_algo,
@@ -2341,7 +2477,13 @@ impl TypstGraph {
                 self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-            self.update_positions(vertex_points, edge_points, None);
+            self.update_positions(
+                vertex_points,
+                edge_points,
+                self.layout_route_points(),
+                None,
+                None,
+            );
             if matches!(
                 self.layout_config.layout_algo,
                 LayoutAlgo::Dot | LayoutAlgo::StableLayered
@@ -2350,24 +2492,54 @@ impl TypstGraph {
             } else {
                 self.layout_edge_labels(energy.spring_length, None);
             }
+            self.layout_initialized = true;
             return Ok(());
         }
 
-        let (mut vertex_points, mut edge_points) = if fixed_nodes {
+        let (mut vertex_points, mut edge_points, route_points) = if fixed_nodes {
             let full = self.full_filter();
             self.partial_optimized_positions(tree_cfg, &full, &energy)
         } else {
-            let (pos_n, pos_e) = self.new_positions(tree_cfg);
+            let (pos_n, pos_e) = self.initial_solver_positions(tree_cfg);
             self.optimized_positions(pos_n, pos_e, &energy, None, None)
         };
 
         self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
-        self.update_positions(vertex_points, edge_points, None);
+        self.update_positions(vertex_points, edge_points, route_points, None, None);
         self.layout_edge_labels(energy.spring_length, None);
+        self.layout_initialized = true;
         Ok(())
     }
 
     fn validate_layout(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("initial-repulsion", self.layout_config.initial_repulsion),
+            ("repulsion-growth", self.layout_config.repulsion_growth),
+        ] {
+            if !(0.0..=1.0).contains(&value) {
+                return Err(format!("{name} must be a finite fraction between 0 and 1"));
+            }
+        }
+        if !self.layout_config.spring_length_scale.is_finite()
+            || self.layout_config.spring_length_scale <= 0.0
+        {
+            return Err("spring-length-scale must be a positive finite multiplier".to_string());
+        }
+        for (name, value) in [
+            ("external-pull", self.layout_config.spring.external_pull),
+            (
+                "external-pull-balance",
+                self.layout_config.spring.external_pull_balance,
+            ),
+            (
+                "external-pull-attachment",
+                self.layout_config.spring.external_pull_attachment,
+            ),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("{name} must be a non-negative finite number"));
+            }
+        }
         if !self.layout_config.depth_scale.is_finite() || self.layout_config.depth_scale < 0.0 {
             return Err("depth-scale must be a non-negative finite number".to_string());
         }
@@ -2394,6 +2566,15 @@ impl TypstGraph {
                 }
             }
         }
+        for hedge in 0..self.n_hedges() {
+            if self.graph[Hedge(hedge)]
+                .route_points
+                .iter()
+                .any(|point| !point.x.is_finite() || !point.y.is_finite())
+            {
+                return Err(format!("half-edge {hedge}: route points must be finite"));
+            }
+        }
         for (_, edge, data) in self.graph.iter_edges() {
             if dot_statement_value(&data.data.statements, "spring-length").is_some()
                 && !Self::positive_statement_f64(&data.data.statements, "spring-length")
@@ -2415,7 +2596,7 @@ impl TypstGraph {
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_nodes());
-        let (mut pos_n, mut pos_e) = self.new_positions(tree_cfg);
+        let (mut pos_n, mut pos_e) = self.initial_solver_positions(tree_cfg);
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
             pos_n,
@@ -2429,8 +2610,10 @@ impl TypstGraph {
                 },
             self.layout_config.incremental_energy,
         );
+        state.route_points = self.initial_solver_route_points();
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
-            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+            self.layout_config.spring_length_scale
+                * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
         });
 
         (state, energy)
@@ -2710,7 +2893,7 @@ impl TypstGraph {
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
         active_subgraph: Option<&SuBitGraph>,
-    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+    ) -> LayoutPositions {
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
         let mut state = self.graph.new_layout_state(
@@ -2725,8 +2908,10 @@ impl TypstGraph {
                 },
             self.layout_config.incremental_energy,
         );
+        state.route_points = self.initial_solver_route_points();
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
-            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+            self.layout_config.spring_length_scale
+                * Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
         });
         if let Some(active_subgraph) = active_subgraph {
             state = state.with_active_subgraph(active_subgraph.clone());
@@ -2746,15 +2931,17 @@ impl TypstGraph {
                     energy,
                     &mut schedule,
                 );
-                (out.vertex_points, out.edge_points)
+                (out.vertex_points, out.edge_points, out.route_points)
             }
             LayoutAlgo::Force => {
                 let mut session = self.force_session(state, energy, selection);
                 session.run_to_end();
                 let state = session.into_state();
-                (state.vertex_points, state.edge_points)
+                (state.vertex_points, state.edge_points, state.route_points)
             }
-            LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree => unreachable!(),
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree | LayoutAlgo::Impred => {
+                unreachable!()
+            }
         }
     }
 
@@ -2796,6 +2983,8 @@ impl TypstGraph {
                 early_tol: self.layout_config.schedule.early_tol * spring_length,
                 seed: self.layout_config.seed,
                 depth_scale: self.layout_config.depth_scale,
+                initial_repulsion: self.layout_config.initial_repulsion,
+                repulsion_growth: self.layout_config.repulsion_growth,
                 flattening_end: self.layout_config.flattening_end,
             },
         )
@@ -2815,7 +3004,9 @@ impl TypstGraph {
         &mut self,
         node: NodeVec<Point2<f64>>,
         edge: EdgeVec<Point2<f64>>,
+        routes: HedgeVec<Vec<Point2<f64>>>,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+        active_subgraph: Option<&SuBitGraph>,
     ) {
         node.into_iter().for_each(|(i, p)| {
             if selection.is_none_or(|(nodes, _)| nodes[i]) {
@@ -2850,6 +3041,15 @@ impl TypstGraph {
             }
             self.graph[i].pos = p;
         });
+        for (hedge, points) in routes {
+            let edge = self.graph[&hedge];
+            if selection.is_none_or(|(_, edges)| edges[edge])
+                && active_subgraph.is_none_or(|active| active[hedge])
+            {
+                let shift = self.graph[edge].shift.unwrap_or_else(Vector2::zero);
+                self.graph[hedge].route_points = points.into_iter().map(|p| p + shift).collect();
+            }
+        }
     }
 
     fn layout_edge_labels(
@@ -2857,26 +3057,47 @@ impl TypstGraph {
         spring_length: f64,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
     ) {
+        for i in 0..self.graph.n_edges() {
+            let edge = EdgeIndex(i);
+            if selection.is_none_or(|(_, edges)| edges[edge]) {
+                self.graph[edge].statements.remove("layout-label-gap");
+            }
+        }
         let cfg = &self.layout_config;
         if cfg.label_steps == 0 {
             return;
         }
 
-        let label_length = cfg.label_length_scale * spring_length;
+        let axes: EdgeVec<Vector2<f64>> =
+            self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
+        let label_lengths = self.new_edgevec(|_, idx, pair| {
+            let scale = if matches!(pair, HedgePair::Unpaired { .. }) {
+                cfg.external_label_length_scale
+            } else {
+                cfg.internal_label_length_scale
+            };
+            let clearance = if matches!(cfg.label_layout, LabelLayout::FixedGap)
+                && !matches!(pair, HedgePair::Unpaired { .. })
+            {
+                let (half_width, half_height) = self.edge_label_route_half_extents(idx, 0.0);
+                half_width * axes[idx].x.abs() + half_height * axes[idx].y.abs()
+            } else {
+                0.0
+            };
+            scale * spring_length + clearance
+        });
         let label_charge = cfg.label_charge * spring_length.powi(2);
         let label_spring = cfg.label_spring;
         let step = cfg.label_step;
         let max_delta = cfg.label_max_delta_scale * spring_length;
         let eps = 1e-4;
 
-        let axes: EdgeVec<Vector2<f64>> =
-            self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
         let label_radii = self.edge_label_radii();
         let node_radii = self.node_layout_radii();
 
         let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
-            edge_pos + axes[idx] * label_length
+            edge_pos + axes[idx] * label_lengths[idx]
         });
 
         for _ in 0..cfg.label_steps {
@@ -2887,10 +3108,17 @@ impl TypstGraph {
                 if selection.is_some_and(|(_, edges)| !edges[idx]) {
                     continue;
                 }
+                // Keep the initial side and clearance. The renderer slides
+                // these labels along the finished curve at this fixed gap.
+                if matches!(cfg.label_layout, LabelLayout::FixedGap)
+                    && !matches!(self.graph[&idx].1, HedgePair::Unpaired { .. })
+                {
+                    continue;
+                }
                 let edge_pos = self.graph[idx].pos;
                 let mut force = match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
-                        let target = edge_pos + axes[idx] * label_length;
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
+                        let target = edge_pos + axes[idx] * label_lengths[idx];
                         if label_spring != 0.0 {
                             (target - labels[idx]) * label_spring
                         } else {
@@ -2949,7 +3177,9 @@ impl TypstGraph {
                 }
 
                 let mut move_vec = match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => force * step,
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
+                        force * step
+                    }
                     LabelLayout::FixedLength => {
                         let offset = labels[idx] - edge_pos;
                         let radial = if offset.magnitude2() > 1e-12 {
@@ -2968,20 +3198,20 @@ impl TypstGraph {
                 labels[idx] += move_vec;
                 let offset = labels[idx] - edge_pos;
                 match cfg.label_layout {
-                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal | LabelLayout::FixedGap => {
                         if offset.dot(axes[idx]) < 0.0 {
                             let dist = offset.magnitude();
                             labels[idx] = edge_pos + axes[idx] * dist;
                         }
                     }
                     LabelLayout::FixedLength => {
-                        let radius = label_length.abs();
+                        let radius = label_lengths[idx].abs();
                         labels[idx] = if radius <= 1e-12 {
                             edge_pos
                         } else if offset.magnitude2() > 1e-12 {
                             edge_pos + offset.normalize() * radius
                         } else {
-                            edge_pos + axes[idx] * label_length
+                            edge_pos + axes[idx] * label_lengths[idx]
                         };
                     }
                 }
@@ -2999,7 +3229,7 @@ impl TypstGraph {
         self.separate_edge_label_positions_from_boxes(
             &mut labels,
             &axes,
-            label_length,
+            &label_lengths,
             label_gap,
             spring_length,
             selection,
@@ -3010,6 +3240,14 @@ impl TypstGraph {
             if selection.is_some_and(|(_, edges)| !edges[idx]) {
                 continue;
             }
+            if matches!(self.layout_config.label_layout, LabelLayout::FixedGap)
+                && !matches!(self.graph[&idx].1, HedgePair::Unpaired { .. })
+            {
+                self.graph[idx].statements.insert(
+                    "layout-label-gap".into(),
+                    (self.layout_config.internal_label_length_scale * spring_length).to_string(),
+                );
+            }
             self.graph[idx].label_pos = Some(labels[idx]);
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
@@ -3019,13 +3257,42 @@ impl TypstGraph {
     fn clear_edge_label_positions(&mut self) {
         for i in 0..self.graph.n_edges() {
             self.graph[EdgeIndex(i)].label_pos = None;
+            self.graph[EdgeIndex(i)]
+                .statements
+                .remove("layout-label-gap");
         }
     }
 
-    fn clear_hedge_route_points(&mut self, edges: Option<&EdgeVec<bool>>) {
+    fn layout_route_points(&self) -> HedgeVec<Vec<Point2<f64>>> {
+        (0..self.n_hedges())
+            .map(|h| self.graph[Hedge(h)].route_points.clone())
+            .collect()
+    }
+
+    fn initial_solver_route_points(&self) -> HedgeVec<Vec<Point2<f64>>> {
+        (0..self.n_hedges())
+            .map(|h| {
+                let hedge = Hedge(h);
+                let shift = if self.layout_initialized {
+                    self.graph[self.graph[&hedge]]
+                        .shift
+                        .unwrap_or_else(Vector2::zero)
+                } else {
+                    Vector2::zero()
+                };
+                self.graph[hedge]
+                    .route_points
+                    .iter()
+                    .map(|point| *point - shift)
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    fn clear_hedge_route_points(&mut self, subgraph: Option<&SuBitGraph>) {
         for hedge in 0..self.graph.n_hedges() {
             let hedge = Hedge(hedge);
-            if edges.is_none_or(|edges| edges[self.graph[&hedge]]) {
+            if subgraph.is_none_or(|subgraph| subgraph[hedge]) {
                 self.graph[hedge].route_points.clear();
             }
         }
@@ -3063,7 +3330,7 @@ impl TypstGraph {
         &self,
         labels: &mut EdgeVec<Point2<f64>>,
         axes: &EdgeVec<Vector2<f64>>,
-        label_length: f64,
+        label_lengths: &EdgeVec<f64>,
         label_gap: f64,
         spring_length: f64,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
@@ -3106,16 +3373,23 @@ impl TypstGraph {
                         .partial_cmp(&right.1.x)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .then_with(|| left.0 .0.cmp(&right.0 .0))
+                .then_with(|| left.0.0.cmp(&right.0.0))
         });
 
         let mut placed = Vec::<LayoutRect>::new();
         for (edge, base_target, half_width, half_height, _) in ordered_labels {
+            if matches!(self.layout_config.label_layout, LabelLayout::FixedGap)
+                && !matches!(self.graph[&edge].1, HedgePair::Unpaired { .. })
+            {
+                placed.push(LayoutRect::centered(base_target, half_width, half_height));
+                continue;
+            }
             let axis = Self::normalized_or(axes[edge], Vector2::unit_y());
             let tangent = Vector2::new(-axis.y, axis.x);
             let edge_pos = self.graph[edge].pos;
             let normal_step = (2.0 * half_height + label_gap).max(spring_length * 0.10);
             let tangent_step = (2.0 * half_width + label_gap).max(spring_length * 0.10);
+            let label_length = label_lengths[edge];
             let min_axis_distance = (label_length.abs() * 0.20).min(label_length.abs());
             let candidates = Self::edge_label_collision_candidates(
                 base_target,
@@ -3214,7 +3488,7 @@ impl TypstGraph {
     fn edge_label_axis(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
         if matches!(
             self.layout_config.label_layout,
-            LabelLayout::DanglingTangent
+            LabelLayout::DanglingTangent | LabelLayout::FixedGap
         ) && matches!(pair, HedgePair::Unpaired { .. })
         {
             self.edge_label_tangent(edge, pair)
@@ -3369,7 +3643,7 @@ impl TypstGraph {
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(&full),
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => full.clone(),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, &full, true)
     }
@@ -3383,7 +3657,7 @@ impl TypstGraph {
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(subgraph),
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => subgraph.clone(),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, subgraph, false)
     }
@@ -3409,7 +3683,7 @@ impl TypstGraph {
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
                 self.dot_edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.apply_initial_grouped_constraints(&mut pos_v, &mut pos_e);
         (pos_v, pos_e)
@@ -3420,14 +3694,16 @@ impl TypstGraph {
         cfg: TreeInitCfg,
         subgraph: &SuBitGraph,
         energy: &SpringChargeEnergy,
-    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+    ) -> LayoutPositions {
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         let (selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
         let (selected_node_axes, selected_edge_axes) =
             self.grouped_layout_selection(&selected_nodes, &selected_edges, !fixed_nodes);
         let selected_edge_points =
             self.new_edgevec(|_, edge, _| selected_edge_axes[edge].x || selected_edge_axes[edge].y);
-        let (mut pos_n, mut pos_e) = if fixed_nodes {
+        let (mut pos_n, mut pos_e) = if self.layout_initialized {
+            self.initial_solver_positions(cfg)
+        } else if fixed_nodes {
             self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edge_points), true)
         } else {
             self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph)
@@ -3643,7 +3919,7 @@ impl TypstGraph {
                 LayeredProfile::Stable,
                 true,
             ),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         }
     }
 
@@ -4605,6 +4881,20 @@ impl TypstGraph {
             Vector2::unit_x()
         } else {
             Vector2::new(-direction.y, direction.x) / length
+        }
+    }
+
+    fn initial_solver_positions(
+        &self,
+        cfg: TreeInitCfg,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        if self.layout_initialized {
+            (
+                self.new_nodevec(|_, _, node| node.pos - node.shift.unwrap_or_else(Vector2::zero)),
+                self.new_edgevec(|edge, _, _| edge.pos - edge.shift.unwrap_or_else(Vector2::zero)),
+            )
+        } else {
+            self.new_positions(cfg)
         }
     }
 

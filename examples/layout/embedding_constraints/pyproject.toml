@@ -1,0 +1,8 @@
+[project]
+name = "feynkit-embedding-constraints-experiment"
+version = "0.1.0"
+requires-python = ">=3.12,!=3.14.1"
+dependencies = ["networkx==3.7"]
+
+[tool.uv]
+package = false

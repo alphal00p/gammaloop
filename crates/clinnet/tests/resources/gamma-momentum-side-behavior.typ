@@ -51,6 +51,7 @@
       fermion-arrow-mark: (end: (symbol: "triangle", fill: green, stroke: none), scale: 0.5),
     )),
     momentum-arrows: true,
+    momentum-label-slide: false,
     show-momentum: mode.starts-with("full"),
     show-particle: not mode.starts-with("none"),
     momentum-arrow-stroke: (paint: red, thickness: 0.4pt, cap: "round"),
@@ -61,11 +62,15 @@
     callbacks.insert(half + "-style", edge => {
       let layers = callback(edge)
       let expected = cases.at(edge.eid).expected
-      for layer in layers.slice(1) {
-        assert(layer.offset * if expected == "left" { 1 } else { -1 } > 0)
-        assert(layer.at("offset-side", default: none) == none)
-        assert(layer.label-side == expected)
-      }
+      assert.eq(layers.len(), 2)
+      let annotation = layers.last()
+      let arrow = annotation.label-path
+      assert(arrow.offset * if expected == "left" { 1 } else { -1 } > 0)
+      assert.eq(arrow.at("offset-side", default: none), none)
+      assert.eq(arrow.label-side, expected)
+      assert.eq(annotation.offset, 0)
+      assert.eq(annotation.label-side, cases.at(edge.eid).side)
+      assert.eq(annotation.label-slide, false)
       layers
     })
   }

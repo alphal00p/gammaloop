@@ -1,4 +1,4 @@
-//! Build and validate the five independently rendered product manuals.
+//! Build and validate the six independently rendered product manuals.
 
 mod server;
 mod typst_render;
@@ -37,7 +37,14 @@ use tempfile::{Builder as TempDirBuilder, TempDir};
 use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
-const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
+const PRODUCT_IDS: [&str; 6] = [
+    "gammaloop",
+    "linnet",
+    "spenso",
+    "idenso",
+    "vakint",
+    "feynkit",
+];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
@@ -1254,12 +1261,9 @@ impl SiteBuilder {
         }
         self.require_file(Path::new("docs/assets/site.css"))?;
         self.require_file(Path::new("docs/assets/site.js"))?;
-        self.require_file(Path::new("docs/assets/showcase.css"))?;
-        self.require_file(Path::new("docs/assets/showcase.js"))?;
-        self.require_file(Path::new("docs/assets/showcase-hard-boiled.mp3"))?;
         self.require_file(Path::new("docs/assets/rustdoc.css"))?;
-        self.require_file(Path::new("docs/assets/STIXTwoMath-Regular.woff2"))?;
-        self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIXTwoMath-Regular.woff2"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
             "docs/portal/main.typ",
@@ -1302,8 +1306,6 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-dark.svg"))?;
-        self.require_file(Path::new("docs/assets/gammaloop-construction-light.svg"))?;
-        self.require_file(Path::new("docs/assets/gammaloop-construction-dark.svg"))?;
 
         let mut component_ids = BTreeSet::new();
         for product in &self.registry.product {
@@ -1765,6 +1767,15 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // Preserve the versioned upstream package verbatim. This vendor-owned
+            // changelog is not an editable repository documentation source.
+            if source
+                == Path::new(
+                    "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+                )
+            {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -2066,6 +2077,13 @@ impl SiteBuilder {
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
         self.write_site_assets(&site)?;
+        let notebooks = self.root.join(format!(
+            "docs/generated/notebooks/products/{}/latest/assets/notebooks",
+            product.id
+        ));
+        if notebooks.is_dir() {
+            copy_tree(&notebooks, &site.join("assets/notebooks"))?;
+        }
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(
@@ -2240,17 +2258,11 @@ impl SiteBuilder {
         for (source, name) in [
             ("docs/assets/site.css", "site.css"),
             ("docs/assets/site.js", "site.js"),
-            ("docs/assets/showcase.css", "showcase.css"),
-            ("docs/assets/showcase.js", "showcase.js"),
             (
-                "docs/assets/showcase-hard-boiled.mp3",
-                "showcase-hard-boiled.mp3",
-            ),
-            (
-                "docs/assets/STIXTwoMath-Regular.woff2",
+                "crates/spynso3/typst/STIXTwoMath-Regular.woff2",
                 "STIXTwoMath-Regular.woff2",
             ),
-            ("docs/assets/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
+            ("crates/spynso3/typst/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
             (
                 "docs/assets/local-unitarity-light.svg",
                 "local-unitarity-light.svg",
@@ -2262,14 +2274,6 @@ impl SiteBuilder {
             ("docs/assets/spensologo.svg", "spensologo.svg"),
             ("assets/gammalooplogo-light.svg", "gammalooplogo-light.svg"),
             ("assets/gammalooplogo-dark.svg", "gammalooplogo-dark.svg"),
-            (
-                "docs/assets/gammaloop-construction-light.svg",
-                "gammaloop-construction-light.svg",
-            ),
-            (
-                "docs/assets/gammaloop-construction-dark.svg",
-                "gammaloop-construction-dark.svg",
-            ),
         ] {
             let target = assets.join(name);
             match fs::remove_file(&target) {
@@ -3153,8 +3157,8 @@ impl SiteBuilder {
         if checked_in.is_file() {
             return Some(checked_in);
         }
-        if component.package == "linnet-py" {
-            let path = self.root.join("crates/linnet-py/linnet_py.pyi");
+        if component.package == "linnet" {
+            let path = self.root.join("crates/linnet-py/linnet.pyi");
             if path.is_file() {
                 return Some(path);
             }
@@ -4576,7 +4580,7 @@ impl SiteBuilder {
             escape_html(&issue_url),
         );
         let main = format!(
-            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><span class=\"developer-hero-logo\" role=\"img\" aria-label=\"Construction of the GammaLoop logo\"></span><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
             escape_html(&self.developers.title),
             escape_html(&self.developers.summary),
             self.developers
@@ -6889,6 +6893,10 @@ fn render_doc_inline(text: &str, format: DocFormat) -> String {
                 .into_owned()
         }
         DocFormat::PythonDocstring => {
+            let roles =
+                Regex::new(r":(?:py:)?(?:class|meth|attr|func|mod|obj|data|const|exc):`([^`]+)`")
+                    .expect("static Python role regex");
+            rendered = roles.replace_all(&rendered, "<code>$1</code>").into_owned();
             let code = Regex::new(r"``([^`]+)``").expect("static Python code regex");
             rendered = code.replace_all(&rendered, "<code>$1</code>").into_owned();
             let code = Regex::new(r"`([^`]+)`").expect("static Python code regex");
@@ -7131,19 +7139,33 @@ fn render_python_example(content: &[&str]) -> String {
     }
 
     if content
-        .first()
-        .is_some_and(|line| line.trim_start().starts_with(">>>"))
+        .iter()
+        .any(|line| line.trim_start().starts_with(">>>"))
     {
-        let source = content
-            .iter()
-            .filter_map(|line| {
-                let line = line.trim_start();
-                line.strip_prefix(">>>")
-                    .or_else(|| line.strip_prefix("..."))
-                    .map(|line| line.strip_prefix(' ').unwrap_or(line))
+        return content
+            .split(|line| line.trim().is_empty())
+            .map(|paragraph| {
+                let code_start = paragraph
+                    .iter()
+                    .position(|line| line.trim_start().starts_with(">>>"));
+                let Some(code_start) = code_start else {
+                    return render_prose_blocks(paragraph, DocFormat::PythonDocstring);
+                };
+                let mut rendered =
+                    render_prose_blocks(&paragraph[..code_start], DocFormat::PythonDocstring);
+                let source = paragraph[code_start..]
+                    .iter()
+                    .filter_map(|line| {
+                        let line = line.trim_start();
+                        line.strip_prefix(">>>")
+                            .or_else(|| line.strip_prefix("..."))
+                            .map(|line| line.strip_prefix(' ').unwrap_or(line))
+                    })
+                    .collect::<Vec<_>>();
+                rendered.push_str(&render_code(&source));
+                rendered
             })
-            .collect::<Vec<_>>();
-        return render_code(&source);
+            .collect();
     }
     if let Some(code_start) = content
         .iter()
@@ -7153,7 +7175,7 @@ fn render_python_example(content: &[&str]) -> String {
         rendered.push_str(&render_code(&content[code_start..]));
         return rendered;
     }
-    render_code(content)
+    render_prose_blocks(content, DocFormat::PythonDocstring)
 }
 
 fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
@@ -9565,6 +9587,25 @@ fn validate_local_target(
             return Ok(());
         }
     }
+    if link.rustdoc
+        && link.href == "index.html#insert-and-complex-keys"
+        && let Some(attribute) = &link.attribute
+    {
+        // Deref-inherited BTreeMap/BTreeSet prose retains this relative link
+        // to std::collections even when Rustdoc inlines it into another crate.
+        let target = "https://doc.rust-lang.org/std/collections/index.html#insert-and-complex-keys";
+        link_rewrites
+            .entry(link.source.to_path_buf())
+            .or_default()
+            .push(LinkRewrite {
+                range: attribute.target_range.clone(),
+                expected: link.href.to_owned(),
+                replacement: target.to_owned(),
+                target_before: link.href.to_owned(),
+                target_after: Some(target.to_owned()),
+            });
+        return Ok(());
+    }
     failures.push(format!(
         "{source_display} -> {} (missing fragment)",
         link.href
@@ -10105,7 +10146,7 @@ mod tests {
             (None, None),
         );
 
-        assert_eq!(module, "symbolica.community.spenso");
+        assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
         assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
@@ -10196,6 +10237,13 @@ mod tests {
         assert!(python.contains("<code data-lang=\"python\">engine.run()</code>"));
         assert!(python.contains("<p>Reuse the engine.</p>"));
         assert!(!python.contains("```"));
+        assert_eq!(
+            render_doc_inline(
+                "Use :class:`Particle`, :meth:`Model.particle`, and :attr:`name`.",
+                DocFormat::PythonDocstring,
+            ),
+            "Use <code>Particle</code>, <code>Model.particle</code>, and <code>name</code>."
+        );
     }
 
     #[test]
@@ -10245,6 +10293,13 @@ mod tests {
             "<code data-lang=\"python\">for name, values in groups.items():\n    for value in values:\n        print(name, value)</code>"
         ));
         assert!(!rendered.contains("<code data-lang=\"python\">Iterate over grouped values"));
+
+        let prose =
+            render_python_example(&["Leave ``model`` as the final expression in a notebook cell."]);
+        assert!(prose.contains(
+            "<p>Leave <code>model</code> as the final expression in a notebook cell.</p>"
+        ));
+        assert!(!prose.contains("data-lang=\"python\""));
     }
 
     #[test]
@@ -10279,6 +10334,23 @@ mod tests {
         ));
         assert!(!rendered.contains("&gt;&gt;&gt;"));
         assert!(!rendered.contains("\n3</code>"));
+
+        let mixed = render_python_example(&[
+            "Load a model:",
+            "",
+            ">>> model = Model(path)",
+            "",
+            "Then generate diagrams:",
+            "",
+            ">>> model.generate_diagrams(incoming, outgoing)",
+        ]);
+        assert!(mixed.contains("<p>Load a model:</p>"));
+        assert!(mixed.contains("<code data-lang=\"python\">model = Model(path)</code>"));
+        assert!(mixed.contains("<p>Then generate diagrams:</p>"));
+        assert!(mixed.contains(
+            "<code data-lang=\"python\">model.generate_diagrams(incoming, outgoing)</code>"
+        ));
+        assert!(!mixed.contains("&gt;&gt;&gt;"));
     }
 
     #[test]
@@ -12249,7 +12321,12 @@ mod tests {
 
         assert_eq!(
             fs::read(font).unwrap(),
-            fs::read(builder.root.join("docs/assets/STIXTwoMath-Regular.woff2")).unwrap()
+            fs::read(
+                builder
+                    .root
+                    .join("crates/spynso3/typst/STIXTwoMath-Regular.woff2")
+            )
+            .unwrap()
         );
     }
 
@@ -12387,8 +12464,6 @@ mod tests {
             "local-unitarity-dark.svg",
             "gammalooplogo-light.svg",
             "gammalooplogo-dark.svg",
-            "gammaloop-construction-light.svg",
-            "gammaloop-construction-dark.svg",
             "spensologo.svg",
             "STIXTwoMath-Regular.woff2",
             "STIX-Two-OFL.txt",
@@ -12409,8 +12484,6 @@ mod tests {
                 "local-unitarity-dark.svg",
                 "gammalooplogo-light.svg",
                 "gammalooplogo-dark.svg",
-                "gammaloop-construction-light.svg",
-                "gammaloop-construction-dark.svg",
                 "spensologo.svg",
             ]
             .map(|asset| output.path().join("assets").join(asset)),

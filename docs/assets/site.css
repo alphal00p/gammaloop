@@ -281,13 +281,10 @@ body[data-has-toc="false"] .docs-shell { grid-template-columns: var(--sidebar-wi
   box-shadow: 0.45rem 0.45rem 0 var(--accent-soft);
 }
 .product-hero-logo { display: block; width: min(18rem, 70%); height: auto; margin-bottom: 1.25rem; background-position: left center; background-repeat: no-repeat; background-size: contain; }
-.product-logo-gammaloop { aspect-ratio: 1.888 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: contain; }
+.product-logo-gammaloop { aspect-ratio: 2.016 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: contain; }
 :root[data-theme="dark"] .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
-.developer-hero-logo { display: block; width: min(18rem, 70%); aspect-ratio: 1.888 / 1; margin-bottom: 1.25rem; background: url("gammaloop-construction-light.svg") left center / contain no-repeat; }
-:root[data-theme="dark"] .developer-hero-logo { background-image: url("gammaloop-construction-dark.svg"); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
-  :root:not([data-theme]) .developer-hero-logo { background-image: url("gammaloop-construction-dark.svg"); }
 }
 .product-logo-spenso { aspect-ratio: 637 / 189; border-radius: 1rem; background-image: url("spensologo.svg"); }
 .product-hero h1 { max-width: 12ch; margin: 0.25rem 0 0.7rem; }
@@ -922,12 +919,6 @@ button[data-copy-target] { display: none; }
 .portal-funding h2 { margin: 0.35rem 0 0; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(1.7rem, 3vw, 2.5rem); font-weight: 500; line-height: 1; letter-spacing: -0.025em; }
 .portal-funding-copy > p:last-child { max-width: 50rem; margin: 0.65rem 0 0; color: var(--ink-muted); }
 .portal-funding > .portal-text-link { margin-top: 0; }
-.portal-showcase { border-bottom: 1px solid var(--border); }
-.portal-showcase .portal-section-heading { border-bottom: 0; padding-bottom: clamp(1.5rem, 3vw, 2.5rem); }
-.portal-showcase-frame { padding: 0 clamp(1.5rem, 5vw, 5rem) 1rem; }
-.portal-showcase-frame > [data-showcase] { min-height: 12rem; border: 1px solid var(--border); background: #211a23; }
-.portal-showcase-credit { margin: 0; padding: 0 clamp(1.5rem, 5vw, 5rem) clamp(3rem, 6vw, 5rem); color: var(--ink-muted); font-size: 0.82rem; }
-html:not(.js) .portal-showcase { display: none; }
 .portal-footer { width: min(92rem, 100%); min-height: 16rem; display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 2rem; align-items: start; margin: 0 auto; padding: clamp(2rem, 5vw, 4.5rem); border-right: 1px solid var(--border); border-left: 1px solid var(--border); }
 .portal-footer > div { display: flex; gap: 1rem; align-items: center; }
 .portal-footer p { margin: 0; color: var(--ink-muted); font-size: 0.82rem; }
@@ -1230,6 +1221,18 @@ html:not(.js) .portal-showcase { display: none; }
 /* Keep Typst artwork on light paper without recoloring its drawing semantics. */
 :is(.live-notebook, :host) :is(svg[width$="pt"], img[src^="data:image/svg+xml;"]) { display: block; max-width: 100%; height: auto; margin: 1rem auto; padding: .75rem; border-radius: .35rem; background: white; }
 .live-notebook marimo-island { display: block; min-width: 0; margin-block: .8rem; }
+.live-notebook marimo-island:is([data-status="queued"], [data-status="running"])::before {
+  content: "Queued…";
+  display: block;
+  padding: .3rem .6rem;
+  border-left: 3px solid var(--link);
+  background: var(--accent-soft);
+  color: var(--ink-strong);
+  font-size: .8rem;
+  font-weight: 600;
+}
+.live-notebook marimo-island[data-status="running"]::before { content: "Running…"; }
+
 
 /* Marimo 0.24 copies this same-origin stylesheet into its widget shadow roots.
    Font variables are public; the scoped palette and editor selectors follow the pinned runtime. */

@@ -21,6 +21,8 @@ pub mod observables;
 pub mod processes;
 pub mod settings;
 pub mod subtraction;
+pub mod tests;
+// pub mod tests_from_pytest;
 pub mod utils;
 pub mod uv;
 pub use gammaloop_tracing_filter::LogMessage;

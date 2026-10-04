@@ -1,14 +1,21 @@
+mod analysis;
+#[cfg(test)]
 mod api;
-mod contraction;
 mod normalize_dots;
 mod settings;
-mod utils;
+mod slot_contraction;
 mod with_settings;
 
 #[cfg(test)]
 mod test;
 
-pub use api::Schoonschip;
-pub use contraction::Schoonschipify;
+#[cfg(test)]
+pub(crate) use analysis::CANDIDATE_NODE_VISITS;
+pub(crate) use analysis::SimplificationCandidates;
+// The legacy raw pipeline exists solely as an independent unit-test oracle.
+#[cfg(test)]
+pub(crate) use api::Schoonschip;
 pub(crate) use normalize_dots::DotNormalizer;
-pub use settings::{SchoonschipContractionOrder, SchoonschipSettings, SchoonschipTraversal};
+pub(crate) use settings::SchoonschipSettings;
+pub(crate) use slot_contraction::{FactorizedContraction, ReductionStatus, SlotContraction};
+pub(crate) use with_settings::SchoonschipWithSettings;

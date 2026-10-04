@@ -19,8 +19,7 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
-use gammalooprs::integrands::process::GaussianReferenceFunction;
-use gammalooprs::utils::serde_utils::{IsDefault, SmartSerde};
+use gammalooprs::utils::serde_utils::SmartSerde;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -102,15 +101,6 @@ pub struct Integrate {
         completion_selected_integrand_target()
     )]
     pub target: Vec<String>,
-
-    /// Integrate a Gaussian acceptance target, e.g. '{"width":300}' or
-    /// `'{"width":300,"center":[1,2,3]}'`. Re is normalization; Im is the raw
-    /// second moment divided by its known expectation (both targets are one).
-    /// Omitted/empty center means centered. Omission requests physics; repeat
-    /// the same descriptor when resuming a reference workspace.
-    #[arg(long = "reference-gaussian", value_name = "JSON")]
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub reference_gaussian: Option<GaussianReferenceFunction>,
 
     /// Whether to restart the integration from scratch, or continue from a previous run if possible
     #[arg(short = 'r', long)]
@@ -233,7 +223,6 @@ impl Default for Integrate {
             n_cores: None,
             workspace_path: None,
             target: Vec::new(),
-            reference_gaussian: None,
             restart: false,
             uncorrelated: false,
             show_max_weight_info: true,
@@ -890,7 +879,6 @@ fn handle_dashboard_key_event(
         KeyCode::Char('1') => dashboard.select_tab(0),
         KeyCode::Char('2') => dashboard.select_tab(1),
         KeyCode::Char('3') => dashboard.select_tab(2),
-        KeyCode::Char('a') | KeyCode::Char('A') => dashboard.toggle_integral_view(),
         KeyCode::Left => dashboard.previous_tab(),
         KeyCode::Right => dashboard.next_tab(),
         KeyCode::Char('[') => dashboard.focus_previous_slot(),
@@ -947,7 +935,7 @@ fn read_existing_workspace_state(
     )
     .map_err(|err| {
         eyre!(
-"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
+            "Could not deserialize integration state from {}: {err}",
             state_path.display()
         )
     })?
@@ -1112,7 +1100,7 @@ impl Integrate {
             .collect()
     }
 
-    pub(crate) fn build_render_options(
+    fn build_render_options(
         &self,
         slot_settings: &[RuntimeSettings],
         show_statistics: bool,
@@ -1240,34 +1228,14 @@ impl Integrate {
         Ok(resolved)
     }
 
-    fn resolve_reference_gaussians(
-        &self,
-        state: &State,
-        slots: &[ResolvedIntegrandSlot],
-    ) -> Result<Vec<Option<GaussianReferenceFunction>>> {
-        slots
-            .iter()
-            .map(|slot| {
-                self.reference_gaussian
-                    .as_ref()
-                    .map(|reference| {
-                        let integrand = state
-                            .process_list
-                            .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
-                            .require_generated()?;
-                        reference.for_integrand(integrand)
-                    })
-                    .transpose()
-            })
-            .collect()
-    }
-
     fn load_or_prepare_workspace_state(
         &self,
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
-        requested: &mut IntegrationWorkspaceManifest,
+        current_effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
+        current_integrand_fingerprints: &[String],
         workspace_path: &std::path::Path,
+        targets: &mut Vec<Option<Complex<F<f64>>>>,
     ) -> Result<Option<IntegrationState>> {
         let path_to_state = workspace_state_path(workspace_path);
         let manifest_path = workspace_manifest_path(workspace_path);
@@ -1279,27 +1247,23 @@ impl Integrate {
                         "integration manifest",
                     )?;
                 manifest.validate_version()?;
-                manifest.validate_reference_config(&requested.reference_gaussians)?;
-                if requested.reference_gaussians.iter().any(Option::is_some)
-                    && manifest.targets != requested.targets
-                {
-                    return Err(eyre!(
-                        "Reference workspace must retain both normalized observable targets equal to one"
-                    ));
-                }
                 if manifest.sampling_correlation_mode != self.sampling_correlation_mode() {
                     return Err(eyre!(
                         "Workspace integration sampling mode does not match the requested mode; use --restart to switch between correlated and uncorrelated integration"
                     ));
                 }
-                if manifest.slots != requested.slots {
+                let expected_slots = selected_slots
+                    .iter()
+                    .map(|slot| slot.slot_meta.clone())
+                    .collect_vec();
+                if manifest.slots != expected_slots {
                     return Err(eyre!(
                         "Workspace integration slots do not match the currently selected integrands"
                     ));
                 }
-                if manifest.targets != requested.targets {
+                if manifest.targets != *targets {
                     warn!("targets have changed with respect to workspace, reverting changes");
-                    requested.targets = manifest.targets.clone();
+                    *targets = manifest.targets.clone();
                 }
                 if manifest.integrand_fingerprints.len() != selected_slots.len() {
                     return Err(eyre!(
@@ -1311,7 +1275,7 @@ impl Integrate {
                         "Workspace effective model parameter metadata is inconsistent with the selected slots"
                     ));
                 }
-                if requested.effective_model_parameters.len() != selected_slots.len() {
+                if current_effective_model_parameters.len() != selected_slots.len() {
                     return Err(eyre!(
                         "Current effective model parameter metadata is inconsistent with the selected slots"
                     ));
@@ -1319,7 +1283,7 @@ impl Integrate {
                 let mismatched_slots = selected_slots
                     .iter()
                     .zip(manifest.effective_model_parameters.iter())
-                    .zip(requested.effective_model_parameters.iter())
+                    .zip(current_effective_model_parameters.iter())
                     .filter(|((_, saved_card), current_card)| saved_card != current_card)
                     .map(|((slot, _), _)| slot.slot_meta.key())
                     .collect_vec();
@@ -1341,7 +1305,7 @@ impl Integrate {
                 let comparison_integrand_fingerprints = izip!(
                     selected_slots.iter(),
                     workspace_settings.iter(),
-                    requested.integrand_fingerprints.iter(),
+                    current_integrand_fingerprints.iter(),
                 )
                 .map(|(slot, settings, current_fingerprint)| {
                     if settings.sampling.selected_graph_names().is_empty() {
@@ -1394,7 +1358,7 @@ impl Integrate {
                     )
                     .map_err(|err| {
                         eyre!(
-"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
+                            "Could not deserialize integration state from {}: {err}; use --restart to create a new workspace",
                             path_to_state.display()
                         )
                     })?
@@ -1402,7 +1366,7 @@ impl Integrate {
 
                 for ((slot, target), workspace_settings) in selected_slots
                     .iter()
-                    .zip(requested.targets.iter())
+                    .zip(targets.iter())
                     .zip(workspace_settings)
                 {
                     let gloop_integrand = state
@@ -1498,8 +1462,8 @@ impl Integrate {
 
                 gloop_integrand.warm_up(model)?;
                 let full_group_count = gloop_integrand.graph_group_count();
-                let mut integration_view =
-                    gloop_integrand.clone_with_selected_graph_groups(&selected_graph_names)?;
+                let mut integration_view = gloop_integrand
+                    .clone_with_selected_graph_groups(model, &selected_graph_names)?;
                 info!(
                     "Runtime graph-group subset for {}: {} of {} groups [{}]",
                     slot.slot_meta.key().green().bold(),
@@ -1646,16 +1610,31 @@ impl Integrate {
         &self,
         slot_integrands: &[gammalooprs::integrands::process::ProcessIntegrand],
         selected_slots: &[ResolvedIntegrandSlot],
-        manifest: &IntegrationWorkspaceManifest,
+        targets: &[Option<Complex<F<f64>>>],
+        effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
+        integrand_fingerprints: &[String],
         workspace_path: &std::path::Path,
     ) -> Result<()> {
-        if manifest.integrand_fingerprints.len() != selected_slots.len() {
+        if integrand_fingerprints.len() != selected_slots.len() {
             return Err(eyre!(
                 "Resolved {} generated-integrand fingerprints for {} integration slots",
-                manifest.integrand_fingerprints.len(),
+                integrand_fingerprints.len(),
                 selected_slots.len(),
             ));
         }
+        let manifest = IntegrationWorkspaceManifest {
+            version: IntegrationWorkspaceManifest::CURRENT_VERSION,
+            slots: selected_slots
+                .iter()
+                .map(|slot| slot.slot_meta.clone())
+                .collect(),
+            targets: targets.to_vec(),
+            effective_model_parameters: effective_model_parameters.to_vec(),
+            integrand_fingerprints: integrand_fingerprints.to_vec(),
+            training_slot: 0,
+            integrator_settings_slot: 0,
+            sampling_correlation_mode: self.sampling_correlation_mode(),
+        };
         manifest.to_file(workspace_manifest_path(workspace_path), true)?;
 
         for (slot, integrand) in selected_slots.iter().zip(slot_integrands.iter()) {
@@ -1733,7 +1712,6 @@ impl Integrate {
 
         if self.show_summary_only {
             let (manifest, integration_state) = read_existing_workspace_state(&workspace_path)?;
-            manifest.validate_reference_config(&manifest.reference_gaussians)?;
             let selected_slots = if self.process.is_empty() && self.integrand_name.is_empty() {
                 self.resolve_manifest_slots(state, &manifest)?
             } else {
@@ -1749,40 +1727,14 @@ impl Integrate {
                 ));
             }
 
-            if self.reference_gaussian.is_some() {
-                let references = self.resolve_reference_gaussians(state, &selected_slots)?;
-                manifest.validate_reference_config(&references)?;
-            }
             let mut targets = if self.target.is_empty() {
                 manifest.targets.clone()
             } else {
                 self.resolve_targets(&selected_slots)?
             };
-            if manifest.reference_gaussians.iter().any(Option::is_some)
-                && [&targets, &manifest.targets].iter().any(|values| {
-                    values.len() != manifest.slots.len()
-                        || values
-                            .iter()
-                            .any(|target| *target != Some(Complex::new(F(1.0), F(1.0))))
-                })
-            {
-                return Err(eyre!(
-                    "Saved Gaussian reference summary requires both normalized targets (1,1)"
-                ));
-            }
             if targets != manifest.targets {
                 warn!("targets have changed with respect to workspace, reverting changes");
                 targets = manifest.targets.clone();
-            }
-
-            for (slot, reference) in manifest.slots.iter().zip(&manifest.reference_gaussians) {
-                if let Some(reference) = reference {
-                    info!(
-                        "Saved reference acceptance {}: Re=normalization, Im=raw |K|² moment / {}; targets=1",
-                        slot.key(),
-                        reference.expected_second_moment::<f64>()
-                    );
-                }
             }
 
             if integration_state.num_points == 0 {
@@ -1828,19 +1780,6 @@ impl Integrate {
         )?;
 
         let selected_slots = self.resolve_selected_slots(state)?;
-        let references = self.resolve_reference_gaussians(state, &selected_slots)?;
-        let mut targets = self.resolve_targets(&selected_slots)?;
-        for (reference, target) in references.iter().zip(&mut targets) {
-            if reference.is_some() {
-                let expected = Complex::new(F(1.0), F(1.0));
-                if target.as_ref().is_some_and(|target| *target != expected) {
-                    return Err(eyre!(
-                        "Gaussian reference integration has two normalized targets (1,1); a different --target is contradictory"
-                    ));
-                }
-                *target = Some(expected);
-            }
-        }
 
         if self.restart && workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)?;
@@ -1853,40 +1792,24 @@ impl Integrate {
                 workspace_path.display()
             );
         }
+        let mut targets = self.resolve_targets(&selected_slots)?;
         let slot_models = self.resolve_slot_models(state, &selected_slots)?;
-        let mut manifest = IntegrationWorkspaceManifest {
-            version: IntegrationWorkspaceManifest::CURRENT_VERSION,
-            slots: selected_slots
-                .iter()
-                .map(|slot| slot.slot_meta.clone())
-                .collect(),
-            targets,
-            effective_model_parameters: self
-                .resolve_effective_model_parameters(state, &selected_slots)?,
-            integrand_fingerprints: self.resolve_integrand_fingerprints(state, &selected_slots)?,
-            reference_observable_convention: references
-                .iter()
-                .any(Option::is_some)
-                .then(|| GaussianReferenceFunction::INTEGRATION_CONVENTION.to_owned()),
-            reference_gaussians: if references.iter().any(Option::is_some) {
-                references
-            } else {
-                Vec::new()
-            },
-            training_slot: 0,
-            integrator_settings_slot: 0,
-            sampling_correlation_mode: self.sampling_correlation_mode(),
-        };
+        let effective_model_parameters =
+            self.resolve_effective_model_parameters(state, &selected_slots)?;
+        let current_integrand_fingerprints =
+            self.resolve_integrand_fingerprints(state, &selected_slots)?;
         let integration_state = self.load_or_prepare_workspace_state(
             state,
             &selected_slots,
-            &mut manifest,
+            &effective_model_parameters,
+            &current_integrand_fingerprints,
             &workspace_path,
+            &mut targets,
         )?;
         let mut slot_integrands =
             self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
         // Persist the post-warm full-source fingerprint for both filtered and unfiltered slots.
-        manifest.integrand_fingerprints =
+        let workspace_integrand_fingerprints =
             self.resolve_integrand_fingerprints(state, &selected_slots)?;
         self.restore_workspace_observables(
             &workspace_path,
@@ -1895,20 +1818,6 @@ impl Integrate {
             &mut slot_integrands,
         )?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
-        for ((slot, integrand), reference) in selected_slots
-            .iter()
-            .zip(&slot_integrands)
-            .zip(&manifest.reference_gaussians)
-        {
-            if let Some(reference) = reference {
-                reference.for_integrand(integrand)?;
-                info!(
-                    "Reference acceptance {}: Re=Gaussian normalization, Im=raw |K|² moment / {}; both targets=1; no physical events",
-                    slot.slot_meta.key(),
-                    reference.expected_second_moment::<f64>()
-                );
-            }
-        }
         let slot_settings = slot_integrands
             .iter()
             .map(|integrand| integrand.get_settings().clone())
@@ -1919,7 +1828,9 @@ impl Integrate {
         self.write_workspace_manifest_and_settings(
             &slot_integrands,
             &selected_slots,
-            &manifest,
+            &targets,
+            &effective_model_parameters,
+            &workspace_integrand_fingerprints,
             &workspace_path,
         )?;
 
@@ -1947,23 +1858,16 @@ impl Integrate {
             slot_settings,
             slot_models,
             slot_integrands,
-            manifest.targets
+            targets
         )
-        .enumerate()
-        .map(|(slot_index, (meta, settings, model, integrand, target))| {
-            let mut slot = IntegrationSlot::new(
+        .map(|(meta, settings, model, integrand, target)| {
+            IntegrationSlot::new(
                 meta,
                 settings,
                 model,
                 Integrand::ProcessIntegrand(Box::new(integrand)),
                 target,
-            );
-            slot.reference_gaussian = manifest
-                .reference_gaussians
-                .get(slot_index)
-                .cloned()
-                .flatten();
-            slot
+            )
         })
         .collect();
 
@@ -2022,9 +1926,7 @@ mod tests {
     use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid};
     use tempfile::tempdir;
 
-    fn write_unversioned_workspace(
-        workspace: &Path,
-    ) -> gammalooprs::integrate::IntegrationWorkspaceManifest {
+    fn write_unversioned_workspace(workspace: &Path) {
         let state_path = workspace_state_path(workspace);
         std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
         std::fs::write(
@@ -2041,7 +1943,6 @@ mod tests {
         )
         .unwrap();
         std::fs::write(state_path, b"not a bincode integration state").unwrap();
-        serde_json::from_slice(&std::fs::read(workspace_manifest_path(workspace)).unwrap()).unwrap()
     }
 
     #[test]
@@ -2061,11 +1962,12 @@ mod tests {
     #[test]
     fn resume_rejects_unversioned_workspace_before_decoding_state() {
         let temp = tempdir().unwrap();
-        let mut requested = write_unversioned_workspace(temp.path());
+        write_unversioned_workspace(temp.path());
         let mut state = State::new_test();
+        let mut targets = Vec::new();
 
         let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
+            .load_or_prepare_workspace_state(&mut state, &[], &[], &[], temp.path(), &mut targets)
             .err()
             .expect("unversioned workspace must be rejected");
         let message = error.to_string();
@@ -2078,13 +1980,12 @@ mod tests {
     fn resume_propagates_workspace_state_read_errors() {
         let temp = tempdir().unwrap();
         let state_path = workspace_state_path(temp.path());
-        let mut requested = write_unversioned_workspace(temp.path());
-        std::fs::remove_file(&state_path).unwrap();
         std::fs::create_dir_all(&state_path).unwrap();
         let mut state = State::new_test();
+        let mut targets = Vec::new();
 
         let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
+            .load_or_prepare_workspace_state(&mut state, &[], &[], &[], temp.path(), &mut targets)
             .err()
             .expect("workspace read error must be propagated");
         let message = error.to_string();
@@ -2246,49 +2147,6 @@ mod tests {
                 Some(Complex::new(F(1.0), F(2.0))),
             ]
         );
-    }
-
-    #[test]
-    fn reference_descriptor_cli_serde_and_workspace_contract() {
-        use clap::Parser;
-        use gammalooprs::{
-            integrands::process::GaussianReferenceFunction, integrate::IntegrationWorkspaceManifest,
-        };
-        let parsed =
-            IntegrateCli::try_parse_from(["test", "--reference-gaussian", r#"{"width":300}"#])
-                .unwrap();
-        let descriptor = parsed.integrate.reference_gaussian.as_ref().unwrap();
-        assert_eq!(descriptor.width(), 300.0);
-        assert!(descriptor.center().is_empty());
-        let encoded = toml::to_string(&parsed.integrate).unwrap();
-        let decoded: Integrate = toml::from_str(&encoded).unwrap();
-        assert_eq!(
-            decoded.reference_gaussian,
-            parsed.integrate.reference_gaussian
-        );
-        let centered = GaussianReferenceFunction::centered(300.0, 4).unwrap();
-        let manifest: IntegrationWorkspaceManifest = serde_json::from_value(serde_json::json!({
-            "version":IntegrationWorkspaceManifest::CURRENT_VERSION,"slots":[{"process_name":"p","integrand_name":"i"}],"targets":[],
-            "effective_model_parameters":[],"integrand_fingerprints":[],"training_slot":0,
-            "integrator_settings_slot":0,"sampling_correlation_mode":"correlated",
-            "reference_gaussians":[centered],
-            "reference_observable_convention":GaussianReferenceFunction::INTEGRATION_CONVENTION
-        }))
-        .unwrap();
-        manifest
-            .validate_reference_config(&[Some(centered)])
-            .unwrap();
-        assert!(manifest.validate_reference_config(&[None]).is_err());
-        assert!(manifest
-            .validate_reference_config(&[Some(
-                GaussianReferenceFunction::centered(301.0, 4).unwrap()
-            )])
-            .is_err());
-        let mut unknown = manifest;
-        unknown.reference_observable_convention = Some("unknown".into());
-        assert!(unknown
-            .validate_reference_config(&unknown.reference_gaussians)
-            .is_err());
     }
 
     #[test]
@@ -2589,30 +2447,6 @@ mod tests {
             ),
             DashboardKeyAction::Redraw
         );
-    }
-
-    #[test]
-    fn dashboard_a_toggles_absolute_integral_view() {
-        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
-        assert!(!dashboard.is_absolute_view());
-
-        assert_eq!(
-            super::handle_dashboard_key_event(
-                &mut dashboard,
-                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-            ),
-            DashboardKeyAction::Redraw
-        );
-        assert!(dashboard.is_absolute_view());
-
-        assert_eq!(
-            super::handle_dashboard_key_event(
-                &mut dashboard,
-                KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
-            ),
-            DashboardKeyAction::Redraw
-        );
-        assert!(!dashboard.is_absolute_view());
     }
 
     #[test]

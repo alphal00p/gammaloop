@@ -2,10 +2,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    IndexTooling,
+    CookMode, CookSettings, IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::SymbolicTensor,
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -22,13 +22,15 @@ use spenso::{
     },
     iterators::IteratableTensor,
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MAX_EAGER_TENSOR_SUM_BYTES, MinIntermediateCost,
-        MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+        MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
         PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SequentialExtract, SequentialRef,
         SmallestDegree,
-        graph::{NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::{AtomStructureExt, ShadowedStructure, StrictTensorFilter},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
+        parsing::{
+            AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShadowedStructure,
+            ShorthandParsing, StrictTensorFilter,
+        },
+        store::TensorScalarStoreMapping,
         tags::SPENSO_TAG,
     },
     shadowing::{
@@ -40,7 +42,7 @@ use spenso::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::DualConciousIndex,
         representation::{LibraryRep, RepName},
-        slot::{DualSlotTo, IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot},
     },
     tensors::{
         data::{SparseOrDense, StorageTensor},
@@ -74,7 +76,7 @@ use crate::{
         process::param_builder::{FnMapEntry, LUParams},
     },
     momentum::{Helicity, sample::MomentumSample},
-    numerator::{ParsingNet, aind::Aind, symbolica_ext::NumeratorAtomExt},
+    numerator::{ParsingNet, aind::Aind},
     processes::{
         ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
         TensorNetworkContractionOrder,
@@ -84,8 +86,7 @@ use crate::{
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
     },
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, SamplingFloat, TENSORLIB, W_,
-        f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
 };
@@ -94,7 +95,7 @@ type ParsingTensorMap<'a> = dyn Fn(ParamTensor<ShadowedStructure<Aind>>) -> Resu
     + 'a;
 
 use super::{
-    ParamBuilder,
+    ParamBuilder, RuntimeCache,
     param_builder::{ThresholdParams, UpdateAndGetParams},
 };
 
@@ -154,7 +155,12 @@ pub(crate) fn evaluate_evaluator_single<T: FloatLike + GenericEvaluatorFloat>(
     generic_evaluator: &mut GenericEvaluator,
     params: &[Complex<F<T>>],
     evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
 ) -> Complex<F<T>> {
+    if !record_primary_timing {
+        return <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
+    }
+
     let start = std::time::Instant::now();
     let result = <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
@@ -167,7 +173,12 @@ pub(crate) fn evaluate_evaluator<T: FloatLike + GenericEvaluatorFloat>(
     generic_evaluator: &mut GenericEvaluator,
     params: &[Complex<F<T>>],
     evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
 ) -> Vec<DualOrNot<Complex<F<T>>>> {
+    if !record_primary_timing {
+        return <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
+    }
+
     let start = std::time::Instant::now();
     let result = <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
@@ -546,7 +557,7 @@ impl EvaluatorStack {
             &fn_map,
             entries,
             settings.optimization_settings(),
-            dual_shape.clone().map(|shape| (shape, Vec::new())),
+            dual_shape.clone(),
             settings,
         )?;
         evaluator.fn_map_entries.extend(alias_entries);
@@ -775,6 +786,20 @@ impl EvaluatorStack {
         )
     }
 
+    fn retain_component_scalar_alias(scalar: &Atom) -> bool {
+        // Keep guards visible until they enclose the complete branch, including
+        // neighboring inverses.
+        scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+            && [
+                OrientationID::symbol(),
+                GS.theta,
+                GS.orientation_delta,
+                Symbol::IF,
+            ]
+            .into_iter()
+            .all(|selector| !scalar.contains_symbol(selector))
+    }
+
     fn preprocess_tensor<A: AtomCore>(
         a: &A,
         atom_index: usize,
@@ -789,46 +814,36 @@ impl EvaluatorStack {
             do_algebra = settings.do_algebra,
             "Evaluator timing milestone"
         );
-        // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-        let network_input = if settings.do_algebra {
-            let color_simplified = a.as_atom_view().simplify_color_with(
-                ColorSimplifySettings::default().with_cof_dimension_invariants(),
-            );
-            let gamma_simplified = color_simplified.simplify_gamma();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-                stage = "evaluator_stack_parse_atom_after_simplify_gamma",
-                atom_index,
-                log.after_gamma = gamma_simplified,
-                "Evaluator atom after gamma simplification"
-            );
-            let simplified = gamma_simplified.simplify_metrics().to_dots();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_done",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
-            simplified
+        // The shared carrier owns admission and tensor identities. Physical
+        // component indices are reversibly encoded only for that strict boundary.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let input = if settings.do_algebra {
+            a.as_atom_view().to_owned()
         } else {
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_skipped",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
             a.as_atom_view().to_cof_dimension_invariants()
+        };
+        let input = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?;
+        let network_input = if settings.do_algebra {
+            input
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+        } else {
+            input
         };
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_normalization_done",
             atom_index,
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Normalized evaluator input before independent scalar contractions"
-        );
-        crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-            stage = "evaluator_stack_parse_atom_before_network_parse",
-            atom_index,
-            log.atom = network_input,
-            "Evaluator atom before network parsing"
+            "Admitted evaluator tensor input"
         );
         let execute = |net: &mut ParsingNet| -> Result<()> {
             macro_rules! execute_min_result_rank {
@@ -914,268 +929,47 @@ impl EvaluatorStack {
             Ok(())
         };
 
-        // Materialize only an original additive tensor factor. Scalar spectators,
-        // powers and functions stay with the original residual product; this
-        // preparation never distributes a graph numerator or changes a strategy.
-        // Only exact Gaussian integers qualify; floating coefficients retain
-        // their original evaluation order in the ordinary network path.
-        let is_gaussian_integer = |atom: AtomView<'_>| {
-            let AtomView::Num(number) = atom else {
-                return false;
-            };
-            matches!(number.get_coeff_view().to_owned(),
-                symbolica::coefficient::Coefficient::Complex(value)
-                    if value.re.is_integer() && value.im.is_integer())
+        let parse_settings = ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_schoonship: true,
+                    expand_inside_chains: true,
+                },
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
         };
-        let constant_factor =
-            |factor: AtomView<'_>| -> Result<Option<ParamTensor<ShadowedStructure<Aind>>>> {
-                if !matches!(factor, AtomView::Add(_))
-                    || factor.get_byte_size() >= MAX_EAGER_TENSOR_SUM_BYTES
-                    || spenso::network::profile::lazy_tensor_sums()
-                {
-                    return Ok(None);
-                }
-                // Reject scalar parameters and guards before parsing candidate factors.
-                // A tensor's index arguments are interpreted by the existing parser.
-                let mut pending = vec![factor];
-                while let Some(atom) = pending.pop() {
-                    match atom {
-                        AtomView::Add(sum) => pending.extend(sum.iter()),
-                        AtomView::Mul(product) => pending.extend(product.iter()),
-                        AtomView::Num(_) if is_gaussian_integer(atom) => {}
-                        AtomView::Fun(_) if atom.is_tensorial(StrictTensorFilter::Tagged) => {}
-                        _ => return Ok(None),
-                    }
-                }
-                let mut constant = factor.parse_into_net()?;
-                let exposed = constant.graph.dangling_indices();
-                if exposed.is_empty() || exposed.iter().any(|slot| !slot.matches(slot)) {
-                    return Ok(None);
-                }
-                constant.graph.cache_expr_tree_roots();
-                let mut bounds: HashMap<_, (usize, usize)> = HashMap::new();
-                for node in constant
-                    .graph
-                    .cached_expr_preorder_nodes()
-                    .into_iter()
-                    .rev()
-                {
-                    let children = constant.graph.cached_expr_children(node);
-                    let (entries, bytes) = match &constant.graph.graph[node] {
-                        NetworkNode::Op(op @ (NetworkOp::Sum | NetworkOp::Product)) => children
-                            .into_iter()
-                            .fold((1usize, 0usize), |(entries, bytes), child| {
-                                let (child_entries, child_bytes) = bounds[&child];
-                                (
-                                    if matches!(op, NetworkOp::Sum) {
-                                        entries.max(child_entries)
-                                    } else {
-                                        entries.saturating_mul(child_entries)
-                                    },
-                                    bytes.saturating_add(child_bytes),
-                                )
-                            }),
-                        NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)) => {
-                            let scalar = constant.store.get_scalar_ref(*scalar).as_view();
-                            if !is_gaussian_integer(scalar) {
-                                return Ok(None);
-                            }
-                            (1, scalar.get_byte_size() + std::mem::size_of::<Atom>())
-                        }
-                        NetworkNode::Leaf(
-                            leaf @ (NetworkLeaf::LibraryKey { .. } | NetworkLeaf::LocalTensor(_)),
-                        ) => {
-                            // Bound logical capacity before realizing a library leaf, then
-                            // inspect its actual entries rather than its symbol or name.
-                            let entries = constant
-                                .graph
-                                .slots(node)
-                                .into_iter()
-                                .try_fold(1usize, |size, slot| {
-                                    size.checked_mul(usize::try_from(slot.dim()).ok()?)
-                                });
-                            let Some(entries) = entries.filter(|size| {
-                                size.saturating_mul(std::mem::size_of::<Atom>())
-                                    < MAX_EAGER_TENSOR_SUM_BYTES
-                            }) else {
-                                return Ok(None);
-                            };
-                            let tensor = match leaf {
-                                NetworkLeaf::LibraryKey { .. } => constant
-                                    .graph
-                                    .get_lib_data::<ShadowedStructure<Aind>, _, _>(
-                                    TENSORLIB.read().unwrap().deref(),
-                                    node,
-                                )?,
-                                NetworkLeaf::LocalTensor(index) => {
-                                    constant.store.get_tensor(*index).clone()
-                                }
-                                _ => unreachable!(),
-                            };
-                            let mut bytes = std::mem::size_of::<Atom>();
-                            for (_, value) in tensor.iter_flat() {
-                                if !is_gaussian_integer(value) {
-                                    return Ok(None);
-                                }
-                                bytes =
-                                    bytes.max(value.get_byte_size() + std::mem::size_of::<Atom>());
-                            }
-                            (entries, bytes)
-                        }
-                        _ => return Ok(None),
-                    };
-                    // A product's unreduced Cartesian capacity bounds its partial
-                    // contractions; sums preserve the largest child's capacity.
-                    // Sum component sizes conservatively and reuse the eager budget.
-                    if entries.saturating_mul(bytes) >= MAX_EAGER_TENSOR_SUM_BYTES {
-                        return Ok(None);
-                    }
-                    // Components remain symbolic, so integer arithmetic needs no
-                    // floating-point exactness bound.
-                    bounds.insert(node, (entries, bytes));
-                }
-                execute(&mut constant)?;
-                let lib = TENSORLIB.read().unwrap();
-                let ExecutionResult::Val(tensor) = constant.result_tensor(lib.deref())? else {
-                    return Ok(None);
-                };
-                Ok(Some(tensor.into_owned()))
-            };
-
-        // Each existing top-level summand is an independent tensor contraction.
-        // Keeping its network local avoids scanning unrelated terms during
-        // finite component preparation. Products, powers and nested sums retain
-        // their grouping; the resulting expressions are reunited before optimization.
-        let terms = if let AtomView::Add(sum) = network_input.as_view() {
-            sum.iter().collect::<Vec<_>>()
-        } else {
-            vec![network_input.as_view()]
-        };
+        let network_expression = cooking.uncook(network_input.expression().as_view());
+        let net = ParsingNet::try_from_view_with_function_library(
+            network_expression.as_view(),
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+            &parse_settings,
+        )?;
+        let mut net = net.map_result(Ok::<_, eyre::Report>, |tensor| match tensor_map {
+            Some(map) => map(tensor),
+            None => Ok(tensor),
+        })?;
+        // Component-network scalar storage remains independent of symbolic
+        // tensor reduction. The finishers scope those scalar references once.
+        let term_index = 0;
+        let scalar_aliases =
+            net.alias_scalar_refs(|_, scalar| Self::retain_component_scalar_alias(scalar));
+        let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_terms_start",
+            stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
             atom_index,
-            term_count = terms.len(),
-            "Contracting independent scalar summands"
+            term_index,
+            closed_sum_boundaries,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Prepared finite tensor contractions through retained sums"
         );
-        // Network handles are local indices. Give each summand its own scope
-        // before combining independently contracted networks.
-        let result = terms
-            .into_iter()
-            .enumerate()
-            .map(|(term_index, term)| -> Result<AliasedAtom> {
-                let term_started = std::time::Instant::now();
-                let mut residual = Vec::new();
-                let mut constants = Vec::new();
-                if let AtomView::Mul(product) = term {
-                    for factor in product.iter() {
-                        if let Some(tensor) = constant_factor(factor)? {
-                            constants.push(tensor);
-                        } else {
-                            residual.push(factor);
-                        }
-                    }
-                }
-                let mut net = if constants.is_empty() {
-                    term.parse_into_net()?
-                } else {
-                    let mut net = Atom::mul_many(residual).parse_into_net()?;
-                    for tensor in constants.into_iter().rev() {
-                        net = ParsingNet::from_tensor(tensor) * net;
-                    }
-                    net
-                };
-                if let Some(tensor_map) = tensor_map {
-                    net = net.map_result(Ok, tensor_map)?;
-                }
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_net_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                // println!("Net: {}", net.dot_pretty());
-                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
-                        // Keep guards visible until they enclose the complete branch,
-                        // including inverses in neighboring scalar factors. These
-                        // definitions precede generated handles, so selector structure
-                        // cannot be hidden through another registered alias either.
-                        && [OrientationID::symbol(), GS.theta, GS.orientation_delta, Symbol::IF]
-                            .into_iter().all(|selector| !scalar.contains_symbol(selector))
-                });
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
-                    atom_index,
-                    term_index,
-                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
-                    aliases_created = scalar_aliases.aliases_created(),
-                    aliased_terms = scalar_aliases.aliased_terms(),
-                    aliased_bytes = scalar_aliases.aliased_bytes(),
-                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                // Prepare only the finite component contraction. Raw symbolic networks
-                // used by Taylor expansion retain their original product/sum grouping.
-                let contraction_preparation_started = std::time::Instant::now();
-                let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
-                    atom_index,
-                    term_index,
-                    closed_sum_boundaries,
-                    elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
-                    "Prepared finite tensor contractions through pending sums"
-                );
-                crate::debug_tags!(#generation, #compile, #term, #dump;
-                    stage = "evaluator_stack_parse_atom_network_dump",
-                    atom_index,
-                    term_index,
-                    file.atom = %term.to_canonical_string(),
-                    file.network = %net.dot_pretty(),
-                    "Parsed evaluator network dump"
-                );
-
-                let parse_elapsed = term_started.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_parse_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                let instant = std::time::Instant::now();
-
-                execute(&mut net)?;
-
-                let execute_elapsed = instant.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                finish(&net, &scalar_aliases, term_index).map_err(|error| {
-                    error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(|terms| {
-                terms.into_iter().fold(AliasedAtom::default(), |sum, term| {
-                    sum.try_add(&term).unwrap()
-                })
-            });
+        execute(&mut net)?;
+        let result = finish(&net, &scalar_aliases, term_index).map_err(|error| {
+            error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+        });
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_done",
             atom_index,
@@ -1443,6 +1237,7 @@ impl EvaluatorStack {
                 _ => false,
             });
             collected
+                .into_inner()
                 .map_collects(|wrapped, _, out| {
                     let core = wrapped.as_fun_view().unwrap().iter().next().unwrap();
                     let factors = match core {
@@ -2271,6 +2066,7 @@ impl EvaluatorStack {
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Vec<DualOrNot<Complex<F<T>>>>
     where
         usize: From<OID>,
@@ -2283,6 +2079,7 @@ impl EvaluatorStack {
                 &mut self.single_parametric,
                 input.as_slice(),
                 evaluation_metadata,
+                record_primary_timing,
             );
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
@@ -2299,6 +2096,7 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some((iterative, len)) = &mut self.iterative else {
             return Err(eyre!(
@@ -2306,7 +2104,12 @@ impl EvaluatorStack {
             ));
         };
 
-        let output = evaluate_evaluator(iterative, input.as_slice(), evaluation_metadata);
+        let output = evaluate_evaluator(
+            iterative,
+            input.as_slice(),
+            evaluation_metadata,
+            record_primary_timing,
+        );
         if *len == 0 {
             return Err(eyre!("Iterative evaluator has no generated orientations"));
         }
@@ -2328,6 +2131,7 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed_function_map) = &mut self.summed_function_map else {
             return Err(eyre!(
@@ -2345,6 +2149,7 @@ impl EvaluatorStack {
             summed_function_map,
             input.as_slice(),
             evaluation_metadata,
+            record_primary_timing,
         ))
     }
 
@@ -2352,6 +2157,7 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed) = &mut self.summed else {
             return Err(eyre!(
@@ -2363,6 +2169,7 @@ impl EvaluatorStack {
             summed,
             input.as_slice(),
             evaluation_metadata,
+            record_primary_timing,
         ))
     }
     #[instrument(
@@ -2374,6 +2181,7 @@ impl EvaluatorStack {
             orientations,
             settings,
             evaluation_metadata,
+            record_primary_timing
         ),
         fields(
             num_orientations = orientations.len(),
@@ -2386,6 +2194,7 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         settings: &RuntimeSettings,
         evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
@@ -2403,6 +2212,7 @@ impl EvaluatorStack {
                 &mut self.single_parametric,
                 input.as_slice(),
                 evaluation_metadata,
+                record_primary_timing,
             ));
         }
 
@@ -2419,14 +2229,21 @@ impl EvaluatorStack {
         }
 
         match settings.general.evaluator_method {
-            EvaluatorMethod::SingleParametric => {
-                Ok(self.evaluate_parametric(input, orientations, evaluation_metadata))
+            EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
+                input,
+                orientations,
+                evaluation_metadata,
+                record_primary_timing,
+            )),
+            EvaluatorMethod::Iterative => {
+                self.evaluate_iterative(input, evaluation_metadata, record_primary_timing)
             }
-            EvaluatorMethod::Iterative => self.evaluate_iterative(input, evaluation_metadata),
             EvaluatorMethod::SummedFunctionMap => {
-                self.evaluate_summed_fnmap(input, evaluation_metadata)
+                self.evaluate_summed_fnmap(input, evaluation_metadata, record_primary_timing)
             }
-            EvaluatorMethod::Summed => self.evaluate_summed(input, evaluation_metadata),
+            EvaluatorMethod::Summed => {
+                self.evaluate_summed(input, evaluation_metadata, record_primary_timing)
+            }
         }
     }
 
@@ -2516,9 +2333,6 @@ impl EvaluatorStack {
     }
 }
 
-/// Dual shape and statically zero `(parameter, derivative component)` seeds.
-type EvaluatorDualConfig = (Vec<Vec<usize>>, Vec<(usize, usize)>);
-
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
@@ -2535,8 +2349,6 @@ pub struct GenericEvaluator {
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
-    /// Only sampling programs warm this source lane; physical evaluators keep it empty.
-    pub(crate) sampling_fixed256: RuntimeCache<ExpressionEvaluator<Complex<F<SamplingFloat>>>>,
     pub(crate) loaded_f64_compiled: RuntimeCache<CompiledComplexEvaluatorSpenso>,
     pub(crate) symjit_f64: RuntimeCache<SymjitComplexEvaluatorGL>,
     pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
@@ -2694,7 +2506,7 @@ impl GenericEvaluator {
             &builder.fn_map,
             builder.reps.clone(),
             optimization_settings,
-            dual_shape.map(|shape| (shape, Vec::new())),
+            dual_shape,
             settings,
         )
     }
@@ -2705,25 +2517,9 @@ impl GenericEvaluator {
         fn_map: &FunctionMap,
         mut fn_map_entries: Vec<FnMapEntry>,
         optimization_settings: OptimizationSettings,
-        dual_config: Option<EvaluatorDualConfig>,
+        dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        // Known-zero seed components belong to the compiled program. Supplying
-        // them to Symbolica avoids evaluating a zero tangent times a singular
-        // derivative of a prepared-only subexpression, such as sqrt(m) at m=0.
-        // The serialized shape and input layout stay unchanged; simplification
-        // is retained in the rational program and every native specialization.
-        let (dual_shape, zero_components) =
-            dual_config.map_or((None, Vec::new()), |(shape, zeros)| (Some(shape), zeros));
-        if let Some(shape) = &dual_shape
-            && zero_components.iter().any(|&(parameter, component)| {
-                parameter >= params.len() || component == 0 || component >= shape.len()
-            })
-        {
-            return Err(eyre!(
-                "statically zero dual seeds must refer to valid derivative components"
-            ));
-        }
         let evaluator_replacements = if settings.do_fn_map_replacements {
             fn_map_entries
                 .iter()
@@ -2921,7 +2717,7 @@ impl GenericEvaluator {
         );
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
-            let dualizer = Dualizer::new(dual, zero_components);
+            let dualizer = Dualizer::new(dual, vec![]);
             tree = tree.vectorize(&dualizer).unwrap();
         }
 
@@ -2952,7 +2748,6 @@ impl GenericEvaluator {
             f128,
             dual_shape,
             arb,
-            sampling_fixed256: RuntimeCache::default(),
             loaded_f64_compiled: RuntimeCache::default(),
             symjit_f64: RuntimeCache::default(),
             active_f64_backend: RuntimeCache::default(),
@@ -3215,73 +3010,117 @@ impl GenericEvaluatorFloat for f64 {
     // }
 }
 
-// Eager scalar and dual dispatch share the same output shape at every native lane.
-macro_rules! impl_eager_evaluator_float {
-    ($scalar:ty, $evaluator:ident => $program:expr) => {
-        impl GenericEvaluatorFloat for $scalar {
-            #[inline(always)]
-            fn get_evaluator_single(
-                $evaluator: &mut GenericEvaluator,
-            ) -> impl FnMut(&[Complex<F<Self>>]) -> Complex<F<Self>> {
-                // info!("USING COMPLEX EAGER SINGLE");
-                #[inline(always)]
-                |params: &[Complex<F<Self>>]| ($program).evaluate_single(params)
-            }
+impl GenericEvaluatorFloat for f128 {
+    #[inline(always)]
+    fn get_evaluator_single(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<f128>>]) -> Complex<F<f128>> {
+        // info!("USING COMPLEX F128 SINGLE");
+        #[inline(always)]
+        |params: &[Complex<F<f128>>]| generic_evaluator.f128.evaluate_single(params)
+    }
 
-            fn get_evaluator(
-                $evaluator: &mut GenericEvaluator,
-            ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
-                |params: &[Complex<F<Self>>]| {
-                    // info!("USING COMPLEX EAGER MULTIPLE");
-                    let mut out = vec![Complex::default(); $evaluator.compute_out_size()];
-                    ($program).evaluate(params, &mut out);
+    fn get_evaluator(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<DualOrNot<Complex<F<f128>>>> {
+        |params: &[Complex<F<f128>>]| {
+            // info!("USING COMPLEX F128 MULTIPLE");
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
+            generic_evaluator.f128.evaluate(params, &mut out);
 
-                    if let Some(dual_shape) = &$evaluator.dual_shape {
-                        let dual_builder = HyperDual::<Complex<F<Self>>>::new(dual_shape.clone());
-                        let dual_size = dual_builder.values.len();
+            if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                let dual_builder = HyperDual::<Complex<F<f128>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
 
-                        out.chunks(dual_size)
-                            .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                            .collect()
-                    } else {
-                        out.into_iter().map(DualOrNot::NonDual).collect()
-                    }
-                }
-            }
-
-            fn get_parameters<'a>(
-                param_builder: &'a mut ParamBuilder,
-                cache: (bool, bool),
-                graph: &'a Graph,
-                sample: &'a MomentumSample<Self>,
-                helicities: &[Helicity],
-                additional_params: &[F<Self>],
-                left_threshold_params: Option<&ThresholdParams<Self>>,
-                right_threshold_params: Option<&ThresholdParams<Self>>,
-                lu_params: Option<&LUParams<Self>>,
-            ) -> InputParams<'a, Self> {
-                param_builder.update_emr_and_get_params(
-                    cache,
-                    sample,
-                    graph,
-                    helicities,
-                    additional_params,
-                    left_threshold_params,
-                    right_threshold_params,
-                    lu_params,
-                )
+                out.chunks(dual_size)
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
+            } else {
+                out.into_iter().map(DualOrNot::NonDual).collect()
             }
         }
-    };
+    }
+
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        cache: (bool, bool),
+        graph: &'a Graph,
+        sample: &'a MomentumSample<Self>,
+        helicities: &[Helicity],
+        additional_params: &[F<f128>],
+        left_threshold_params: Option<&ThresholdParams<f128>>,
+        right_threshold_params: Option<&ThresholdParams<f128>>,
+        lu_params: Option<&LUParams<f128>>,
+    ) -> InputParams<'a, Self> {
+        param_builder.update_emr_and_get_params(
+            cache,
+            sample,
+            graph,
+            helicities,
+            additional_params,
+            left_threshold_params,
+            right_threshold_params,
+            lu_params,
+        )
+    }
 }
 
-impl_eager_evaluator_float!(f128, evaluator => &mut evaluator.f128);
-impl_eager_evaluator_float!(ArbPrec, evaluator => &mut evaluator.arb);
-impl_eager_evaluator_float!(SamplingFloat, evaluator => evaluator.sampling_fixed256.as_mut()
-    .expect("fixed256 sampling evaluator must be prepared during warmup"));
+impl GenericEvaluatorFloat for ArbPrec {
+    #[inline(always)]
+    fn get_evaluator_single(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Complex<F<ArbPrec>> {
+        #[inline(always)]
+        |params: &[Complex<F<ArbPrec>>]| generic_evaluator.arb.evaluate_single(params)
+    }
+
+    fn get_evaluator(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<DualOrNot<Complex<F<ArbPrec>>>> {
+        |params: &[Complex<F<ArbPrec>>]| {
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
+            generic_evaluator.arb.evaluate(params, &mut out);
+
+            if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                let dual_builder = HyperDual::<Complex<F<ArbPrec>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
+            } else {
+                out.into_iter().map(DualOrNot::NonDual).collect()
+            }
+        }
+    }
+
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        cache: (bool, bool),
+        graph: &'a Graph,
+        sample: &'a MomentumSample<Self>,
+        helicities: &[Helicity],
+        additional_params: &[F<ArbPrec>],
+        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        lu_params: Option<&LUParams<ArbPrec>>,
+    ) -> InputParams<'a, Self> {
+        param_builder.update_emr_and_get_params(
+            cache,
+            sample,
+            graph,
+            helicities,
+            additional_params,
+            left_threshold_params,
+            right_threshold_params,
+            lu_params,
+        )
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::numerator::symbolica_ext::NumeratorAtomExt;
     use std::io::Cursor;
 
     use idenso::{dirac::AGS, representations::Bispinor};
@@ -3819,7 +3658,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_residue_sum_closes_through_color_trace_and_outer_gamma() {
-        use idenso::{color::CS, dirac::gamma_tensor, shorthands::chain::Chain};
+        use idenso::{color::CS, dirac::gamma_tensor};
 
         test_initialise().unwrap();
         let family = symbol!("evaluator_test::trace_joint_family");
@@ -3829,6 +3668,17 @@ mod tests {
         let left = parse_lit!(spenso::bis(4, 3));
         let right = parse_lit!(spenso::bis(4, 4));
         let generator = CS.chain_t(parse_lit!(spenso::coad(8, 7)));
+        let compact_body = (&q + &x)
+            * spenso::chain!(
+                &left,
+                &right,
+                function!(
+                    idenso::dirac::AGS.gamma,
+                    SPENSO_TAG.chain_in,
+                    SPENSO_TAG.chain_out,
+                    &mu
+                )
+            );
         let definition = Arc::new(FnMapEntry {
             lhs: function!(family, 0, &q),
             rhs: (&q + &x) * gamma_tensor(left.clone(), right.clone(), mu.clone()),
@@ -3853,7 +3703,7 @@ mod tests {
         // Existing compact bodies already own in/out. They must keep their
         // ordinary interface rather than become a nested color/spin binder.
         let compact = Arc::new(FnMapEntry {
-            rhs: definition.rhs.chainify(Bispinor {}.into()),
+            rhs: compact_body,
             ..(*definition).clone()
         });
         let (unfused, joints) = EvaluatorStack::combine_numerator_families(
@@ -4323,7 +4173,7 @@ mod tests {
                     runtime.general.evaluator_method = method;
                     let actual = scalar_value(
                         stack
-                            .evaluate(make_input(), all, &runtime, &mut metadata)
+                            .evaluate(make_input(), all, &runtime, &mut metadata, false)
                             .unwrap(),
                     );
                     assert!(
@@ -4428,7 +4278,7 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (EvaluatorStack, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
@@ -4449,7 +4299,7 @@ mod tests {
                         runtime.general.evaluator_method = method;
                         let actual = scalar_value(
                             decoded
-                                .evaluate(make_input(), all, &runtime, &mut metadata)
+                                .evaluate(make_input(), all, &runtime, &mut metadata, false)
                                 .unwrap(),
                         );
                         assert!(
@@ -4590,7 +4440,7 @@ mod tests {
                 &FunctionMap::default(),
                 vec![],
                 settings.optimization_settings(),
-                dual_shape.clone().map(|shape| (shape, Vec::new())),
+                dual_shape.clone(),
                 &settings,
             )
             .unwrap();
@@ -4860,6 +4710,7 @@ mod tests {
                                 id: OrientationID(id),
                             },
                             &mut metadata,
+                            false,
                         )),
                         Complex::new_re(F(expected))
                     );
@@ -4880,7 +4731,7 @@ mod tests {
                     assert_eq!(
                         scalar_value(
                             stack
-                                .evaluate(make_input(), all, &runtime, &mut metadata)
+                                .evaluate(make_input(), all, &runtime, &mut metadata, false,)
                                 .unwrap()
                         ),
                         Complex::new_re(F(63.0))
@@ -5060,6 +4911,7 @@ mod tests {
                     id: OrientationID(runtime_id),
                 },
                 &mut metadata,
+                false,
             );
             assert_eq!(scalar_value(actual), Complex::new_re(F(expected)));
         }
@@ -5070,7 +4922,7 @@ mod tests {
             filter: &filter,
         };
         assert_eq!(
-            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata)),
+            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata, false)),
             Complex::new_re(F(17.0))
         );
 
@@ -5084,7 +4936,7 @@ mod tests {
             assert_eq!(
                 scalar_value(
                     stack
-                        .evaluate(make_input(), all, &runtime_settings, &mut metadata)
+                        .evaluate(make_input(), all, &runtime_settings, &mut metadata, false,)
                         .unwrap()
                 ),
                 Complex::new_re(F(17.0))
@@ -5122,7 +4974,7 @@ mod tests {
             &function_map,
             vec![entry],
             OptimizationSettings::default(),
-            dual_shape.clone().map(|shape| (shape, Vec::new())),
+            dual_shape.clone(),
             &settings,
         )
         .unwrap();
@@ -5132,7 +4984,7 @@ mod tests {
             &FunctionMap::default(),
             vec![],
             OptimizationSettings::default(),
-            dual_shape.map(|shape| (shape, Vec::new())),
+            dual_shape,
             &settings,
         )
         .unwrap();
@@ -5298,7 +5150,7 @@ mod tests {
                         &builder.fn_map,
                         builder.reps.clone(),
                         settings.optimization_settings(),
-                        dual_shape.clone().map(|shape| (shape, Vec::new())),
+                        dual_shape.clone(),
                         &settings,
                     )
                     .unwrap();
@@ -5308,7 +5160,7 @@ mod tests {
                         &builder.fn_map,
                         builder.reps.clone(),
                         settings.optimization_settings(),
-                        dual_shape.clone().map(|shape| (shape, Vec::new())),
+                        dual_shape.clone(),
                         &settings,
                     )
                     .unwrap();
@@ -5330,7 +5182,7 @@ mod tests {
                             &function_map,
                             retained.fn_map_entries.clone(),
                             settings.optimization_settings(),
-                            dual_shape.clone().map(|shape| (shape, Vec::new())),
+                            dual_shape.clone(),
                             &EvaluatorSettings {
                                 do_fn_map_replacements: false,
                                 ..settings
@@ -5343,7 +5195,7 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (GenericEvaluator, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
@@ -5515,6 +5367,7 @@ mod tests {
                             make_input(),
                             selected,
                             &mut metadata,
+                            false
                         )),
                         Complex::new_re(F(expected))
                     );
@@ -5535,7 +5388,13 @@ mod tests {
                     assert_eq!(
                         scalar_value(
                             stack
-                                .evaluate(make_input(), all, &runtime_settings, &mut metadata,)
+                                .evaluate(
+                                    make_input(),
+                                    all,
+                                    &runtime_settings,
+                                    &mut metadata,
+                                    false
+                                )
                                 .unwrap()
                         ),
                         Complex::new_re(F(4.0 * weight_at_zero + 12.0))
@@ -5975,7 +5834,7 @@ mod tests {
         let mut state = Vec::new();
         State::export(&mut state).unwrap();
         let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-        let model = Model::default();
+        let model = Model::empty("test");
         let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),
@@ -6196,22 +6055,19 @@ mod tests {
             let eager = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
                 &mut evaluator,
             )(&[]));
-            for level in [
-                CompilationOptimizationLevel::O0,
-                CompilationOptimizationLevel::O3,
-            ] {
-                evaluator.activate_symjit(level).unwrap();
-                let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
-                    &mut evaluator,
-                )(&[]));
-                for actual in [eager, jit] {
-                    assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
-                    assert!(
-                        (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
-                        "level={level}, actual={actual:?}, expected={expected}"
-                    );
-                    assert_eq!(actual.im.0, 0.0);
-                }
+            evaluator
+                .activate_symjit(CompilationOptimizationLevel::O0)
+                .unwrap();
+            let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
+                &mut evaluator,
+            )(&[]));
+            for actual in [eager, jit] {
+                assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
+                assert!(
+                    (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
+                    "actual={actual:?}, expected={expected}"
+                );
+                assert_eq!(actual.im.0, 0.0);
             }
         }
     }

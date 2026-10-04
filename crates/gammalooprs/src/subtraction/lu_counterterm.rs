@@ -1,29 +1,25 @@
 use core::f64;
-use std::{collections::BTreeMap, path::Path, sync::Arc};
+use std::{collections::BTreeMap, path::Path};
 
+use crate::cff::{Esurface, EsurfaceID, OrientationID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::{Context, eyre};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use smallvec::{SmallVec, smallvec};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+use spenso::algebra::complex::Complex;
 use symbolica::domains::{
     dual::{DualNumberStructure, HyperDual},
     float::{Real, RealLike},
 };
 use tracing::{debug, warn};
-use typed_index_collections::{TiVec, ti_vec};
+use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
     cff::{
         CutCFFIndex,
-        esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingThresholds,
-            esurface_value_is_strictly_inside,
-        },
-        expression::OrientationID,
+        esurface::{EsurfaceCollection, ExistingEsurfaceId, esurface_value_is_strictly_inside},
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::{
@@ -35,44 +31,34 @@ use crate::{
                 evaluate_evaluator_single,
             },
             param_builder::LUParams,
-            sampling::maps::SamplingEvaluationError,
-            threshold_multiplier::{
-                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInputWorkspace,
-            },
         },
     },
     momentum::{
-        Rotatable, Rotation, SignOrZero, ThreeMomentum,
+        Rotation, SignOrZero, ThreeMomentum,
         sample::{
             ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample,
             SubspaceData,
         },
         signature::LoopSignature,
     },
-    observables::{
-        GenericThresholdCountertermComponentWeight, ThresholdCountertermComponentOccurrence,
-    },
     processes::{
-        CutGroupId, EvaluatorBuildTimings, IteratedCtCollection, IteratedThresholdPieces,
-        LUCounterTermData, LUThresholdHelperOutputs, LeftThresholdId, RightThresholdId,
-        SingleThresholdPieces, ThresholdCountertermComponentKind,
-        ThresholdCountertermMetadataRegistry, ThresholdCountertermSide,
-        ThresholdCountertermVariantId, build_derivative_structure,
+        CutGroupId, EvaluatorBuildTimings, IteratedCtCollection, LUCounterTermData,
+        LeftThresholdId, RightThresholdId, build_derivative_structure,
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         RstarTDependenceEvaluator, RstarTDependenceInput, evaluate_integrated_ct_normalisation,
         evaluate_integrated_ct_normalisation_dual, evaluate_uv_damper, evaluate_uv_damper_dual,
-        overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapKinematics, OverlapStructure},
+        overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
-        ArbPrec, F, FloatLike,
+        F, FloatLike,
         hyperdual_utils::{
             DualOrNot, dualize_dual_t_to_dual_r_t, extract_coefficient_t_duals,
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
-        newton_solver::{NewtonIterationResult, RadialRootIdentity},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
     uv::forest::ParametricIntegrands,
 };
@@ -112,266 +98,20 @@ fn multiply_dual_or_not_complex<T: FloatLike>(
     }
 }
 
-struct ThresholdHelperEvaluation<T, P> {
-    legacy: Option<T>,
-    pieces: Option<P>,
-}
-
-type ThresholdHelperValue<T> = DualOrNot<Complex<F<T>>>;
-type SingleThresholdHelperEvaluation<T> = ThresholdHelperEvaluation<
-    ThresholdHelperValue<T>,
-    SingleThresholdPieces<ThresholdHelperValue<T>>,
->;
-type IteratedThresholdHelperEvaluation<T> = ThresholdHelperEvaluation<
-    ThresholdHelperValue<T>,
-    IteratedThresholdPieces<ThresholdHelperValue<T>>,
->;
-
-struct ThresholdHelperEvaluationContext<'a, T: FloatLike> {
-    helper: &'a mut GenericEvaluator,
-    cut_cff_index: &'a CutCFFIndex,
-    threshold_result: &'a ThresholdHelperValue<T>,
-    outputs: LUThresholdHelperOutputs,
-    evaluation_meta_data: &'a mut EvaluationMetaData,
-}
-
-impl<T, P> ThresholdHelperEvaluation<T, P> {
-    fn into_legacy(self) -> T {
-        self.legacy
-            .expect("legacy LU threshold helper output is unavailable")
-    }
-
-    fn into_pieces(self) -> P {
-        self.pieces
-            .expect("split LU threshold helper outputs are unavailable")
-    }
-}
-
-#[derive(Clone, Debug)]
-struct SingleMultiplierCoefficients<T: FloatLike> {
-    local: F<T>,
-    integrated: F<T>,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum SingleMultiplierComponent {
-    Local,
-    Integrated,
-}
-
-fn single_multiplier_context<'a, S>(
-    component: SingleMultiplierComponent,
-    base: &'a S,
-    root: &'a S,
-) -> (&'a S, &'a S) {
-    // The absent side's threshold-rescaling map is the identity: its coordinates stay at `base`,
-    // while the original integrand factor on that side remains part of the expanded term.
-    match component {
-        SingleMultiplierComponent::Local => (base, root),
-        SingleMultiplierComponent::Integrated => (root, root),
-    }
-}
-
-impl<T: FloatLike> SingleMultiplierCoefficients<T> {
-    fn all_zero(&self) -> bool {
-        self.local.is_zero() && self.integrated.is_zero()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct IteratedMultiplierCoefficients<T: FloatLike> {
-    local_local: PairMultiplierCoefficient<T>,
-    local_integrated: PairMultiplierCoefficient<T>,
-    integrated_local: PairMultiplierCoefficient<T>,
-    integrated_integrated: PairMultiplierCoefficient<T>,
-}
-
-#[derive(Clone, Debug)]
-struct PairMultiplierCoefficient<T: FloatLike> {
-    left: F<T>,
-    right: F<T>,
-}
-
-impl<T: FloatLike> PairMultiplierCoefficient<T> {
-    fn effective(&self) -> F<T> {
-        &self.left * &self.right
-    }
-
-    fn is_zero(&self) -> bool {
-        self.left.is_zero() || self.right.is_zero()
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-enum IteratedMultiplierComponent {
-    LocalLocal,
-    LocalIntegrated,
-    IntegratedLocal,
-    IntegratedIntegrated,
-}
-
-fn iterated_multiplier_context<'a, S>(
-    component: IteratedMultiplierComponent,
-    base: &'a S,
-    left_root: &'a S,
-    right_root: &'a S,
-    merged_root: &'a S,
-) -> (&'a S, &'a S) {
-    match component {
-        IteratedMultiplierComponent::LocalLocal => (base, merged_root),
-        IteratedMultiplierComponent::LocalIntegrated => (right_root, merged_root),
-        IteratedMultiplierComponent::IntegratedLocal => (left_root, merged_root),
-        IteratedMultiplierComponent::IntegratedIntegrated => (merged_root, merged_root),
-    }
-}
-
-impl<T: FloatLike> IteratedMultiplierCoefficients<T> {
-    fn all_zero(&self) -> bool {
-        self.local_local.is_zero()
-            && self.local_integrated.is_zero()
-            && self.integrated_local.is_zero()
-            && self.integrated_integrated.is_zero()
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn evaluate_single_multiplier_context<T: FloatLike>(
-    collection: &mut ThresholdMultiplierEvaluatorCollection,
-    workspace: &mut ThresholdMultiplierInputWorkspace<T>,
-    variant_id: ThresholdCountertermVariantId,
-    generation_lmb: &LoopMomentumBasis,
-    masses: &EdgeVec<F<T>>,
-    model_values: &[Complex<F<f64>>],
-    additional_values: &[F<T>],
-    effective: &MomentumSample<T>,
-    star: &MomentumSample<T>,
-    evaluation_meta_data: &mut EvaluationMetaData,
-) -> Result<F<T>> {
-    let Some(evaluator_id) = collection.evaluator_id_for_variant(variant_id)? else {
-        return Ok(effective.sample.one());
-    };
-    let values = workspace.bind(
-        collection.layout(),
-        generation_lmb,
-        masses,
-        model_values,
-        additional_values,
-        effective,
-        star,
-    )?;
-    collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn evaluate_pair_multiplier_context<T: FloatLike>(
-    collection: &mut ThresholdMultiplierEvaluatorCollection,
-    workspace: &mut ThresholdMultiplierInputWorkspace<T>,
-    left_variant_id: ThresholdCountertermVariantId,
-    right_variant_id: ThresholdCountertermVariantId,
-    generation_lmb: &LoopMomentumBasis,
-    masses: &EdgeVec<F<T>>,
-    model_values: &[Complex<F<f64>>],
-    additional_values: &[F<T>],
-    effective: &MomentumSample<T>,
-    star: &MomentumSample<T>,
-    evaluation_meta_data: &mut EvaluationMetaData,
-) -> Result<(F<T>, F<T>)> {
-    let left_evaluator_id = collection.evaluator_id_for_variant(left_variant_id)?;
-    let right_evaluator_id = collection.evaluator_id_for_variant(right_variant_id)?;
-    if left_evaluator_id.is_none() && right_evaluator_id.is_none() {
-        return Ok((effective.sample.one(), effective.sample.one()));
-    }
-
-    let values = workspace.bind(
-        collection.layout(),
-        generation_lmb,
-        masses,
-        model_values,
-        additional_values,
-        effective,
-        star,
-    )?;
-    if let (Some(left_evaluator_id), Some(right_evaluator_id)) =
-        (left_evaluator_id, right_evaluator_id)
-        && left_evaluator_id == right_evaluator_id
-    {
-        // Expression interning gives equal functions one evaluator ID. Both sides receive the
-        // same bound input slice, so evaluate the shared function once and reuse its value.
-        let value = collection.evaluators_mut()[left_evaluator_id.0]
-            .evaluate(values, evaluation_meta_data)?;
-        return Ok((value.clone(), value));
-    }
-    let left = if let Some(evaluator_id) = left_evaluator_id {
-        collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)?
-    } else {
-        effective.sample.one()
-    };
-    // Deliberately evaluate the right factor even when the left factor is exactly zero. This
-    // keeps finite/real validation symmetric and makes one global context authoritative.
-    let right = if let Some(evaluator_id) = right_evaluator_id {
-        collection.evaluators_mut()[evaluator_id.0].evaluate(values, evaluation_meta_data)?
-    } else {
-        effective.sample.one()
-    };
-    Ok((left, right))
-}
-
-fn weight_single_multiplier_pieces<T: FloatLike>(
-    pieces: SingleThresholdPieces<DualOrNot<Complex<F<T>>>>,
-    coefficients: &SingleMultiplierCoefficients<T>,
-    order: usize,
-    zero: &F<T>,
+fn plain_t_dual_or_scalar_complex<T: FloatLike>(
+    value: &DualOrNot<Complex<F<T>>>,
+    t_variable: Option<usize>,
 ) -> DualOrNot<Complex<F<T>>> {
-    let mut result = zero_dual_or_not_complex(order, zero);
-    if !coefficients.local.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.local,
-            &DualOrNot::NonDual(Complex::new_re(coefficients.local.clone())),
-        );
+    match value {
+        DualOrNot::Dual(dual) => {
+            if let Some(t_variable) = t_variable {
+                DualOrNot::Dual(extract_zero_threshold_coefficient_t_dual(dual, t_variable))
+            } else {
+                DualOrNot::NonDual(dual.values[0].clone())
+            }
+        }
+        DualOrNot::NonDual(value) => DualOrNot::NonDual(value.clone()),
     }
-    if !coefficients.integrated.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.integrated,
-            &DualOrNot::NonDual(Complex::new_re(coefficients.integrated.clone())),
-        );
-    }
-    result
-}
-
-fn weight_iterated_multiplier_pieces<T: FloatLike>(
-    pieces: IteratedThresholdPieces<DualOrNot<Complex<F<T>>>>,
-    coefficients: &IteratedMultiplierCoefficients<T>,
-    order: usize,
-    zero: &F<T>,
-) -> DualOrNot<Complex<F<T>>> {
-    let mut result = zero_dual_or_not_complex(order, zero);
-    if !coefficients.local_local.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.local_local,
-            &DualOrNot::NonDual(Complex::new_re(coefficients.local_local.effective())),
-        );
-    }
-    if !coefficients.local_integrated.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.local_integrated,
-            &DualOrNot::NonDual(Complex::new_re(coefficients.local_integrated.effective())),
-        );
-    }
-    if !coefficients.integrated_local.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.integrated_local,
-            &DualOrNot::NonDual(Complex::new_re(coefficients.integrated_local.effective())),
-        );
-    }
-    if !coefficients.integrated_integrated.is_zero() {
-        result += multiply_dual_or_not_complex(
-            pieces.integrated_integrated,
-            &DualOrNot::NonDual(Complex::new_re(
-                coefficients.integrated_integrated.effective(),
-            )),
-        );
-    }
-    result
 }
 
 fn extract_zero_threshold_coefficient_t_dual<
@@ -512,29 +252,13 @@ fn extend_extracted_f_params<T: FloatLike>(
 fn extend_extracted_eta_params<T: FloatLike>(
     params: &mut Vec<Complex<F<T>>>,
     value: &DualOrNot<F<T>>,
-    lu_variable: Option<usize>,
-    threshold_variable: Option<usize>,
+    t_variable: Option<usize>,
 ) {
     match value {
         DualOrNot::Dual(dual) => {
-            if let Some(lu_variable) = lu_variable {
-                let (coefficient_orders, coefficient_duals) =
-                    extract_coefficient_t_duals(dual, lu_variable);
-                let projected_threshold_variable = threshold_variable.map(|variable| {
-                    if variable > lu_variable {
-                        variable - 1
-                    } else {
-                        variable
-                    }
-                });
-                for (orders, coefficient_dual) in
-                    coefficient_orders.into_iter().zip(coefficient_duals)
-                {
-                    if orders.iter().enumerate().any(|(variable, &order)| {
-                        Some(variable) != projected_threshold_variable && order != 0
-                    }) {
-                        continue;
-                    }
+            if let Some(t_variable) = t_variable {
+                let (_, coefficient_duals) = extract_coefficient_t_duals(dual, t_variable);
+                for coefficient_dual in coefficient_duals {
                     params.extend(
                         extract_t_derivatives(coefficient_dual)
                             .into_iter()
@@ -542,17 +266,7 @@ fn extend_extracted_eta_params<T: FloatLike>(
                     );
                 }
             } else {
-                params.extend(
-                    dual.get_shape()
-                        .iter()
-                        .zip(&dual.values)
-                        .filter(|(orders, _)| {
-                            !orders.iter().enumerate().any(|(variable, &order)| {
-                                Some(variable) != threshold_variable && order != 0
-                            })
-                        })
-                        .map(|(_, value)| Complex::new_re(value.clone())),
-                );
+                params.extend(dual.values.iter().cloned().map(Complex::new_re));
             }
         }
         DualOrNot::NonDual(value) => params.push(Complex::new_re(value.clone())),
@@ -562,27 +276,20 @@ fn extend_extracted_eta_params<T: FloatLike>(
 fn evaluate_threshold_helper_single<
     T: FloatLike + crate::integrands::process::evaluators::GenericEvaluatorFloat,
 >(
-    context: ThresholdHelperEvaluationContext<'_, T>,
+    helper: &mut GenericEvaluator,
+    cut_cff_index: &CutCFFIndex,
+    threshold_result: &DualOrNot<Complex<F<T>>>,
     threshold_params: &ThresholdParams<T>,
-) -> SingleThresholdHelperEvaluation<T> {
-    let ThresholdHelperEvaluationContext {
-        helper,
-        cut_cff_index,
-        threshold_result,
-        outputs,
-        evaluation_meta_data,
-    } = context;
-    let variable_indices = variable_indices_from_cut_cff_index(cut_cff_index);
-    let t_variable = variable_indices.lu_cut;
+    evaluation_meta_data: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> DualOrNot<Complex<F<T>>> {
+    let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
     let mut helper_params = Vec::new();
     extend_extracted_f_params(&mut helper_params, threshold_result, t_variable);
     extend_extracted_eta_params(
         &mut helper_params,
         &threshold_params.esurface_derivative,
         t_variable,
-        variable_indices
-            .left_threshold
-            .or(variable_indices.right_threshold),
     );
     extend_plain_helper_real_params(&mut helper_params, &threshold_params.radius, t_variable);
     extend_plain_helper_real_params(
@@ -615,79 +322,40 @@ fn evaluate_threshold_helper_single<
         );
     }
 
-    let mut result = evaluate_evaluator(helper, &helper_params, evaluation_meta_data);
+    let mut result = evaluate_evaluator(
+        helper,
+        &helper_params,
+        evaluation_meta_data,
+        record_primary_timing,
+    );
 
-    match outputs {
-        LUThresholdHelperOutputs::Legacy => {
-            assert_eq!(
-                result.len(),
-                1,
-                "legacy single LU threshold helper must return one combined output",
-            );
-            ThresholdHelperEvaluation {
-                legacy: result.pop(),
-                pieces: None,
-            }
-        }
-        LUThresholdHelperOutputs::Pieces => {
-            assert_eq!(
-                result.len(),
-                2,
-                "single LU threshold helper must return local and integrated pieces",
-            );
-            let integrated = result.pop().unwrap();
-            let local = result.pop().unwrap();
-            ThresholdHelperEvaluation {
-                legacy: None,
-                pieces: Some(SingleThresholdPieces { local, integrated }),
-            }
-        }
-        LUThresholdHelperOutputs::LegacyAndPieces => {
-            assert_eq!(
-                result.len(),
-                3,
-                "recording single LU threshold helper must return legacy, local, and integrated outputs",
-            );
-            let integrated = result.pop().unwrap();
-            let local = result.pop().unwrap();
-            let legacy = result.pop().unwrap();
-            ThresholdHelperEvaluation {
-                legacy: Some(legacy),
-                pieces: Some(SingleThresholdPieces { local, integrated }),
-            }
-        }
-    }
+    debug_assert_eq!(result.len(), 1);
+    result.pop().unwrap()
 }
 
 fn evaluate_threshold_helper_iterated<
     T: FloatLike + crate::integrands::process::evaluators::GenericEvaluatorFloat,
 >(
-    context: ThresholdHelperEvaluationContext<'_, T>,
+    helper: &mut GenericEvaluator,
+    cut_cff_index: &CutCFFIndex,
+    threshold_result: &DualOrNot<Complex<F<T>>>,
     left_threshold_params: &ThresholdParams<T>,
     right_threshold_params: &ThresholdParams<T>,
-) -> IteratedThresholdHelperEvaluation<T> {
-    let ThresholdHelperEvaluationContext {
-        helper,
-        cut_cff_index,
-        threshold_result,
-        outputs,
-        evaluation_meta_data,
-    } = context;
-    let variable_indices = variable_indices_from_cut_cff_index(cut_cff_index);
-    let t_variable = variable_indices.lu_cut;
+    evaluation_meta_data: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> DualOrNot<Complex<F<T>>> {
+    let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
     let mut helper_params = Vec::new();
     extend_extracted_f_params(&mut helper_params, threshold_result, t_variable);
     extend_extracted_eta_params(
         &mut helper_params,
         &left_threshold_params.esurface_derivative,
         t_variable,
-        variable_indices.left_threshold,
     );
     extend_extracted_eta_params(
         &mut helper_params,
         &right_threshold_params.esurface_derivative,
         t_variable,
-        variable_indices.right_threshold,
     );
 
     extend_plain_helper_real_params(
@@ -755,48 +423,15 @@ fn evaluate_threshold_helper_iterated<
         );
     }
 
-    let mut result = evaluate_evaluator(helper, &helper_params, evaluation_meta_data);
+    let mut result = evaluate_evaluator(
+        helper,
+        &helper_params,
+        evaluation_meta_data,
+        record_primary_timing,
+    );
 
-    match outputs {
-        LUThresholdHelperOutputs::Legacy => {
-            assert_eq!(
-                result.len(),
-                1,
-                "legacy iterated LU threshold helper must return one combined output",
-            );
-            ThresholdHelperEvaluation {
-                legacy: result.pop(),
-                pieces: None,
-            }
-        }
-        LUThresholdHelperOutputs::Pieces | LUThresholdHelperOutputs::LegacyAndPieces => {
-            let expected = if outputs == LUThresholdHelperOutputs::Pieces {
-                4
-            } else {
-                5
-            };
-            assert_eq!(
-                result.len(),
-                expected,
-                "iterated LU threshold helper must return the configured legacy and/or LL, LI, IL, and II outputs",
-            );
-            let integrated_integrated = result.pop().unwrap();
-            let integrated_local = result.pop().unwrap();
-            let local_integrated = result.pop().unwrap();
-            let local_local = result.pop().unwrap();
-            let legacy = (outputs == LUThresholdHelperOutputs::LegacyAndPieces)
-                .then(|| result.pop().unwrap());
-            ThresholdHelperEvaluation {
-                legacy,
-                pieces: Some(IteratedThresholdPieces {
-                    local_local,
-                    local_integrated,
-                    integrated_local,
-                    integrated_integrated,
-                }),
-            }
-        }
-    }
+    debug_assert_eq!(result.len(), 1);
+    result.pop().unwrap()
 }
 
 fn real_dual_to_complex<T: FloatLike>(dual: HyperDual<F<T>>) -> HyperDual<Complex<F<T>>> {
@@ -1025,7 +660,6 @@ pub struct LUCounterTermEvaluators {
     pub right_thresholds_evaluator: TiVec<RightThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub iterated_evaluator: IteratedCtCollection<BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub threshold_helpers: LUThresholdHelperEvaluators,
-    pub threshold_multipliers: Option<ThresholdMultiplierEvaluatorCollection>,
     pub residue_from_e_surface_evaluators: Vec<GenericEvaluator>,
 }
 
@@ -1081,69 +715,14 @@ impl LUCounterTermEvaluators {
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
 
-        // Ignore eager-only helper and multiplier evaluators, as well as pass-two evaluators.
+        // Ignore eager-only helper evaluators and pass-two evaluators.
         left + right + iterated
     }
 
-    fn evaluate_residue_from_esurface<T: FloatLike>(
-        &mut self,
-        cut_group_id: CutGroupId,
-        order: usize,
-        pass_one_result: DualOrNot<Complex<F<T>>>,
-        cut_esurface: &DualOrNot<F<T>>,
-        evaluation_meta_data: &mut EvaluationMetaData,
-    ) -> Complex<F<T>> {
-        let mut params_for_pass_two = vec![];
-        match pass_one_result {
-            DualOrNot::Dual(dual_result) => {
-                params_for_pass_two.extend_from_slice(&extract_t_derivatives_complex(dual_result));
-            }
-            DualOrNot::NonDual(non_dual_result) => {
-                params_for_pass_two.push(non_dual_result);
-            }
-        }
-
-        match cut_esurface {
-            DualOrNot::Dual(dual_e_surface) => {
-                extract_t_derivatives(dual_e_surface.clone())[1..]
-                    .iter()
-                    .for_each(|value| params_for_pass_two.push(Complex::new_re(value.clone())));
-            }
-            DualOrNot::NonDual(non_dual_e_surface) => {
-                debug!("non dual esurface: {}", non_dual_e_surface);
-                params_for_pass_two.push(Complex::new_re(non_dual_e_surface.clone()));
-            }
-        }
-
-        debug!(
-            "LU pass-two evaluator input: cut_group_id={}, lu_order={}, param_count={}",
-            cut_group_id.0,
-            order + 1,
-            params_for_pass_two.len()
-        );
-        for (idx, value) in params_for_pass_two.iter().enumerate() {
-            debug!(
-                "LU pass-two evaluator param: cut_group_id={}, lu_order={}, index={}, value={}",
-                cut_group_id.0,
-                order + 1,
-                idx,
-                value
-            );
-        }
-
-        evaluate_evaluator_single(
-            &mut self.residue_from_e_surface_evaluators[order],
-            &params_for_pass_two,
-            evaluation_meta_data,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
         max_cut_order: usize,
         threshold_helpers: LUThresholdHelperEvaluators,
-        threshold_multipliers: Option<ThresholdMultiplierEvaluatorCollection>,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -1207,22 +786,12 @@ impl LUCounterTermEvaluators {
 
         timings.symbolica_time += symbolica_started.elapsed();
 
-        if let Some(multipliers) = &threshold_multipliers {
-            multipliers
-                .validate(
-                    counterterm_data.left_thresholds.len(),
-                    counterterm_data.right_thresholds.len(),
-                )
-                .expect("invalid threshold-multiplier registry generated for LU counterterms");
-        }
-
         (
             LUCounterTermEvaluators {
                 left_thresholds_evaluator,
                 right_thresholds_evaluator,
                 iterated_evaluator,
                 threshold_helpers,
-                threshold_multipliers,
                 residue_from_e_surface_evaluators: pass_two_evaluator,
             },
             timings,
@@ -1303,9 +872,6 @@ impl LUCounterTermEvaluators {
         }
         self.threshold_helpers
             .for_each_generic_evaluator_mut(&mut f)?;
-        if let Some(multipliers) = &mut self.threshold_multipliers {
-            multipliers.for_each_generic_evaluator_mut(&mut f)?;
-        }
         for pass_to_evaluator in self.residue_from_e_surface_evaluators.iter_mut() {
             f(pass_to_evaluator)?;
         }
@@ -1321,23 +887,10 @@ type CutThresholds = (
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub(crate) struct LUVariantSubspaces {
-    pub left_variant_ids: TiVec<LeftThresholdId, ThresholdCountertermVariantId>,
-    pub right_variant_ids: TiVec<RightThresholdId, ThresholdCountertermVariantId>,
-    pub left: TiVec<LeftThresholdId, SubspaceData>,
-    pub right: TiVec<RightThresholdId, SubspaceData>,
-}
-
-#[derive(Clone, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct LUCounterTerm {
     pub evaluators: TiVec<CutGroupId, LUCounterTermEvaluators>,
     pub thresholds: TiVec<CutGroupId, CutThresholds>,
     pub subspaces: TiVec<CutGroupId, (SubspaceData, SubspaceData)>,
-    /// Present only when directives require per-variant projected E-surface instances.
-    pub variant_subspaces: Option<TiVec<CutGroupId, LUVariantSubspaces>>,
-    /// Stable graph-local static metadata. The absent/no-directive path retains no allocation.
-    pub metadata_registry: Option<ThresholdCountertermMetadataRegistry>,
     pub active_cut_groups: TiVec<CutGroupId, bool>,
     pub active_left_thresholds: TiVec<CutGroupId, TiVec<LeftThresholdId, bool>>,
     pub active_right_thresholds: TiVec<CutGroupId, TiVec<RightThresholdId, bool>>,
@@ -1345,91 +898,6 @@ pub(crate) struct LUCounterTerm {
     pub rstar_dependence_calculator: TiVec<CutGroupId, RstarTDependenceEvaluator>,
 }
 
-pub(crate) struct LUCountertermEvaluation<T: FloatLike> {
-    pub total: Complex<F<T>>,
-    pub components: Option<Vec<GenericThresholdCountertermComponentWeight<T>>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct GlobalOverlapRecord {
-    cut_group_id: CutGroupId,
-    side: ThresholdCountertermSide,
-    local_threshold_id: usize,
-    variant_id: Option<ThresholdCountertermVariantId>,
-}
-
-/// One complete solve group. Every sample is expressed in `subspace`'s parent,
-/// while its cut's fixed data remain independent. Raised derivative packets
-/// stay on the cut's `LUCTKinematicPoint`, outside shared center geometry.
-#[derive(Debug)]
-struct ThresholdSolveGroup<T: FloatLike> {
-    thresholds: EsurfaceCollection,
-    subspace: SubspaceData,
-    kinematics: Vec<MomentumSample<T>>,
-    records: Vec<GlobalOverlapRecord>,
-    overlap: OverlapStructure,
-    prefactor_power: usize,
-}
-
-#[derive(Clone, Debug)]
-pub struct LUSharedOverlaps<T: FloatLike> {
-    left: OverlapStructure,
-    right: OverlapStructure,
-    // Local CT dispatch refers back to the complete group and its center. In
-    // particular, foreign-cut complements never disappear during projection.
-    left_groups: Vec<(Arc<ThresholdSolveGroup<T>>, usize)>,
-    right_groups: Vec<(Arc<ThresholdSolveGroup<T>>, usize)>,
-}
-
-struct PendingLUCountertermComponent<T: FloatLike> {
-    component_id: usize,
-    occurrence: ThresholdCountertermComponentOccurrence,
-    multiplier_values: SmallVec<[F<T>; 2]>,
-    effective_multiplier: F<T>,
-    /// `None` is reserved for an exact-zero multiplier and avoids pass-one/helper/pass-two work.
-    pass_one: Option<DualOrNot<Complex<F<T>>>>,
-}
-
-impl<T: FloatLike> PendingLUCountertermComponent<T> {
-    fn finish(
-        self,
-        zero: &F<T>,
-        evaluate_pass_two: impl FnOnce(DualOrNot<Complex<F<T>>>) -> Complex<F<T>>,
-    ) -> (Complex<F<T>>, GenericThresholdCountertermComponentWeight<T>) {
-        let Some(pass_one) = self.pass_one else {
-            let weighted = Complex::new_re(zero.clone());
-            return (
-                weighted.clone(),
-                GenericThresholdCountertermComponentWeight {
-                    component_id: self.component_id,
-                    occurrence: self.occurrence,
-                    multiplier_values: self.multiplier_values,
-                    effective_multiplier: self.effective_multiplier,
-                    bare: None,
-                    weighted,
-                    evaluation_skipped: true,
-                },
-            );
-        };
-
-        let bare = evaluate_pass_two(pass_one);
-        let weighted = &bare * &Complex::new_re(self.effective_multiplier.clone());
-        (
-            weighted.clone(),
-            GenericThresholdCountertermComponentWeight {
-                component_id: self.component_id,
-                occurrence: self.occurrence,
-                multiplier_values: self.multiplier_values,
-                effective_multiplier: self.effective_multiplier,
-                bare: Some(bare),
-                weighted,
-                evaluation_skipped: false,
-            },
-        )
-    }
-}
-
-#[derive(Clone)]
 pub struct LUCTKinematicPoint<T: FloatLike> {
     pub unrescaled_sample: MomentumSample<T>,
     pub dualized_momentum_sample_cache: Vec<MomentumSample<T>>,
@@ -1619,340 +1087,12 @@ impl LUCounterTerm {
         ))
     }
 
-    /// Collect all solved cuts before constructing independent physical-cycle groups.
-    /// Local threshold IDs are retained only for residue dispatch; each center's
-    /// multichannel complements continue to refer to the complete solve group.
-    /// Only representative cut samples enter geometry preparation; the caller
-    /// retains its raised LU packets for physical residue evaluation. Additional
-    /// packets may carry different momenta and derivatives; none of those values
-    /// may alter common centers or the foreign-cut data retained by a group.
-    /// Canonical preparation chooses identity-frame centers once; native adoption
-    /// retains those decisions and rebuilds only each member's actual fixed data.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare_shared_overlaps<T: FloatLike>(
-        &self,
-        cut_samples: &[(CutGroupId, &MomentumSample<T>)],
-        graph: &Graph,
-        masses: &EdgeVec<F<T>>,
-        reversed_edges: &TiVec<CutGroupId, Vec<EdgeIndex>>,
-        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-        settings: &RuntimeSettings,
-        probe_rotation: &Rotation,
-        canonical: Option<&TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>,
-    ) -> Result<TiVec<CutGroupId, Option<LUSharedOverlaps<T>>>> {
-        if canonical.is_none() && !probe_rotation.is_identity() {
-            return Err(eyre!(
-                "physical overlap centers must be prepared in the canonical identity frame"
-            ));
-        }
-        // Local dispatch can refer to one complete group more than once. Retain
-        // its canonical occurrence identity, never compare or hash center values.
-        let mut canonical_groups = canonical.map(|locals| {
-            locals
-                .iter()
-                .flatten()
-                .flat_map(|local| local.left_groups.iter().chain(&local.right_groups))
-                .map(|(group, _)| group)
-                .unique_by(|group| Arc::as_ptr(group))
-                .collect_vec()
-        });
-        if let Some(canonical) = canonical
-            && (canonical.len() != self.thresholds.len()
-                || canonical.iter_enumerated().any(|(cut, overlap)| {
-                    overlap.is_some() != cut_samples.iter().any(|(id, _)| *id == cut)
-                }))
-        {
-            return Err(SamplingEvaluationError::UncertainGeometry {
-                detail: format!(
-                    "physical selector/cut membership differs from canonical graph '{}'",
-                    graph.name
-                ),
-            }
-            .into());
-        }
-        let mut partitions = BTreeMap::new();
-        let e_cm = F::from_f64(settings.kinematics.e_cm);
-        let existence_threshold = F::from_f64(settings.subtraction.esurface_existence_threshold);
-        for &(cut_group_id, cut_sample) in cut_samples {
-            let variants = self
-                .variant_subspaces
-                .as_ref()
-                .map(|data| &data[cut_group_id]);
-            for side in [
-                ThresholdCountertermSide::Left,
-                ThresholdCountertermSide::Right,
-            ] {
-                let (thresholds, legacy, subspaces, variant_ids, active) = match side {
-                    ThresholdCountertermSide::Left => (
-                        self.thresholds[cut_group_id]
-                            .0
-                            .iter()
-                            .cloned()
-                            .collect_vec(),
-                        &self.subspaces[cut_group_id].0,
-                        variants.map(|data| data.left.raw.as_slice()),
-                        variants.map(|data| data.left_variant_ids.raw.as_slice()),
-                        self.active_left_thresholds[cut_group_id].raw.as_slice(),
-                    ),
-                    ThresholdCountertermSide::Right => (
-                        self.thresholds[cut_group_id]
-                            .1
-                            .iter()
-                            .cloned()
-                            .collect_vec(),
-                        &self.subspaces[cut_group_id].1,
-                        variants.map(|data| data.right.raw.as_slice()),
-                        variants.map(|data| data.right_variant_ids.raw.as_slice()),
-                        self.active_right_thresholds[cut_group_id].raw.as_slice(),
-                    ),
-                    ThresholdCountertermSide::Amplitude => unreachable!(),
-                };
-                for (local_id, surface) in thresholds.into_iter().enumerate() {
-                    if !active[local_id] {
-                        continue;
-                    }
-                    let subspace = subspaces.map_or(legacy, |data| &data[local_id]);
-                    let native = cut_sample
-                        .lmb_transform(&graph.loop_momentum_basis, subspace.get_lmb(all_lmbs));
-                    if !surface
-                        .classify_existence_subspace(
-                            native.loop_moms(),
-                            native.external_moms(),
-                            subspace,
-                            all_lmbs,
-                            graph,
-                            masses,
-                            &reversed_edges[cut_group_id],
-                            &e_cm,
-                            &existence_threshold,
-                        )
-                        .is_existing()
-                    {
-                        continue;
-                    }
-                    let variant_id = variant_ids.map(|ids| ids[local_id]);
-                    let group_id = variant_id.and_then(|id| {
-                        self.metadata_registry
-                            .as_ref()
-                            .and_then(|registry| registry.variants.get(id.0))
-                            .and_then(|variant| variant.group_id)
-                    });
-                    let record = GlobalOverlapRecord {
-                        cut_group_id,
-                        side,
-                        local_threshold_id: local_id,
-                        variant_id,
-                    };
-                    partitions
-                        .entry((group_id, subspace.solve_signature(all_lmbs)))
-                        .or_insert_with(Vec::new)
-                        .push((record, surface, subspace.clone(), native));
-                }
-            }
-        }
-        let mut groups = Vec::new();
-        for ((group_id, signature), entries) in partitions {
-            let subspace = entries[0].2.clone();
-            let mut thresholds = EsurfaceCollection::new();
-            let mut kinematics = Vec::new();
-            let mut records = Vec::new();
-            let mut prefactor_power = 2;
-            for (record, surface, native_subspace, native) in entries {
-                let order = match record.side {
-                    ThresholdCountertermSide::Left => self.evaluators[record.cut_group_id]
-                        .left_thresholds_evaluator
-                        [LeftThresholdId::from(record.local_threshold_id)]
-                    .keys()
-                    .filter_map(|index| index.left_threshold_order)
-                    .max()
-                    .unwrap_or(1),
-                    ThresholdCountertermSide::Right => self.evaluators[record.cut_group_id]
-                        .right_thresholds_evaluator
-                        [RightThresholdId::from(record.local_threshold_id)]
-                    .keys()
-                    .filter_map(|index| index.right_threshold_order)
-                    .max()
-                    .unwrap_or(1),
-                    ThresholdCountertermSide::Amplitude => unreachable!(),
-                };
-                let num_right = self.thresholds[record.cut_group_id].1.len();
-                let iterated_order = self.evaluators[record.cut_group_id]
-                    .iterated_evaluator
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| match record.side {
-                        ThresholdCountertermSide::Left => {
-                            index / num_right == record.local_threshold_id
-                        }
-                        ThresholdCountertermSide::Right => {
-                            index % num_right == record.local_threshold_id
-                        }
-                        ThresholdCountertermSide::Amplitude => false,
-                    })
-                    .flat_map(|(_, evaluator)| evaluator.keys())
-                    .filter_map(|index| match record.side {
-                        ThresholdCountertermSide::Left => index.left_threshold_order,
-                        ThresholdCountertermSide::Right => index.right_threshold_order,
-                        ThresholdCountertermSide::Amplitude => None,
-                    })
-                    .max()
-                    .unwrap_or(1);
-                let order = order.max(iterated_order);
-                // An even power strictly above every pole order suppresses every
-                // omitted threshold, including the derivatives of raised residues.
-                prefactor_power = prefactor_power.max(2 * (order / 2 + 1));
-                thresholds.push(surface);
-                kinematics.push(native.lmb_transform(
-                    native_subspace.get_lmb(all_lmbs),
-                    subspace.get_lmb(all_lmbs),
-                ));
-                records.push(record);
-            }
-            let overlap = if let Some(groups) = &mut canonical_groups {
-                let index = groups.iter().position(|group| {
-                    group.records == records
-                        && group.subspace.solve_signature(all_lmbs) == signature
-                        && group.subspace.get_lmb(all_lmbs).loop_edges
-                            == subspace.get_lmb(all_lmbs).loop_edges
-                        && group.prefactor_power == prefactor_power
-                }).ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
-                    detail: format!("physical overlap membership differs from canonical graph '{}' group {:?}, records {:?}", graph.name, group_id, records),
-                })?;
-                groups.remove(index).overlap.clone()
-            } else {
-                let solver_kinematics = kinematics
-                    .iter()
-                    .map(|sample| OverlapKinematics {
-                        loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
-                        external_momenta: sample
-                            .external_moms()
-                            .iter()
-                            .map(|p| p.to_f64())
-                            .collect(),
-                        edge_masses: None,
-                    })
-                    .collect_vec();
-                let existing: ExistingThresholds = thresholds.keys().collect();
-                let input = OverlapInput {
-                    graph,
-                    settings,
-                    subspace: &subspace,
-                    threshold_subspaces: None,
-                    lmbs: all_lmbs,
-                    thresholds: &thresholds,
-                    edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
-                    surface_kinematics: Some(&solver_kinematics),
-                };
-                let first = &solver_kinematics[0];
-                overlap_subspace::find_maximal_overlap(
-                    &input,
-                    &existing,
-                    &first.loop_moms,
-                    &first.external_momenta,
-                    probe_rotation,
-                )?
-            };
-            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #center;
-                graph = %graph.name, group_id = ?group_id,
-                file.solve_signature = ?signature,
-                file.instances = ?records.iter().map(|record| (record.cut_group_id, record.side, record.local_threshold_id, record.variant_id)).collect_vec(),
-                centers = overlap.overlap_groups.len(),
-                "prepared complete threshold solve group"
-            );
-            groups.push(Arc::new(ThresholdSolveGroup {
-                thresholds,
-                subspace,
-                kinematics,
-                records,
-                overlap,
-                prefactor_power,
-            }));
-        }
-        if canonical_groups
-            .as_ref()
-            .is_some_and(|groups| !groups.is_empty())
-        {
-            return Err(SamplingEvaluationError::UncertainGeometry {
-                detail: format!(
-                    "physical graph '{}' omitted a canonical threshold solve group",
-                    graph.name
-                ),
-            }
-            .into());
-        }
-        let mut result = ti_vec![None; self.thresholds.len()];
-        for &(cut_group_id, _) in cut_samples {
-            let mut local = LUSharedOverlaps {
-                left: OverlapStructure::new_empty(),
-                right: OverlapStructure::new_empty(),
-                left_groups: Vec::new(),
-                right_groups: Vec::new(),
-            };
-            for side in [
-                ThresholdCountertermSide::Left,
-                ThresholdCountertermSide::Right,
-            ] {
-                let (structure, contexts) = if side == ThresholdCountertermSide::Left {
-                    (&mut local.left, &mut local.left_groups)
-                } else {
-                    (&mut local.right, &mut local.right_groups)
-                };
-                structure.existing_esurfaces = groups
-                    .iter()
-                    .flat_map(|group| &group.records)
-                    .filter(|record| record.cut_group_id == cut_group_id && record.side == side)
-                    .map(|record| EsurfaceID::from(record.local_threshold_id))
-                    .sorted()
-                    .collect();
-                for group in &groups {
-                    let local_id = |id: ExistingEsurfaceId| {
-                        let record = &group.records[group.overlap.existing_esurfaces[id].0];
-                        if record.cut_group_id != cut_group_id || record.side != side {
-                            return None;
-                        }
-                        structure
-                            .existing_esurfaces
-                            .iter_enumerated()
-                            .find_map(|(id, surface)| {
-                                (surface.0 == record.local_threshold_id).then_some(id)
-                            })
-                    };
-                    for (center_index, center) in group.overlap.overlap_groups.iter().enumerate() {
-                        let members = center
-                            .existing_esurfaces
-                            .iter()
-                            .filter_map(|&id| local_id(id))
-                            .collect_vec();
-                        if members.is_empty() {
-                            continue;
-                        }
-                        let complement = center
-                            .complement
-                            .iter()
-                            .filter_map(|&id| local_id(id))
-                            .collect();
-                        structure.overlap_groups.push(OverlapGroup {
-                            existing_esurfaces: members,
-                            complement,
-                            center: center.center.clone(),
-                        });
-                        contexts.push((Arc::clone(group), center_index));
-                    }
-                }
-            }
-            // Some(empty) retains an accepted physical cut with no existing
-            // thresholds; None denotes a cut excluded before overlap preparation.
-            result[cut_group_id] = Some(local);
-        }
-        Ok(result)
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
         kinematic_point: &LUCTKinematicPoint<T>,
         cut_group_id: CutGroupId,
-        _reversed_edges: &[EdgeIndex],
+        reversed_edges: &[EdgeIndex],
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
@@ -1961,15 +1101,9 @@ impl LUCounterTerm {
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_meta_data: &mut EvaluationMetaData,
-        record_components: bool,
-        shared_overlaps: Option<&LUSharedOverlaps<T>>,
-    ) -> Result<LUCountertermEvaluation<T>> {
+        record_primary_timing: bool,
+    ) -> Result<Complex<F<T>>> {
         self.ensure_active_cut_group(cut_group_id)?;
-
-        // Metadata alone does not request runtime allocations. Detailed storage is enabled only
-        // for an accepted event whose caller explicitly asked for additional weights.
-        let record_components = record_components && self.metadata_registry.is_some();
-        let additional_params = settings.additional_params::<T>();
 
         let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_group_id];
 
@@ -1977,112 +1111,213 @@ impl LUCounterTerm {
         let right_thresholds = TiVec::from_ref(&right_thresholds_typed.raw);
 
         if left_thresholds.is_empty() && right_thresholds.is_empty() {
-            return Ok(LUCountertermEvaluation {
-                total: Complex::new_re(kinematic_point.representative_sample().zero()),
-                components: record_components.then(Vec::new),
-            });
+            return Ok(Complex::new_re(
+                kinematic_point.representative_sample().zero(),
+            ));
         }
 
-        let (legacy_left_subspace, legacy_right_subspace) = &self.subspaces[cut_group_id];
-        let variant_subspaces = self
-            .variant_subspaces
-            .as_ref()
-            .map(|subspaces| &subspaces[cut_group_id]);
-        let threshold_helper_outputs = if variant_subspaces.is_some() {
-            LUThresholdHelperOutputs::Pieces
-        } else if self.metadata_registry.is_some() {
-            LUThresholdHelperOutputs::LegacyAndPieces
-        } else {
-            LUThresholdHelperOutputs::Legacy
+        let (left_subspace, right_subspace) = &self.subspaces[cut_group_id];
+        let (sample_left_transformed, sample_right_transformed) = (
+            kinematic_point
+                .lmb_transform(&graph.loop_momentum_basis, left_subspace.get_lmb(all_lmbs)),
+            kinematic_point
+                .lmb_transform(&graph.loop_momentum_basis, right_subspace.get_lmb(all_lmbs)),
+        );
+
+        debug!("possible left thresholds: {}", left_thresholds.len());
+        debug!("possible right thresholds: {}", right_thresholds.len());
+
+        let masses_f64: EdgeVec<F<f64>> = masses.iter().map(|(_, m)| F(m.to_f64())).collect();
+        let sample_left_transformed_f64 = sample_left_transformed
+            .representative_sample()
+            .loop_moms()
+            .iter()
+            .map(|lm| lm.to_f64())
+            .collect();
+        let sample_right_transformed_f64 = sample_right_transformed
+            .representative_sample()
+            .loop_moms()
+            .iter()
+            .map(|lm| lm.to_f64())
+            .collect();
+        let external_moms_f64 = kinematic_point
+            .representative_sample()
+            .external_moms()
+            .iter()
+            .map(|em| em.to_f64())
+            .collect();
+
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
+        let esurface_existence_threshold =
+            F::from_f64(settings.subtraction.esurface_existence_threshold);
+
+        let left_existing_esurfaces = self.thresholds[cut_group_id]
+            .0
+            .iter_enumerated()
+            .filter_map(|(left_id, esurface)| {
+                let classification = esurface.classify_existence_subspace(
+                    sample_left_transformed.representative_sample().loop_moms(),
+                    kinematic_point.representative_sample().external_moms(),
+                    left_subspace,
+                    all_lmbs,
+                    graph,
+                    masses,
+                    reversed_edges,
+                    &e_cm,
+                    &esurface_existence_threshold,
+                );
+                debug!(
+                    graph = %graph.name,
+                    side = "left",
+                    esurface_id = left_id.0,
+                    status = classification.label(),
+                    normalized_margin = ?classification.normalized_margin(),
+                    non_existing_reason = ?classification.non_existing_reason(),
+                    "classified LU threshold surface"
+                );
+                if classification.is_existing() {
+                    Some(EsurfaceID::from(left_id.0))
+                } else {
+                    None
+                }
+            })
+            .collect::<TiVec<ExistingEsurfaceId, _>>();
+
+        let right_existing_esurfaces = self.thresholds[cut_group_id]
+            .1
+            .iter_enumerated()
+            .filter_map(|(right_id, esurface)| {
+                let classification = esurface.classify_existence_subspace(
+                    sample_right_transformed.representative_sample().loop_moms(),
+                    kinematic_point.representative_sample().external_moms(),
+                    right_subspace,
+                    all_lmbs,
+                    graph,
+                    masses,
+                    reversed_edges,
+                    &e_cm,
+                    &esurface_existence_threshold,
+                );
+                debug!(
+                    graph = %graph.name,
+                    side = "right",
+                    esurface_id = right_id.0,
+                    status = classification.label(),
+                    normalized_margin = ?classification.normalized_margin(),
+                    non_existing_reason = ?classification.non_existing_reason(),
+                    "classified LU threshold surface"
+                );
+                if classification.is_existing() {
+                    Some(EsurfaceID::from(right_id.0))
+                } else {
+                    None
+                }
+            })
+            .collect::<TiVec<ExistingEsurfaceId, _>>();
+
+        debug!(
+            "number of thresholds on the left: {}",
+            left_existing_esurfaces.len()
+        );
+        debug!(
+            "number of thresholds on the right: {}",
+            right_existing_esurfaces.len()
+        );
+
+        if left_existing_esurfaces.is_empty() && right_existing_esurfaces.is_empty() {
+            return Ok(Complex::new_re(
+                kinematic_point.representative_sample().zero(),
+            ));
+        }
+
+        let left_overlap_input = OverlapInput {
+            graph,
+            subspace: left_subspace,
+            settings,
+            edge_masses: masses_f64.clone(),
+            lmbs: all_lmbs,
+            thresholds: left_thresholds,
         };
-        let left_subspace = legacy_left_subspace;
-        let right_subspace = legacy_right_subspace;
-        let left_threshold_subspaces =
-            variant_subspaces.map(|subspaces| subspaces.left.raw.as_slice());
-        let right_threshold_subspaces =
-            variant_subspaces.map(|subspaces| subspaces.right.raw.as_slice());
-        let detailed_variant_ids = if record_components {
-            let registry = self
-                .metadata_registry
-                .as_ref()
-                .expect("record_components requires threshold metadata");
-            let (left, right) = if let Some(subspaces) = variant_subspaces {
-                (
-                    subspaces.left_variant_ids.iter().copied().collect_vec(),
-                    subspaces.right_variant_ids.iter().copied().collect_vec(),
-                )
-            } else {
-                (
-                    registry.lu_variant_ids(cut_group_id, ThresholdCountertermSide::Left)?,
-                    registry.lu_variant_ids(cut_group_id, ThresholdCountertermSide::Right)?,
-                )
-            };
-            if left.len() != left_thresholds.len() || right.len() != right_thresholds.len() {
-                return Err(eyre!(
-                    "graph '{}' cut group {} threshold metadata maps {} left/{} right variants onto {} left/{} right runtime thresholds",
+
+        let right_overlap_input = OverlapInput {
+            graph,
+            subspace: right_subspace,
+            settings,
+            edge_masses: masses_f64,
+            lmbs: all_lmbs,
+            thresholds: right_thresholds,
+        };
+
+        let left_overlap = match overlap_subspace::find_maximal_overlap(
+            &left_overlap_input,
+            &left_existing_esurfaces,
+            &sample_left_transformed_f64,
+            &external_moms_f64,
+            probe_rotation,
+        ) {
+            Ok(left_overlap) => left_overlap,
+            Err(error) => {
+                evaluation_meta_data.record_threshold_counterterm_error(format!(
+                    "LU graph '{}' cut group {} left subspace failed overlap-center construction in probe rotation {}: {}",
                     graph.name,
                     cut_group_id.0,
-                    left.len(),
-                    right.len(),
-                    left_thresholds.len(),
-                    right_thresholds.len(),
+                    probe_rotation.method,
+                    error,
                 ));
+                return Ok(Complex::new_re(F::from_f64(f64::NAN)));
             }
-            Some((left, right))
-        } else {
-            None
         };
-        let Some(shared) = shared_overlaps else {
-            return Ok(LUCountertermEvaluation {
-                total: Complex::new_re(kinematic_point.representative_sample().zero()),
-                components: record_components.then(Vec::new),
-            });
+
+        let right_overlap = match overlap_subspace::find_maximal_overlap(
+            &right_overlap_input,
+            &right_existing_esurfaces,
+            &sample_right_transformed_f64,
+            &external_moms_f64,
+            probe_rotation,
+        ) {
+            Ok(right_overlap) => right_overlap,
+            Err(error) => {
+                evaluation_meta_data.record_threshold_counterterm_error(format!(
+                    "LU graph '{}' cut group {} right subspace failed overlap-center construction in probe rotation {}: {}",
+                    graph.name,
+                    cut_group_id.0,
+                    probe_rotation.method,
+                    error,
+                ));
+                return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+            }
         };
-        let left_overlap = &shared.left;
-        let right_overlap = &shared.right;
+
         debug!("left overlap structure: {}", left_overlap);
+
         debug!("right overlap structure: {}", right_overlap);
-        let mut radial_root_failed = false;
+
         let left_counterterm_builder = CounterTermBuilder::new(
             graph,
             settings,
-            left_thresholds,
-            kinematic_point.clone(),
-            left_overlap,
+            left_overlap_input.thresholds,
+            sample_left_transformed,
+            &left_overlap,
             masses,
             all_lmbs,
             left_subspace,
-            left_threshold_subspaces,
             probe_rotation,
-            cut_group_id,
-            &shared.left_groups,
         );
+
         let left_overlap_builders = left_overlap
             .overlap_groups
             .iter()
-            .enumerate()
-            .map(|(group_index, group)| {
-                group
-                    .existing_esurfaces
-                    .iter()
-                    .map(|id| {
-                        left_counterterm_builder
-                            .new_overlap_builder(group_index, left_overlap.existing_esurfaces[*id])
-                    })
-                    .collect_vec()
-            })
+            .map(|overlap_group| left_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
-        let mut left_overlap_solutions = Vec::with_capacity(left_overlap.overlap_groups.len());
-        for (overlap_group_index, (group, builders)) in left_overlap
-            .overlap_groups
-            .iter()
-            .zip(&left_overlap_builders)
-            .enumerate()
-        {
-            let mut solutions = Vec::with_capacity(builders.len());
-            for (&id, builder) in group.existing_esurfaces.iter().zip(builders) {
-                let esurface_id = left_overlap.existing_esurfaces[id];
-                let identity = Self::radial_root_identity(
+
+        let mut radial_root_failed = false;
+        let mut left_overlap_solutions = Vec::with_capacity(left_overlap_builders.len());
+        for (overlap_group_index, overlap_builder) in left_overlap_builders.iter().enumerate() {
+            let mut group_solutions =
+                Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
+            for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
+                let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
                     &graph.name,
                     cut_group_id,
                     "left",
@@ -2090,62 +1325,55 @@ impl LUCounterTerm {
                     esurface_id,
                     probe_rotation,
                 );
-                match builder.new_esurface_builder(id).solve_rstar(
-                    &mut self.rstar_dependence_calculator[cut_group_id],
-                    &identity,
-                    evaluation_meta_data,
-                ) {
-                    Some(solution) => solutions.push(solution),
-                    None => {
-                        evaluation_meta_data.record_threshold_counterterm_error(format!(
-                            "LU graph '{}' cut group {} left threshold {} center {} failed radial-root validation",
-                            graph.name, cut_group_id.0, esurface_id.0, overlap_group_index));
-                        radial_root_failed = true;
-                    }
-                }
+                let Some(solution) = overlap_builder
+                    .new_esurface_builder(existing_esurface_id)
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
+                else {
+                    evaluation_meta_data.record_threshold_counterterm_error(format!(
+                        "LU graph '{}' cut group {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        graph.name,
+                        cut_group_id.0,
+                        overlap_group_index,
+                        esurface_id.0,
+                        probe_rotation.method,
+                    ));
+                    radial_root_failed = true;
+                    continue;
+                };
+                group_solutions.push(solution);
             }
-            left_overlap_solutions.push(solutions);
+            left_overlap_solutions.push(group_solutions);
         }
+
         let right_counterterm_builder = CounterTermBuilder::new(
             graph,
             settings,
-            right_thresholds,
-            kinematic_point.clone(),
-            right_overlap,
+            right_overlap_input.thresholds,
+            sample_right_transformed,
+            &right_overlap,
             masses,
             all_lmbs,
             right_subspace,
-            right_threshold_subspaces,
             probe_rotation,
-            cut_group_id,
-            &shared.right_groups,
         );
+
         let right_overlap_builders = right_overlap
             .overlap_groups
             .iter()
-            .enumerate()
-            .map(|(group_index, group)| {
-                group
-                    .existing_esurfaces
-                    .iter()
-                    .map(|id| {
-                        right_counterterm_builder
-                            .new_overlap_builder(group_index, right_overlap.existing_esurfaces[*id])
-                    })
-                    .collect_vec()
-            })
+            .map(|overlap_group| right_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
-        let mut right_overlap_solutions = Vec::with_capacity(right_overlap.overlap_groups.len());
-        for (overlap_group_index, (group, builders)) in right_overlap
-            .overlap_groups
-            .iter()
-            .zip(&right_overlap_builders)
-            .enumerate()
-        {
-            let mut solutions = Vec::with_capacity(builders.len());
-            for (&id, builder) in group.existing_esurfaces.iter().zip(builders) {
-                let esurface_id = right_overlap.existing_esurfaces[id];
-                let identity = Self::radial_root_identity(
+
+        let mut right_overlap_solutions = Vec::with_capacity(right_overlap_builders.len());
+        for (overlap_group_index, overlap_builder) in right_overlap_builders.iter().enumerate() {
+            let mut group_solutions =
+                Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
+            for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
+                let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
                     &graph.name,
                     cut_group_id,
                     "right",
@@ -2153,52 +1381,41 @@ impl LUCounterTerm {
                     esurface_id,
                     probe_rotation,
                 );
-                match builder.new_esurface_builder(id).solve_rstar(
-                    &mut self.rstar_dependence_calculator[cut_group_id],
-                    &identity,
-                    evaluation_meta_data,
-                ) {
-                    Some(solution) => solutions.push(solution),
-                    None => {
-                        evaluation_meta_data.record_threshold_counterterm_error(format!(
-                            "LU graph '{}' cut group {} right threshold {} center {} failed radial-root validation",
-                            graph.name, cut_group_id.0, esurface_id.0, overlap_group_index));
-                        radial_root_failed = true;
-                    }
-                }
+                let Some(solution) = overlap_builder
+                    .new_esurface_builder(existing_esurface_id)
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
+                else {
+                    evaluation_meta_data.record_threshold_counterterm_error(format!(
+                        "LU graph '{}' cut group {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        graph.name,
+                        cut_group_id.0,
+                        overlap_group_index,
+                        esurface_id.0,
+                        probe_rotation.method,
+                    ));
+                    radial_root_failed = true;
+                    continue;
+                };
+                group_solutions.push(solution);
             }
-            right_overlap_solutions.push(solutions);
+            right_overlap_solutions.push(group_solutions);
         }
+
         if radial_root_failed {
-            return Ok(LUCountertermEvaluation {
-                total: Complex::new_re(F::from_f64(f64::NAN)),
-                components: None,
-            });
+            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
         }
 
         let zero = kinematic_point.representative_sample().zero();
         let mut total_result = Complex::new_re(zero.clone());
-        let mut completed_components = record_components.then(Vec::new);
-        let mut threshold_multiplier_workspace = self.evaluators[cut_group_id]
-            .threshold_multipliers
-            .as_ref()
-            .map(|collection| {
-                ThresholdMultiplierInputWorkspace::new(collection.layout(), zero.clone())
-            });
-        if threshold_multiplier_workspace.is_some() && variant_subspaces.is_none() {
-            return Err(eyre!(
-                "graph '{}' cut group {} has threshold multipliers but no variant/subspace registry",
-                graph.name,
-                cut_group_id.0,
-            ));
-        }
 
         for order in 0..kinematic_point.lu_cut_parameter_cache.len() {
-            let mut pending_components = record_components.then(Vec::new);
             let mut left_evaluations = zero_dual_or_not_complex(order, &zero);
 
-            for (overlap_group_index, solutions_group) in left_overlap_solutions.iter().enumerate()
-            {
+            for solutions_group in left_overlap_solutions.iter() {
                 for solution in solutions_group {
                     let representative_sample = solution.rstar_sample_for_order(order);
                     let left_threshold_id =
@@ -2237,119 +1454,6 @@ impl LUCounterTerm {
                             left_threshold_params.radius_star,
                         );
                         let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                        let detailed_variant_id = detailed_variant_ids
-                            .as_ref()
-                            .map(|(left, _)| left[left_threshold_id.0]);
-                        let multiplier_coefficients = if let Some(workspace) =
-                            threshold_multiplier_workspace.as_mut()
-                        {
-                            let variant_id = variant_subspaces
-                                .expect("multiplier registry requires variant subspaces")
-                                .left_variant_ids[left_threshold_id];
-                            let collection = self.evaluators[cut_group_id]
-                                .threshold_multipliers
-                                .as_mut()
-                                .expect("multiplier workspace requires evaluator collection");
-                            let (effective, star) = single_multiplier_context(
-                                SingleMultiplierComponent::Local,
-                                kinematic_point.representative_sample(),
-                                &inverse_transformed_sample,
-                            );
-                            let local = evaluate_single_multiplier_context(
-                                collection,
-                                workspace,
-                                variant_id,
-                                &graph.loop_momentum_basis,
-                                masses,
-                                param_builder.model_values(),
-                                &additional_params,
-                                effective,
-                                star,
-                                evaluation_meta_data,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Failed to evaluate local multiplier for graph '{}' cut group {} left variant {}",
-                                    graph.name, cut_group_id.0, variant_id.0,
-                                )
-                            })?;
-                            let (effective, star) = single_multiplier_context(
-                                SingleMultiplierComponent::Integrated,
-                                kinematic_point.representative_sample(),
-                                &inverse_transformed_sample,
-                            );
-                            let integrated = evaluate_single_multiplier_context(
-                                collection,
-                                workspace,
-                                variant_id,
-                                &graph.loop_momentum_basis,
-                                masses,
-                                param_builder.model_values(),
-                                &additional_params,
-                                effective,
-                                star,
-                                evaluation_meta_data,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Failed to evaluate integrated multiplier for graph '{}' cut group {} left variant {}",
-                                    graph.name, cut_group_id.0, variant_id.0,
-                                )
-                            })?;
-                            let coefficients = SingleMultiplierCoefficients { local, integrated };
-                            Some(coefficients)
-                        } else if record_components {
-                            let one = kinematic_point.representative_sample().one();
-                            Some(SingleMultiplierCoefficients {
-                                local: one.clone(),
-                                integrated: one,
-                            })
-                        } else {
-                            None
-                        };
-
-                        if multiplier_coefficients
-                            .as_ref()
-                            .is_some_and(SingleMultiplierCoefficients::all_zero)
-                        {
-                            if let Some(pending) = pending_components.as_mut() {
-                                let coefficients = multiplier_coefficients.as_ref().unwrap();
-                                let variant_id = detailed_variant_id.expect(
-                                    "detailed zero multiplier requires a stable left variant ID",
-                                );
-                                let registry = self.metadata_registry.as_ref().unwrap();
-                                for (kind, coefficient) in [
-                                    (
-                                        ThresholdCountertermComponentKind::Local,
-                                        &coefficients.local,
-                                    ),
-                                    (
-                                        ThresholdCountertermComponentKind::Integrated,
-                                        &coefficients.integrated,
-                                    ),
-                                ] {
-                                    pending.push(PendingLUCountertermComponent {
-                                        component_id: registry.component_id(
-                                            Some(cut_group_id),
-                                            kind,
-                                            &[variant_id],
-                                        )?,
-                                        occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                            overlap_groups: SmallVec::from_slice(&[
-                                                overlap_group_index,
-                                            ]),
-                                            left_threshold_order: cut_cff_index.left_threshold_order,
-                                            right_threshold_order: None,
-                                            lu_cut_order: cut_cff_index.lu_cut_order,
-                                        },
-                                        multiplier_values: smallvec![coefficient.clone()],
-                                        effective_multiplier: coefficient.clone(),
-                                        pass_one: None,
-                                    });
-                                }
-                            }
-                            continue;
-                        }
 
                         let params = T::get_parameters(
                             param_builder,
@@ -2357,7 +1461,7 @@ impl LUCounterTerm {
                             graph,
                             &inverse_transformed_sample,
                             settings.kinematics.externals.get_helicities(),
-                            &additional_params,
+                            &settings.additional_params(),
                             Some(&left_threshold_params),
                             None,
                             Some(&lu_cut_params),
@@ -2367,109 +1471,51 @@ impl LUCounterTerm {
                             .left_thresholds_evaluator[left_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
-                            .evaluate(params, orientations, settings, evaluation_meta_data)
+                            .evaluate(
+                                params,
+                                orientations,
+                                settings,
+                                evaluation_meta_data,
+                                record_primary_timing,
+                            )
                             .unwrap()
                             .pop()
                             .unwrap();
-
-                        // E-surface channel weights are part of the residue and
-                        // retain radial derivatives. Opaque user multipliers are
-                        // applied to the completed helper pieces below.
-                        let result_of_this_ct = multiply_dual_or_not_complex(
-                            result_of_this_ct,
-                            &sample.value_of_multi_channeling_factor,
-                        );
 
                         debug!(
                             "result of left threshold evaluator {:?}: {}",
                             cut_cff_index, result_of_this_ct
                         );
 
-                        let helper_evaluation = evaluate_threshold_helper_single(
-                            ThresholdHelperEvaluationContext {
-                                helper: self.evaluators[cut_group_id]
-                                    .threshold_helpers
-                                    .left_thresholds[left_threshold_id]
-                                    .get_mut(&cut_cff_index)
-                                    .unwrap(),
-                                cut_cff_index: &cut_cff_index,
-                                threshold_result: &result_of_this_ct,
-                                outputs: threshold_helper_outputs,
-                                evaluation_meta_data,
-                            },
+                        let helper_completed_result = evaluate_threshold_helper_single(
+                            self.evaluators[cut_group_id]
+                                .threshold_helpers
+                                .left_thresholds[left_threshold_id]
+                                .get_mut(&cut_cff_index)
+                                .unwrap(),
+                            &cut_cff_index,
+                            &result_of_this_ct,
                             &left_threshold_params,
+                            evaluation_meta_data,
+                            record_primary_timing,
                         );
-                        if let Some(pending) = pending_components.as_mut() {
-                            let helper_completed_pieces = helper_evaluation.into_pieces();
-                            let coefficients = multiplier_coefficients
-                                .as_ref()
-                                .expect("detailed components always materialize identity factors");
-                            let variant_id = detailed_variant_id
-                                .expect("detailed left component requires a stable variant ID");
-                            let registry = self.metadata_registry.as_ref().unwrap();
-                            for (kind, piece, coefficient) in [
-                                (
-                                    ThresholdCountertermComponentKind::Local,
-                                    helper_completed_pieces.local,
-                                    coefficients.local.clone(),
-                                ),
-                                (
-                                    ThresholdCountertermComponentKind::Integrated,
-                                    helper_completed_pieces.integrated,
-                                    coefficients.integrated.clone(),
-                                ),
-                            ] {
-                                let pass_one = (!coefficient.is_zero())
-                                    .then(|| negate_dual_or_not_complex(piece));
-                                pending.push(PendingLUCountertermComponent {
-                                    component_id: registry.component_id(
-                                        Some(cut_group_id),
-                                        kind,
-                                        &[variant_id],
-                                    )?,
-                                    occurrence:
-                                        ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                            overlap_groups: SmallVec::from_slice(&[
-                                                overlap_group_index,
-                                            ]),
-                                            left_threshold_order: cut_cff_index
-                                                .left_threshold_order,
-                                            right_threshold_order: None,
-                                            lu_cut_order: cut_cff_index.lu_cut_order,
-                                        },
-                                    multiplier_values: smallvec![coefficient.clone()],
-                                    effective_multiplier: coefficient,
-                                    pass_one,
-                                });
-                            }
-                        } else {
-                            let helper_completed_result = if let Some(coefficients) =
-                                &multiplier_coefficients
-                            {
-                                weight_single_multiplier_pieces(
-                                    helper_evaluation.into_pieces(),
-                                    coefficients,
-                                    order,
-                                    &zero,
-                                )
-                            } else if threshold_helper_outputs == LUThresholdHelperOutputs::Pieces {
-                                let helper_completed_pieces = helper_evaluation.into_pieces();
-                                let mut result = helper_completed_pieces.local;
-                                result += helper_completed_pieces.integrated;
-                                result
-                            } else {
-                                helper_evaluation.into_legacy()
-                            };
-                            left_evaluations += helper_completed_result;
-                        }
+
+                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                            &sample.value_of_multi_channeling_factor,
+                            variable_indices.lu_cut,
+                        );
+
+                        left_evaluations += multiply_dual_or_not_complex(
+                            helper_completed_result,
+                            &multi_channeling_factor,
+                        );
                     }
                 }
             }
 
             let mut right_evaluations = zero_dual_or_not_complex(order, &zero);
 
-            for (overlap_group_index, solutions_group) in right_overlap_solutions.iter().enumerate()
-            {
+            for solutions_group in right_overlap_solutions.iter() {
                 for solution in solutions_group {
                     let representative_sample = solution.rstar_sample_for_order(order);
                     let right_threshold_id =
@@ -2507,119 +1553,6 @@ impl LUCounterTerm {
                             right_threshold_params.radius_star,
                         );
                         let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                        let detailed_variant_id = detailed_variant_ids
-                            .as_ref()
-                            .map(|(_, right)| right[right_threshold_id.0]);
-                        let multiplier_coefficients = if let Some(workspace) =
-                            threshold_multiplier_workspace.as_mut()
-                        {
-                            let variant_id = variant_subspaces
-                                .expect("multiplier registry requires variant subspaces")
-                                .right_variant_ids[right_threshold_id];
-                            let collection = self.evaluators[cut_group_id]
-                                .threshold_multipliers
-                                .as_mut()
-                                .expect("multiplier workspace requires evaluator collection");
-                            let (effective, star) = single_multiplier_context(
-                                SingleMultiplierComponent::Local,
-                                kinematic_point.representative_sample(),
-                                &inverse_transformed_sample,
-                            );
-                            let local = evaluate_single_multiplier_context(
-                                collection,
-                                workspace,
-                                variant_id,
-                                &graph.loop_momentum_basis,
-                                masses,
-                                param_builder.model_values(),
-                                &additional_params,
-                                effective,
-                                star,
-                                evaluation_meta_data,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Failed to evaluate local multiplier for graph '{}' cut group {} right variant {}",
-                                    graph.name, cut_group_id.0, variant_id.0,
-                                )
-                            })?;
-                            let (effective, star) = single_multiplier_context(
-                                SingleMultiplierComponent::Integrated,
-                                kinematic_point.representative_sample(),
-                                &inverse_transformed_sample,
-                            );
-                            let integrated = evaluate_single_multiplier_context(
-                                collection,
-                                workspace,
-                                variant_id,
-                                &graph.loop_momentum_basis,
-                                masses,
-                                param_builder.model_values(),
-                                &additional_params,
-                                effective,
-                                star,
-                                evaluation_meta_data,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Failed to evaluate integrated multiplier for graph '{}' cut group {} right variant {}",
-                                    graph.name, cut_group_id.0, variant_id.0,
-                                )
-                            })?;
-                            let coefficients = SingleMultiplierCoefficients { local, integrated };
-                            Some(coefficients)
-                        } else if record_components {
-                            let one = kinematic_point.representative_sample().one();
-                            Some(SingleMultiplierCoefficients {
-                                local: one.clone(),
-                                integrated: one,
-                            })
-                        } else {
-                            None
-                        };
-
-                        if multiplier_coefficients
-                            .as_ref()
-                            .is_some_and(SingleMultiplierCoefficients::all_zero)
-                        {
-                            if let Some(pending) = pending_components.as_mut() {
-                                let coefficients = multiplier_coefficients.as_ref().unwrap();
-                                let variant_id = detailed_variant_id.expect(
-                                    "detailed zero multiplier requires a stable right variant ID",
-                                );
-                                let registry = self.metadata_registry.as_ref().unwrap();
-                                for (kind, coefficient) in [
-                                    (
-                                        ThresholdCountertermComponentKind::Local,
-                                        &coefficients.local,
-                                    ),
-                                    (
-                                        ThresholdCountertermComponentKind::Integrated,
-                                        &coefficients.integrated,
-                                    ),
-                                ] {
-                                    pending.push(PendingLUCountertermComponent {
-                                        component_id: registry.component_id(
-                                            Some(cut_group_id),
-                                            kind,
-                                            &[variant_id],
-                                        )?,
-                                        occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                            overlap_groups: SmallVec::from_slice(&[
-                                                overlap_group_index,
-                                            ]),
-                                            left_threshold_order: None,
-                                            right_threshold_order: cut_cff_index.right_threshold_order,
-                                            lu_cut_order: cut_cff_index.lu_cut_order,
-                                        },
-                                        multiplier_values: smallvec![coefficient.clone()],
-                                        effective_multiplier: coefficient.clone(),
-                                        pass_one: None,
-                                    });
-                                }
-                            }
-                            continue;
-                        }
 
                         let params = T::get_parameters(
                             param_builder,
@@ -2627,7 +1560,7 @@ impl LUCounterTerm {
                             graph,
                             &inverse_transformed_sample,
                             settings.kinematics.externals.get_helicities(),
-                            &additional_params,
+                            &settings.additional_params(),
                             None,
                             Some(&right_threshold_params),
                             Some(&lu_cut_params),
@@ -2637,115 +1570,54 @@ impl LUCounterTerm {
                             .right_thresholds_evaluator[right_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
-                            .evaluate(params, orientations, settings, evaluation_meta_data)
+                            .evaluate(
+                                params,
+                                orientations,
+                                settings,
+                                evaluation_meta_data,
+                                record_primary_timing,
+                            )
                             .unwrap()
                             .pop()
                             .unwrap();
-
-                        // E-surface channel weights are part of the residue and
-                        // retain radial derivatives. Opaque user multipliers are
-                        // applied to the completed helper pieces below.
-                        let result_of_this_ct = multiply_dual_or_not_complex(
-                            result_of_this_ct,
-                            &sample.value_of_multi_channeling_factor,
-                        );
 
                         debug!(
                             "result of right threshold evaluator {:?}: {}",
                             cut_cff_index, result_of_this_ct
                         );
 
-                        let helper_evaluation = evaluate_threshold_helper_single(
-                            ThresholdHelperEvaluationContext {
-                                helper: self.evaluators[cut_group_id]
-                                    .threshold_helpers
-                                    .right_thresholds[right_threshold_id]
-                                    .get_mut(&cut_cff_index)
-                                    .unwrap(),
-                                cut_cff_index: &cut_cff_index,
-                                threshold_result: &result_of_this_ct,
-                                outputs: threshold_helper_outputs,
-                                evaluation_meta_data,
-                            },
+                        let helper_completed_result = evaluate_threshold_helper_single(
+                            self.evaluators[cut_group_id]
+                                .threshold_helpers
+                                .right_thresholds[right_threshold_id]
+                                .get_mut(&cut_cff_index)
+                                .unwrap(),
+                            &cut_cff_index,
+                            &result_of_this_ct,
                             &right_threshold_params,
+                            evaluation_meta_data,
+                            record_primary_timing,
                         );
-                        if let Some(pending) = pending_components.as_mut() {
-                            let helper_completed_pieces = helper_evaluation.into_pieces();
-                            let coefficients = multiplier_coefficients
-                                .as_ref()
-                                .expect("detailed components always materialize identity factors");
-                            let variant_id = detailed_variant_id
-                                .expect("detailed right component requires a stable variant ID");
-                            let registry = self.metadata_registry.as_ref().unwrap();
-                            for (kind, piece, coefficient) in [
-                                (
-                                    ThresholdCountertermComponentKind::Local,
-                                    helper_completed_pieces.local,
-                                    coefficients.local.clone(),
-                                ),
-                                (
-                                    ThresholdCountertermComponentKind::Integrated,
-                                    helper_completed_pieces.integrated,
-                                    coefficients.integrated.clone(),
-                                ),
-                            ] {
-                                let pass_one = (!coefficient.is_zero())
-                                    .then(|| negate_dual_or_not_complex(piece));
-                                pending.push(PendingLUCountertermComponent {
-                                    component_id: registry.component_id(
-                                        Some(cut_group_id),
-                                        kind,
-                                        &[variant_id],
-                                    )?,
-                                    occurrence:
-                                        ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                            overlap_groups: SmallVec::from_slice(&[
-                                                overlap_group_index,
-                                            ]),
-                                            left_threshold_order: None,
-                                            right_threshold_order: cut_cff_index
-                                                .right_threshold_order,
-                                            lu_cut_order: cut_cff_index.lu_cut_order,
-                                        },
-                                    multiplier_values: smallvec![coefficient.clone()],
-                                    effective_multiplier: coefficient,
-                                    pass_one,
-                                });
-                            }
-                        } else {
-                            let helper_completed_result = if let Some(coefficients) =
-                                &multiplier_coefficients
-                            {
-                                weight_single_multiplier_pieces(
-                                    helper_evaluation.into_pieces(),
-                                    coefficients,
-                                    order,
-                                    &zero,
-                                )
-                            } else if threshold_helper_outputs == LUThresholdHelperOutputs::Pieces {
-                                let helper_completed_pieces = helper_evaluation.into_pieces();
-                                let mut result = helper_completed_pieces.local;
-                                result += helper_completed_pieces.integrated;
-                                result
-                            } else {
-                                helper_evaluation.into_legacy()
-                            };
-                            right_evaluations += helper_completed_result;
-                        }
+
+                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                            &sample.value_of_multi_channeling_factor,
+                            variable_indices.lu_cut,
+                        );
+
+                        right_evaluations += multiply_dual_or_not_complex(
+                            helper_completed_result,
+                            &multi_channeling_factor,
+                        );
                     }
                 }
             }
 
             let mut cartesian_product_result = zero_dual_or_not_complex(order, &zero);
 
-            for (left_overlap_group_index, left_solutions_group) in
-                left_overlap_solutions.iter().enumerate()
-            {
+            for left_solutions_group in left_overlap_solutions.iter() {
                 for left_solution in left_solutions_group {
                     let left_sample_representative = left_solution.rstar_sample_for_order(order);
-                    for (right_overlap_group_index, right_solutions_group) in
-                        right_overlap_solutions.iter().enumerate()
-                    {
+                    for right_solutions_group in right_overlap_solutions.iter() {
                         for right_solution in right_solutions_group {
                             let right_sample_representative =
                                 right_solution.rstar_sample_for_order(order);
@@ -2798,245 +1670,15 @@ impl LUCounterTerm {
                                     right_threshold_params.radius,
                                     right_threshold_params.radius_star,
                                 );
-                                let inverse_transformed_momentum_sample =
-                                    merge_and_inverse_transform(
-                                        &sample_left,
-                                        &sample_right,
-                                        &cut_cff_index,
-                                    );
-                                let detailed_pair_variant_ids =
-                                    detailed_variant_ids.as_ref().map(|(left, right)| {
-                                        (left[iterated_index.0.0], right[iterated_index.1.0])
-                                    });
-                                let multiplier_coefficients = if let Some(workspace) =
-                                    threshold_multiplier_workspace.as_mut()
-                                {
-                                    let variant_subspaces = variant_subspaces
-                                        .expect("multiplier registry requires variant subspaces");
-                                    let left_variant_id =
-                                        variant_subspaces.left_variant_ids[iterated_index.0];
-                                    let right_variant_id =
-                                        variant_subspaces.right_variant_ids[iterated_index.1];
-                                    let left_root = sample_left.get_inverse_transformed_sample();
-                                    let right_root = sample_right.get_inverse_transformed_sample();
-                                    let collection = self.evaluators[cut_group_id]
-                                        .threshold_multipliers
-                                        .as_mut()
-                                        .expect(
-                                            "multiplier workspace requires evaluator collection",
-                                        );
-
-                                    let (effective, star) = iterated_multiplier_context(
-                                        IteratedMultiplierComponent::LocalLocal,
-                                        kinematic_point.representative_sample(),
-                                        &left_root,
-                                        &right_root,
-                                        &inverse_transformed_momentum_sample,
-                                    );
-                                    let (left, right) = evaluate_pair_multiplier_context(
-                                        collection,
-                                        workspace,
-                                        left_variant_id,
-                                        right_variant_id,
-                                        &graph.loop_momentum_basis,
-                                        masses,
-                                        param_builder.model_values(),
-                                        &additional_params,
-                                        effective,
-                                        star,
-                                        evaluation_meta_data,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed to evaluate LL multipliers for graph '{}' cut group {} variants ({}, {})",
-                                            graph.name,
-                                            cut_group_id.0,
-                                            left_variant_id.0,
-                                            right_variant_id.0,
-                                        )
-                                    })?;
-                                    let local_local = PairMultiplierCoefficient { left, right };
-
-                                    let (effective, star) = iterated_multiplier_context(
-                                        IteratedMultiplierComponent::IntegratedLocal,
-                                        kinematic_point.representative_sample(),
-                                        &left_root,
-                                        &right_root,
-                                        &inverse_transformed_momentum_sample,
-                                    );
-                                    let (left, right) = evaluate_pair_multiplier_context(
-                                        collection,
-                                        workspace,
-                                        left_variant_id,
-                                        right_variant_id,
-                                        &graph.loop_momentum_basis,
-                                        masses,
-                                        param_builder.model_values(),
-                                        &additional_params,
-                                        effective,
-                                        star,
-                                        evaluation_meta_data,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed to evaluate IL multipliers for graph '{}' cut group {} variants ({}, {})",
-                                            graph.name,
-                                            cut_group_id.0,
-                                            left_variant_id.0,
-                                            right_variant_id.0,
-                                        )
-                                    })?;
-                                    let integrated_local =
-                                        PairMultiplierCoefficient { left, right };
-
-                                    let (effective, star) = iterated_multiplier_context(
-                                        IteratedMultiplierComponent::LocalIntegrated,
-                                        kinematic_point.representative_sample(),
-                                        &left_root,
-                                        &right_root,
-                                        &inverse_transformed_momentum_sample,
-                                    );
-                                    let (left, right) = evaluate_pair_multiplier_context(
-                                        collection,
-                                        workspace,
-                                        left_variant_id,
-                                        right_variant_id,
-                                        &graph.loop_momentum_basis,
-                                        masses,
-                                        param_builder.model_values(),
-                                        &additional_params,
-                                        effective,
-                                        star,
-                                        evaluation_meta_data,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed to evaluate LI multipliers for graph '{}' cut group {} variants ({}, {})",
-                                            graph.name,
-                                            cut_group_id.0,
-                                            left_variant_id.0,
-                                            right_variant_id.0,
-                                        )
-                                    })?;
-                                    let local_integrated =
-                                        PairMultiplierCoefficient { left, right };
-
-                                    let (effective, star) = iterated_multiplier_context(
-                                        IteratedMultiplierComponent::IntegratedIntegrated,
-                                        kinematic_point.representative_sample(),
-                                        &left_root,
-                                        &right_root,
-                                        &inverse_transformed_momentum_sample,
-                                    );
-                                    let (left, right) = evaluate_pair_multiplier_context(
-                                        collection,
-                                        workspace,
-                                        left_variant_id,
-                                        right_variant_id,
-                                        &graph.loop_momentum_basis,
-                                        masses,
-                                        param_builder.model_values(),
-                                        &additional_params,
-                                        effective,
-                                        star,
-                                        evaluation_meta_data,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed to evaluate II multipliers for graph '{}' cut group {} variants ({}, {})",
-                                            graph.name,
-                                            cut_group_id.0,
-                                            left_variant_id.0,
-                                            right_variant_id.0,
-                                        )
-                                    })?;
-                                    let integrated_integrated =
-                                        PairMultiplierCoefficient { left, right };
-
-                                    let coefficients = IteratedMultiplierCoefficients {
-                                        local_local,
-                                        local_integrated,
-                                        integrated_local,
-                                        integrated_integrated,
-                                    };
-                                    Some(coefficients)
-                                } else if record_components {
-                                    let one = kinematic_point.representative_sample().one();
-                                    let identity = || PairMultiplierCoefficient {
-                                        left: one.clone(),
-                                        right: one.clone(),
-                                    };
-                                    Some(IteratedMultiplierCoefficients {
-                                        local_local: identity(),
-                                        local_integrated: identity(),
-                                        integrated_local: identity(),
-                                        integrated_integrated: identity(),
-                                    })
-                                } else {
-                                    None
-                                };
-
-                                if multiplier_coefficients
-                                    .as_ref()
-                                    .is_some_and(IteratedMultiplierCoefficients::all_zero)
-                                {
-                                    if let Some(pending) = pending_components.as_mut() {
-                                        let coefficients =
-                                            multiplier_coefficients.as_ref().unwrap();
-                                        let (left_variant_id, right_variant_id) =
-                                            detailed_pair_variant_ids.expect(
-                                                "detailed zero multipliers require stable pair variant IDs",
-                                            );
-                                        let registry = self.metadata_registry.as_ref().unwrap();
-                                        for (kind, coefficient) in [
-                                            (
-                                                ThresholdCountertermComponentKind::LocalLocal,
-                                                &coefficients.local_local,
-                                            ),
-                                            (
-                                                ThresholdCountertermComponentKind::LocalIntegrated,
-                                                &coefficients.local_integrated,
-                                            ),
-                                            (
-                                                ThresholdCountertermComponentKind::IntegratedLocal,
-                                                &coefficients.integrated_local,
-                                            ),
-                                            (
-                                                ThresholdCountertermComponentKind::IntegratedIntegrated,
-                                                &coefficients.integrated_integrated,
-                                            ),
-                                        ] {
-                                            pending.push(PendingLUCountertermComponent {
-                                                component_id: registry.component_id(
-                                                    Some(cut_group_id),
-                                                    kind,
-                                                    &[left_variant_id, right_variant_id],
-                                                )?,
-                                                occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                                    overlap_groups: SmallVec::from_slice(&[
-                                                        left_overlap_group_index,
-                                                        right_overlap_group_index,
-                                                    ]),
-                                                    left_threshold_order: cut_cff_index.left_threshold_order,
-                                                    right_threshold_order: cut_cff_index.right_threshold_order,
-                                                    lu_cut_order: cut_cff_index.lu_cut_order,
-                                                },
-                                                multiplier_values: smallvec![
-                                                    coefficient.left.clone(),
-                                                    coefficient.right.clone(),
-                                                ],
-                                                effective_multiplier: coefficient.effective(),
-                                                pass_one: None,
-                                            });
-                                        }
-                                    }
-                                    continue;
-                                }
-
-                                let multi_channeling_factor = multiply_dual_or_not_complex(
-                                    sample_left.value_of_multi_channeling_factor.clone(),
-                                    &sample_right.value_of_multi_channeling_factor,
+                                let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                                    &multiply_dual_or_not_complex(
+                                        sample_left.value_of_multi_channeling_factor.clone(),
+                                        &sample_right.value_of_multi_channeling_factor,
+                                    ),
+                                    variable_indices.lu_cut,
                                 );
+                                let inverse_transformed_momentum_sample =
+                                    merge_and_inverse_transform(&sample_left, &sample_right);
 
                                 let params = T::get_parameters(
                                     param_builder,
@@ -3044,7 +1686,7 @@ impl LUCounterTerm {
                                     graph,
                                     &inverse_transformed_momentum_sample,
                                     settings.kinematics.externals.get_helicities(),
-                                    &additional_params,
+                                    &settings.additional_params(),
                                     Some(&left_threshold_params),
                                     Some(&right_threshold_params),
                                     Some(&lu_cut_params),
@@ -3054,154 +1696,95 @@ impl LUCounterTerm {
                                     .iterated_evaluator[iterated_index]
                                     .get_mut(&cut_cff_index)
                                     .unwrap()
-                                    .evaluate(params, orientations, settings, evaluation_meta_data)
+                                    .evaluate(
+                                        params,
+                                        orientations,
+                                        settings,
+                                        evaluation_meta_data,
+                                        record_primary_timing,
+                                    )
                                     .unwrap()
                                     .pop()
                                     .unwrap();
 
-                                let result_of_this_ct = multiply_dual_or_not_complex(
-                                    result_of_this_ct,
-                                    &multi_channeling_factor,
-                                );
-                                let helper_evaluation = evaluate_threshold_helper_iterated(
-                                    ThresholdHelperEvaluationContext {
-                                        helper: self.evaluators[cut_group_id]
-                                            .threshold_helpers
-                                            .iterated[iterated_index]
-                                            .get_mut(&cut_cff_index)
-                                            .unwrap(),
-                                        cut_cff_index: &cut_cff_index,
-                                        threshold_result: &result_of_this_ct,
-                                        outputs: threshold_helper_outputs,
-                                        evaluation_meta_data,
-                                    },
+                                let helper_completed_result = evaluate_threshold_helper_iterated(
+                                    self.evaluators[cut_group_id].threshold_helpers.iterated
+                                        [iterated_index]
+                                        .get_mut(&cut_cff_index)
+                                        .unwrap(),
+                                    &cut_cff_index,
+                                    &result_of_this_ct,
                                     &left_threshold_params,
                                     &right_threshold_params,
+                                    evaluation_meta_data,
+                                    record_primary_timing,
                                 );
-                                if let Some(pending) = pending_components.as_mut() {
-                                    let helper_completed_pieces = helper_evaluation.into_pieces();
-                                    let coefficients = multiplier_coefficients.as_ref().expect(
-                                        "detailed components always materialize identity factors",
-                                    );
-                                    let (left_variant_id, right_variant_id) =
-                                        detailed_pair_variant_ids.expect(
-                                            "detailed pair component requires stable variant IDs",
-                                        );
-                                    let registry = self.metadata_registry.as_ref().unwrap();
-                                    for (kind, piece, coefficient) in [
-                                        (
-                                            ThresholdCountertermComponentKind::LocalLocal,
-                                            helper_completed_pieces.local_local,
-                                            &coefficients.local_local,
-                                        ),
-                                        (
-                                            ThresholdCountertermComponentKind::LocalIntegrated,
-                                            helper_completed_pieces.local_integrated,
-                                            &coefficients.local_integrated,
-                                        ),
-                                        (
-                                            ThresholdCountertermComponentKind::IntegratedLocal,
-                                            helper_completed_pieces.integrated_local,
-                                            &coefficients.integrated_local,
-                                        ),
-                                        (
-                                            ThresholdCountertermComponentKind::IntegratedIntegrated,
-                                            helper_completed_pieces.integrated_integrated,
-                                            &coefficients.integrated_integrated,
-                                        ),
-                                    ] {
-                                        let pass_one = (!coefficient.is_zero()).then_some(piece);
-                                        pending.push(PendingLUCountertermComponent {
-                                            component_id: registry.component_id(
-                                                Some(cut_group_id),
-                                                kind,
-                                                &[left_variant_id, right_variant_id],
-                                            )?,
-                                            occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                                                overlap_groups: SmallVec::from_slice(&[
-                                                    left_overlap_group_index,
-                                                    right_overlap_group_index,
-                                                ]),
-                                                left_threshold_order: cut_cff_index.left_threshold_order,
-                                                right_threshold_order: cut_cff_index.right_threshold_order,
-                                                lu_cut_order: cut_cff_index.lu_cut_order,
-                                            },
-                                            multiplier_values: smallvec![
-                                                coefficient.left.clone(),
-                                                coefficient.right.clone(),
-                                            ],
-                                            effective_multiplier: coefficient.effective(),
-                                            pass_one,
-                                        });
-                                    }
-                                } else {
-                                    let helper_completed_result =
-                                        if let Some(coefficients) = &multiplier_coefficients {
-                                            weight_iterated_multiplier_pieces(
-                                                helper_evaluation.into_pieces(),
-                                                coefficients,
-                                                order,
-                                                &zero,
-                                            )
-                                        } else if threshold_helper_outputs
-                                            == LUThresholdHelperOutputs::Pieces
-                                        {
-                                            let helper_completed_pieces =
-                                                helper_evaluation.into_pieces();
-                                            let mut result = helper_completed_pieces.local_local;
-                                            result += helper_completed_pieces.local_integrated;
-                                            result += helper_completed_pieces.integrated_local;
-                                            result += helper_completed_pieces.integrated_integrated;
-                                            result
-                                        } else {
-                                            helper_evaluation.into_legacy()
-                                        };
 
-                                    cartesian_product_result += helper_completed_result;
-                                }
+                                cartesian_product_result += multiply_dual_or_not_complex(
+                                    helper_completed_result,
+                                    &multi_channeling_factor,
+                                );
                             }
                         }
                     }
                 }
             }
 
-            let cut_esurface = kinematic_point.cut_esurface_for_order(order);
-            if let Some(pending_components) = pending_components {
-                let completed_components = completed_components
-                    .as_mut()
-                    .expect("detailed pending components require completed storage");
-                for component in pending_components {
-                    let (weighted, completed) = component.finish(&zero, |pass_one| {
-                        self.evaluators[cut_group_id].evaluate_residue_from_esurface(
-                            cut_group_id,
-                            order,
-                            pass_one,
-                            cut_esurface,
-                            evaluation_meta_data,
-                        )
-                    });
-                    total_result += weighted;
-                    completed_components.push(completed);
+            let mut pass_one_result = left_evaluations.clone();
+            pass_one_result += right_evaluations;
+            pass_one_result += negate_dual_or_not_complex(cartesian_product_result);
+            let pass_one_result = negate_dual_or_not_complex(pass_one_result);
+
+            let mut params_for_pass_two = vec![];
+            match pass_one_result {
+                DualOrNot::Dual(dual_result) => {
+                    params_for_pass_two
+                        .extend_from_slice(&extract_t_derivatives_complex(dual_result));
                 }
-            } else {
-                let mut pass_one_result = left_evaluations;
-                pass_one_result += right_evaluations;
-                pass_one_result += negate_dual_or_not_complex(cartesian_product_result);
-                let pass_one_result = negate_dual_or_not_complex(pass_one_result);
-                total_result += self.evaluators[cut_group_id].evaluate_residue_from_esurface(
-                    cut_group_id,
-                    order,
-                    pass_one_result,
-                    cut_esurface,
-                    evaluation_meta_data,
+                DualOrNot::NonDual(non_dual_result) => {
+                    params_for_pass_two.push(non_dual_result);
+                }
+            }
+
+            match kinematic_point.cut_esurface_for_order(order).clone() {
+                DualOrNot::Dual(dual_e_surface) => {
+                    extract_t_derivatives(dual_e_surface)[1..]
+                        .iter()
+                        .for_each(|value| params_for_pass_two.push(Complex::new_re(value.clone())));
+                }
+                DualOrNot::NonDual(non_dual_e_surface) => {
+                    debug!("non dual esurface: {}", non_dual_e_surface);
+                    params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                }
+            }
+
+            debug!(
+                "LU pass-two evaluator input: cut_group_id={}, lu_order={}, param_count={}",
+                cut_group_id.0,
+                order + 1,
+                params_for_pass_two.len()
+            );
+            for (idx, value) in params_for_pass_two.iter().enumerate() {
+                debug!(
+                    "LU pass-two evaluator param: cut_group_id={}, lu_order={}, index={}, value={}",
+                    cut_group_id.0,
+                    order + 1,
+                    idx,
+                    value
                 );
             }
+
+            let pass_two_result = evaluate_evaluator_single(
+                &mut self.evaluators[cut_group_id].residue_from_e_surface_evaluators[order],
+                &params_for_pass_two,
+                evaluation_meta_data,
+                record_primary_timing,
+            );
+
+            total_result += pass_two_result;
         }
 
-        Ok(LUCountertermEvaluation {
-            total: total_result,
-            components: completed_components,
-        })
+        Ok(total_result)
     }
 }
 
@@ -3211,14 +1794,11 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     e_cm: F<T>,
     graph: &'a Graph,
     subspace: &'a SubspaceData,
-    threshold_subspaces: Option<&'a [SubspaceData]>,
     all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
-    kinematic_point: LUCTKinematicPoint<T>,
+    transformed_kinematic_point: LUCTKinematicPoint<T>,
     probe_rotation: &'a Rotation,
-    cut_group_id: CutGroupId,
-    shared_groups: &'a [(Arc<ThresholdSolveGroup<T>>, usize)],
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -3227,102 +1807,65 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         graph: &'a Graph,
         settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
-        kinematic_point: LUCTKinematicPoint<T>,
+        transformed_kinematic_point: LUCTKinematicPoint<T>,
         overlap_structure: &'a OverlapStructure,
         masses: &'a EdgeVec<F<T>>,
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
         subspace: &'a SubspaceData,
-        threshold_subspaces: Option<&'a [SubspaceData]>,
         probe_rotation: &'a Rotation,
-        cut_group_id: CutGroupId,
-        shared_groups: &'a [(Arc<ThresholdSolveGroup<T>>, usize)],
     ) -> Self {
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
+
         Self {
             real_mass_vector: masses,
-            e_cm: F::from_f64(settings.kinematics.e_cm),
+            e_cm,
             graph,
             settings,
             esurface_collection,
             overlap_structure,
-            kinematic_point,
+            transformed_kinematic_point,
             all_lmbs,
             subspace,
-            threshold_subspaces,
             probe_rotation,
-            cut_group_id,
-            shared_groups,
         }
     }
 
-    fn threshold_subspace(&self, esurface_id: EsurfaceID) -> &SubspaceData {
-        self.threshold_subspaces
-            .map_or(self.subspace, |subspaces| &subspaces[esurface_id.0])
-    }
+    fn new_overlap_builder(&'a self, overlap_group: &'a OverlapGroup) -> OverlapBuilder<'a, T> {
+        let subspace = self.subspace;
 
-    fn new_overlap_builder(
-        &'a self,
-        group_index: usize,
-        selected_esurface: EsurfaceID,
-    ) -> OverlapBuilder<'a, T> {
-        let subspace = self.threshold_subspace(selected_esurface);
-        let (shared_group, shared_center) = &self.shared_groups[group_index];
-        let transformed_kinematic_point = self.kinematic_point.lmb_transform(
-            &self.graph.loop_momentum_basis,
-            subspace.get_lmb(self.all_lmbs),
-        );
-        // A center has only active coordinates. Copy by defining edge instead of
-        // transforming its artificial zero complement as a physical sample.
-        let mut center = transformed_kinematic_point
-            .representative_sample()
-            .loop_moms()
-            .clone();
-        for momentum in center.0.iter_mut() {
-            *momentum = ThreeMomentum::new(self.e_cm.zero(), self.e_cm.zero(), self.e_cm.zero());
-        }
-        let shared_lmb = shared_group.subspace.get_lmb(self.all_lmbs);
-        for target_index in subspace.iter_lmb_indices() {
-            let edge = subspace.get_lmb(self.all_lmbs).loop_edges[target_index];
-            let source_index = shared_lmb
-                .loop_edges
-                .iter_enumerated()
-                .find_map(|(index, &candidate)| (candidate == edge).then_some(index))
-                .expect("compatible solve group has the same defining edges");
-            center[target_index] = shared_group.overlap.overlap_groups[*shared_center].center
-                [source_index]
-                .map(&|value| F(T::from_f64_exact_binary(value.0)))
-                .rotate(self.probe_rotation);
-        }
-        let shifted_loop_momenta = transformed_kinematic_point
+        let center = overlap_group.center.cast();
+
+        let shifted_loop_momenta = self
+            .transformed_kinematic_point
             .representative_sample()
             .loop_moms()
             - &center;
+
         let radius = shifted_loop_momenta
-            .hyper_radius_squared(subspace.as_subspace_simple())
+            .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
             .sqrt();
+        let unit_shifted_momenta = shifted_loop_momenta.rescale(
+            &radius.inv(),
+            Some(&subspace.iter_lmb_indices().collect_vec()),
+        );
+
         OverlapBuilder {
             counterterm_builder: self,
-            subspace,
+            overlap_group,
             center,
-            shifted_loop_momenta,
+            unit_shifted_momenta,
             radius,
-            transformed_kinematic_point,
-            shared_group,
-            shared_center: *shared_center,
         }
     }
 }
 
 struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
-    subspace: &'a SubspaceData,
-    /// Canonical identity-frame centers are promoted exactly and rotated natively
-    /// once; only active coordinates move to this threshold's native parent LMB.
+    overlap_group: &'a OverlapGroup,
+    /// Solver-derived centers already belong to the current probe and cut-side LMB frame.
     center: LoopMomenta<F<T>>,
-    shifted_loop_momenta: LoopMomenta<F<T>>,
+    unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
-    transformed_kinematic_point: LUCTKinematicPoint<T>,
-    shared_group: &'a ThresholdSolveGroup<T>,
-    shared_center: usize,
 }
 
 impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
@@ -3358,22 +1901,18 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
         radial_root_identity: &RadialRootIdentity,
-        evaluation_metadata: &mut EvaluationMetaData,
+        radial_root_diagnostics: &mut RadialRootDiagnostics,
     ) -> Option<RstarSolution<'a, T>> {
-        let subspace = self.overlap_builder.subspace;
+        let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
         let masses = self.overlap_builder.counterterm_builder.real_mass_vector;
 
         debug!("subspace: {:?}", subspace);
 
-        let radius = &self.overlap_builder.radius;
-        if radius.is_nan() || radius.is_infinite() || radius <= &radius.zero() {
-            warn!(%radius, "threshold projection requires a finite positive active displacement");
-            return None;
-        }
         let representative_sample = self
             .overlap_builder
+            .counterterm_builder
             .transformed_kinematic_point
             .representative_sample();
         let mut center_with_fixed_complement = representative_sample.loop_moms().clone();
@@ -3382,34 +1921,30 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 self.overlap_builder.center[loop_index].clone();
         }
 
-        let shared = self.overlap_builder.shared_group;
-        let shared_lmb = shared.subspace.get_lmb(lmbs);
-        let shared_center = &shared.overlap.overlap_groups[self.overlap_builder.shared_center];
-        // Validate every member with its own solved-cut data, including members
-        // whose counterterm is dispatched by another cut.
-        let center_surface_values = shared_center
+        let center_surface_values = self
+            .overlap_builder
+            .overlap_group
             .existing_esurfaces
             .iter()
-            .map(|&id| {
-                let surface_id = shared.overlap.existing_esurfaces[id];
-                let sample = &shared.kinematics[surface_id.0];
-                let mut momenta = sample.loop_moms().clone();
-                for index in shared.subspace.iter_lmb_indices() {
-                    momenta[index] = shared_center.center[index]
-                        .map(&|value| F(T::from_f64_exact_binary(value.0)))
-                        .rotate(self.overlap_builder.counterterm_builder.probe_rotation);
-                }
-                let value = shared.thresholds[surface_id].compute_from_momenta(
-                    shared_lmb,
+            .map(|&existing_esurface_id| {
+                let esurface_id = self
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[existing_esurface_id];
+                let esurface =
+                    &self.overlap_builder.counterterm_builder.esurface_collection[esurface_id];
+                let value = esurface.compute_from_momenta(
+                    subspace.get_lmb(lmbs),
                     masses,
-                    &momenta,
-                    sample.external_moms(),
+                    &center_with_fixed_complement,
+                    representative_sample.external_moms(),
                 );
-                let valid = esurface_value_is_strictly_inside(
+                let is_valid = esurface_value_is_strictly_inside(
                     &value,
                     &self.overlap_builder.counterterm_builder.e_cm,
                 );
-                (surface_id, value, valid)
+                (esurface_id, value, is_valid)
             })
             .collect_vec();
         let all_center_values_valid = center_surface_values
@@ -3421,7 +1956,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             graph = %graph.name,
             selected_esurface_id = self.esurface_id.0,
             rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-            center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
+            center_provenance = "current_probe_cut_lmb_frame",
             subspace_loop_indices = ?subspace.iter_lmb_indices().collect_vec(),
             file.active_center = %format!("{}", self.overlap_builder.center),
             file.center_with_fixed_complement = %format!("{}", center_with_fixed_complement),
@@ -3442,7 +1977,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 graph = %graph.name,
                 selected_esurface_id = self.esurface_id.0,
                 rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-                center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
+                center_provenance = "current_probe_cut_lmb_frame",
                 center = %center_with_fixed_complement,
                 surface_values = %center_surface_values
                     .iter()
@@ -3458,9 +1993,10 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             return None;
         }
 
-        let (raw_alpha_guess, _) = self.esurface.get_radius_guess_subspace(
-            &self.overlap_builder.shifted_loop_momenta,
+        let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
+            &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
+                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .external_moms(),
@@ -3470,12 +2006,13 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             masses,
         );
 
-        let function = |alpha: &_| {
+        let function = |r: &_| {
             self.esurface.compute_self_and_r_derivative_subspace(
-                alpha,
-                &self.overlap_builder.shifted_loop_momenta,
+                r,
+                &self.overlap_builder.unit_shifted_momenta,
                 &self.overlap_builder.center,
                 self.overlap_builder
+                    .counterterm_builder
                     .transformed_kinematic_point
                     .representative_sample()
                     .external_moms(),
@@ -3486,15 +2023,13 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             )
         };
 
-        let zero = raw_alpha_guess.zero();
-        let mut alpha_guess = raw_alpha_guess.clone();
-        if alpha_guess.is_nan() || alpha_guess.is_infinite() || alpha_guess <= zero {
-            // The existing ray guess now uses the unnormalized displacement,
-            // so its root coordinate and this fallback are dimensionless.
-            alpha_guess = zero.one();
+        let zero = raw_radius_guess.zero();
+        let mut radius_guess = raw_radius_guess.clone();
+        if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
+            radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
         }
 
-        debug!("initial alpha guess: {:?}", alpha_guess);
+        debug!("initial radius guess: {:?}", radius_guess);
 
         // Some residual is expected when Newton stagnates at the representable value nearest the
         // root. Direct convergence uses the active precision; the shared diagnostics may also
@@ -3506,10 +2041,10 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 .subtraction
                 .radial_root_residual_tolerance,
         );
-        let mut solution = match evaluation_metadata.radial_root_diagnostics.solve(
+        let solution = match radial_root_diagnostics.solve(
             radial_root_identity,
             &zero,
-            &alpha_guess,
+            &radius_guess,
             function,
             &tolerance,
             MAX_ITERATIONS,
@@ -3522,33 +2057,22 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     graph = %graph.name,
                     esurface_id = self.esurface_id.0,
                     rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
-                    center_provenance = "canonical_identity_center_promoted_and_rotated_natively",
-                    raw_alpha_guess = %raw_alpha_guess,
-                    alpha_guess = %alpha_guess,
+                    center_provenance = "current_probe_cut_lmb_frame",
+                    raw_radius_guess = %raw_radius_guess,
+                    radius_guess = %radius_guess,
                     error = %error,
-                    "refusing to evaluate a threshold counterterm with an invalid alpha solution"
+                    "refusing to evaluate a threshold counterterm with an invalid radial solution"
                 );
                 return None;
             }
         };
 
-        debug!("alpha solution: {:?}", solution);
-        let alpha = solution.solution.clone();
-        // Diagnostics retain the dimensionless solve and its energy residual.
-        // Physical residue interfaces still consume r* and d eta / d r.
-        solution.solution *= radius;
-        solution.derivative_at_solution /= radius;
-        if [&solution.solution, &solution.derivative_at_solution]
-            .iter()
-            .any(|value| value.is_nan() || value.is_infinite() || **value <= zero)
-        {
-            warn!(%alpha, %radius, "threshold radial solution is not representable");
-            return None;
-        }
+        debug!("r* solution: {:?}", solution);
 
-        let alpha_t_dependence = if rstar_t_dependence_evaluator.supports_t_derivatives() {
+        let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
+                .counterterm_builder
                 .transformed_kinematic_point
                 .non_dual_cut_params()
                 .tstar
@@ -3560,28 +2084,25 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             };
 
             Some(
-                rstar_t_dependence_evaluator.evaluate_alpha(
-                    RstarTDependenceInput {
-                        t_star: &t_star,
-                        alpha: &alpha,
-                        overlap_center: &self.overlap_builder.center,
-                        subspace,
-                        unrescaled_momentum_sample: self
-                            .overlap_builder
-                            .transformed_kinematic_point
-                            .unrescaled_sample(),
-                        representative_sample,
-                        masses,
-                        threshold_esurface: self.esurface,
-                        lmb: &self
-                            .overlap_builder
-                            .counterterm_builder
-                            .graph
-                            .loop_momentum_basis,
-                        all_lmbs: lmbs,
-                    },
-                    evaluation_metadata,
-                ),
+                rstar_t_dependence_evaluator.evaluate(RstarTDependenceInput {
+                    t_star: &t_star,
+                    radius_star: &solution.solution,
+                    overlap_center: &self.overlap_builder.center,
+                    subspace,
+                    unrescaled_momentum_sample: self
+                        .overlap_builder
+                        .counterterm_builder
+                        .transformed_kinematic_point
+                        .unrescaled_sample(),
+                    masses,
+                    threshold_esurface: self.esurface,
+                    lmb: &self
+                        .overlap_builder
+                        .counterterm_builder
+                        .graph
+                        .loop_momentum_basis,
+                    all_lmbs: lmbs,
+                }),
             )
         } else {
             None
@@ -3590,8 +2111,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
-            alpha,
-            alpha_t_dependence,
+            t_dependent_solution,
         })
     }
 }
@@ -3599,9 +2119,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 struct RstarSolution<'a, T: FloatLike> {
     esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
     solution: NewtonIterationResult<T>,
-    /// Authoritative dimensionless projection; physical radii are derived from it.
-    alpha: F<T>,
-    alpha_t_dependence: Option<HyperDual<F<T>>>,
+    t_dependent_solution: Option<HyperDual<F<T>>>,
 }
 
 struct DualRstarGeometry<T: FloatLike> {
@@ -3613,40 +2131,40 @@ struct DualRstarGeometry<T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSolution<'a, T> {
-    fn subspace(&self) -> &SubspaceData {
-        self.esurface_ct_builder.overlap_builder.subspace
-    }
-
     fn max_supported_order(&self) -> usize {
-        self.alpha_t_dependence
+        self.t_dependent_solution
             .as_ref()
             .map(|dual| dual.values.len().saturating_sub(1))
             .unwrap_or(0)
     }
 
     fn base_rstar_loop_momenta(&self) -> LoopMomenta<F<T>> {
-        let subspace = self.subspace();
+        let subspace = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
 
         &self
             .esurface_ct_builder
             .overlap_builder
-            .shifted_loop_momenta
-            .rescale(&self.alpha, subspace.as_subspace_simple())
+            .unit_shifted_momenta
+            .rescale(&self.solution.solution, subspace.as_subspace_simple())
             + &self.esurface_ct_builder.overlap_builder.center
     }
 
-    fn truncated_alpha_solution(&self, order: usize) -> HyperDual<F<T>> {
+    fn truncated_rstar_solution(&self, order: usize) -> HyperDual<F<T>> {
         let dual_solution = self
-            .alpha_t_dependence
+            .t_dependent_solution
             .as_ref()
-            .expect("higher-order LU threshold evaluation requires cached alpha(t)");
+            .expect("higher-order LU threshold evaluation requires cached r_star(t)");
         HyperDual::from_values(
             simple_n_deriv_shape(order),
             dual_solution.values[..=order].to_vec(),
         )
     }
 
-    fn embedded_truncated_alpha_solution(&self, cut_cff_index: &CutCFFIndex) -> HyperDual<F<T>> {
+    fn embedded_truncated_rstar_solution(&self, cut_cff_index: &CutCFFIndex) -> HyperDual<F<T>> {
         let lu_order = cut_cff_index
             .lu_cut_order
             .expect("mixed LU geometry requires lu_cut_order")
@@ -3656,9 +2174,12 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .expect("mixed LU geometry requires a dual shape");
         let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
         let t_dual = if lu_order == 0 {
-            HyperDual::from_values(simple_n_deriv_shape(0), vec![self.alpha.clone()])
+            HyperDual::from_values(
+                simple_n_deriv_shape(0),
+                vec![self.solution.solution.clone()],
+            )
         } else {
-            self.truncated_alpha_solution(lu_order)
+            self.truncated_rstar_solution(lu_order)
         };
 
         embed_t_dual_in_target_shape(&t_dual, &target_shape, t_variable)
@@ -3668,6 +2189,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
+            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order);
         let dual_loop_momenta = source_sample
@@ -3677,12 +2199,81 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .expect("higher-order LU threshold evaluation requires dual loop momenta")
             .clone();
 
-        self.dual_geometry(
-            dual_loop_momenta,
-            self.truncated_alpha_solution(order),
-            source_sample.external_moms(),
-            None,
-        )
+        let radius_star = self.truncated_rstar_solution(order);
+        let center = dualize_loop_momenta(
+            &radius_star,
+            &self.esurface_ct_builder.overlap_builder.center,
+        );
+        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
+
+        let shifted_momenta = dual_loop_momenta
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() - center.clone())
+            .collect::<LoopMomenta<_>>();
+
+        let radius = dual_shifted_radius(
+            &shifted_momenta,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+        );
+        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
+        let unit_shifted_momenta = shifted_momenta.rescale(
+            &inverse_radius,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace
+                .as_subspace_simple(),
+        );
+
+        let rstar_loop_momenta = unit_shifted_momenta
+            .rescale(
+                &radius_star,
+                self.esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .subspace
+                    .as_subspace_simple(),
+            )
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() + center.clone())
+            .collect();
+
+        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
+            self.esurface_ct_builder.esurface,
+            &radius_star,
+            &unit_shifted_momenta,
+            &center,
+            &external_moms,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .real_mass_vector,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .graph,
+        );
+
+        DualRstarGeometry {
+            radius,
+            radius_star,
+            esurface_derivative,
+            rstar_loop_momenta,
+            external_moms,
+        }
     }
 
     fn dual_geometry_for_cut_cff_index(
@@ -3697,6 +2288,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
+            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order);
         let target_shape = shape_from_cut_cff_index(cut_cff_index)
@@ -3710,71 +2302,65 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         )
         .expect("mixed LU geometry requires dual loop momenta");
 
-        self.dual_geometry(
-            dual_loop_momenta,
-            self.embedded_truncated_alpha_solution(cut_cff_index),
-            source_sample.external_moms(),
-            threshold_variable,
-        )
-    }
+        let mut radius_star = self.embedded_truncated_rstar_solution(cut_cff_index);
+        activate_threshold_variable_in_target_shape(&mut radius_star, threshold_variable);
+        let center = dualize_loop_momenta(
+            &radius_star,
+            &self.esurface_ct_builder.overlap_builder.center,
+        );
+        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
 
-    fn dual_geometry(
-        &self,
-        mut dual_loop_momenta: LoopMomenta<HyperDual<F<T>>>,
-        mut alpha: HyperDual<F<T>>,
-        source_externals: &ExternalFourMomenta<F<T>>,
-        threshold_variable: Option<usize>,
-    ) -> DualRstarGeometry<T> {
-        let representative = self
-            .esurface_ct_builder
-            .overlap_builder
-            .transformed_kinematic_point
-            .representative_sample();
-        // Higher-order packets retain their derivatives at the exact physical
-        // base already used by the alpha solve and implicit-function evaluator.
-        for (momentum, base) in dual_loop_momenta
-            .0
-            .iter_mut()
-            .zip(representative.loop_moms().iter())
-        {
-            momentum.px.values[0] = base.px.clone();
-            momentum.py.values[0] = base.py.clone();
-            momentum.pz.values[0] = base.pz.clone();
-        }
-        let center = dualize_loop_momenta(&alpha, &self.esurface_ct_builder.overlap_builder.center);
-        let external_moms = dualize_external_momenta(&alpha, source_externals);
         let shifted_momenta = dual_loop_momenta
             .iter()
             .zip(center.iter())
             .map(|(momentum, center)| momentum.clone() - center.clone())
             .collect::<LoopMomenta<_>>();
-        let radius = dual_shifted_radius(&shifted_momenta, self.subspace());
-        let mut radius_star = alpha.clone() * &radius;
-        // Threshold derivatives remain derivatives in physical r*, not alpha.
-        // This zero-based variation preserves the authoritative projection base.
-        if threshold_variable.is_some() {
-            let mut radial_variation = new_constant(&alpha, &self.alpha.zero());
-            activate_threshold_variable_in_target_shape(&mut radial_variation, threshold_variable);
-            radius_star += &radial_variation;
-            alpha += radial_variation / &radius;
-        }
-        let rstar_loop_momenta = shifted_momenta
-            .rescale(&alpha, self.subspace().as_subspace_simple())
+
+        let radius = dual_shifted_radius(
+            &shifted_momenta,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+        );
+        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
+        let unit_shifted_momenta = shifted_momenta.rescale(
+            &inverse_radius,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace
+                .as_subspace_simple(),
+        );
+
+        let rstar_loop_momenta = unit_shifted_momenta
+            .rescale(
+                &radius_star,
+                self.esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .subspace
+                    .as_subspace_simple(),
+            )
             .iter()
             .zip(center.iter())
             .map(|(momentum, center)| momentum.clone() + center.clone())
             .collect();
-        let (_, alpha_derivative) = compute_self_and_r_derivative_subspace_dual(
+
+        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
             self.esurface_ct_builder.esurface,
-            &alpha,
-            &shifted_momenta,
+            &radius_star,
+            &unit_shifted_momenta,
             &center,
             &external_moms,
             self.esurface_ct_builder
                 .overlap_builder
                 .counterterm_builder
                 .real_mass_vector,
-            self.subspace(),
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
             self.esurface_ct_builder
                 .overlap_builder
                 .counterterm_builder
@@ -3784,7 +2370,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                 .counterterm_builder
                 .graph,
         );
-        let esurface_derivative = alpha_derivative / &radius;
 
         DualRstarGeometry {
             radius,
@@ -3796,114 +2381,183 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
     }
 
     fn non_dual_multichanneling_factor(&self, rstar_sample: &MomentumSample<T>) -> Complex<F<T>> {
-        let builder = self.esurface_ct_builder.overlap_builder;
-        let group = builder.shared_group;
-        let native_lmb = self
-            .subspace()
-            .get_lmb(builder.counterterm_builder.all_lmbs);
-        let group_lmb = group.subspace.get_lmb(builder.counterterm_builder.all_lmbs);
-        let active_sample = rstar_sample.lmb_transform(native_lmb, group_lmb);
-        let values: Vec<_> = group
-            .thresholds
-            .iter_enumerated()
-            .map(|(id, surface)| {
-                let mut momenta = group.kinematics[id.0].loop_moms().clone();
-                for index in group.subspace.iter_lmb_indices() {
-                    momenta[index] = active_sample.loop_moms()[index].clone();
-                }
-                surface
-                    .compute_from_momenta(
-                        group_lmb,
-                        builder.counterterm_builder.real_mass_vector,
-                        &momenta,
-                        group.kinematics[id.0].external_moms(),
-                    )
-                    .powi(group.prefactor_power as i32)
-            })
-            .collect();
-        let weights = group
-            .overlap
+        let subspace = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
+
+        let multi_channeling_denominator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .overlap_structure
             .overlap_groups
             .iter()
-            .map(|center| {
-                center
+            .map(|group| {
+                group
                     .complement
                     .iter()
-                    .map(|id| &values[group.overlap.existing_esurfaces[*id].0])
-                    .fold(rstar_sample.one(), |weight, value| weight * value)
+                    .map(|existing_esurface_id| {
+                        let esurface_id = self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .overlap_structure
+                            .existing_esurfaces[*existing_esurface_id];
+                        let esurface = &self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .esurface_collection[esurface_id];
+                        let esurface_value = esurface.compute_from_momenta(
+                            subspace.get_lmb(
+                                self.esurface_ct_builder
+                                    .overlap_builder
+                                    .counterterm_builder
+                                    .all_lmbs,
+                            ),
+                            self.esurface_ct_builder
+                                .overlap_builder
+                                .counterterm_builder
+                                .real_mass_vector,
+                            rstar_sample.loop_moms(),
+                            rstar_sample.external_moms(),
+                        );
+
+                        &esurface_value * &esurface_value
+                    })
+                    .fold(rstar_sample.one(), |acc, value| acc * value)
             })
-            .collect_vec();
-        let denominator = weights
+            .fold(rstar_sample.zero(), |acc, value| acc + value);
+
+        let multichanneling_numerator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .overlap_group
+            .complement
             .iter()
-            .fold(rstar_sample.zero(), |sum, value| sum + value);
-        Complex::new_re(weights[builder.shared_center].clone() / denominator)
+            .map(|existing_esurface_id| {
+                let esurface_id = self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[*existing_esurface_id];
+                let esurface = &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .esurface_collection[esurface_id];
+                let esurface_value = esurface.compute_from_momenta(
+                    subspace.get_lmb(
+                        self.esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .all_lmbs,
+                    ),
+                    self.esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .real_mass_vector,
+                    rstar_sample.loop_moms(),
+                    rstar_sample.external_moms(),
+                );
+
+                &esurface_value * &esurface_value
+            })
+            .fold(rstar_sample.one(), |acc, value| acc * value);
+
+        Complex::new_re(multichanneling_numerator / multi_channeling_denominator)
     }
 
     fn dual_multichanneling_factor(&self, geometry: &DualRstarGeometry<T>) -> HyperDual<F<T>> {
-        let builder = self.esurface_ct_builder.overlap_builder;
-        let group = builder.shared_group;
-        let native_lmb = self
-            .subspace()
-            .get_lmb(builder.counterterm_builder.all_lmbs);
-        let group_lmb = group.subspace.get_lmb(builder.counterterm_builder.all_lmbs);
-        let external_spatial = geometry
-            .external_moms
-            .iter()
-            .map(|p| p.spatial.clone())
-            .collect();
-        let current =
-            geometry
-                .rstar_loop_momenta
-                .lmb_transform(native_lmb, group_lmb, &external_spatial);
-        let values = group
-            .thresholds
-            .iter_enumerated()
-            .map(|(id, surface)| {
-                let sample = &group.kinematics[id.0];
-                // The target cut's complement carries its live LU-t derivatives.
-                // Other cuts' already-solved data are constants for this residue;
-                // their threshold-r dependence enters through the shared coordinates.
-                let (mut momenta, externals) = if group.records[id.0].cut_group_id
-                    == builder.counterterm_builder.cut_group_id
-                {
-                    (current.clone(), geometry.external_moms.clone())
-                } else {
-                    (
-                        dualize_loop_momenta(&geometry.radius, sample.loop_moms()),
-                        dualize_external_momenta(&geometry.radius, sample.external_moms()),
-                    )
-                };
-                for index in group.subspace.iter_lmb_indices() {
-                    momenta[index] = current[index].clone();
-                }
-                let value = surface.compute_from_dual_momenta(
-                    group_lmb,
-                    builder.counterterm_builder.real_mass_vector,
-                    &momenta,
-                    &externals,
-                );
-                (0..group.prefactor_power).fold(
-                    new_constant(&value, &value.values[0].one()),
-                    |product, _| product * &value,
-                )
-            })
-            .collect_vec();
-        let one = new_constant(&geometry.radius, &geometry.radius.values[0].one());
+        let subspace = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
+        let lmb = subspace.get_lmb(
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+        );
         let zero = new_constant(&geometry.radius, &geometry.radius.values[0].zero());
-        let weights = group
-            .overlap
+        let one = new_constant(&geometry.radius, &geometry.radius.values[0].one());
+
+        let multi_channeling_denominator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .overlap_structure
             .overlap_groups
             .iter()
-            .map(|center| {
-                center
+            .map(|group| {
+                group
                     .complement
                     .iter()
-                    .map(|id| &values[group.overlap.existing_esurfaces[*id].0])
-                    .fold(one.clone(), |weight, value| weight * value)
+                    .map(|existing_esurface_id| {
+                        let esurface_id = self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .overlap_structure
+                            .existing_esurfaces[*existing_esurface_id];
+                        let esurface = &self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .esurface_collection[esurface_id];
+                        let esurface_value = esurface.compute_from_dual_momenta(
+                            lmb,
+                            self.esurface_ct_builder
+                                .overlap_builder
+                                .counterterm_builder
+                                .real_mass_vector,
+                            &geometry.rstar_loop_momenta,
+                            &geometry.external_moms,
+                        );
+
+                        esurface_value.clone() * esurface_value
+                    })
+                    .fold(one.clone(), |acc, value| acc * value)
             })
-            .collect_vec();
-        let denominator = weights.iter().fold(zero, |sum, value| sum + value);
-        weights[builder.shared_center].clone() / denominator
+            .fold(zero.clone(), |acc, value| acc + value);
+
+        let multi_channeling_numerator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .overlap_group
+            .complement
+            .iter()
+            .map(|existing_esurface_id| {
+                let esurface_id = self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[*existing_esurface_id];
+                let esurface = &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .esurface_collection[esurface_id];
+                let esurface_value = esurface.compute_from_dual_momenta(
+                    lmb,
+                    self.esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .real_mass_vector,
+                    &geometry.rstar_loop_momenta,
+                    &geometry.external_moms,
+                );
+
+                esurface_value.clone() * esurface_value
+            })
+            .fold(one, |acc, value| acc * value);
+
+        multi_channeling_numerator / multi_channeling_denominator
     }
 
     fn rstar_sample_for_order<'solution>(
@@ -3916,6 +2570,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             let mut rstar_sample = self
                 .esurface_ct_builder
                 .overlap_builder
+                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .clone();
@@ -3991,6 +2646,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
+            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order)
             .clone();
@@ -4072,6 +2728,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
+            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order)
             .clone();
@@ -4184,7 +2841,12 @@ impl<'solution, 'a, T: FloatLike> RstarSample<'solution, 'a, T> {
     }
 
     fn get_inverse_transformed_sample(&self) -> MomentumSample<T> {
-        let subspace = self.rstar_solution.subspace();
+        let subspace = self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
         let current_lmb = subspace.get_lmb(
             self.rstar_solution
                 .esurface_ct_builder
@@ -4211,89 +2873,76 @@ impl<'solution, 'a, T: FloatLike> RstarSample<'solution, 'a, T> {
 fn merge_and_inverse_transform<T: FloatLike>(
     left_sample: &RstarSample<'_, '_, T>,
     right_sample: &RstarSample<'_, '_, T>,
-    cut_cff_index: &CutCFFIndex,
 ) -> MomentumSample<T> {
-    let left_builder = left_sample
+    let left_subspace = left_sample
         .rstar_solution
         .esurface_ct_builder
-        .overlap_builder;
-    let lmbs = left_builder.counterterm_builder.all_lmbs;
-    let left_subspace = left_sample.rstar_solution.subspace();
-    let right_subspace = right_sample.rstar_solution.subspace();
+        .overlap_builder
+        .counterterm_builder
+        .subspace;
+
+    let right_subspace = right_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder
+        .counterterm_builder
+        .subspace;
+
     assert!(
-        left_subspace.is_mergable_with(right_subspace, lmbs),
-        "incompatible physical subspaces for merging samples"
+        left_subspace.is_mergable_with(right_subspace),
+        "incompatible subspaces for merging samples"
     );
-    let graph_lmb = &left_builder.counterterm_builder.graph.loop_momentum_basis;
-    let mut merged = left_sample.get_inverse_transformed_sample();
-    let right = right_sample.get_inverse_transformed_sample();
-    let base = left_builder
-        .transformed_kinematic_point
-        .representative_sample()
-        .lmb_transform(left_subspace.get_lmb(lmbs), graph_lmb);
-    // Add the two physical displacements to their common solved-cut sample.
-    // This is the same Cartesian projection even when native parent slots differ.
-    for index in (0..merged.loop_moms().0.len()).map(LoopIndex::from) {
-        merged.sample.loop_moms[index] +=
-            &right.sample.loop_moms[index] - &base.sample.loop_moms[index];
+
+    let mut merged_sample = left_sample.rstar_sample.clone();
+    for lmb_index in right_subspace.iter_lmb_indices() {
+        let right_momentum = right_sample.rstar_sample.loop_moms()[lmb_index].clone();
+        merged_sample.sample.loop_moms[lmb_index] = right_momentum;
     }
+
     match (
-        merged.sample.dual_loop_moms.as_mut(),
-        right.sample.dual_loop_moms.as_ref(),
+        merged_sample.sample.dual_loop_moms.as_mut(),
+        right_sample.rstar_sample.sample.dual_loop_moms.as_ref(),
     ) {
-        (Some(merged_duals), Some(right_duals)) => {
-            let source = &left_builder.transformed_kinematic_point;
-            let order = cut_cff_index.lu_cut_order.expect("iterated LU order") - 1;
-            let base_sample = source.sample_for_order(order);
-            let target_shape = shape_from_cut_cff_index(cut_cff_index).map(HyperDual::new);
-            let native_base = embedded_dual_loop_momenta_for_cut_cff_index(
-                base_sample,
-                &target_shape,
-                variable_indices_from_cut_cff_index(cut_cff_index).lu_cut,
-            )
-            .expect("iterated dual base matches the residue shape");
-            let external = dualize_external_momenta(
-                &merged_duals[LoopIndex::from(0)].px,
-                base_sample.external_moms(),
-            );
-            let base_duals = native_base.lmb_transform(
-                left_subspace.get_lmb(lmbs),
-                graph_lmb,
-                &external.iter().map(|p| p.spatial.clone()).collect(),
-            );
-            for index in (0..merged_duals.0.len()).map(LoopIndex::from) {
-                merged_duals[index] = merged_duals[index].clone() + right_duals[index].clone()
-                    - base_duals[index].clone();
+        (Some(merged_dual_loop_moms), Some(right_dual_loop_moms)) => {
+            for lmb_index in right_subspace.iter_lmb_indices() {
+                merged_dual_loop_moms[lmb_index] = right_dual_loop_moms[lmb_index].clone();
             }
         }
         (None, None) => {}
-        _ => unreachable!("iterated LU samples must carry matching dual shapes"),
+        _ => {
+            unreachable!("iterated LU samples must either both carry dual loop momenta or neither")
+        }
     }
-    merged
+
+    let current_lmb = left_subspace.get_lmb(
+        left_sample
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .all_lmbs,
+    );
+
+    let target_lmb = &left_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder
+        .counterterm_builder
+        .graph
+        .loop_momentum_basis;
+
+    merged_sample.lmb_transform(current_lmb, target_lmb)
 }
 
 #[cfg(test)]
-#[path = "lu_counterterm_group_tests.rs"]
-mod group_tests;
-
-#[cfg(test)]
 mod tests {
-    use super::{
-        IteratedMultiplierCoefficients, IteratedMultiplierComponent, LUCounterTerm,
-        PairMultiplierCoefficient, PendingLUCountertermComponent, SingleMultiplierCoefficients,
-        SingleMultiplierComponent, extend_extracted_eta_params,
-        extract_zero_threshold_coefficient_t_dual, iterated_multiplier_context,
-        single_multiplier_context, weight_iterated_multiplier_pieces,
-        weight_single_multiplier_pieces,
-    };
+    use super::{LUCounterTerm, extract_zero_threshold_coefficient_t_dual};
     use crate::cff::CutCFFIndex;
-    use crate::observables::events::ThresholdCountertermComponentOccurrence;
-    use crate::processes::{CutGroupId, IteratedThresholdPieces, SingleThresholdPieces};
+    use crate::processes::CutGroupId;
     use crate::utils::{
-        ArbPrec, F, FloatLike, f128,
-        hyperdual_utils::{DualOrNot, new_from_values, shape_from_cut_cff_index},
+        F,
+        hyperdual_utils::{new_from_values, shape_from_cut_cff_index},
     };
-    use spenso::algebra::complex::Complex;
     use symbolica::domains::dual::HyperDual;
     use typed_index_collections::{TiVec, ti_vec};
 
@@ -4303,8 +2952,6 @@ mod tests {
             evaluators: TiVec::new(),
             thresholds: TiVec::new(),
             subspaces: TiVec::new(),
-            variant_subspaces: None,
-            metadata_registry: None,
             rstar_dependence_calculator: TiVec::new(),
             active_cut_groups: ti_vec![false],
             active_left_thresholds: ti_vec![TiVec::new()],
@@ -4345,253 +2992,5 @@ mod tests {
         let zero_threshold = extract_zero_threshold_coefficient_t_dual(&mixed_dual, 0);
 
         assert_eq!(zero_threshold.values, vec![F(10.0_f64), F(11.0_f64)]);
-    }
-
-    #[test]
-    fn iterated_eta_parameters_project_onto_their_own_threshold_axis() {
-        let cut_cff_index = CutCFFIndex {
-            left_threshold_order: Some(1),
-            right_threshold_order: Some(2),
-            lu_cut_order: Some(1),
-        };
-        let shape = HyperDual::new(shape_from_cut_cff_index(&cut_cff_index).unwrap());
-        let mixed_eta = DualOrNot::Dual(new_from_values(&shape, &[F(10.0_f64), F(20.0_f64)]));
-
-        let mut left_params = Vec::new();
-        extend_extracted_eta_params(&mut left_params, &mixed_eta, None, None);
-        assert_eq!(
-            left_params,
-            vec![Complex::new_re(F(10.0_f64))],
-            "an order-one left eta must take the zero coefficient of the right threshold axis",
-        );
-
-        let mut right_params = Vec::new();
-        extend_extracted_eta_params(&mut right_params, &mixed_eta, None, Some(0));
-        assert_eq!(
-            right_params,
-            vec![Complex::new_re(F(10.0_f64)), Complex::new_re(F(20.0_f64)),],
-            "the right eta must retain derivatives along its own threshold axis",
-        );
-    }
-
-    #[test]
-    fn multiplier_contexts_follow_expanded_term_semantics() {
-        let base = "base";
-        let left_root = "left_root";
-        let right_root = "right_root";
-        let merged_root = "merged_root";
-
-        assert_eq!(
-            single_multiplier_context(SingleMultiplierComponent::Local, &base, &left_root),
-            (&base, &left_root),
-        );
-        assert_eq!(
-            single_multiplier_context(SingleMultiplierComponent::Integrated, &base, &left_root),
-            (&left_root, &left_root),
-        );
-        assert_eq!(
-            iterated_multiplier_context(
-                IteratedMultiplierComponent::LocalLocal,
-                &base,
-                &left_root,
-                &right_root,
-                &merged_root,
-            ),
-            (&base, &merged_root),
-        );
-        assert_eq!(
-            iterated_multiplier_context(
-                IteratedMultiplierComponent::IntegratedLocal,
-                &base,
-                &left_root,
-                &right_root,
-                &merged_root,
-            ),
-            (&left_root, &merged_root),
-        );
-        assert_eq!(
-            iterated_multiplier_context(
-                IteratedMultiplierComponent::LocalIntegrated,
-                &base,
-                &left_root,
-                &right_root,
-                &merged_root,
-            ),
-            (&right_root, &merged_root),
-        );
-        assert_eq!(
-            iterated_multiplier_context(
-                IteratedMultiplierComponent::IntegratedIntegrated,
-                &base,
-                &left_root,
-                &right_root,
-                &merged_root,
-            ),
-            (&merged_root, &merged_root),
-        );
-
-        // One original term, two single-sided (local/integrated) terms on each side, and four
-        // paired terms exhaust the 3x3 expansion used by the GL638 two-sided regression.
-        let left_only_terms = 2;
-        let right_only_terms = 2;
-        let paired_terms = 4;
-        assert_eq!(1 + left_only_terms + right_only_terms + paired_terms, 9);
-        assert_eq!((1 + left_only_terms) * (1 + right_only_terms), 9);
-    }
-
-    #[test]
-    fn zero_multiplier_coefficients_skip_unused_pieces() {
-        let zero = F(0.0_f64);
-        let single = weight_single_multiplier_pieces(
-            SingleThresholdPieces {
-                local: DualOrNot::NonDual(Complex::new_re(F(f64::NAN))),
-                integrated: DualOrNot::NonDual(Complex::new_re(F(3.0))),
-            },
-            &SingleMultiplierCoefficients {
-                local: F(0.0),
-                integrated: F(5.0),
-            },
-            0,
-            &zero,
-        )
-        .unwrap_real();
-        assert_eq!(single, Complex::new_re(F(15.0)));
-
-        let iterated = weight_iterated_multiplier_pieces(
-            IteratedThresholdPieces {
-                local_local: DualOrNot::NonDual(Complex::new_re(F(1.0))),
-                local_integrated: DualOrNot::NonDual(Complex::new_re(F(f64::NAN))),
-                integrated_local: DualOrNot::NonDual(Complex::new_re(F(100.0))),
-                integrated_integrated: DualOrNot::NonDual(Complex::new_re(F(1000.0))),
-            },
-            &IteratedMultiplierCoefficients {
-                local_local: PairMultiplierCoefficient {
-                    left: F(2.0),
-                    right: F(1.0),
-                },
-                local_integrated: PairMultiplierCoefficient {
-                    left: F(0.0),
-                    right: F(1.0),
-                },
-                integrated_local: PairMultiplierCoefficient {
-                    left: F(5.0),
-                    right: F(1.0),
-                },
-                integrated_integrated: PairMultiplierCoefficient {
-                    left: F(7.0),
-                    right: F(1.0),
-                },
-            },
-            0,
-            &zero,
-        )
-        .unwrap_real();
-        assert_eq!(iterated, Complex::new_re(F(7502.0)));
-
-        assert!(
-            SingleMultiplierCoefficients {
-                local: zero,
-                integrated: zero,
-            }
-            .all_zero()
-        );
-        assert!(
-            IteratedMultiplierCoefficients {
-                local_local: PairMultiplierCoefficient {
-                    left: zero,
-                    right: F(1.0),
-                },
-                local_integrated: PairMultiplierCoefficient {
-                    left: zero,
-                    right: F(1.0),
-                },
-                integrated_local: PairMultiplierCoefficient {
-                    left: zero,
-                    right: F(1.0),
-                },
-                integrated_integrated: PairMultiplierCoefficient {
-                    left: zero,
-                    right: F(1.0),
-                },
-            }
-            .all_zero()
-        );
-    }
-
-    #[test]
-    fn detailed_component_finishing_skips_exact_zero_and_reconciles_weights() {
-        let occurrence = ThresholdCountertermComponentOccurrence::LocalUnitarity {
-            overlap_groups: smallvec::smallvec![2],
-            left_threshold_order: Some(1),
-            right_threshold_order: None,
-            lu_cut_order: Some(2),
-        };
-        let nonzero = PendingLUCountertermComponent {
-            component_id: 4,
-            occurrence: occurrence.clone(),
-            multiplier_values: smallvec::smallvec![F(2.0_f64)],
-            effective_multiplier: F(2.0),
-            // Single-sided signs are already carried by the pass-one component.
-            pass_one: Some(DualOrNot::NonDual(Complex::new_re(F(-3.0)))),
-        };
-        let mut pass_two_calls = 0;
-        let (weighted, completed) = nonzero.finish(&F(0.0), |pass_one| {
-            pass_two_calls += 1;
-            pass_one.unwrap_real() * Complex::new_re(F(4.0))
-        });
-        assert_eq!(pass_two_calls, 1);
-        assert_eq!(completed.bare, Some(Complex::new_re(F(-12.0))));
-        assert_eq!(weighted, Complex::new_re(F(-24.0)));
-        assert_eq!(completed.weighted, weighted);
-
-        let skipped = PendingLUCountertermComponent {
-            component_id: 5,
-            occurrence,
-            multiplier_values: smallvec::smallvec![F(0.0_f64)],
-            effective_multiplier: F(0.0),
-            pass_one: None,
-        };
-        let (skipped_weight, skipped) = skipped.finish(&F(0.0), |_| {
-            panic!("exact-zero component must not reach pass two")
-        });
-        assert!(skipped.evaluation_skipped);
-        assert!(skipped.bare.is_none());
-        assert_eq!(skipped_weight, Complex::new_re(F(0.0)));
-
-        let decomposition = crate::observables::events::GenericThresholdCountertermEventInfo {
-            original: Complex::new_re(F(30.0)),
-            components: vec![completed, skipped],
-        };
-        assert_eq!(decomposition.total(), Complex::new_re(F(6.0)));
-    }
-
-    fn assert_detailed_component_precision<T: FloatLike>() {
-        let value = |value| F(T::from_f64(value));
-        let component = PendingLUCountertermComponent {
-            component_id: 0,
-            occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                overlap_groups: smallvec::smallvec![0],
-                left_threshold_order: Some(1),
-                right_threshold_order: None,
-                lu_cut_order: Some(1),
-            },
-            multiplier_values: smallvec::smallvec![value(2.0)],
-            effective_multiplier: value(2.0),
-            pass_one: Some(DualOrNot::NonDual(Complex::new_re(value(-3.0)))),
-        };
-        let (_, completed) = component.finish(&value(0.0), |pass_one| {
-            pass_one.unwrap_real() * Complex::new_re(value(4.0))
-        });
-
-        assert_eq!(completed.bare.unwrap().re.0.into_f64(), -12.0);
-        assert_eq!(completed.weighted.re.0.into_f64(), -24.0);
-        assert_eq!(completed.effective_multiplier.0.into_f64(), 2.0);
-    }
-
-    #[test]
-    fn detailed_components_preserve_all_runtime_precision_lanes() {
-        assert_detailed_component_precision::<f64>();
-        assert_detailed_component_precision::<f128>();
-        assert_detailed_component_precision::<ArbPrec>();
     }
 }

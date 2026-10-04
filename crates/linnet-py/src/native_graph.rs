@@ -28,7 +28,7 @@ type ForestGraph = HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord, ForestNode
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(from_py_object, eq, eq_int, name = "NodeStore")]
+#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "NodeStore")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyNodeStore {
     /// Dense node records with one incidence bitset per node.

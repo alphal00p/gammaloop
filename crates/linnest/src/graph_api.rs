@@ -4,16 +4,19 @@ use cgmath::{Point2, Rad, Vector2};
 use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
+        NodeIndex,
         builder::{HedgeData, HedgeGraphBuilder},
         involution::{
-            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Involution,
+            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
             InvolutiveMapping, Orientation,
         },
-        layout::spring::{Constraint, LayoutPointIndex, PointConstraint},
+        layout::{
+            impred::{ImpredConfig, ImpredLayout},
+            spring::{Constraint, LayoutPointIndex, PointConstraint},
+        },
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         swap::Swap,
-        NodeIndex,
     },
     parser::{
         ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
@@ -22,7 +25,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
+use crate::{PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode, default_figment};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -52,7 +55,9 @@ pub struct TypstDotGraphInfo {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TypstPoint {
+    #[serde(deserialize_with = "crate::deserialize_f64")]
     pub x: f64,
+    #[serde(deserialize_with = "crate::deserialize_f64")]
     pub y: f64,
 }
 
@@ -266,6 +271,9 @@ pub struct TypstEndpointSpec {
     pub compass: Option<String>,
     #[serde(default)]
     pub in_subgraph: bool,
+    /// Ordered interior points from this endpoint's node toward the edge anchor.
+    #[serde(default)]
+    pub route_points: Vec<TypstPoint>,
 }
 
 pub const GRAPH_SPEC_SCHEMA: &str = "linnest-graph-spec";
@@ -377,6 +385,8 @@ struct TypstHedgeStructuralPatch {
     pub port_label: Option<String>,
     #[serde(default)]
     pub compass: Option<String>,
+    #[serde(default)]
+    pub route_points: Option<Vec<TypstPoint>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -475,6 +485,235 @@ fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
     to_rkyv_bytes::<_, 4096>(graph)
 }
 
+/// Export the measured graph through serde rather than the build-specific archive.
+/// The host computes a layout without taking ownership of Typst content or styles.
+pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
+    use figment::{Figment, Profile, providers::Serialized};
+
+    let mut graph = decode_typst_graph(arg)?;
+    let options: ciborium::Value = decode_cbor(options, "layout options")?;
+    graph.layout_config = Figment::from(Serialized::from(options, Profile::Default))
+        .extract()
+        .map_err(|error| format!("Invalid layout snapshot options: {error}"))?;
+    graph.validate_layout()?;
+    encode_cbor(&graph)
+}
+
+impl TypstGraph {
+    /// Decode a measured snapshot across WASM/native word sizes. Bitvec's serde
+    /// representation embeds its storage word width, so rebuild each node crown
+    /// with the destination width before deserializing the native graph.
+    pub fn from_layout_snapshot(snapshot: &serde_json::Value) -> Result<Self, String> {
+        let mut snapshot = snapshot.clone();
+        let nodes = snapshot
+            .pointer_mut("/graph/node_store/nodes")
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or("Layout snapshot has no node crowns")?;
+        for node in nodes {
+            let set = node
+                .get_mut("set")
+                .ok_or("Layout snapshot node has no crown")?;
+            if set.get("order").and_then(serde_json::Value::as_str) != Some("bitvec::order::Lsb0") {
+                return Err("Layout snapshot requires Lsb0 node crowns".to_owned());
+            }
+            let integer = |value: Option<&serde_json::Value>| {
+                value
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or("Invalid layout crown integer")
+            };
+            let width = integer(set.pointer("/head/width"))? as usize;
+            let head = integer(set.pointer("/head/index"))? as usize;
+            let bits = integer(set.get("bits"))? as usize;
+            if !matches!(width, 32 | 64) || head >= width {
+                return Err("Invalid layout crown storage width or head".to_owned());
+            }
+            let words = set
+                .get("data")
+                .and_then(serde_json::Value::as_array)
+                .ok_or("Layout crown has no storage words")?;
+            let end = head
+                .checked_add(bits)
+                .ok_or("Layout crown length overflow")?;
+            if words.len() != end.div_ceil(width) {
+                return Err("Layout crown storage does not match its bit count".to_owned());
+            }
+            let words = words
+                .iter()
+                .map(|word| integer(Some(word)))
+                .collect::<Result<Vec<_>, _>>()?;
+            if width == 32 && words.iter().any(|word| *word > u32::MAX as u64) {
+                return Err("Layout crown word exceeds its storage width".to_owned());
+            }
+            let native_width = usize::BITS as usize;
+            let mut packed = vec![0u64; bits.div_ceil(native_width)];
+            for bit in 0..bits {
+                let source = head + bit;
+                if (words[source / width] >> (source % width)) & 1 != 0 {
+                    packed[bit / native_width] |= 1 << (bit % native_width);
+                }
+            }
+            set["head"] = serde_json::json!({"width": native_width, "index": 0});
+            set["data"] = serde_json::json!(packed);
+        }
+        serde_json::from_value(snapshot)
+            .map_err(|error| format!("Invalid layout snapshot: {error}"))
+    }
+}
+
+/// Return the physical incidence passed to `graph_impred_seed`.
+pub fn graph_impred_diagram_bytes(snapshot: &[u8]) -> Result<Vec<u8>, String> {
+    let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
+    let graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+    let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
+    serde_json::to_vec(&diagram).map_err(|error| error.to_string())
+}
+
+/// Embedding-constrained seed for the JSON request `{diagram, scale,
+/// external_sides}` built from `graph_impred_diagram`.
+pub fn graph_impred_seed_bytes(request: &[u8]) -> Result<Vec<u8>, String> {
+    let request: crate::SeedRequest = serde_json::from_slice(request)
+        .map_err(|error| format!("Invalid embedding request JSON: {error}"))?;
+    let seed = request.initialize()?;
+    serde_json::to_vec(&seed).map_err(|error| error.to_string())
+}
+
+/// Relax a certified EC carrier while retaining native graph ownership.
+/// The complete physical routes accompany the archived graph so Hobby never
+/// interpolates an extra bookkeeping point at the half-edge storage boundary.
+pub fn graph_impred_layout_bytes(
+    snapshot: &[u8],
+    seed: &[u8],
+    options: &[u8],
+) -> Result<Vec<u8>, String> {
+    ImpredRun::start(snapshot, seed, options)?.result_bytes()
+}
+
+/// A native ImPrEd layout kept with its session, so a host can refine it in
+/// warm passes, for example around measured label boxes.
+pub struct ImpredRun {
+    pub session: crate::impred_projection::ProjectionSession,
+    pub layout: ImpredLayout,
+    pub config: ImpredConfig,
+}
+
+impl ImpredRun {
+    /// Project the snapshot onto the EC seed and solve with the Typst options.
+    pub fn start(snapshot: &[u8], seed: &[u8], options: &[u8]) -> Result<Self, String> {
+        let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
+        let graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+        let options: serde_json::Value = decode_cbor(options, "ImPrEd layout options")?;
+        let seed = serde_json::from_slice(seed)
+            .map_err(|error| format!("Invalid EC layout seed: {error}"))?;
+        Self::new(graph, seed, &options)
+    }
+
+    /// Seed the graph with its embedding-constrained drawing at the `impred-spacing`
+    /// scale, as the Typst layout does, then solve.
+    #[cfg(feature = "svg")]
+    pub(crate) fn seeded(graph: TypstGraph, options: &serde_json::Value) -> Result<Self, String> {
+        let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
+        let request = crate::SeedRequest {
+            diagram: serde_json::from_value(diagram).map_err(|error| error.to_string())?,
+            scale: options
+                .get("impred-spacing")
+                .map_or(
+                    Some(ImpredConfig::default().target),
+                    serde_json::Value::as_f64,
+                )
+                .ok_or("ImPrEd spacing must be numeric")?,
+            external_sides: true,
+        };
+        let seed =
+            serde_json::to_value(request.initialize()?).map_err(|error| error.to_string())?;
+        Self::new(graph, seed, options)
+    }
+
+    /// Project the graph onto an EC seed and solve with `impred-*` options.
+    fn new(
+        mut graph: TypstGraph,
+        seed: serde_json::Value,
+        options: &serde_json::Value,
+    ) -> Result<Self, String> {
+        use crate::impred_projection::ProjectionSession;
+
+        let mut settings =
+            serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
+        for (option, field) in [
+            ("steps", "steps"),
+            ("step-scale", "step_scale"),
+            ("spacing", "target"),
+            ("repulsion", "repulsion"),
+            ("attraction", "attraction"),
+            ("parallel-balance", "parallel_attraction_balance"),
+            ("pull", "pull"),
+            ("pull-balance", "pull_balance"),
+            ("external-max-points", "external_max_points"),
+            ("split-length-ratio", "split_length_ratio"),
+            ("contract-chord-ratio", "contract_chord_ratio"),
+            ("edge-clearance", "edge_clearance"),
+            ("node-edge-strength", "node_edge_strength"),
+            ("labels", "labels"),
+            ("level", "level"),
+        ] {
+            if let Some(value) = options.get(format!("impred-{option}")) {
+                settings[field] = value.clone();
+            }
+        }
+        let config: ImpredConfig = serde_json::from_value(settings)
+            .map_err(|error| format!("Invalid ImPrEd options: {error}"))?;
+        let attachment = match options.get("impred-pull-attachment") {
+            Some(value) => value
+                .as_f64()
+                .ok_or("ImPrEd attachment pull must be numeric")?,
+            None => 4.0,
+        };
+        if !attachment.is_finite() || attachment < 0.0 {
+            return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
+        }
+        graph.layout_config.spring.external_pull_attachment = attachment;
+        let (session, _) =
+            ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
+        let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
+        layout.solve(config)?;
+        Ok(Self {
+            session,
+            layout,
+            config,
+        })
+    }
+
+    /// The layout graph and complete carriers, as `graph_impred_layout` returns.
+    pub fn result_bytes(&self) -> Result<Vec<u8>, String> {
+        let graph = self
+            .session
+            .apply_impred_layout(&self.layout)
+            .map_err(|error| error.to_string())?;
+        let carriers: Vec<Vec<_>> = self
+            .layout
+            .routes
+            .iter()
+            .map(|route| {
+                route
+                    .iter()
+                    .map(|&point| self.layout.positions[point])
+                    .collect()
+            })
+            .collect();
+        #[derive(Serialize)]
+        struct ResultGeometry {
+            graph: Vec<u8>,
+            carriers: Vec<Vec<[f64; 2]>>,
+        }
+        let result = ResultGeometry {
+            graph: encode_typst_graph(&graph)?,
+            carriers,
+        };
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&result, &mut bytes).map_err(|error| error.to_string())?;
+        Ok(bytes)
+    }
+}
+
 fn typst_graph_from_dot(dot: DotGraph) -> TypstGraph {
     TypstGraph::from_dot(dot, &default_figment())
 }
@@ -499,9 +738,64 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let envelope: TypstGraphSpecEnvelope = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(
-        envelope.into_graph()?,
-    )?))
+    encode_typst_graph(&TypstGraph::from_spec(envelope.into_graph()?)?)
+}
+
+impl TypstGraph {
+    /// Build the graph a spec describes, as `graph.build` does in Typst.
+    pub(crate) fn from_spec(spec: TypstGraphSpec) -> Result<Self, String> {
+        // Builder half-edges follow source/sink input order. Reuse the same ID
+        // completion as DotGraph before attaching geometry to the reordered graph.
+        let endpoints = spec
+            .edges
+            .iter()
+            .flat_map(|edge| edge.source.iter().chain(edge.sink.iter()))
+            .collect::<Vec<_>>();
+        let mut ids: HedgeVec<Option<Hedge>> = endpoints
+            .iter()
+            .map(|endpoint| endpoint.id.map(Hedge))
+            .collect();
+        let used = ids.iter().filter_map(|(_, id)| *id).collect::<HashSet<_>>();
+        ids.fill_in(|id| used.contains(id));
+        let routes = endpoints
+            .iter()
+            .map(|endpoint| {
+                endpoint
+                    .route_points
+                    .iter()
+                    .map(|point| {
+                        if !point.x.is_finite() || !point.y.is_finite() {
+                            return Err("route-points coordinates must be finite".to_string());
+                        }
+                        Ok(Point2::new(point.x, point.y))
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut graph = typst_graph_from_dot(graph_from_spec(spec)?);
+        for ((_, id), route) in ids.into_iter().zip(routes) {
+            graph.graph[id.expect("half-edge IDs completed")].route_points = route;
+        }
+        Ok(graph)
+    }
+
+    /// Node records in index order, as `graph.nodes` returns them.
+    pub(crate) fn node_records(&self) -> Result<Vec<TypstDotNode>, String> {
+        with_dot_view(self, |graph| {
+            Ok(graph.vertex_data().map(node_view_to_output).collect())
+        })
+    }
+
+    /// Edge records in index order, as `graph.edges` returns them.
+    pub(crate) fn edge_records(&self) -> Result<Vec<TypstDotEdge>, String> {
+        let edges = with_dot_view(self, |graph| {
+            Ok(graph
+                .edge_data()
+                .map(|edge| edge_view_to_output(graph, edge))
+                .collect::<Vec<_>>())
+        })?;
+        Ok(edges_with_route_points(self, edges))
+    }
 }
 
 pub fn encode_graph_spec_bytes(spec: &TypstGraphSpec) -> Result<Vec<u8>, String> {
@@ -513,15 +807,10 @@ pub fn encode_graph_spec_bytes(spec: &TypstGraphSpec) -> Result<Vec<u8>, String>
 }
 
 pub fn graph_with_data_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let layout_config = graph.layout_config.clone();
-    let mut graph = graph.to_dot_graph();
+    let mut graph = decode_typst_graph(arg)?;
     let patch: TypstGraphDataPatch = decode_cbor(arg2, "graph data patch")?;
     apply_graph_data_patch(&mut graph, patch)?;
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
-        graph,
-        layout_config,
-    ))
+    encode_typst_graph(&graph)
 }
 
 pub fn graph_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -562,9 +851,7 @@ pub fn graph_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>,
 }
 
 pub fn graph_set_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let layout_config = graph.layout_config.clone();
-    let mut graph = graph.to_dot_graph();
+    let mut graph = decode_typst_graph(arg)?;
     let patch: TypstNamedDataPatch = decode_cbor(arg2, "named node data patch")?;
     let node = graph
         .graph
@@ -573,17 +860,12 @@ pub fn graph_set_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
             (data.name.as_deref() == Some(patch.name.as_str())).then_some(index)
         })
         .ok_or_else(|| format!("No node named {:?}", patch.name))?;
-    graph.graph[node].payload = Some(patch.data);
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
-        graph,
-        layout_config,
-    ))
+    graph.graph[node].data = Some(patch.data);
+    encode_typst_graph(&graph)
 }
 
 pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let layout_config = graph.layout_config.clone();
-    let mut graph = graph.to_dot_graph();
+    let mut graph = decode_typst_graph(arg)?;
     let patch: TypstNamedDataPatch = decode_cbor(arg2, "named edge data patch")?;
     let edge = graph
         .graph
@@ -598,11 +880,8 @@ pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
             .then_some(index)
         })
         .ok_or_else(|| format!("No edge named {:?}", patch.name))?;
-    graph.graph[edge].payload = Some(patch.data);
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
-        graph,
-        layout_config,
-    ))
+    graph.graph[edge].data = Some(patch.data);
+    encode_typst_graph(&graph)
 }
 
 pub fn graph_apply_structural_patches_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -750,6 +1029,17 @@ fn apply_typst_graph_structural_patch(
         }
         if let Some(compass) = hedge.compass {
             data.compasspt = parse_endpoint_compass(&compass)?.map(compass_pt_to_string);
+        }
+        if let Some(points) = hedge.route_points {
+            data.route_points = points
+                .into_iter()
+                .map(|point| {
+                    if !point.x.is_finite() || !point.y.is_finite() {
+                        return Err("route-points coordinates must be finite".to_string());
+                    }
+                    Ok(Point2::new(point.x, point.y))
+                })
+                .collect::<Result<_, String>>()?;
         }
     }
 
@@ -912,9 +1202,12 @@ fn statement_radians(statements: &BTreeMap<String, String>, key: &str) -> Option
     })
 }
 
-fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> Result<(), String> {
+fn apply_graph_data_patch(
+    graph: &mut TypstGraph,
+    patch: TypstGraphDataPatch,
+) -> Result<(), String> {
     if let Some(data) = patch.data {
-        graph.global_data.payload = Some(data);
+        graph.data = Some(data);
     }
 
     for node in patch.nodes {
@@ -926,7 +1219,7 @@ fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> R
             ));
         }
         if let Some(data) = node.data {
-            graph.graph[NodeIndex(node.index)].payload = Some(data);
+            graph.graph[NodeIndex(node.index)].data = Some(data);
         }
     }
 
@@ -946,15 +1239,15 @@ fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> R
             .ok_or_else(|| format!("Edge data patch index {} could not be resolved", edge.index))?;
 
         if let Some(data) = edge.data {
-            graph.graph[edge_index].payload = Some(data);
+            graph.graph[edge_index].data = Some(data);
         }
         if let Some(data) = edge.source {
             let hedge = endpoint_hedge(pair, Flow::Source, edge.index)?;
-            graph.graph[hedge].payload = Some(data);
+            graph.graph[hedge].data = Some(data);
         }
         if let Some(data) = edge.sink {
             let hedge = endpoint_hedge(pair, Flow::Sink, edge.index)?;
-            graph.graph[hedge].payload = Some(data);
+            graph.graph[hedge].data = Some(data);
         }
     }
 
@@ -967,7 +1260,7 @@ fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> R
             ));
         }
         if let Some(data) = hedge.data {
-            graph.graph[Hedge(hedge.index)].payload = Some(data);
+            graph.graph[Hedge(hedge.index)].data = Some(data);
         }
     }
 
@@ -1004,14 +1297,7 @@ pub fn graph_dot_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub fn graph_nodes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let nodes = with_dot_view(&graph, |graph| {
-        Ok(graph
-            .vertex_data()
-            .map(node_view_to_output)
-            .collect::<Vec<_>>())
-    })?;
-    encode_cbor(&nodes)
+    encode_cbor(&decode_typst_graph(arg)?.node_records()?)
 }
 
 pub fn graph_nodes_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -1027,14 +1313,7 @@ pub fn graph_nodes_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> 
 }
 
 pub fn graph_edges_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let edges = with_dot_view(&graph, |graph| {
-        Ok(graph
-            .edge_data()
-            .map(|edge| edge_view_to_output(graph, edge))
-            .collect::<Vec<_>>())
-    })?;
-    encode_cbor(&edges_with_route_points(&graph, edges))
+    encode_cbor(&decode_typst_graph(arg)?.edge_records()?)
 }
 
 pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -2762,6 +3041,71 @@ mod tests {
     use super::*;
     use ciborium::Value;
 
+    #[test]
+    fn layout_snapshot_preserves_constraints_and_measured_fields() {
+        let graph =
+            TypstGraph::parse("digraph { a [pos=\"1,2!\",\"layout-width\"=3]; a -> b [id=0]; }")
+                .unwrap();
+        let bytes = encode_typst_graph(&graph).unwrap();
+        let options =
+            BTreeMap::from([("layout-algo", "impred"), ("external-pull-attachment", "4")]);
+        let snapshot =
+            graph_layout_snapshot_bytes(&bytes, &encode_cbor(&options).unwrap()).unwrap();
+        let mut restored: TypstGraph = decode_cbor(&snapshot, "snapshot").unwrap();
+        assert!(matches!(
+            restored.layout_config.layout_algo,
+            crate::LayoutAlgo::Impred
+        ));
+        assert_eq!(restored.layout_config.spring.external_pull_attachment, 4.0);
+        assert_eq!(
+            encode_cbor(&restored.graph).unwrap(),
+            encode_cbor(&graph.graph).unwrap()
+        );
+        assert!(
+            restored
+                .layout_with_subgraph(None)
+                .unwrap_err()
+                .contains("shared Typst pipeline to prepare a constrained EC seed")
+        );
+    }
+
+    #[test]
+    fn layout_snapshot_reconstructs_wasm32_node_crowns() {
+        let source = format!("digraph {{ {} }}", "a -> b;".repeat(36));
+        let graph = TypstGraph::parse(&source).unwrap();
+        let mut snapshot = serde_json::to_value(&graph).unwrap();
+        for node in snapshot
+            .pointer_mut("/graph/node_store/nodes")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+        {
+            let set = &mut node["set"];
+            let bits = set["bits"].as_u64().unwrap() as usize;
+            let old_width = set["head"]["width"].as_u64().unwrap() as usize;
+            let old = set["data"].as_array().unwrap();
+            let mut words = vec![0u32; bits.div_ceil(32)];
+            for bit in 0..bits {
+                if (old[bit / old_width].as_u64().unwrap() >> (bit % old_width)) & 1 != 0 {
+                    words[bit / 32] |= 1 << (bit % 32);
+                }
+            }
+            set["head"]["width"] = serde_json::json!(32);
+            set["data"] = serde_json::json!(words);
+        }
+        let restored = TypstGraph::from_layout_snapshot(&snapshot).unwrap();
+        assert_eq!(
+            encode_cbor(&restored).unwrap(),
+            encode_cbor(&graph).unwrap()
+        );
+        snapshot["graph"]["node_store"]["nodes"][0]["set"]["head"]["width"] = serde_json::json!(16);
+        assert!(
+            TypstGraph::from_layout_snapshot(&snapshot)
+                .unwrap_err()
+                .contains("storage width")
+        );
+    }
+
     fn cut_fixture(orientation: Orientation) -> TypstGraph {
         let mut builder = DotBuilder::new();
         for (index, name) in ["b", "c", "isolated"].into_iter().enumerate() {
@@ -3241,9 +3585,12 @@ mod tests {
                     let selected: Vec<Value> = decode_cbor(&result.unwrap(), "selection").unwrap();
                     assert!(selected.is_empty());
                 } else {
-                    assert_eq!(result.unwrap_err(), format!(
-                        "Archived subgraph has {size} bits, but graph has {n_hedges} half-edges; sizes must match"
-                    ));
+                    assert_eq!(
+                        result.unwrap_err(),
+                        format!(
+                            "Archived subgraph has {size} bits, but graph has {n_hedges} half-edges; sizes must match"
+                        )
+                    );
                 }
             }
         }
@@ -3381,7 +3728,24 @@ mod tests {
             assert!(changed, "No serialized {field} found");
             let graph: TypstGraph =
                 decode_cbor(&encode_cbor(&value).unwrap(), "corrupt graph").unwrap();
-            assert!(cut_result(
+            assert!(
+                cut_result(
+                    &graph,
+                    &[TypstCutEntry {
+                        left: 0,
+                        right: 1,
+                        winding: 2
+                    }]
+                )
+                .is_err()
+            );
+        }
+        let mut graph = cut_fixture(Orientation::Default);
+        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
+            .build::<DefaultNodeStore<TypstNode>>()
+            .node_store;
+        assert!(
+            cut_result(
                 &graph,
                 &[TypstCutEntry {
                     left: 0,
@@ -3389,21 +3753,8 @@ mod tests {
                     winding: 2
                 }]
             )
-            .is_err());
-        }
-        let mut graph = cut_fixture(Orientation::Default);
-        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
-            .build::<DefaultNodeStore<TypstNode>>()
-            .node_store;
-        assert!(cut_result(
-            &graph,
-            &[TypstCutEntry {
-                left: 0,
-                right: 1,
-                winding: 2
-            }]
-        )
-        .is_err());
+            .is_err()
+        );
     }
 
     #[test]
@@ -3473,11 +3824,13 @@ mod tests {
             .unwrap();
             let output = decode_typst_graph(&result.graph).unwrap();
             for edge in [0, 3, 4] {
-                assert!(output[EdgeIndex(edge)]
-                    .cut_name()
-                    .unwrap()
-                    .unwrap()
-                    .starts_with("k."));
+                assert!(
+                    output[EdgeIndex(edge)]
+                        .cut_name()
+                        .unwrap()
+                        .unwrap()
+                        .starts_with("k.")
+                );
                 if !payload_only {
                     assert_eq!(output[EdgeIndex(edge)].data, graph[EdgeIndex(0)].data);
                 }
@@ -3553,6 +3906,184 @@ mod tests {
     }
 
     #[test]
+    fn layered_routes_and_positions_survive_serialized_zero_step_force_passes() {
+        for shifted in [false, true] {
+            let mut graph = TypstGraph::parse(
+                "digraph { a -> b; b -> c; c -> d; a -> d; ext [style=invis]; ext -> a; d -> ext; }",
+            )
+            .unwrap();
+            graph.layout_config.layout_algo = crate::LayoutAlgo::Dot;
+            graph.layout_config.label_steps = 0;
+            if shifted {
+                graph.graph[NodeIndex(1)].shift = Some(Vector2::new(0.375, -0.625));
+                for index in 0..graph.n_edges() {
+                    graph.graph[EdgeIndex(index)].shift = Some(Vector2::new(-0.25, 0.5));
+                }
+            }
+            graph.layout_with_subgraph(None).unwrap();
+            let positions = |graph: &TypstGraph| {
+                let nodes = (0..graph.n_nodes())
+                    .map(|index| graph.graph[NodeIndex(index)].pos)
+                    .collect::<Vec<_>>();
+                let edges = (0..graph.n_edges())
+                    .map(|index| graph.graph[EdgeIndex(index)].pos)
+                    .collect::<Vec<_>>();
+                let routes = (0..graph.n_hedges())
+                    .map(|index| graph.graph[Hedge(index)].route_points.clone())
+                    .collect::<Vec<_>>();
+                (nodes, edges, routes)
+            };
+            let expected = positions(&graph);
+            assert!(expected.2.iter().any(|route| !route.is_empty()));
+            // The initialized state must survive the same archive boundary used
+            // by consecutive public Typst layout calls.
+            for _ in 0..2 {
+                graph = decode_typst_graph(&encode_typst_graph(&graph).unwrap()).unwrap();
+                graph.layout_config.layout_algo = crate::LayoutAlgo::Force;
+                graph.layout_config.schedule.steps = 0;
+                graph.layout_config.depth_scale = 0.0;
+                graph.layout_with_subgraph(None).unwrap();
+                let actual = positions(&graph);
+                assert_eq!(
+                    actual.2.iter().map(Vec::len).collect::<Vec<_>>(),
+                    expected.2.iter().map(Vec::len).collect::<Vec<_>>()
+                );
+                for (actual, expected) in actual
+                    .0
+                    .iter()
+                    .chain(&actual.1)
+                    .chain(actual.2.iter().flatten())
+                    .zip(
+                        expected
+                            .0
+                            .iter()
+                            .chain(&expected.1)
+                            .chain(expected.2.iter().flatten()),
+                    )
+                {
+                    assert!(
+                        (actual.x - expected.x).abs() < 1e-12
+                            && (actual.y - expected.y).abs() < 1e-12,
+                        "shifted={shifted}: expected {expected:?}, got {actual:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn route_points_survive_graph_spec_ordering_and_payload_updates() {
+        let integer_point: TypstPoint = decode_cbor(
+            &encode_cbor(&BTreeMap::from([("x", 1), ("y", -2)])).unwrap(),
+            "route point",
+        )
+        .unwrap();
+        assert_eq!(integer_point, TypstPoint { x: 1.0, y: -2.0 });
+        let endpoint = |node, id, x| TypstEndpointSpec {
+            node,
+            id,
+            statement: None,
+            data: None,
+            port_label: None,
+            compass: None,
+            in_subgraph: false,
+            route_points: vec![TypstPoint { x, y: 0.5 }],
+        };
+        let edge = |name: &str, source, sink| TypstEdgeSpec {
+            name: Some(name.to_owned()),
+            source,
+            sink,
+            data: None,
+            orientation: None,
+            flow: None,
+            id: None,
+            pos: None,
+            statements: BTreeMap::new(),
+        };
+        let spec = TypstGraphSpec {
+            name: None,
+            data: None,
+            statements: BTreeMap::new(),
+            default_edge_statements: BTreeMap::new(),
+            default_node_statements: BTreeMap::new(),
+            nodes: (0..2)
+                .map(|index| TypstNodeSpec {
+                    name: Some(format!("n{index}")),
+                    index: Some(index),
+                    data: None,
+                    pos: None,
+                    statements: BTreeMap::new(),
+                })
+                .collect(),
+            edges: vec![
+                edge(
+                    "paired",
+                    Some(endpoint(0, Some(3), 10.0)),
+                    Some(endpoint(1, Some(1), 11.0)),
+                ),
+                edge("dangling", Some(endpoint(0, None, 12.0)), None),
+                edge(
+                    "loop",
+                    Some(endpoint(1, None, 13.0)),
+                    Some(endpoint(1, None, 14.0)),
+                ),
+            ],
+        };
+        let bytes = graph_from_spec_bytes(&encode_graph_spec_bytes(&spec).unwrap()).unwrap();
+        let expected = [12.0, 11.0, 13.0, 10.0, 14.0];
+        let check = |bytes: &[u8]| {
+            let graph = decode_typst_graph(bytes).unwrap();
+            for (id, x) in expected.into_iter().enumerate() {
+                assert_eq!(
+                    graph.graph[Hedge(id)].route_points,
+                    vec![Point2::new(x, 0.5)]
+                );
+            }
+            let exported: Vec<TypstDotEdge> =
+                decode_cbor(&graph_edges_bytes(bytes).unwrap(), "edges").unwrap();
+            for endpoint in exported
+                .iter()
+                .flat_map(|edge| edge.source.iter().chain(edge.sink.iter()))
+            {
+                assert_eq!(
+                    endpoint.route_points,
+                    vec![TypstPoint {
+                        x: expected[endpoint.hedge],
+                        y: 0.5
+                    }]
+                );
+            }
+        };
+        check(&bytes);
+        let bytes = graph_with_data_bytes(
+            &bytes,
+            &encode_cbor(&BTreeMap::from([("data", vec![1u8, 2])])).unwrap(),
+        )
+        .unwrap();
+        check(&bytes);
+        for (name, update) in [
+            (
+                "n0",
+                graph_set_node_data_by_name_bytes as fn(&[u8], &[u8]) -> Result<Vec<u8>, String>,
+            ),
+            ("paired", graph_set_edge_data_by_name_bytes),
+        ] {
+            let patch = ciborium::Value::Map(vec![
+                ("name".into(), name.into()),
+                ("data".into(), ciborium::Value::Bytes(vec![3, 4])),
+            ]);
+            check(&update(&bytes, &encode_cbor(&patch).unwrap()).unwrap());
+        }
+        let mut invalid = spec;
+        invalid.edges[0].source.as_mut().unwrap().route_points[0].x = f64::NAN;
+        assert!(
+            graph_from_spec_bytes(&encode_graph_spec_bytes(&invalid).unwrap())
+                .unwrap_err()
+                .contains("finite")
+        );
+    }
+
+    #[test]
     fn auxiliary_z_modes_preserve_xy_statements() {
         let mut spec: TypstPlacementSpec = decode_cbor(
             &encode_cbor(&BTreeMap::from([("z", -2.5)])).unwrap(),
@@ -3615,10 +4146,11 @@ mod tests {
                 "placement",
             )
             .unwrap();
-            assert!(spec
-                .resolve(&[], "test")
-                .unwrap_err()
-                .contains("finite number"));
+            assert!(
+                spec.resolve(&[], "test")
+                    .unwrap_err()
+                    .contains("finite number")
+            );
         }
         for z in [
             Value::Integer((-3).into()),
@@ -3651,11 +4183,13 @@ mod tests {
             ("ref-depth", Value::Integer(0.into())),
             ("z-mode", Value::Text("group".into())),
         ] {
-            assert!(decode_cbor::<TypstPlacementSpec>(
-                &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
-                "placement",
-            )
-            .is_err());
+            assert!(
+                decode_cbor::<TypstPlacementSpec>(
+                    &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
+                    "placement",
+                )
+                .is_err()
+            );
         }
     }
 

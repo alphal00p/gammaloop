@@ -3,19 +3,24 @@
 #let quickstart-python = [
 = Using Vakint from Python
 
-Symbolica `2.2.0` bundles Vakint's community module. This matching-only workflow canonicalizes one
+Vakint is available as `symbolica.community.hepkit.vakint` in a Symbolica community
+assembly built with this checkout. This matching-only workflow canonicalizes one
 loop with arbitrary input labels and invokes no external evaluation tool.
 
-== Install and verify the module
+== Verify the installed module
+
+Install the combined host wheel built with this checkout, then verify its public path:
 
 // docs-example: syntax
 ```sh
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "symbolica==2.2.0"
-python -c "import symbolica.community.vakint as vakint; print(vakint.__name__)"
+python -c "import symbolica.community.hepkit.vakint as vakint; print(vakint.__name__)"
 ```
+
+For source assemblies, `VakintWrapper::get_name()` returns `hepkit_vakint`.
+Register its native module as `symbolica.community.hepkit_vakint_native` and copy
+`crates/vakint/python/symbolica/community/hepkit/vakint/` into the host's matching
+Python package directory. The host's `symbolica.community.hepkit` must be a package;
+the wrapper imports the native exports and calls `initialize_module()`.
 
 There is no separate `vakint` Python wheel. Follow
 #link("https://symbolica.io/docs/get_started.html")[Symbolica's installation and license terms].
@@ -27,7 +32,7 @@ Save this as `vakint_quickstart.py`:
 // docs-example: compile vakint-community-quickstart
 ```python
 from symbolica import E
-from symbolica.community.vakint import Vakint
+from symbolica.community.hepkit.vakint import Vakint
 
 engine = Vakint(evaluation_order=[])
 integral = E(

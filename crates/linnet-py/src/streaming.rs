@@ -8,10 +8,11 @@ use pyo3::prelude::*;
 
 /// A position snapshot from one continuous force-layout run.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(frozen, name = "LayoutFrame", get_all)]
+#[pyclass(module = "linnet", frozen, name = "LayoutFrame", get_all)]
 pub(crate) struct PyLayoutFrame {
     nodes: Vec<(f64, f64)>,
     edges: Vec<(f64, f64)>,
+    paths: Vec<Vec<(f64, f64)>>,
     iteration: usize,
     done: bool,
     max_movement: f64,
@@ -22,7 +23,7 @@ pub(crate) struct PyLayoutFrame {
 /// Topology is fixed for the lifetime of the stream. Frames contain only
 /// coordinates and progress, so notebook viewers can retain their SVG elements.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "LayoutStream")]
+#[pyclass(module = "linnet", unsendable, name = "LayoutStream")]
 pub(crate) struct PyLayoutStream {
     stream: ForceLayoutStream,
     every: usize,
@@ -38,8 +39,18 @@ impl PyLayoutStream {
     ///
     /// This preview uses native graph geometry, without Typst label measurement
     /// or final edge-label relaxation. A new stream restarts from the same seed.
+    /// `spring_length_scale` changes spring rest lengths without scaling repulsion.
+    /// `external_pull_attachment` multiplies the extra demand from distributed
+    /// owners sharing an external X coordinate; zero disables that correction.
+    /// `external_pull` applies a constant left/right pull for mixed external flows,
+    /// or a radial pull when all flows agree. `external_pull_balance` is a finite
+    /// nonnegative exponent on topology weights: 0 gives uniform pull, 1 (the
+    /// default) balances topology, and values above 1 strengthen balancing.
+    /// It does not change radial pull.
+    /// `initial_repulsion` grows to one
+    /// over the `repulsion_growth` fraction of the iteration budget.
     #[staticmethod]
-    #[pyo3(signature = (dot, *, every=4, steps=200, epochs=8, seed=1, step=0.02, cool=0.85, spring_strength=1.0, repulsion=1.5, length_scale=1.0, depth_scale=1.0, flattening_end=0.5, delta=0.1, early_tolerance=0.000001))]
+    #[pyo3(signature = (dot, *, every=4, steps=200, epochs=8, seed=1, step=0.02, cool=0.85, spring_strength=1.0, repulsion=1.5, length_scale=1.0, spring_length_scale=1.0, external_pull=0.0, external_pull_balance=1.0, external_pull_attachment=1.0, initial_repulsion=1.0, repulsion_growth=0.7, depth_scale=1.0, flattening_end=0.5, delta=0.1, early_tolerance=0.000001))]
     #[allow(clippy::too_many_arguments)]
     fn from_dot(
         dot: &str,
@@ -52,6 +63,12 @@ impl PyLayoutStream {
         spring_strength: f64,
         repulsion: f64,
         length_scale: f64,
+        spring_length_scale: f64,
+        external_pull: f64,
+        external_pull_balance: f64,
+        external_pull_attachment: f64,
+        initial_repulsion: f64,
+        repulsion_growth: f64,
         depth_scale: f64,
         flattening_end: f64,
         delta: f64,
@@ -67,6 +84,12 @@ impl PyLayoutStream {
             ("k-spring", spring_strength),
             ("beta", repulsion),
             ("length-scale", length_scale),
+            ("spring-length-scale", spring_length_scale),
+            ("external-pull", external_pull),
+            ("external-pull-balance", external_pull_balance),
+            ("external-pull-attachment", external_pull_attachment),
+            ("initial-repulsion", initial_repulsion),
+            ("repulsion-growth", repulsion_growth),
             ("depth-scale", depth_scale),
             ("flattening-end", flattening_end),
             ("delta", delta),
@@ -79,13 +102,25 @@ impl PyLayoutStream {
             }
             settings.insert(key, value.to_string());
         }
-        if !(0.0..=1.0).contains(&cool) || !(0.0..=1.0).contains(&flattening_end) {
-            return Err(PyValueError::new_err(
-                "cool and flattening_end must be between zero and one",
-            ));
+        for (key, value) in [
+            ("cool", cool),
+            ("flattening_end", flattening_end),
+            ("initial_repulsion", initial_repulsion),
+            ("repulsion_growth", repulsion_growth),
+        ] {
+            if !(0.0..=1.0).contains(&value) {
+                return Err(PyValueError::new_err(format!(
+                    "{key} must be between zero and one"
+                )));
+            }
         }
-        if length_scale == 0.0 {
-            return Err(PyValueError::new_err("length_scale must be positive"));
+        for (key, value) in [
+            ("length_scale", length_scale),
+            ("spring_length_scale", spring_length_scale),
+        ] {
+            if value == 0.0 {
+                return Err(PyValueError::new_err(format!("{key} must be positive")));
+            }
         }
         settings.insert("steps", steps.to_string());
         settings.insert("epochs", epochs.to_string());
@@ -129,6 +164,11 @@ impl PyLayoutStream {
         let frame = self.stream.step(count);
         self.finished = frame.done;
         Some(PyLayoutFrame {
+            paths: frame
+                .paths
+                .into_iter()
+                .map(|path| path.into_iter().map(|point| (point.x, point.y)).collect())
+                .collect(),
             nodes: frame
                 .nodes
                 .into_iter()

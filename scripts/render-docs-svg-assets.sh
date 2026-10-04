@@ -97,12 +97,6 @@ queue_render \
     docs/assets/typst/marks/gammaloop.typ \
     "$output_root/assets/gammalooplogo.svg" \
     light
-for theme in light dark; do
-    queue_render \
-        docs/assets/typst/marks/gammaloop-construction.typ \
-        "$output_root/docs/assets/gammaloop-construction-$theme.svg" \
-        "$theme"
-done
 queue_render \
     docs/assets/typst/marks/spenso.typ \
     "$output_root/docs/assets/spensologo.svg" \
@@ -113,8 +107,7 @@ generated=(
     "$output_root"/docs/assets/about-*.svg
     "$output_root"/docs/assets/graphs/portal-graph-*.svg
     "$output_root"/docs/assets/local-unitarity-*.svg
-    "$output_root"/docs/assets/gammaloop-construction-*.svg
     "$output_root"/docs/assets/spensologo.svg
     "$output_root"/assets/gammalooplogo*.svg
 )
-test "${#generated[@]}" -eq 34
+test "${#generated[@]}" -eq 32

@@ -4,6 +4,7 @@ use spenso::{
     metric,
     network::{
         library::symbolic::{ETS, ExplicitKey},
+        parsing::ParseState,
         tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
@@ -11,7 +12,7 @@ use spenso::{
         Canonicalized,
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{AbsInd, DummyAind, ParseableAind},
+        slot::{AbsInd, DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
     utils::to_superscript,
 };
@@ -19,14 +20,14 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     printer::PrintState,
-    symbol,
 };
 
+#[cfg(test)]
+use symbolica::symbol;
+
 use crate::{
-    IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS,
-    shorthands::chain::Chain,
+    IndexTooling, bis, gamma, gamma0, rep_symbols::RS, shorthands::bracket::BracketNormalizer,
 };
-use eyre::Result;
 
 use super::representations::Bispinor;
 
@@ -38,6 +39,7 @@ pub struct GammaLibrary {
     pub projp: Symbol,
     pub projm: Symbol,
     pub gamma5: Symbol,
+    pub charge_conjugation: Symbol,
     pub sigma: Symbol,
 }
 
@@ -341,6 +343,8 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
         }
     }),
     gammaconj: spenso::tensor_symbol!("spenso::gammaconj"),
+    // ALOHA's Weyl convention C = -i gamma^2 gamma^0: C* = C and C^T = -C.
+    charge_conjugation: spenso::tensor_symbol!("spenso::charge_conjugation"; Real, Antisymmetric),
 };
 }
 
@@ -384,7 +388,9 @@ pub fn gamma_tensor(first: Atom, second: Atom, lorentz: Atom) -> Atom {
         .finish()
 }
 
-fn spinor_matrix_structure<Aind: AbsInd>(
+/// A two-bispinor matrix key with its logical row/column order retained.
+/// Shared component libraries use this constructor for additional Dirac matrices.
+pub fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
 ) -> Canonicalized<ExplicitKey<Aind>> {
@@ -504,67 +510,8 @@ impl PolSymbols {
     }
 }
 
-/// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
-///
-/// Implementors provide a method to apply gamma matrix identities, such as
-/// anticommutation relations and trace evaluations.
-pub trait GammaSimplifier {
-    /// Simplifies gamma matrix structures within the expression.
-    ///
-    /// Uses the Clifford algebra relation `{gamma^mu, gamma^nu} = 2 * g^{mu nu}`
-    /// and evaluates traces of products of gamma matrices. It handles intermediate
-    /// simplification steps involving metric tensors.
-    ///
-    /// # Returns
-    /// An [`Atom`] representing the expression after gamma matrix simplification.
-    fn simplify_gamma(&self) -> Atom;
-
-    /// Simplifies gamma matrices with explicit chain-ordering and trace settings.
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom;
-
-    fn simplify_gamma0(&self) -> Atom;
-
-    fn collect_gamma_chains(&self) -> Atom;
-
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
-}
-
-impl GammaSimplifier for Atom {
-    fn simplify_gamma(&self) -> Atom {
-        self.as_view().simplify_gamma()
-    }
-
-    fn collect_gamma_chains(&self) -> Atom {
-        let rep: LibraryRep = Bispinor {}.into();
-        self.chainify(rep).collect_chains(rep)
-    }
-
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
-        self.as_view().simplify_gamma_with(settings)
-    }
-
-    fn simplify_gamma0(&self) -> Atom {
-        self.as_view().simplify_gamma0()
-    }
-
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom> {
-        self.as_view().simplify_gamma_conj::<Aind>()
-    }
-}
-
-impl GammaSimplifier for AtomView<'_> {
-    fn simplify_gamma(&self) -> Atom {
-        self.simplify_gamma_with(GammaSimplifySettings::default())
-    }
-    fn collect_gamma_chains(&self) -> Atom {
-        let rep: LibraryRep = Bispinor {}.into();
-        self.chainify(rep).collect_chains(rep)
-    }
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
-        DiracSimplifier::new(&settings).simplify(*self)
-    }
-
-    fn simplify_gamma0(&self) -> Atom {
+impl DiracSimplifier<'_> {
+    pub(crate) fn factor_gamma_zero(expr: AtomView<'_>) -> Atom {
         let repeated_gamma0 = gamma0!(RS.a__, RS.b__) * gamma0!(RS.b__, RS.c__);
 
         let gamma0_ia = gamma0!([RS.d_, RS.i_], [RS.d_, RS.a_]);
@@ -590,41 +537,94 @@ impl GammaSimplifier for AtomView<'_> {
             * gamma0_bj)
             .to_pattern();
 
-        self.replace(gmg)
+        let simplified = BracketNormalizer::normalize(expr)
+            .replace(gmg)
             .with(gmgrhs)
             .replace(gmgn)
             .with(gmgnrhs)
             .replace(repeated_gamma0)
             .repeat()
-            .with(metric!(bis!(RS.a__), bis!(RS.c__)))
+            .with(metric!(bis!(RS.a__), bis!(RS.c__)));
+        BracketNormalizer::normalize(simplified.as_view())
     }
 
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> Result<Atom> {
-        let dummy = symbol!("dummy");
-
-        let dummypati = function!(dummy, RS.i_).to_pattern();
-        let dummypatj = function!(dummy, RS.j_).to_pattern();
-
-        let conj_gamma = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__).spenso_conj();
-
-        let conj_gamma_rhs = (gamma0!([RS.d_, RS.j_], [Atom::var(RS.d_), function!(dummy, RS.j_)])
-            * gamma!(
-                [Atom::var(RS.d_), function!(dummy, RS.j_)],
-                [Atom::var(RS.d_), function!(dummy, RS.i_)],
-                RS.a__
-            )
-            * gamma0!([Atom::var(RS.d_), function!(dummy, RS.i_)], [RS.d_, RS.i_]))
-        .to_pattern();
-
-        Ok(self.replace(conj_gamma).with_map(move |m| {
-            let a = conj_gamma_rhs.replace_wildcards_with_matches(m);
-            let i = dummypati.replace_wildcards_with_matches(m);
-            let j = dummypatj.replace_wildcards_with_matches(m);
-            a.replace(i)
-                .with(Aind::new_dummy().to_atom())
-                .replace(j)
-                .with(Aind::new_dummy().to_atom())
-        }))
+    pub(crate) fn conjugate_matrices<Aind: DummyAind + ParseableAind>(
+        expr: AtomView<'_>,
+        dummies: &ParseState<Aind>,
+    ) -> Atom {
+        let mut result = expr.to_owned();
+        // Allocate the two sandwich connections per occurrence from the
+        // enclosing tensor's reservation scope. Original endpoint labels may
+        // coincide or contain wildcard-spelled symbols; neither is a template
+        // for a generated dummy.
+        for (matrix, adjoint, sign) in [
+            (AGS.gamma, AGS.gamma, 1),
+            (AGS.gamma5, AGS.gamma5, -1),
+            (AGS.projm, AGS.projp, 1),
+            (AGS.projp, AGS.projm, 1),
+        ] {
+            let dimension = if matrix == AGS.gamma {
+                Atom::var(RS.d_)
+            } else {
+                Atom::num(4)
+            };
+            let first = Bispinor {}.to_symbolic([dimension.clone(), Atom::var(RS.i_)]);
+            let last = Bispinor {}.to_symbolic([dimension.clone(), Atom::var(RS.j_)]);
+            let mut source = symbolica::atom::FunctionBuilder::new(matrix)
+                .add_arg(&first)
+                .add_arg(&last);
+            if matrix == AGS.gamma {
+                source = source.add_arg(Atom::var(RS.a__));
+            }
+            let pattern = source.finish().spenso_conj().to_pattern();
+            let root = symbolica::id::MatchSettings::new()
+                .min_level(0)
+                .max_level(Some(0));
+            let mut slots = SlotMatcher::default();
+            let mut opaque_level = None;
+            result = result.replace_map(|node, context, out| {
+                if opaque_level.is_some_and(|level| context.function_level > level) {
+                    return;
+                }
+                opaque_level = None;
+                if !matches!(slots.classify(node), SlotMatch::Other) {
+                    // Protect literal payloads without assigning an unchanged
+                    // replacement, which would rebuild callback-bearing parents.
+                    opaque_level = Some(context.function_level);
+                    return;
+                }
+                // Root-level symbolic matching may also select one factor of
+                // a product. Only a complete unary conjugate is this rule's
+                // replacement boundary; spectators belong to the outer tree.
+                if !matches!(node, AtomView::Fun(function)
+                    if function.get_symbol() == spenso::network::library::function_lib::INBUILTS.conj
+                        && function.get_nargs() == 1)
+                {
+                    return;
+                }
+                let Some(matches) = node.pattern_match(&pattern, None, &root).next() else {
+                    return;
+                };
+                let inner_first =
+                    Bispinor {}.to_symbolic([dimension.clone(), dummies.fresh_index().to_atom()]);
+                let inner_last =
+                    Bispinor {}.to_symbolic([dimension.clone(), dummies.fresh_index().to_atom()]);
+                let mut middle = symbolica::atom::FunctionBuilder::new(adjoint)
+                    .add_arg(&inner_last)
+                    .add_arg(&inner_first);
+                if matrix == AGS.gamma {
+                    middle = middle.add_arg(Atom::var(RS.a__));
+                }
+                **out = (Atom::num(sign)
+                    * function!(AGS.gamma0, &last, &inner_last)
+                    * middle.finish()
+                    * function!(AGS.gamma0, &inner_first, &first))
+                .to_pattern()
+                .replace_wildcards(&matches)
+                .expect("the conjugate pattern binds every generated matrix argument");
+            });
+        }
+        result
     }
 }
 
@@ -634,6 +634,7 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
 
 mod macros;
 mod simplify;
-pub use simplify::{GammaChainOrdering, GammaSimplifySettings};
+pub(crate) use simplify::DiracSimplifier;
+pub use simplify::{GammaChainOrdering, GammaOutput, GammaSimplifySettings};
 #[cfg(test)]
 mod test;

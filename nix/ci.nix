@@ -9,6 +9,10 @@
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
+      name = "feynkit";
+      packages = ["feynkit" "feynkit-amplitude" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo"];
+    }
+    {
       name = "core";
       packages = [
         "gammaloop-api"
@@ -53,6 +57,7 @@
         "linnet"
         "linnet-py"
         "linnest"
+        "typst-renderer"
       ];
     }
     {
@@ -264,7 +269,6 @@
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
@@ -336,7 +340,6 @@
       "checks.${system}.gammaloop-clippy"
       "checks.${system}.gammaloop-fmt"
       "checks.${system}.gammaloop-guppy-workspace-graph"
-      "packages.${system}.nix-ci-check-alphal00p-docs"
       "packages.${system}.nix-ci-check-gammaloop-doctest"
       "packages.${system}.nix-ci-passed"
     ]
@@ -436,7 +439,7 @@ in {
         # Keep the legacy repository key available to branches on older Symbolica.
         secrets = ["SYMBOLICA_LICENSE_SIGNED"];
       };
-    }) (["alphal00p-docs" "gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
+    }) (["gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
     deploy = {
       ci-passed = {
         package = "packages.${system}.nix-ci-passed";

@@ -1,6 +1,5 @@
 use color_eyre::Result;
 use eyre::eyre;
-use gammalooprs::integrands::process::EvaluationTarget;
 use gammalooprs::{
     integrands::{
         evaluation::{
@@ -169,7 +168,7 @@ impl<'a> EvaluateSamples<'a> {
                         self.discrete_dims.as_ref(),
                     )?;
                     integrand.evaluate_samples_raw(
-                        EvaluationTarget::Physical(&model),
+                        &model,
                         &samples,
                         1,
                         self.use_arb_prec,
@@ -272,8 +271,8 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                         || orientations.iter().any(Option::is_some))
                 {
                     return Err(eyre!(
-                    "Graph and orientation selection are only supported in momentum-space evaluation."
-                ));
+                        "Graph and orientation selection are only supported in momentum-space evaluation."
+                    ));
                 }
 
                 if let Some(discrete_dims) = &self.discrete_dims {

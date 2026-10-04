@@ -52,23 +52,8 @@ gammaloop_state/
 examples/cli/qq_aaa/*
 !examples/cli/qq_aaa/qqx_aaa_subtracted.dot
 !examples/cli/qq_aaa/qqx_aaa_subtracted.toml
-# Keep maintained NNLO cards and inputs; local states, plots and pilot output stay ignored.
 examples/cli/epem_a_ttxh/NNLO/*
-!examples/cli/epem_a_ttxh/NNLO/README.md
 !examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml
-!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL297.toml
-!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml
-!examples/cli/epem_a_ttxh/NNLO/gl297_advanced_sampling.toml
-!examples/cli/epem_a_ttxh/NNLO/gl297_optimized_lmbs.toml
-!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling.toml
-!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling_max_weight.toml
-!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling_with_optimized_lmbs.toml
-!examples/cli/epem_a_ttxh/NNLO/gl638_optimized_lmbs.toml
-!examples/cli/epem_a_ttxh/NNLO/monitor_tth_nnlo_integration.py
-!examples/cli/epem_a_ttxh/NNLO/graphs/
-!examples/cli/epem_a_ttxh/NNLO/graphs/*.dot
-!examples/cli/epem_a_ttxh/NNLO/sampling/
-!examples/cli/epem_a_ttxh/NNLO/sampling/*.toml
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
@@ -314,3 +299,71 @@ __marimo__/
 
 # The process-budget owner serializes guarded pipelines through this runtime lock.
 /bin/heavy-run.lock
+
+# Versioned browser wheels and generated Marimo islands for local docs previews.
+/docs/generated/notebooks/
+
+# Raw tensor benchmark expressions; compact records are versioned.
+/examples/notebooks/tensor_benchmark_m1/
+
+# Local Symbolica evaluator executables.
+/gcc_compiled_evaluator_complex
+/gcc_compiled_evaluator_real
+
+# Untracked full-expression timing dumps; retain the compact versioned records.
+/examples/notebooks/tensor_contraction_parity.json
+/examples/notebooks/contraction_performance.json
+/examples/notebooks/dot_normalization.json
+/examples/notebooks/symbolica_main_update.json
+
+# Regenerated benchmark/audit receipts; keep runtime data, fixtures and provenance tracked.
+/crates/idenso/benches/data/massive-fermion-ladder-baseline.json
+/crates/idenso/benches/data/plain-ladder-performance.json
+/crates/idenso/benches/data/unified-baseline.json
+/crates/idenso/benches/data/unified-callers.json
+/crates/idenso/benches/data/unified-color-phases.json
+/crates/idenso/benches/data/unified-completed-reruns.json
+/crates/idenso/benches/data/unified-final-replays-aliases.json
+/crates/idenso/benches/data/unified-final-replays-complete.json
+/crates/idenso/benches/data/unified-independent-reference-checks-aliases.json
+/crates/idenso/benches/data/unified-independent-reference-checks-complete.json
+/crates/idenso/benches/data/unified-native-baseline-matched-affinity.json
+/crates/idenso/benches/data/unified-native-candidate.json
+/crates/idenso/benches/data/unified-native-metric.json
+/crates/idenso/benches/data/unified-native-phases.json
+/crates/idenso/benches/data/unified-notebook-baseline.json
+/crates/idenso/benches/data/unified-parser-profiler.json
+/crates/idenso/benches/data/unified-regression-fix.json
+/crates/idenso/benches/data/unified-results.json
+/crates/idenso/benches/data/unified-validation.json
+/examples/notebooks/fermion_ladder_four_staged_timing.json
+/examples/notebooks/fermion_ladder_four_timing.json
+/examples/notebooks/fermion_ladder_routing_comparison.json
+/examples/notebooks/fermion_ladder_three_staged_timing.json
+/examples/notebooks/fermion_ladder_three_timing.json
+/examples/notebooks/gamma_cleanup.json
+/examples/notebooks/gamma_trace_axial_form.json
+/examples/notebooks/gamma_trace_intermediates.json
+/examples/notebooks/gamma_trace_measurements.json
+/examples/notebooks/gamma_trace_ordering.json
+/examples/notebooks/gamma_trace_profile.json
+/examples/notebooks/gamma_trace_scaling.json
+/examples/notebooks/gluon_ladder_four_staged_control.json
+/examples/notebooks/gluon_ladder_four_timing.json
+/examples/notebooks/gluon_ladder_timing.json
+/examples/notebooks/metric_contraction.json
+/examples/notebooks/scalar_contraction_regression.json
+/examples/notebooks/structure_matching.json
+/examples/notebooks/tensor_benchmark_m0.json
+/examples/notebooks/tensor_benchmark_m1.json
+/examples/notebooks/tensor_benchmark_review_amendment.json
+/examples/notebooks/tensor_benchmark_trace_diagnostics.json
+/examples/notebooks/tensor_full_stack_scattering.json
+/examples/notebooks/tensor_full_stack_timing.json
+/examples/reproducers/symbolic-display/measurements.json
+/examples/reproducers/symbolica-aliases/qualification.json
+/examples/reproducers/symbolica-atom-access/measurements.json
+/examples/reproducers/symbolica-expansion/main_expansion_measurements.json
+/examples/reproducers/symbolica-expansion/polynomial_replacement_measurements.json
+/examples/reproducers/symbolica-expansion/primitive_measurements.json
+/examples/reproducers/symbolica-graph/observation.json

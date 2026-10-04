@@ -3,7 +3,7 @@
 #let quickstart-python = [
 = Using Idenso from Python
 
-Symbolica `2.2.0` bundles Idenso and Spenso as native community modules. This example contracts one
+The `spynso3` bindings expose Spenso and Idenso through one Symbolica community module. This example contracts one
 four-dimensional Minkowski metric with a vector and verifies the exact remaining expression.
 
 == Install and verify the modules
@@ -13,8 +13,8 @@ four-dimensional Minkowski metric with a vector and verifies the exact remaining
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "symbolica==2.2.0"
-python -c "import symbolica.community.idenso; import symbolica.community.spenso"
+python -m pip install symbolica
+python -c "import symbolica.community.tensor"
 ```
 
 There is no standalone `idenso` Python wheel. Import the community module before constructing
@@ -27,21 +27,25 @@ Save this as `idenso_quickstart.py`:
 
 // docs-example: compile idenso-community-quickstart
 ```python
-from symbolica.community.idenso import initialize, list_dangling, simplify_metrics
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
-initialize()
 rep = Representation.mink(4)
 mu, nu = rep("mu"), rep("nu")
-g, q = TensorName.g(), TensorName("q")
+g = TensorExpression.g(rep)
+q = TensorName.vector("q")
 
 expression = g(mu, nu) * q(mu)
-reduced = simplify_metrics(expression)
+reduced = expression.contract()
 
-assert reduced == q(nu).to_expression()
-assert len(list_dangling(reduced)) == 1
+assert reduced == q(nu)
+assert len(reduced.list_dangling()) == 1
 print(reduced)
 ```
+
+Typed composition represents the contraction with a `bracket` shorthand. `contract()`
+uses the shared symbolic contractor for bracketed and ordinary indexed products. It returns
+a `TensorExpression`, retaining scalar factorization. `to_expression()` explicitly
+returns its ordinary Symbolica expression. The #link("guides/algebra/")[algebra guide] explains dummy scopes.
 
 Run `python idenso_quickstart.py`. Success means the explicit metric disappears and `q(nu)`
 remains. The structural equality check is stronger than comparing printed text, whose formatting

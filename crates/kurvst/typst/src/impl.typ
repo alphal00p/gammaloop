@@ -175,7 +175,6 @@
   }
 }
 
-// Cap positive outsets so endpoint adjustments cannot consume half the span.
 #let outset-point(from, toward, distance: 0) = {
   let dx = _point-x(toward) - _point-x(from)
   let dy = _point-y(toward) - _point-y(from)
@@ -183,7 +182,8 @@
   if distance == 0 or length == 0 {
     _point-pair(from)
   } else {
-    let applied = calc.min(distance, length * 0.45)
+    // A one-ended outset may use the full segment, especially for large nodes.
+    let applied = calc.min(distance, length)
     (
       _point-x(from) + dx / length * applied,
       _point-y(from) + dy / length * applied,

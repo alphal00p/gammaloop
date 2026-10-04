@@ -12,6 +12,7 @@ struct AttributeSpec {
 const GRAPH_SPEC: AttributeSpec = AttributeSpec {
     entity: "graph",
     known: &[
+        "canonical_cuts_required",
         "group_id",
         "is_group_master",
         "num",
@@ -19,7 +20,6 @@ const GRAPH_SPEC: AttributeSpec = AttributeSpec {
         "pole_part",
         "params",
         "projector",
-        "threshold_counterterms",
     ],
     ignored: &[
         "bgcolor",
@@ -48,6 +48,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
     known: &[
         "dod",
         "is_cut",
+        "initial_state_connection",
         "is_dummy",
         "lmb_id",
         "mass",
@@ -55,6 +56,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "name",
         "num",
         "particle",
+        "particle_id",
         "pdg",
         "vakint_edge_power",
     ],
@@ -71,6 +73,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "lmb_rep",
         "penwidth",
         "pin",
+        "pos",
         "sink",
         "source",
         "style",
@@ -181,9 +184,6 @@ fn warn_attributes<'a>(
             .iter()
             .chain(spec.ignored.iter())
             .any(|known| *known == attr)
-            || attr
-                .strip_suffix("_autogen")
-                .is_some_and(|base| spec.known.contains(&base))
         {
             continue;
         }

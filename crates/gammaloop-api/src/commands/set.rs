@@ -5,11 +5,10 @@ use color_eyre::{Result, Section};
 use eyre::{eyre, Context, Report};
 use figment::{
     providers::{Format, Serialized},
-    value::{Dict, Value as FigmentValue},
     Figment,
 };
 use gammalooprs::{
-    model::{ParameterNature, UFOSymbol},
+    model::{ModelGammaLoopExt, ParameterNature, UFOSymbol},
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
@@ -385,7 +384,7 @@ impl Set {
                                 )
                             });
                     }
-                    state.model_parameters.apply_to_model(&mut state.model)?;
+                    state.model.apply_param_card(&state.model_parameters)?;
                 }
             }
             Set::BaseDir { path } => {
@@ -679,9 +678,9 @@ impl SetArgs {
                     .unwrap_or("")
                     .to_ascii_lowercase();
                 match ext.as_str() {
-                    "toml" => Ok(fig.merge(figment::providers::Toml::file_exact(file))),
+                    "toml" => Ok(fig.merge(figment::providers::Toml::file(file))),
                     // "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
-                    "json" => Ok(fig.merge(figment::providers::Json::file_exact(file))),
+                    "json" => Ok(fig.merge(figment::providers::Json::file(file))),
                     _ => Err(color_eyre::eyre::eyre!(
                         "Unsupported settings file extension: {}",
                         ext
@@ -937,12 +936,18 @@ fn parse_runtime_model_setting_value(value: &J) -> Result<(F<f64>, F<f64>)> {
 }
 
 #[allow(clippy::type_complexity)]
-fn extract_runtime_model_updates(value: &mut Dict) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
-    let Some(model_value) = value.remove("model") else {
+fn extract_runtime_model_updates_from_json(
+    value: &mut J,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(object) = value.as_object_mut() else {
         return Ok(BTreeMap::new());
     };
 
-    let FigmentValue::Dict(_, model_object) = model_value else {
+    let Some(model_value) = object.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let J::Object(model_object) = model_value else {
         return Err(eyre!(
             "The runtime settings 'model' block must be a table/object"
         ));
@@ -951,11 +956,27 @@ fn extract_runtime_model_updates(value: &mut Dict) -> Result<BTreeMap<String, (F
     model_object
         .into_iter()
         .map(|(parameter_name, value)| {
-            parse_runtime_model_setting_value(&value.deserialize()?)
+            parse_runtime_model_setting_value(&value)
                 .map(|parsed| (parameter_name.clone(), parsed))
                 .with_context(|| format!("While parsing runtime model setting '{parameter_name}'"))
         })
         .collect()
+}
+
+#[allow(clippy::type_complexity)]
+fn extract_runtime_model_updates_from_toml(
+    value: &mut toml::Value,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(table) = value.as_table_mut() else {
+        return Ok(BTreeMap::new());
+    };
+
+    let Some(model_value) = table.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut model_json = serde_json::json!({ "model": serde_json::to_value(model_value)? });
+    extract_runtime_model_updates_from_json(&mut model_json)
 }
 
 #[derive(Clone)]
@@ -1017,33 +1038,103 @@ fn merge_runtime_settings_input(
     let preserved_model = settings_without_model.model.clone();
     settings_without_model.model = Default::default();
 
-    let mut updates: Dict = input.merge_figment(Figment::new())?.extract()?;
-    let model_updates = extract_runtime_model_updates(&mut updates)?;
-    // Normalize aliases before merging with serialized settings: Serde only sees
-    // one spelling per field, even when the stored value uses the canonical name.
-    if let Some(FigmentValue::Dict(_, sampling)) = updates.get_mut("sampling") {
-        for (alias, canonical) in [
-            ("lmb_multichanneling", "sampling_multichanneling"),
-            ("lmb_channels", "sampling_channels"),
-            ("lmb_channel_weight", "sampling_channel_weight"),
-        ] {
-            if let Some(value) = sampling.remove(alias) {
-                if sampling.contains_key(canonical) {
-                    return Err(eyre!(
-                        "Runtime settings update specifies both 'sampling.{alias}' and 'sampling.{canonical}'"
+    let mut merged_settings: Option<RuntimeSettings> = None;
+    let mut model_updates = BTreeMap::new();
+
+    match input {
+        SetArgs::File { file } => {
+            let ext = file
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            match ext.as_str() {
+                "toml" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = toml::from_str::<toml::Value>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse TOML runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+                    if value.as_table().is_some_and(|table| !table.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                                .extract()?,
+                        );
+                    }
+                }
+                "json" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = serde_json::from_str::<J>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse JSON runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_json(&mut value)?;
+                    if value.as_object().is_some_and(|object| !object.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Json::string(&serde_json::to_string(
+                                &value,
+                            )?))
+                            .extract()?,
+                        );
+                    }
+                }
+                _ => {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Unsupported settings file extension: {}",
+                        ext
                     ));
                 }
-                sampling.insert(canonical.to_string(), value);
             }
         }
+        SetArgs::String { string } => {
+            let mut value = toml::from_str::<toml::Value>(string)
+                .with_context(|| "Trying to parse runtime settings TOML string")?;
+            model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+            if value.as_table().is_some_and(|table| !table.is_empty()) {
+                let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                merged_settings = Some(
+                    fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                        .extract()?,
+                );
+            }
+        }
+        SetArgs::Kv { pairs } => {
+            let mut fig = Figment::from(Serialized::defaults(&settings_without_model));
+            let mut saw_non_model_pair = false;
+            for KvPair { key, value } in pairs {
+                if let Some(parameter_name) = key.strip_prefix("model.") {
+                    model_updates.insert(
+                        parameter_name.to_string(),
+                        parse_runtime_model_setting_value(&infer_cli_value(value)?).with_context(
+                            || format!("While parsing runtime model setting '{parameter_name}'"),
+                        )?,
+                    );
+                } else {
+                    saw_non_model_pair = true;
+                    fig = fig.adjoin((key.clone(), infer_cli_value(value)?));
+                }
+            }
+
+            if saw_non_model_pair {
+                merged_settings = Some(fig.extract()?);
+            }
+        }
+        SetArgs::Stored => {}
+        SetArgs::Defaults => unreachable!("defaults should be handled by the caller"),
     }
-    let mut merged_settings: RuntimeSettings = if updates.is_empty() {
-        settings.clone()
-    } else {
-        Figment::from(Serialized::defaults(&settings_without_model))
-            .merge(Serialized::defaults(updates))
-            .extract()?
-    };
+
+    let mut merged_settings = merged_settings.unwrap_or_else(|| settings.clone());
     merged_settings.model = preserved_model;
     for (parameter_name, value) in model_updates {
         merged_settings
@@ -1118,8 +1209,7 @@ mod test {
     use gammalooprs::{
         graph::Graph,
         initialisation::test_initialise,
-        model::InputParamCard,
-        model::{ParameterNature, ParameterType, UFOSymbol},
+        model::{ModelGammaLoopExt, ParameterNature, ParameterType, UFOSymbol},
         observables::{
             FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
             QuantitySettings, SelectorDefinitionSettings,
@@ -1150,10 +1240,10 @@ mod test {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         for process_name in process_names {
@@ -1228,7 +1318,7 @@ mod test {
             MODEL_REAL_VALUE_FORMAT_HINT
         );
         assert_eq!(
-            model_value_format_hint(Some(ParameterType::Imaginary)),
+            model_value_format_hint(Some(ParameterType::Complex)),
             MODEL_COMPLEX_VALUE_FORMAT_HINT
         );
         assert_eq!(
@@ -1255,7 +1345,7 @@ mod test {
     fn validate_model_parameter_type_accepts_complex_values_for_imaginary_parameters() {
         validate_model_parameter_type(
             "alpha",
-            ParameterType::Imaginary,
+            ParameterType::Complex,
             &Complex::new(F(1.0), F(2.0)),
         )
         .unwrap();
@@ -1304,142 +1394,19 @@ mod test {
     }
 
     #[test]
-    fn merge_runtime_settings_input_normalizes_sampling_aliases() {
-        let settings: RuntimeSettings = toml::from_str(
-            r#"
-[sampling]
-graphs = "monte_carlo"
-sampling_multichanneling = true
-sampling_channels = "monte_carlo"
-sampling_channel_weight = "ose"
-default_channel_selection = ["auto:lmb"]
-alpha = 2.0
-[integrator]
-n_start = 321
-"#,
-        )
-        .unwrap();
-        let string = r#"
-[sampling]
-lmb_multichanneling = false
-lmb_channels = "summed"
-lmb_channel_weight = "map_density"
-"#;
-        let mut expected = settings.clone();
-        expected.sampling = toml::from_str(
-            "graphs = 'monte_carlo'\nsampling_multichanneling = false\nalpha = 2.0\ndefault_channel_selection = ['auto:lmb']",
-        )
-        .unwrap();
-        for input in [
-            SetArgs::String {
-                string: string.to_string(),
-            },
-            SetArgs::Kv {
-                pairs: [
-                    "sampling.lmb_multichanneling=false",
-                    "sampling.lmb_channels=summed",
-                    "sampling.lmb_channel_weight=map_density",
-                ]
-                .map(|pair| pair.parse().unwrap())
-                .to_vec(),
-            },
-        ] {
-            let merged = super::merge_runtime_settings_input(&settings, &input).unwrap();
-            assert_eq!(merged, expected);
-        }
-        assert_eq!(
-            super::merge_runtime_settings_input(&settings, &SetArgs::Stored).unwrap(),
-            settings
-        );
-    }
-
-    #[test]
-    fn merge_runtime_settings_input_rejects_conflicting_sampling_aliases() {
-        for (alias, canonical, value) in [
-            ("lmb_multichanneling", "sampling_multichanneling", "true"),
-            ("lmb_channels", "sampling_channels", "'summed'"),
-            ("lmb_channel_weight", "sampling_channel_weight", "'ose'"),
-        ] {
-            for input in [
-                SetArgs::String {
-                    string: format!("[sampling]\n{alias} = {value}\n{canonical} = {value}"),
-                },
-                SetArgs::Kv {
-                    pairs: [alias, canonical]
-                        .map(|key| KvPair {
-                            key: format!("sampling.{key}"),
-                            value: value.to_string(),
-                        })
-                        .to_vec(),
-                },
-            ] {
-                let error =
-                    super::merge_runtime_settings_input(&RuntimeSettings::default(), &input)
-                        .unwrap_err();
-                assert!(error.to_string().contains(&format!(
-                    "specifies both 'sampling.{alias}' and 'sampling.{canonical}'"
-                )));
-            }
-        }
-    }
-
-    #[test]
-    fn merge_runtime_settings_input_accepts_file_model_and_sampling_updates() {
-        let mut settings = RuntimeSettings::default();
-        settings
-            .model
-            .external_parameters
-            .insert("mass_scalar_1".to_string(), (F(2.0), F(0.0)));
-        settings.sampling = toml::from_str(
-            "sampling_multichanneling = true\nsampling_channel_weight = 'ose'\ndefault_channel_selection = ['auto:lmb']",
-        )
-        .unwrap();
-        settings.integrator.n_start = 321;
-        for (extension, contents) in [
-            (
-                "toml",
-                "[model]\nmass_scalar_2 = [3.0, 1.0]\n[sampling]\nlmb_multichanneling = false\nlmb_channel_weight = 'map_density'",
-            ),
-            (
-                "json",
-                r#"{"model":{"mass_scalar_2":[3.0,1.0]},"sampling":{"lmb_multichanneling":false,"lmb_channel_weight":"map_density"}}"#,
-            ),
-        ] {
-            let file = std::env::temp_dir().join(format!(
-                "gammaloop_runtime_sampling_aliases_{}.{extension}",
-                std::process::id()
-            ));
-            std::fs::write(&file, contents).unwrap();
-            let result = super::merge_runtime_settings_input(
-                &settings,
-                &SetArgs::File { file: file.clone() },
-            );
-            std::fs::remove_file(&file).unwrap();
-            let mut expected = settings.clone();
-            expected.sampling =
-                toml::from_str("default_channel_selection = ['auto:lmb']").unwrap();
-            expected.model.external_parameters.insert(
-                "mass_scalar_2".to_string(),
-                (F(3.0), F(1.0)),
-            );
-            assert_eq!(result.unwrap(), expected);
-            assert!(super::merge_runtime_settings_input(&settings, &SetArgs::File { file }).is_err());
-        }
-    }
-
-    #[test]
     fn process_settings_reject_non_overridable_model_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let removable_parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
-                    && state.model_parameters.contains_key(&parameter.name)
+                    && state
+                        .model_parameters
+                        .contains_key(&UFOSymbol::from(parameter.name.as_str()))
             })
             .expect("SM model must contain at least one overridable external parameter")
             .name
@@ -1472,12 +1439,11 @@ lmb_channel_weight = "map_density"
     fn process_settings_reject_invalid_model_value_types() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
                     && parameter.parameter_type == ParameterType::Real
@@ -2511,8 +2477,8 @@ integrate = 10
     fn set_model_rejects_internal_parameters() {
         let model = load_generic_model("sm");
         let internal_param = model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|param| param.nature == ParameterNature::Internal)
             .expect("SM model must contain internal parameters")
             .name
@@ -2520,8 +2486,7 @@ integrate = 10
 
         let mut state = State::new_test();
         state.model = model;
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         assert!(!state
             .model_parameters
             .contains_key(&UFOSymbol::from(internal_param.as_str())));
@@ -2551,12 +2516,11 @@ integrate = 10
     fn set_model_rejects_imaginary_component_for_real_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
                     && parameter.parameter_type == ParameterType::Real

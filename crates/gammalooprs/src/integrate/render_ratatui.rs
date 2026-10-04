@@ -19,7 +19,7 @@ use super::{
     StatusUpdate,
     display::{StyledText, TextColor, TextStyle},
     status_update::{
-        ComponentKind, ContributionKind, ContributionSortMode, IntegralView, MainResultsRow,
+        ComponentKind, ContributionKind, ContributionSortMode, MainResultsRow,
         MainResultsRowGroupKind, MainTableSlotCells, StatisticsMedianEntry, StatisticsMixSegment,
         StatisticsScope,
     },
@@ -158,20 +158,16 @@ impl Default for SlotMetricVisibility {
 struct HistoryPoint {
     iteration: usize,
     samples: usize,
-    signed_real_slot_values: Vec<Option<(f64, f64)>>,
-    signed_imag_slot_values: Vec<Option<(f64, f64)>>,
-    absolute_real_slot_values: Vec<Option<(f64, f64)>>,
-    absolute_imag_slot_values: Vec<Option<(f64, f64)>>,
+    real_slot_values: Vec<Option<(f64, f64)>>,
+    imag_slot_values: Vec<Option<(f64, f64)>>,
     completed_iteration: bool,
 }
 
 impl HistoryPoint {
-    fn slot_values(&self, component: ComponentKind, view: IntegralView) -> &[Option<(f64, f64)>] {
-        match (view, component) {
-            (IntegralView::Signed, ComponentKind::Real) => &self.signed_real_slot_values,
-            (IntegralView::Signed, ComponentKind::Imag) => &self.signed_imag_slot_values,
-            (IntegralView::Absolute, ComponentKind::Real) => &self.absolute_real_slot_values,
-            (IntegralView::Absolute, ComponentKind::Imag) => &self.absolute_imag_slot_values,
+    fn slot_values(&self, component: ComponentKind) -> &[Option<(f64, f64)>] {
+        match component {
+            ComponentKind::Real => &self.real_slot_values,
+            ComponentKind::Imag => &self.imag_slot_values,
         }
     }
 }
@@ -190,23 +186,22 @@ impl<'a> DiscreteRowRef<'a> {
         self.row.contribution.raw
     }
 
-    fn sort_value(self, mode: ContributionSortMode, slot_index: usize, view: IntegralView) -> f64 {
+    fn sort_value(self, mode: ContributionSortMode, slot_index: usize) -> f64 {
         let Some(cell) = self.row.slot_cell(slot_index) else {
             return 0.0;
         };
-        let statistics = cell.statistics(view);
         match mode {
             ContributionSortMode::Index => match self.contribution() {
                 ContributionKind::Bin(index) => index as f64,
                 ContributionKind::All => -1.0,
                 ContributionKind::Sum => -0.5,
             },
-            ContributionSortMode::Integral => statistics
+            ContributionSortMode::Integral => cell
                 .value
                 .as_ref()
                 .map(|value| value.raw.0.abs().0)
                 .unwrap_or_default(),
-            ContributionSortMode::Error => statistics
+            ContributionSortMode::Error => cell
                 .value
                 .as_ref()
                 .map(|value| value.raw.1.abs().0)
@@ -217,7 +212,6 @@ impl<'a> DiscreteRowRef<'a> {
 
 pub struct RatatuiDashboardState {
     latest_update: Option<StatusUpdate>,
-    integral_view: IntegralView,
     active_tab: DashboardTab,
     density: DensityMode,
     metric_visibility: SlotMetricVisibility,
@@ -237,7 +231,6 @@ impl Default for RatatuiDashboardState {
     fn default() -> Self {
         Self {
             latest_update: None,
-            integral_view: IntegralView::Signed,
             active_tab: DashboardTab::Overview,
             density: DensityMode::Metrics,
             metric_visibility: SlotMetricVisibility::default(),
@@ -262,19 +255,6 @@ impl RatatuiDashboardState {
 
     pub fn has_update(&self) -> bool {
         self.latest_update.is_some()
-    }
-
-    pub fn is_absolute_view(&self) -> bool {
-        self.integral_view == IntegralView::Absolute
-    }
-
-    pub fn toggle_integral_view(&mut self) {
-        let selected_row = self.selected_discrete_key();
-        self.integral_view = match self.integral_view {
-            IntegralView::Signed => IntegralView::Absolute,
-            IntegralView::Absolute => IntegralView::Signed,
-        };
-        self.restore_discrete_selection(selected_row);
     }
 
     pub fn update(&mut self, update: StatusUpdate) {
@@ -361,20 +341,16 @@ impl RatatuiDashboardState {
     }
 
     pub fn cycle_discrete_sort(&mut self) {
-        let selected_row = self.selected_discrete_key();
         self.discrete_sort = match self.discrete_sort {
             ContributionSortMode::Index => ContributionSortMode::Integral,
             ContributionSortMode::Integral => ContributionSortMode::Error,
             ContributionSortMode::Error => ContributionSortMode::Index,
         };
         self.clamp_state();
-        self.restore_discrete_selection(selected_row);
     }
 
     pub fn toggle_discrete_sort_direction(&mut self) {
-        let selected_row = self.selected_discrete_key();
         self.discrete_descending = !self.discrete_descending;
-        self.restore_discrete_selection(selected_row);
     }
 
     pub fn toggle_chart_history_window(&mut self) {
@@ -474,18 +450,10 @@ impl RatatuiDashboardState {
     }
 
     fn push_history_point(&mut self, update: &StatusUpdate) {
-        let signed_real_slot_values =
-            self.collect_history_slot_values(update, ComponentKind::Real, IntegralView::Signed);
-        let signed_imag_slot_values =
-            self.collect_history_slot_values(update, ComponentKind::Imag, IntegralView::Signed);
-        let absolute_real_slot_values =
-            self.collect_history_slot_values(update, ComponentKind::Real, IntegralView::Absolute);
-        let absolute_imag_slot_values =
-            self.collect_history_slot_values(update, ComponentKind::Imag, IntegralView::Absolute);
-        if signed_real_slot_values.iter().all(Option::is_none)
-            && signed_imag_slot_values.iter().all(Option::is_none)
-            && absolute_real_slot_values.iter().all(Option::is_none)
-            && absolute_imag_slot_values.iter().all(Option::is_none)
+        let real_slot_values = self.collect_history_slot_values(update, ComponentKind::Real);
+        let imag_slot_values = self.collect_history_slot_values(update, ComponentKind::Imag);
+        if real_slot_values.iter().all(Option::is_none)
+            && imag_slot_values.iter().all(Option::is_none)
         {
             return;
         }
@@ -493,10 +461,8 @@ impl RatatuiDashboardState {
         let point = HistoryPoint {
             iteration: update.meta.iteration,
             samples: update.meta.total_points,
-            signed_real_slot_values,
-            signed_imag_slot_values,
-            absolute_real_slot_values,
-            absolute_imag_slot_values,
+            real_slot_values,
+            imag_slot_values,
             completed_iteration: !matches!(update.kind(), super::IntegrationStatusKind::Live),
         };
 
@@ -568,7 +534,6 @@ impl RatatuiDashboardState {
         &self,
         update: &StatusUpdate,
         component: ComponentKind,
-        view: IntegralView,
     ) -> Vec<Option<(f64, f64)>> {
         let Some(row) = update
             .main_results
@@ -579,7 +544,7 @@ impl RatatuiDashboardState {
         (0..update.main_results.slot_headers.len())
             .map(|slot_index| {
                 row.slot_cell(slot_index)
-                    .and_then(|cell| cell.statistics(view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .map(|value| (value.raw.0.0, value.raw.1.0.abs()))
             })
             .collect()
@@ -622,7 +587,7 @@ impl RatatuiDashboardState {
                     .main_results
                     .find_row(ContributionKind::All, *component)
                     .and_then(|row| row.slot_cell(self.focused_slot))
-                    .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .is_some()
             })
             .collect()
@@ -681,10 +646,7 @@ impl RatatuiDashboardState {
             .collect::<Vec<_>>();
 
         let tabs = Tabs::new(titles)
-            .block(titled_block(format!(
-                "GammaLoop status · {}",
-                integral_view_label(self.integral_view)
-            )))
+            .block(titled_block("GammaLoop status"))
             .select(self.active_tab.index())
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD));
         frame.render_widget(tabs, area);
@@ -750,7 +712,7 @@ impl RatatuiDashboardState {
             );
             if update.meta.show_eta_to_target {
                 left.push_text(" | ", TextStyle::PLAIN);
-                left.push_text("ETA to ⟨I⟩ target ", TextStyle::green().bold());
+                left.push_text("ETA to target ", TextStyle::green().bold());
                 if let Some(specification) = update.meta.eta_to_target_specification() {
                     left.push_text("(", TextStyle::green().bold());
                     left.push_text(specification, TextStyle::green().bold());
@@ -870,22 +832,21 @@ impl RatatuiDashboardState {
                             .main_results
                             .find_row(ContributionKind::All, component)
                             .and_then(|row| row.slot_cell(slot_index))
-                            .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                            .and_then(|cell| cell.value.as_ref())
                             .map(|value| value.display.to_plain_string().chars().count())
                     })
             })
             .max()
             .unwrap_or(16)
             .max(16) as u16;
-        let has_targets = self.integral_view == IntegralView::Signed
-            && (0..update.main_results.slot_headers.len()).any(|slot_index| {
-                update
-                    .target_display_for_slot_component(slot_index, ComponentKind::Real)
+        let has_targets = (0..update.main_results.slot_headers.len()).any(|slot_index| {
+            update
+                .target_display_for_slot_component(slot_index, ComponentKind::Real)
+                .is_some()
+                || update
+                    .target_display_for_slot_component(slot_index, ComponentKind::Imag)
                     .is_some()
-                    || update
-                        .target_display_for_slot_component(slot_index, ComponentKind::Imag)
-                        .is_some()
-            });
+        });
         let target_value_width = (0..update.main_results.slot_headers.len())
             .flat_map(|slot_index| {
                 [ComponentKind::Real, ComponentKind::Imag]
@@ -905,13 +866,13 @@ impl RatatuiDashboardState {
                     .main_results
                     .find_row(ContributionKind::All, ComponentKind::Real)
                     .and_then(|row| row.slot_cell(slot_index))
-                    .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .map(|value| &value.display);
                 let im_value = update
                     .main_results
                     .find_row(ContributionKind::All, ComponentKind::Imag)
                     .and_then(|row| row.slot_cell(slot_index))
-                    .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .map(|value| &value.display);
                 let target_re =
                     update.target_display_for_slot_component(slot_index, ComponentKind::Real);
@@ -933,15 +894,9 @@ impl RatatuiDashboardState {
                         },
                     )),
                     cell_from_styled_text(&update.main_results.slot_headers[slot_index]),
-                    cell_from_styled_text(&component_label_with_colon(
-                        ComponentKind::Real,
-                        self.integral_view,
-                    )),
+                    cell_from_styled_text(&component_label_with_colon(ComponentKind::Real)),
                     cell_from_optional_styled_text(re_value),
-                    cell_from_styled_text(&component_label_with_colon(
-                        ComponentKind::Imag,
-                        self.integral_view,
-                    )),
+                    cell_from_styled_text(&component_label_with_colon(ComponentKind::Imag)),
                     cell_from_optional_styled_text(im_value),
                 ];
                 if has_targets {
@@ -949,12 +904,10 @@ impl RatatuiDashboardState {
                     cells.push(plain_header_cell("trgt"));
                     cells.push(cell_from_styled_text(&component_label_with_colon(
                         ComponentKind::Real,
-                        IntegralView::Signed,
                     )));
                     cells.push(cell_from_optional_styled_text(target_re.as_ref()));
                     cells.push(cell_from_styled_text(&component_label_with_colon(
                         ComponentKind::Imag,
-                        IntegralView::Signed,
                     )));
                     cells.push(cell_from_optional_styled_text(target_im.as_ref()));
                 }
@@ -965,9 +918,9 @@ impl RatatuiDashboardState {
         let mut widths = vec![
             Constraint::Length(1),
             Constraint::Length(slot_name_width),
-            Constraint::Length(5),
+            Constraint::Length(3),
             Constraint::Length(value_width),
-            Constraint::Length(5),
+            Constraint::Length(3),
             Constraint::Length(value_width),
         ];
         if has_targets {
@@ -983,10 +936,7 @@ impl RatatuiDashboardState {
 
         frame.render_widget(
             Table::new(rows, widths)
-                .block(titled_block(format!(
-                    "Integrands · {}",
-                    integral_view_label(self.integral_view)
-                )))
+                .block(titled_block("Integrands"))
                 .column_spacing(1),
             area,
         );
@@ -1061,7 +1011,7 @@ impl RatatuiDashboardState {
             .iter()
             .filter_map(|point| {
                 (*point)
-                    .slot_values(component, self.integral_view)
+                    .slot_values(component)
                     .get(focused_slot)
                     .copied()
                     .flatten()
@@ -1072,7 +1022,7 @@ impl RatatuiDashboardState {
             .iter()
             .filter_map(|point| {
                 (*point)
-                    .slot_values(component, self.integral_view)
+                    .slot_values(component)
                     .get(focused_slot)
                     .copied()
                     .flatten()
@@ -1083,7 +1033,7 @@ impl RatatuiDashboardState {
             .iter()
             .filter_map(|point| {
                 (*point)
-                    .slot_values(component, self.integral_view)
+                    .slot_values(component)
                     .get(focused_slot)
                     .copied()
                     .flatten()
@@ -1095,7 +1045,7 @@ impl RatatuiDashboardState {
             .filter(|point| point.completed_iteration)
             .filter_map(|point| {
                 (*point)
-                    .slot_values(component, self.integral_view)
+                    .slot_values(component)
                     .get(focused_slot)
                     .copied()
                     .flatten()
@@ -1105,11 +1055,7 @@ impl RatatuiDashboardState {
         if central_points.is_empty() {
             frame.render_widget(
                 Paragraph::new("Waiting for focused-integrand history...").block(titled_block(
-                    format!(
-                        "Convergence {} ({})",
-                        integral_view_label(self.integral_view),
-                        component.tag_for_view(self.integral_view)
-                    ),
+                    format!("Convergence ({})", component.phase_name()),
                 )),
                 area,
             );
@@ -1128,27 +1074,21 @@ impl RatatuiDashboardState {
             .main_results
             .find_row(ContributionKind::All, component)
             .and_then(|row| row.slot_cell(focused_slot))
-            .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+            .and_then(|cell| cell.value.as_ref())
             .map(|value| (value.raw.0.0, value.raw.1.0.abs()))
             .or_else(|| {
                 self.history.last().and_then(|point| {
                     point
-                        .slot_values(component, self.integral_view)
+                        .slot_values(component)
                         .get(focused_slot)
                         .copied()
                         .flatten()
                 })
             })
             .unwrap_or((0.0, 1.0));
-        if !current_value.0.is_finite() || !current_value.1.is_finite() || current_value.1 <= 0.0 {
-            frame.render_widget(
-                Paragraph::new("Waiting for a finite central value and non-zero MC uncertainty...")
-                    .block(titled_block("Convergence")),
-                area,
-            );
-            return;
-        }
-        let sigma = current_value.1;
+        let sigma = current_value
+            .1
+            .max(current_value.0.abs().max(1.0) * 1.0e-12);
         let y_span = self.chart_y_sigma_span as f64;
         let y_min = current_value.0 - y_span * sigma;
         let y_max = current_value.0 + y_span * sigma;
@@ -1182,9 +1122,8 @@ impl RatatuiDashboardState {
                 .data(&completed_points),
         ];
 
-        let target_points = (self.integral_view == IntegralView::Signed)
-            .then(|| update.target_for_slot_component(focused_slot, component))
-            .flatten()
+        let target_points = update
+            .target_for_slot_component(focused_slot, component)
             .map(|target| vec![(x_min, target.0), (x_max.max(x_min + 1.0), target.0)]);
         if let Some(target_points) = target_points.as_ref() {
             datasets.push(
@@ -1198,11 +1137,8 @@ impl RatatuiDashboardState {
 
         let selected_for_training =
             update.slot_component_selected_for_training(focused_slot, component);
-        let mut title = StyledText::styled(
-            format!("Convergence {} : ", integral_view_label(self.integral_view)),
-            TextStyle::green().bold(),
-        );
-        title.append(component.label_display_for_view(self.integral_view));
+        let mut title = StyledText::styled("Convergence : ", TextStyle::green().bold());
+        title.push_text(component.phase_name(), component.text_style());
         title.push_text(
             if selected_for_training {
                 " (selected for training)"
@@ -1244,13 +1180,12 @@ impl RatatuiDashboardState {
             .focused_slot
             .min(update.main_results.slot_headers.len().saturating_sub(1));
         let rows = self.overview_summary_rows(update);
-        let show_target_columns = self.integral_view == IntegralView::Signed
-            && rows.iter().any(|row| {
-                update
-                    .target_deltas_for_row_slot(row, focused_slot, self.integral_view)
-                    .0
-                    .is_some()
-            });
+        let show_target_columns = rows.iter().any(|row| {
+            update
+                .target_deltas_for_row_slot(row, focused_slot)
+                .0
+                .is_some()
+        });
         let focused_column_count = 5 + if show_target_columns { 2 } else { 0 };
 
         let mut table_rows = vec![blank_table_row(focused_column_count)];
@@ -1263,31 +1198,19 @@ impl RatatuiDashboardState {
             let Some(cell) = row.slot_cell(focused_slot) else {
                 continue;
             };
-            let (delta_sigma, delta_percent) =
-                update.target_deltas_for_row_slot(row, focused_slot, self.integral_view);
-            let statistics = cell.statistics(self.integral_view);
+            let (delta_sigma, delta_percent) = update.target_deltas_for_row_slot(row, focused_slot);
             let mut label = row.contribution.display.clone();
             label.push_text(" ", TextStyle::PLAIN);
-            label.append(row.component.raw.label_display_for_view(self.integral_view));
+            label.append(row.component.display.clone());
             let mut cells = vec![
                 cell_from_styled_text(&label),
+                cell_from_optional_styled_text(cell.value.as_ref().map(|value| &value.display)),
                 cell_from_optional_styled_text(
-                    statistics.value.as_ref().map(|value| &value.display),
+                    cell.relative_error.as_ref().map(|value| &value.display),
                 ),
+                cell_from_optional_styled_text(cell.chi_sq.as_ref().map(|value| &value.display)),
                 cell_from_optional_styled_text(
-                    statistics
-                        .relative_error
-                        .as_ref()
-                        .map(|value| &value.display),
-                ),
-                cell_from_optional_styled_text(
-                    statistics.chi_sq.as_ref().map(|value| &value.display),
-                ),
-                cell_from_optional_styled_text(
-                    statistics
-                        .max_weight_impact
-                        .as_ref()
-                        .map(|value| &value.display),
+                    cell.max_weight_impact.as_ref().map(|value| &value.display),
                 ),
             ];
             if show_target_columns {
@@ -1328,10 +1251,7 @@ impl RatatuiDashboardState {
         let table = Table::new(table_rows, widths)
             .header(Row::new(headers))
             .block(titled_block_styled(&scoped_integrand_title(
-                &format!(
-                    "Focused integrand {} ",
-                    integral_view_label(self.integral_view)
-                ),
+                "Focused integrand ",
                 &update.main_results.slot_headers[focused_slot],
                 "",
             )))
@@ -1373,14 +1293,14 @@ impl RatatuiDashboardState {
         let mut header_bottom = vec![cell_from_styled_text(&contribution_detail), blank_cell()];
         let mut widths = vec![
             Constraint::Length(contribution_width),
-            Constraint::Length(5),
+            Constraint::Length(3),
         ];
         for (slot_index, slot_header) in update.main_results.slot_headers.iter().enumerate() {
             let integral_width = rows
                 .iter()
                 .filter_map(|row| {
                     row.slot_cell(slot_index)
-                        .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                        .and_then(|cell| cell.value.as_ref())
                         .map(|value| value.display.to_plain_string().chars().count())
                 })
                 .chain(std::iter::once(
@@ -1431,40 +1351,30 @@ impl RatatuiDashboardState {
             for row in group_rows {
                 let mut cells = vec![
                     cell_from_styled_text(&row.contribution.display),
-                    cell_from_styled_text(
-                        &row.component.raw.label_display_for_view(self.integral_view),
-                    ),
+                    cell_from_styled_text(&row.component.display),
                 ];
                 for slot_index in 0..update.main_results.slot_headers.len() {
                     let cell = row.slot_cell(slot_index);
                     cells.push(cell_from_optional_styled_text(
-                        cell.and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                        cell.and_then(|cell| cell.value.as_ref())
                             .map(|value| &value.display),
                     ));
                     if self.metric_visibility.relative_error {
                         cells.push(cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view).relative_error.as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.relative_error.as_ref())
+                                .map(|value| &value.display),
                         ));
                     }
                     if self.metric_visibility.chi_sq {
                         cells.push(cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view).chi_sq.as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.chi_sq.as_ref())
+                                .map(|value| &value.display),
                         ));
                     }
                     if self.metric_visibility.max_weight_impact {
                         cells.push(cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view)
-                                    .max_weight_impact
-                                    .as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.max_weight_impact.as_ref())
+                                .map(|value| &value.display),
                         ));
                     }
                 }
@@ -1473,10 +1383,7 @@ impl RatatuiDashboardState {
         }
 
         let table = Table::new(table_rows, widths)
-            .block(titled_block(format!(
-                "Results summary · {}",
-                integral_view_label(self.integral_view)
-            )))
+            .block(titled_block("Results summary"))
             .column_spacing(1);
         frame.render_widget(table, area);
     }
@@ -1593,7 +1500,7 @@ impl RatatuiDashboardState {
                 entry
                     .row
                     .slot_cell(focused_slot)
-                    .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .map(|value| value.display.to_plain_string().chars().count())
             })
             .chain(std::iter::once("integral".chars().count()))
@@ -1608,38 +1515,22 @@ impl RatatuiDashboardState {
                     let cell = entry.row.slot_cell(focused_slot);
                     Row::new(vec![
                         cell_from_styled_text(&entry.row.contribution.display),
-                        cell_from_styled_text(
-                            &entry
-                                .row
-                                .component
-                                .raw
-                                .label_display_for_view(self.integral_view),
+                        cell_from_styled_text(&entry.row.component.display),
+                        cell_from_optional_styled_text(
+                            cell.and_then(|cell| cell.value.as_ref())
+                                .map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view).value.as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.relative_error.as_ref())
+                                .map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view).relative_error.as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.chi_sq.as_ref())
+                                .map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view).chi_sq.as_ref()
-                            })
-                            .map(|value| &value.display),
-                        ),
-                        cell_from_optional_styled_text(
-                            cell.and_then(|cell| {
-                                cell.statistics(self.integral_view)
-                                    .max_weight_impact
-                                    .as_ref()
-                            })
-                            .map(|value| &value.display),
+                            cell.and_then(|cell| cell.max_weight_impact.as_ref())
+                                .map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
                             cell.and_then(|cell| cell.sample_fraction.as_ref())
@@ -1663,7 +1554,7 @@ impl RatatuiDashboardState {
             rows,
             [
                 Constraint::Length(contribution_width),
-                Constraint::Length(5),
+                Constraint::Length(3),
                 Constraint::Length(integral_width),
                 Constraint::Length(8),
                 Constraint::Length(8),
@@ -1683,10 +1574,7 @@ impl RatatuiDashboardState {
         ))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
         .block(titled_block_styled(&scoped_integrand_title(
-            &format!(
-                "Discrete bins {} for focused integrand ",
-                integral_view_label(self.integral_view)
-            ),
+            "Discrete bins for focused integrand ",
             &update.main_results.slot_headers[focused_slot],
             &format!(
                 " (sort: {} {})",
@@ -1721,9 +1609,7 @@ impl RatatuiDashboardState {
         let mut selected_line = vec![Span::raw("selected: ")];
         selected_line.extend(spans_from_styled_text(&row.contribution.display));
         selected_line.push(Span::raw(" "));
-        selected_line.extend(spans_from_styled_text(
-            &row.component.raw.label_display_for_view(self.integral_view),
-        ));
+        selected_line.extend(spans_from_styled_text(&row.component.display));
         frame.render_widget(
             Paragraph::new(Line::from(selected_line)).block(titled_block("Selected bin")),
             layout[0],
@@ -1740,7 +1626,7 @@ impl RatatuiDashboardState {
         let integral_width = (0..update.main_results.slot_headers.len())
             .filter_map(|slot_index| {
                 row.slot_cell(slot_index)
-                    .and_then(|cell| cell.statistics(self.integral_view).value.as_ref())
+                    .and_then(|cell| cell.value.as_ref())
                     .map(|value| value.display.to_plain_string().chars().count())
             })
             .chain(std::iter::once("integral".chars().count()))
@@ -1752,26 +1638,19 @@ impl RatatuiDashboardState {
             (0..update.main_results.slot_headers.len())
                 .filter_map(|slot_index| {
                     let cell = row.slot_cell(slot_index)?;
-                    let statistics = cell.statistics(self.integral_view);
                     Some(Row::new(vec![
                         cell_from_styled_text(&update.main_results.slot_headers[slot_index]),
                         cell_from_optional_styled_text(
-                            statistics.value.as_ref().map(|value| &value.display),
+                            cell.value.as_ref().map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            statistics
-                                .relative_error
-                                .as_ref()
-                                .map(|value| &value.display),
+                            cell.relative_error.as_ref().map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            statistics.chi_sq.as_ref().map(|value| &value.display),
+                            cell.chi_sq.as_ref().map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
-                            statistics
-                                .max_weight_impact
-                                .as_ref()
-                                .map(|value| &value.display),
+                            cell.max_weight_impact.as_ref().map(|value| &value.display),
                         ),
                         cell_from_optional_styled_text(
                             cell.sample_fraction.as_ref().map(|value| &value.display),
@@ -1808,10 +1687,7 @@ impl RatatuiDashboardState {
                 .map(cell_from_styled_text)
                 .collect::<Vec<_>>(),
         ))
-        .block(titled_block(format!(
-            "Per integrand details · {}",
-            integral_view_label(self.integral_view)
-        )))
+        .block(titled_block("Per integrand details"))
         .column_spacing(1);
         frame.render_widget(table, layout[1]);
     }
@@ -1823,7 +1699,8 @@ impl RatatuiDashboardState {
         let focused_slot_name = update.main_results.slot_headers[focused_slot].to_plain_string();
         let top_height = if area.height > 18 {
             update
-                .max_weight_details(self.integral_view)
+                .max_weight_details
+                .as_ref()
                 .map(|section| {
                     let row_count = section
                         .rows_by_slot
@@ -1843,13 +1720,9 @@ impl RatatuiDashboardState {
             .constraints([Constraint::Length(top_height), Constraint::Min(8)])
             .split(area);
 
-        if let Some(section) = update.max_weight_details(self.integral_view) {
+        if let Some(section) = update.max_weight_details.as_ref() {
             let headers = section.headers();
-            let mut title = section.title();
-            title.push_text(
-                format!(" · {}", integral_view_label(self.integral_view)),
-                TextStyle::green().bold(),
-            );
+            let title = section.title();
             let max_eval_width = max_styled_text_width(
                 std::iter::once(&headers[2]).chain(
                     section
@@ -1901,7 +1774,7 @@ impl RatatuiDashboardState {
             );
         }
 
-        if let Some(section) = update.discrete_max_weight_details(self.integral_view) {
+        if let Some(section) = update.discrete_max_weight_details.as_ref() {
             let sorted_rows = self.sorted_discrete_max_weight_rows(section);
             let lower = Layout::default()
                 .direction(Direction::Horizontal)
@@ -1961,8 +1834,7 @@ impl RatatuiDashboardState {
                         .collect::<Vec<_>>(),
                 ))
                 .block(titled_block(format!(
-                    "Per-bin max weight · {} (sort: {} {})",
-                    integral_view_label(self.integral_view),
+                    "Per-bin max weight (sort: {} {})",
                     discrete_sort_label(self.discrete_sort),
                     if self.discrete_descending {
                         "desc"
@@ -2009,10 +1881,7 @@ impl RatatuiDashboardState {
                 cell_from_styled_text(&coordinate_headers[3]),
             ]))
             .block(titled_block_styled(&scoped_integrand_title(
-                &format!(
-                    "Maximum weight coordinates {} for integrand ",
-                    integral_view_label(self.integral_view)
-                ),
+                "Maximum weight coordinates for integrand ",
                 &update.main_results.slot_headers[focused_slot],
                 "",
             )));
@@ -2037,11 +1906,6 @@ impl RatatuiDashboardState {
         let footer = Paragraph::new(Line::from(vec![
             Span::styled("Tabs", label_style()),
             Span::raw(" 1/2/3 or <- ->  "),
-            Span::styled("View", label_style()),
-            Span::raw(format!(
-                " a ({})  ",
-                integral_view_label(self.integral_view)
-            )),
             Span::styled("Integrand", label_style()),
             Span::raw(" [ / ]  "),
             Span::styled("Scope", label_style()),
@@ -2077,7 +1941,6 @@ impl RatatuiDashboardState {
         frame.render_widget(
             Paragraph::new(Text::from(vec![
                 Line::from("1/2/3 or Left/Right  switch tabs"),
-                Line::from("a / A               toggle ⟨I⟩ / ⟨|I|⟩ globally"),
                 Line::from("[ and ]             change focused integrand"),
                 Line::from("j / k               move selected discrete row"),
                 Line::from("s                   cycle discrete sort"),
@@ -2177,28 +2040,6 @@ impl RatatuiDashboardState {
         self.discrete_rows_for_slot(focused_slot)
     }
 
-    fn selected_discrete_key(&self) -> Option<(ContributionKind, ComponentKind)> {
-        self.discrete_rows()
-            .get(self.selected_discrete_row)
-            .map(|row| (row.contribution(), row.component()))
-    }
-
-    fn restore_discrete_selection(
-        &mut self,
-        selected_row: Option<(ContributionKind, ComponentKind)>,
-    ) {
-        let Some(selected_row) = selected_row else {
-            return;
-        };
-        if let Some(index) = self
-            .discrete_rows()
-            .iter()
-            .position(|row| (row.contribution(), row.component()) == selected_row)
-        {
-            self.selected_discrete_row = index;
-        }
-    }
-
     fn selected_statistics_scope(&self, update: &StatusUpdate) -> StatisticsScope {
         match self.statistics_scope {
             DashboardStatisticsScope::Global => StatisticsScope::Global,
@@ -2221,8 +2062,8 @@ impl RatatuiDashboardState {
             .collect::<Vec<_>>();
 
         rows.sort_by(|lhs, rhs| {
-            let lhs_key = lhs.sort_value(self.discrete_sort, slot_index, self.integral_view);
-            let rhs_key = rhs.sort_value(self.discrete_sort, slot_index, self.integral_view);
+            let lhs_key = lhs.sort_value(self.discrete_sort, slot_index);
+            let rhs_key = rhs.sort_value(self.discrete_sort, slot_index);
             let ordering = match self.discrete_sort {
                 ContributionSortMode::Index => match (lhs.contribution(), rhs.contribution()) {
                     (ContributionKind::Bin(lhs_index), ContributionKind::Bin(rhs_index)) => {
@@ -2290,11 +2131,8 @@ impl RatatuiDashboardState {
     }
 
     fn overview_value_text(&self, update: &StatusUpdate, slot_index: usize) -> Text<'static> {
-        overview_metric_text(update, slot_index, self.integral_view, |cell| {
-            cell.statistics(self.integral_view)
-                .value
-                .as_ref()
-                .map(|value| &value.display)
+        overview_metric_text(update, slot_index, |cell| {
+            cell.value.as_ref().map(|value| &value.display)
         })
     }
 
@@ -2315,10 +2153,9 @@ impl RatatuiDashboardState {
         let Some(cell) = row.slot_cell(slot_index) else {
             return Text::from("N/A");
         };
-        let statistics = cell.statistics(self.integral_view);
 
         let mut lines = Vec::new();
-        if let Some(value) = statistics.value.as_ref() {
+        if let Some(value) = cell.value.as_ref() {
             lines.push(Line::from(spans_from_styled_text(&value.display)));
         } else {
             lines.push(Line::from("N/A"));
@@ -2328,25 +2165,19 @@ impl RatatuiDashboardState {
         if self.metric_visibility.relative_error {
             metrics.push(labeled_value_line(
                 "rel err",
-                statistics
-                    .relative_error
-                    .as_ref()
-                    .map(|value| &value.display),
+                cell.relative_error.as_ref().map(|value| &value.display),
             ));
         }
         if self.metric_visibility.chi_sq {
             metrics.push(labeled_value_line(
                 "chi^2",
-                statistics.chi_sq.as_ref().map(|value| &value.display),
+                cell.chi_sq.as_ref().map(|value| &value.display),
             ));
         }
         if self.metric_visibility.max_weight_impact {
             metrics.push(labeled_value_line(
                 "mwi",
-                statistics
-                    .max_weight_impact
-                    .as_ref()
-                    .map(|value| &value.display),
+                cell.max_weight_impact.as_ref().map(|value| &value.display),
             ));
         }
         if !metrics.is_empty() && !matches!(self.density, DensityMode::Compact) {
@@ -2367,7 +2198,6 @@ impl RatatuiDashboardState {
 fn overview_metric_text(
     update: &StatusUpdate,
     slot_index: usize,
-    view: IntegralView,
     select: impl Fn(&MainTableSlotCells) -> Option<&StyledText>,
 ) -> Text<'static> {
     let select = &select;
@@ -2377,7 +2207,7 @@ fn overview_metric_text(
         .flat_map(|group| group.rows.iter())
         .filter_map(|row| {
             let text = row.slot_cell(slot_index).and_then(select)?;
-            let mut spans = spans_from_styled_text(&row.component.raw.label_display_for_view(view));
+            let mut spans = spans_from_styled_text(&row.component.display);
             spans.push(Span::raw(": "));
             spans.extend(spans_from_styled_text(text));
             Some(Line::from(spans))
@@ -2391,17 +2221,10 @@ fn overview_metric_text(
     }
 }
 
-fn component_label_with_colon(component: ComponentKind, view: IntegralView) -> StyledText {
-    let mut label = component.label_display_for_view(view);
+fn component_label_with_colon(component: ComponentKind) -> StyledText {
+    let mut label = component.label_display();
     label.push_text(":", component.text_style());
     label
-}
-
-fn integral_view_label(view: IntegralView) -> &'static str {
-    match view {
-        IntegralView::Signed => "⟨I⟩",
-        IntegralView::Absolute => "⟨|I|⟩",
-    }
 }
 
 fn component_rank(component: ComponentKind) -> usize {
@@ -2683,279 +2506,13 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 
 #[cfg(test)]
 mod tests {
-    use ratatui::{Terminal, backend::TestBackend};
-    use spenso::algebra::complex::Complex;
-
     use super::*;
-    use crate::{
-        integrate::{
-            IntegrationStatusKind, IntegrationStatusPhaseDisplay,
-            display::DisplayField,
-            status_update::{
-                DiscreteMaxWeightDetailsSection, DiscreteMaxWeightRow, IntegralStatisticsCells,
-                MainResultsRowGroup, MainResultsSection, MaxWeightDetailsRow,
-                MaxWeightDetailsSection, SlotCoordinateEntry, StatusMeta,
-            },
-        },
-        utils::F,
-    };
 
-    fn statistics(avg: f64, err: f64, marker: &str) -> IntegralStatisticsCells {
-        IntegralStatisticsCells {
-            value: Some(DisplayField::new(
-                (F(avg), F(err)),
-                StyledText::plain(marker),
-            )),
-            relative_error: Some(DisplayField::new(
-                err / avg.abs().max(f64::EPSILON) * 100.0,
-                StyledText::plain(format!("{marker}_ERR")),
-            )),
-            chi_sq: Some(DisplayField::new(
-                avg.abs(),
-                StyledText::plain(format!("{marker}_CHI")),
-            )),
-            max_weight_impact: Some(DisplayField::new(
-                err.abs(),
-                StyledText::plain(format!("{marker}_MWI")),
-            )),
-        }
-    }
-
-    fn result_row(
-        contribution: ContributionKind,
-        contribution_label: &str,
-        signed: (f64, f64, &str),
-        absolute: (f64, f64, &str),
-    ) -> MainResultsRow {
-        MainResultsRow {
-            contribution: DisplayField::new(contribution, StyledText::plain(contribution_label)),
-            component: DisplayField::new(ComponentKind::Real, StyledText::plain("re")),
-            slot_cells: vec![MainTableSlotCells {
-                signed: statistics(signed.0, signed.1, signed.2),
-                absolute: statistics(absolute.0, absolute.1, absolute.2),
-                sample_fraction: Some(DisplayField::new(50.0, StyledText::plain("50%"))),
-                sample_count: Some(DisplayField::new(50, StyledText::plain("50"))),
-                target_pdf: Some(DisplayField::new(50.0, StyledText::plain("50%"))),
-            }],
-            delta_sigma: None,
-            delta_percent: None,
-        }
-    }
-
-    fn max_weight_row(component_label: &str, positive: bool, marker: &str) -> MaxWeightDetailsRow {
-        MaxWeightDetailsRow {
-            slot: DisplayField::new("slot".to_string(), StyledText::plain("slot")),
-            component_sign: DisplayField::new(
-                (ComponentKind::Real, positive),
-                StyledText::plain(component_label),
-            ),
-            max_eval: DisplayField::new(F(42.0), StyledText::plain(marker)),
-            coordinates: DisplayField::new("x: 0.5".to_string(), StyledText::plain("x: 0.5")),
-        }
-    }
-
-    fn discrete_max_weight_section(
-        component_label: &str,
-        marker: &str,
-    ) -> DiscreteMaxWeightDetailsSection {
-        DiscreteMaxWeightDetailsSection {
-            contribution_header: StyledText::plain("Contribution"),
-            slot_headers: vec![StyledText::plain("slot")],
-            row_groups: vec![vec![DiscreteMaxWeightRow {
-                contribution: DisplayField::new(ContributionKind::Bin(0), StyledText::plain("#0")),
-                component_sign: DisplayField::new(
-                    (ComponentKind::Real, true),
-                    StyledText::plain(component_label),
-                ),
-                slot_values: vec![Some(DisplayField::new(F(42.0), StyledText::plain(marker)))],
-                slot_coordinates: vec![SlotCoordinateEntry {
-                    slot: DisplayField::new("slot".to_string(), StyledText::plain("slot")),
-                    coordinates: DisplayField::new(
-                        "x: 0.5".to_string(),
-                        StyledText::plain("x: 0.5"),
-                    ),
-                }],
-            }]],
-        }
-    }
-
-    fn status_update() -> StatusUpdate {
-        StatusUpdate {
-            kind: IntegrationStatusKind::Live,
-            meta: StatusMeta {
-                elapsed_time: Duration::from_secs(10),
-                iteration_elapsed_time: Duration::from_secs(2),
-                iteration: 2,
-                current_iteration_points: 100,
-                total_points: 100,
-                n_samples_evaluated: 100,
-                cores: 1,
-                training_slot: 0,
-                training_phase_display: IntegrationStatusPhaseDisplay::Real,
-                live_progress: None,
-                show_eta_to_target: true,
-                eta_to_target_specification: Some("rel ≤ 1%".to_string()),
-                eta_to_target: Some(Duration::from_secs(5)),
-            },
-            targets: vec![Some(Complex::new(F(1.0), F(0.0)))],
-            slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
-            per_slot_training_phase: false,
-            main_results: MainResultsSection {
-                header_left: StyledText::plain(""),
-                header_middle: StyledText::plain(""),
-                header_tail: StyledText::plain(""),
-                contribution_header: StyledText::plain("Contribution\n(idx=graph)"),
-                slot_headers: vec![StyledText::plain("slot")],
-                has_discrete_columns: true,
-                has_target_columns: true,
-                row_groups: vec![
-                    MainResultsRowGroup {
-                        kind: MainResultsRowGroupKind::All,
-                        rows: vec![result_row(
-                            ContributionKind::All,
-                            "All",
-                            (-2.0, 0.2, "SIGNED_ALL"),
-                            (20.0, 0.4, "ABS_ALL"),
-                        )],
-                    },
-                    MainResultsRowGroup {
-                        kind: MainResultsRowGroupKind::Bins,
-                        rows: vec![
-                            result_row(
-                                ContributionKind::Bin(0),
-                                "#0",
-                                (-1.0, 9.0, "SIGNED_BIN0"),
-                                (12.0, 1.0, "ABS_BIN0"),
-                            ),
-                            result_row(
-                                ContributionKind::Bin(1),
-                                "#1",
-                                (-1.0, 1.0, "SIGNED_BIN1"),
-                                (8.0, 9.0, "ABS_BIN1"),
-                            ),
-                        ],
-                    },
-                ],
-            },
-            max_weight_details: Some(MaxWeightDetailsSection {
-                rows_by_slot: vec![vec![
-                    max_weight_row("re [+]", true, "SIGNED_MAX_POS"),
-                    max_weight_row("re [-]", false, "SIGNED_MAX_NEG"),
-                ]],
-            }),
-            absolute_max_weight_details: Some(MaxWeightDetailsSection {
-                rows_by_slot: vec![vec![max_weight_row("|re|", true, "ABS_MAX")]],
-            }),
-            discrete_max_weight_details: Some(discrete_max_weight_section(
-                "re [+]",
-                "SIGNED_BIN_MAX",
-            )),
-            absolute_discrete_max_weight_details: Some(discrete_max_weight_section(
-                "|re|",
-                "ABS_BIN_MAX",
-            )),
-            statistics: None,
-        }
-    }
-
-    fn render(dashboard: &RatatuiDashboardState) -> String {
-        let backend = TestBackend::new(220, 64);
-        let mut terminal = Terminal::new(backend).expect("test terminal");
-        terminal
-            .draw(|frame| dashboard.draw(frame))
-            .expect("ratatui draw");
-
-        let buffer = terminal.backend().buffer();
-        (0..buffer.area.height)
-            .map(|y| {
-                let mut line = String::new();
-                for x in 0..buffer.area.width {
-                    line.push_str(buffer[(x, y)].symbol());
-                }
-                line.trim_end().to_string()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    #[test]
-    fn absolute_overview_switches_history_and_hides_signed_targets() {
-        let mut dashboard = RatatuiDashboardState::new();
-        dashboard.update(status_update());
-
-        assert_eq!(
-            dashboard.history[0].slot_values(ComponentKind::Real, IntegralView::Signed)[0],
-            Some((-2.0, 0.2))
-        );
-        assert_eq!(
-            dashboard.history[0].slot_values(ComponentKind::Real, IntegralView::Absolute)[0],
-            Some((20.0, 0.4))
-        );
-
-        let signed = render(&dashboard);
-        assert!(signed.contains("SIGNED_ALL"), "{signed}");
-        assert!(signed.contains("trgt"), "{signed}");
-        assert!(signed.contains("Δ [σ]"), "{signed}");
-
-        dashboard.toggle_integral_view();
-        let absolute = render(&dashboard);
-        assert!(absolute.contains("ABS_ALL"), "{absolute}");
-        assert!(!absolute.contains("SIGNED_ALL"), "{absolute}");
-        assert!(!absolute.contains("trgt"), "{absolute}");
-        assert!(!absolute.contains("Δ [σ]"), "{absolute}");
-        assert!(absolute.contains("ETA to ⟨I⟩ target"), "{absolute}");
-        assert!(absolute.contains("⟨|I|⟩"), "{absolute}");
-        assert!(
-            signed.matches("target").count() > absolute.matches("target").count(),
-            "signed:\n{signed}\nabsolute:\n{absolute}"
-        );
-    }
-
-    #[test]
-    fn absolute_view_reaches_every_tab_and_uses_signless_max_weights() {
-        let mut dashboard = RatatuiDashboardState::new();
-        dashboard.update(status_update());
-        dashboard.toggle_integral_view();
-
-        for (tab, marker) in [(0, "ABS_ALL"), (1, "ABS_BIN"), (2, "ABS_MAX")] {
-            dashboard.select_tab(tab);
-            let rendered = render(&dashboard);
-            assert!(rendered.contains("⟨|I|⟩"), "tab {tab}:\n{rendered}");
-            assert!(rendered.contains(marker), "tab {tab}:\n{rendered}");
-        }
-
-        dashboard.select_tab(2);
-        let max_weight = render(&dashboard);
-        assert!(max_weight.contains("|re|"), "{max_weight}");
-        assert!(!max_weight.contains("re [+]"), "{max_weight}");
-        assert!(!max_weight.contains("re [-]"), "{max_weight}");
-        assert!(!max_weight.contains("SIGNED_MAX"), "{max_weight}");
-    }
-
-    #[test]
-    fn active_view_sort_keeps_the_logical_bin_selected() {
-        let mut dashboard = RatatuiDashboardState::new();
-        dashboard.update(status_update());
-
-        assert_eq!(
-            dashboard.discrete_rows()[0].contribution(),
-            ContributionKind::Bin(0)
-        );
-        dashboard.select_next_discrete_row();
-        assert_eq!(
-            dashboard.selected_discrete_key(),
-            Some((ContributionKind::Bin(1), ComponentKind::Real))
-        );
-
-        dashboard.toggle_integral_view();
-        assert_eq!(
-            dashboard.discrete_rows()[0].contribution(),
-            ContributionKind::Bin(1)
-        );
-        assert_eq!(
-            dashboard.selected_discrete_key(),
-            Some((ContributionKind::Bin(1), ComponentKind::Real))
-        );
+    fn plain_line(line: Line<'static>) -> String {
+        line.spans
+            .into_iter()
+            .map(|span| span.content.into_owned())
+            .collect::<String>()
     }
 
     #[test]
@@ -2979,10 +2536,7 @@ mod tests {
         ]);
 
         assert_eq!(
-            line.spans
-                .into_iter()
-                .map(|span| span.content.into_owned())
-                .collect::<String>(),
+            plain_line(line),
             "stability: f64: 2.4e-16 (12.34%)   f128: 1.3e-26 (1.23e-3%)   arb: N/A (0.00%)"
         );
     }
