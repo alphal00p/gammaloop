@@ -1,10 +1,9 @@
 //! Run with `cargo run --profile dev-optim -p feynkit-generator --example
-//! four_loop_numerator -- [threads=1] [diagrams.jsonl|-] [none|zeroes]`.
+//! four_loop_numerator -- [threads=1] [diagrams.jsonl|-] [filter_zero_color=false]`.
 use std::{io::Write, sync::Mutex, time::Instant};
 
 use feynkit_generator::{
-    GenerationControl, GenerationFilter, GenerationOptions, NumeratorGrouping, Process,
-    SnailFilterOptions,
+    GenerationControl, GenerationFilter, GenerationOptions, Process, SnailFilterOptions,
 };
 use feynkit_model::Model;
 
@@ -16,11 +15,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .transpose()?
         .unwrap_or(1);
     let output = arguments.next().filter(|path| path != "-");
-    let grouping = match arguments.next().as_deref().unwrap_or("none") {
-        "none" => NumeratorGrouping::None,
-        "zeroes" => NumeratorGrouping::OnlyDetectZeroes,
-        mode => return Err(format!("unknown grouping mode: {mode}").into()),
-    };
+    let filter_zero_color = arguments
+        .next()
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(false);
     let model = Model::qcd();
     let process = Process::new(["g"], ["g"]).with_filters(
         ["u", "c", "s", "t", "b"]
@@ -33,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stage = Mutex::new(("start", Instant::now()));
     let options = GenerationOptions::default()
         .threads(threads)
-        .numerator_grouping(grouping)
+        .filter_zero_color(filter_zero_color)
         .with_loop_count(4, 4)?
         .max_vertices(8)
         .with_graph_filter(GenerationFilter::MaxNumberOfBridges(0))

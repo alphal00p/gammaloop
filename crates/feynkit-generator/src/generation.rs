@@ -1786,7 +1786,7 @@ impl Generator {
         let zero_numerator_count = grouped.zero_numerator_count;
         let mut groups = grouped.groups;
         let total = groups.len();
-        options.report_progress("grouping", 0, Some(total));
+        options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
         let mut diagrams = Vec::with_capacity(grouped.diagrams.len());
         for (output_index, (comparison_master, group)) in grouped
             .diagrams
@@ -1858,7 +1858,12 @@ impl Generator {
                 member.source_id = source.id();
                 member.source_name = source.name().to_owned();
             }
-            options.report_progress("grouping", output_index + 1, Some(total));
+            options.report_progress_with_zero_count(
+                "grouping",
+                output_index + 1,
+                Some(total),
+                zero_numerator_count,
+            );
         }
 
         let result = GenerationResult {
@@ -1873,10 +1878,11 @@ impl Generator {
             groups,
         };
         result.validate_groups()?;
-        options.report_progress(
+        options.report_progress_with_zero_count(
             if completed { "complete" } else { "cancelled" },
             result.diagrams.len(),
             Some(result.diagrams.len()),
+            zero_numerator_count,
         );
         Ok(result)
     }
@@ -3805,7 +3811,7 @@ impl ResolvedProcess {
             NumeratorGrouping::Identical(options)
             | NumeratorGrouping::UpToSign(options)
             | NumeratorGrouping::UpToScalar(options) => Some(options),
-            NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => None,
+            NumeratorGrouping::None => None,
         };
         let include_left_right =
             self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right;
@@ -5725,9 +5731,107 @@ mod tests {
         }
     }
 
+    #[test]
+    fn zero_color_filter_is_opt_in_for_generated_qcd_tadpoles() {
+        let model = Arc::new(Model::qcd());
+        let process = Process::new([] as [&str; 0], ["g"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .max_vertices(1)
+            .allow_self_loops(true)
+            .allow_zero_flow_edges(true)
+            .threads(1);
+        let unfiltered = process.generate_diagrams(model.clone(), &options).unwrap();
+        assert!(unfiltered.report.completed);
+        assert!(!unfiltered.diagrams.is_empty());
+        assert_eq!(unfiltered.report.zero_numerator_count, 0);
+        assert!(
+            unfiltered
+                .diagrams
+                .iter()
+                .any(|diagram| !diagram.numerator().is_zero())
+        );
+
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let captured = updates.clone();
+        let filtered_options = options
+            .clone()
+            .filter_zero_color(true)
+            .progress(move |update| {
+                if update.stage == "filter_zero_color" {
+                    captured.lock().unwrap().push(update);
+                }
+                crate::GenerationControl::Continue
+            });
+        let filtered = process
+            .generate_diagrams(model.clone(), &filtered_options)
+            .unwrap();
+        assert!(filtered.report.completed);
+        assert!(filtered.diagrams.is_empty());
+        assert_eq!(
+            filtered.report.zero_numerator_count,
+            unfiltered.diagrams.len()
+        );
+        filtered.validate_groups().unwrap();
+        let updates = updates.lock().unwrap();
+        assert_eq!(
+            updates
+                .iter()
+                .map(|update| (update.completed, update.zero_numerator_count))
+                .collect::<Vec<_>>(),
+            (0..=unfiltered.diagrams.len())
+                .map(|count| (count, count))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            updates
+                .iter()
+                .all(|update| update.total == Some(unfiltered.diagrams.len()))
+        );
+
+        let amplitude = process
+            .generate_amplitude(model.clone(), &options, Default::default())
+            .unwrap();
+        assert_eq!(amplitude.diagrams().len(), unfiltered.diagrams.len());
+        assert!(matches!(
+            process.generate_amplitude(model, &options.filter_zero_color(true), Default::default()),
+            Err(GenerationError::Amplitude(error)) if matches!(*error, feynkit_amplitude::AmplitudeError::Empty)
+        ));
+    }
+
+    #[test]
+    fn zero_color_filter_progress_can_cancel_algebra() {
+        let process = Process::new([] as [&str; 0], ["g"]);
+        let result = process
+            .generate_diagrams(
+                Model::qcd(),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .max_vertices(1)
+                    .allow_self_loops(true)
+                    .allow_zero_flow_edges(true)
+                    .threads(1)
+                    .filter_zero_color(true)
+                    .progress(|update| {
+                        if update.stage == "filter_zero_color" && update.completed == 1 {
+                            crate::GenerationControl::Cancel
+                        } else {
+                            crate::GenerationControl::Continue
+                        }
+                    }),
+            )
+            .unwrap();
+        assert!(!result.report.completed);
+        assert_eq!(result.report.zero_numerator_count, 1);
+        assert!(!result.diagrams.is_empty());
+        result.validate_groups().unwrap();
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn zero_detection_uses_the_requested_generation_pool() {
+    fn color_filter_uses_the_requested_generation_pool() {
         for threads in [1, 4] {
             let observed = Arc::new(Mutex::new(Vec::new()));
             let sink = observed.clone();
@@ -5735,9 +5839,9 @@ mod tests {
                 .with_loop_count(1, 1)
                 .unwrap()
                 .threads(threads)
-                .numerator_grouping(NumeratorGrouping::OnlyDetectZeroes)
+                .filter_zero_color(true)
                 .progress(move |progress| {
-                    if progress.stage == "grouping_preparation" && progress.completed > 0 {
+                    if progress.stage == "filter_zero_color" && progress.completed > 0 {
                         sink.lock().unwrap().push(rayon::current_num_threads());
                     }
                     crate::GenerationControl::Continue
@@ -7548,8 +7652,7 @@ mod tests {
     fn grouping_options_are_validated() {
         let generator = Generator::new(fermion_model());
 
-        let grouping =
-            GenerationOptions::default().numerator_grouping(NumeratorGrouping::OnlyDetectZeroes);
+        let grouping = GenerationOptions::default().filter_zero_color(true);
         generator
             .validate_options(GenerationType::Amplitude, &grouping)
             .unwrap();

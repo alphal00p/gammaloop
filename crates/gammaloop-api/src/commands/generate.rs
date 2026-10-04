@@ -78,8 +78,6 @@ pub enum GenerateCmd {
 pub enum GroupingChoice {
     #[clap(name = "no_grouping")]
     NoGrouping,
-    #[clap(name = "only_detect_zeroes")]
-    OnlyDetectZeroes,
     #[clap(name = "group_identical_graphs_up_to_sign")]
     GroupIdenticalGraphsUpToSign,
     #[clap(name = "group_identical_graphs_up_to_scalar_rescaling")]
@@ -127,7 +125,6 @@ impl GroupingChoice {
                 NumeratorGrouping::UpToSign(graph_grouping_options)
             }
             GroupingChoice::NoGrouping => NumeratorGrouping::None,
-            GroupingChoice::OnlyDetectZeroes => NumeratorGrouping::OnlyDetectZeroes,
         }
     }
 }
@@ -281,6 +278,11 @@ pub struct SpecArgs {
     /// Numerator-aware grouping choice
     #[arg(long = "numerator-grouping", short = 'G', value_enum)]
     pub numerator_aware_isomorphism_grouping: Option<GroupingChoice>,
+
+    /// Remove diagrams whose numerators vanish under color algebra before grouping.
+    #[arg(long = "filter-zero-color", default_value_t = false)]
+    #[serde(default)]
+    pub filter_zero_color: bool,
 
     /// Deterministic random seed used for numerical numerator comparisons.
     #[arg(long = "numerical-samples-seed")]
@@ -1305,6 +1307,7 @@ pub fn parse_spec_with_model(
         .generation_options
         .clone()
         .numerator_grouping(build_grouping_option(args))
+        .filter_zero_color(args.filter_zero_color)
         .allow_self_loops(!args.filter_self_loop.unwrap_or(false))
         .allow_zero_flow_edges(!args.filter_zero_flow_edges.unwrap_or(true))
         .graph_prefix(args.graph_prefix.clone().unwrap_or_else(|| "GL".to_owned()));
@@ -2319,6 +2322,7 @@ mod tests {
             symmetrize_final_states: None,
             symmetrize_left_right_states: None,
             numerator_aware_isomorphism_grouping: None,
+            filter_zero_color: false,
             numerical_samples_seed: None,
             number_of_samples_for_numerator_comparisons: None,
             consider_internal_masses_only_in_numerator_isomorphisms: None,
@@ -2352,6 +2356,44 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn zero_color_filter_is_independent_of_grouping_and_forwarded_in_both_modes() {
+        let model = load_generic_model("sm");
+        for mode in ["amp", "xs"] {
+            for enabled in [false, true] {
+                let mut command = vec!["gammaloop", "generate", mode, "a", ">", "d", "d~"];
+                if enabled {
+                    command.push("--filter-zero-color");
+                }
+                let repl = Repl::try_parse_from(command).unwrap();
+                let Commands::Generate(Generate {
+                    mode: Some(GenerateCmd::Amp(args) | GenerateCmd::Xs(args)),
+                    ..
+                }) = repl.command
+                else {
+                    panic!("expected diagram generation");
+                };
+                assert_eq!(args.filter_zero_color, enabled);
+                assert!(matches!(
+                    build_grouping_option(&args),
+                    NumeratorGrouping::UpToScalar(_)
+                ));
+                let serialized = serde_json::to_value(&args).unwrap();
+                let decoded: SpecArgs = serde_json::from_value(serialized).unwrap();
+                assert_eq!(decoded, args);
+                let generation_type = if mode == "amp" {
+                    GenerationType::Amplitude
+                } else {
+                    GenerationType::CrossSection
+                };
+                let spec = parse_spec_with_model(&decoded, generation_type, &model).unwrap();
+                let options =
+                    serde_json::to_value(&spec.process_definition.generation_options).unwrap();
+                assert_eq!(options["filter_zero_color"], enabled);
+            }
+        }
     }
 
     #[test]

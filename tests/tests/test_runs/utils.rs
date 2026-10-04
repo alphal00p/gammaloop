@@ -268,7 +268,7 @@ disable_threshold_subtraction = false
             "remove processes",
             r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
                 --only-diagrams
-                --numerator-grouping only_detect_zeroes
+                --filter-zero-color --numerator-grouping no_grouping
                 --select-graphs GL42
                 --loop-momentum-bases GL42=2
                 --global-prefactor-num '1𝑖*(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
