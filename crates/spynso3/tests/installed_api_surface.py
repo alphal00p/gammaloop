@@ -176,7 +176,7 @@ class ApiSurfaceTests(unittest.TestCase):
                     tensor = sp.Tensor.dense(structure, [first, E("0")])
                     if sparse:
                         tensor = tensor.to_sparse()
-                    evaluator = tensor.evaluator({}, {}, [], iterations=1, n_cores=1)
+                    evaluator = tensor.evaluator([], iterations=1, n_cores=1)
                     self.assertEqual(
                         list(evaluator.evaluate_complex([[]])[0]),
                         [1 + (1j if complex_coefficients else 0), 0],
