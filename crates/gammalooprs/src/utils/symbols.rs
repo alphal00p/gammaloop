@@ -273,22 +273,6 @@ pub struct GammaloopSymbols {
     pub inverse_temperature: Symbol,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThermalDistributionLimit {
-    Default,
-    ZeroTemperature,
-    Vacuum,
-}
-
-impl ThermalDistributionLimit {
-    pub fn is_finite_temperature(&self) -> bool {
-        matches!(self, ThermalDistributionLimit::Default)
-    }
-    pub fn temperature_flag(&self) -> Atom {
-        Atom::num(if self.is_finite_temperature() { 1 } else { 0 })
-    }
-}
-
 impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let arg = arg.into();
@@ -1091,7 +1075,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     radius_star_right: symbol!("r⃰_right"),
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
-    thermal_distribution: symbol!("N"),
+    thermal_distribution: *three_dimensional_reps::symbols::THERMAL_DISTRIBUTION,
     thermal_weight_wrapper: *three_dimensional_reps::symbols::THERMAL_WEIGHT_WRAPPER,
     inverse_temperature: symbol!("β"),
 };

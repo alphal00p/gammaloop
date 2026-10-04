@@ -613,25 +613,19 @@ fn cff_surface_for_vertex_thermal(
         edges
             .iter()
             .filter(|edge| edge.edge_type == EdgeType::Virtual)
-            .map(|edge| edge.edge_id)
+            .map(|edge| EdgeIndex(edge.edge_id))
             .collect::<Vec<_>>()
     };
-    let incoming = virtual_ids(&vertex.incoming);
-    let outgoing = virtual_ids(&vertex.outgoing);
-    // Canonicalize an H-surface with the larger positive side, using the
-    // smaller edge IDs as the tie break when the two sides have equal size.
-    let flip = match incoming.len().cmp(&outgoing.len()) {
-        std::cmp::Ordering::Greater => true,
-        std::cmp::Ordering::Less => false,
-        std::cmp::Ordering::Equal => outgoing > incoming,
-    };
-    let sign = if flip { -1 } else { 1 };
+    let (sides, sign) = ThermalNumerator::from_edge_lists_canonicalized(
+        virtual_ids(&vertex.outgoing),
+        virtual_ids(&vertex.incoming),
+    );
     let mut expr = LinearEnergyExpr::zero();
-    for edge in outgoing {
-        expr = expr + LinearEnergyExpr::ose(EdgeIndex(edge), i64::from(sign));
+    for edge in sides.positive_energies {
+        expr = expr + LinearEnergyExpr::ose(edge, 1);
     }
-    for edge in incoming {
-        expr = expr + LinearEnergyExpr::ose(EdgeIndex(edge), -i64::from(sign));
+    for edge in sides.negative_energies {
+        expr = expr + LinearEnergyExpr::ose(edge, -1);
     }
     let mut shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
     add_initial_state_cut_external_shift(parsed, vertex, &mut shift);
@@ -735,6 +729,53 @@ mod thermal_tests {
         atom::{Atom, AtomCore},
         parse,
     };
+
+    #[test]
+    fn thermal_surface_canonicalization_preserves_external_shift_sign() {
+        let parsed = crate::graph_io::test_graphs::box_graph();
+        for (outgoing, incoming, positive, negative, expected_sign) in [
+            (vec![2, 0], vec![3, 1], vec![0, 2], vec![1, 3], 1),
+            (vec![3, 1], vec![2, 0], vec![0, 2], vec![1, 3], -1),
+            (vec![3], vec![2, 0, 1], vec![0, 1, 2], vec![3], -1),
+        ] {
+            let vertex = CffVertex {
+                nodes: BTreeSet::from([0, 2]),
+                outgoing: outgoing
+                    .into_iter()
+                    .map(|edge_id| EdgeRef {
+                        edge_id,
+                        edge_type: EdgeType::Virtual,
+                    })
+                    .collect(),
+                incoming: incoming
+                    .into_iter()
+                    .map(|edge_id| EdgeRef {
+                        edge_id,
+                        edge_type: EdgeType::Virtual,
+                    })
+                    .collect(),
+            };
+            let (surface, sign) = cff_surface_for_vertex_thermal(&parsed, &vertex);
+            assert_eq!(sign, expected_sign);
+            let expected = LinearEnergyExpr {
+                internal_terms: positive
+                    .into_iter()
+                    .map(|edge| (EdgeIndex(edge), Rational::from(1)))
+                    .chain(
+                        negative
+                            .into_iter()
+                            .map(|edge| (EdgeIndex(edge), Rational::from(-1))),
+                    )
+                    .collect(),
+                external_terms: vec![
+                    (EdgeIndex(0), Rational::from(expected_sign)),
+                    (EdgeIndex(2), Rational::from(expected_sign)),
+                ],
+                ..LinearEnergyExpr::zero()
+            };
+            assert_eq!(surface, expected.canonical());
+        }
+    }
 
     #[test]
     fn thermal_detachable_cycles_respect_attachment_vertices() {

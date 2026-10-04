@@ -1949,6 +1949,7 @@ impl CrossSectionGraph {
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
             )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
             .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
             settings,
         )?;
@@ -3984,6 +3985,7 @@ impl CrossSectionGraph {
                     &settings.orientation_pattern,
                     settings.explicit_orientation_sum_only,
                 )
+                .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
                 .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
                 settings,
             )?

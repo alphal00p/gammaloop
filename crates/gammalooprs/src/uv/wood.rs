@@ -39,11 +39,7 @@ impl CutWoods {
 
             let mut spinneys =
                 graph.classified_spinneys(&subgraph, &settings.uv, &graph.loop_momentum_basis);
-            if settings.medium.vacuum_subtraction {
-                // Completed thermal weights already carry (1 - V). The full-observable
-                // UV operation vanishes, so omit it before either 4D or 3D computation.
-                graph.remove_full_observable_spinney(&mut spinneys);
-            }
+            graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;

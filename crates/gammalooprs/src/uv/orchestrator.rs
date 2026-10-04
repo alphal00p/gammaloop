@@ -11,7 +11,7 @@ use vakint::Vakint;
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
     numerator::aind::Aind,
-    settings::global::{GenerationSettings, MediumMode},
+    settings::global::GenerationSettings,
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, local_3d::Localizer},
@@ -38,13 +38,7 @@ impl UVOrchestrator {
             ));
         }
 
-        if settings.uv.local_uv_cts_from_expanded_4d_integrands
-            && (settings.medium.mode != MediumMode::Vacuum || settings.medium.vacuum_subtraction)
-        {
-            return Err(eyre!(
-                "thermal modes and vacuum subtraction require local UV subtraction at the 3D level"
-            ));
-        }
+        settings.validate_medium_uv_compatibility()?;
 
         let result = match self {
             Self::LegacyDagForest => {

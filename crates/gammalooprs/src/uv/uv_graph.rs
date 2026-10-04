@@ -25,6 +25,7 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
+    settings::global::MediumSettings,
     utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
@@ -181,10 +182,19 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .collect()
     }
 
-    fn remove_full_observable_spinney<E, V, H>(&self, spinneys: &mut Vec<Spinney>)
-    where
+    fn remove_full_observable_spinney<E, V, H>(
+        &self,
+        spinneys: &mut Vec<Spinney>,
+        medium: &MediumSettings,
+    ) where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
+        if !medium.vacuum_subtraction {
+            return;
+        }
+
+        // Completed thermal weights already carry (1 - V). The full-observable
+        // UV operation vanishes, so omit it before either 4D or 3D computation.
         let full_observable =
             InternalSubGraph::cleaned_filter_pessimist(self.as_ref().full_filter(), self.as_ref());
         spinneys

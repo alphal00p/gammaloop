@@ -3,13 +3,11 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::ThreeMomentum,
     settings::runtime::{HFunction, HFunctionSettings},
-    utils::{
-        ArbPrec, h, h_dual,
-        symbols::{GS, ThermalDistributionLimit},
-    },
+    utils::{ArbPrec, h, h_dual, symbols::GS},
     uv::uv_graph::UVE,
 };
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::MediumMode;
 
 #[test]
 fn fermi_surface_derivatives_include_profile_and_spatial_jacobian() -> Result<()> {
@@ -154,7 +152,7 @@ fn fermi_surface_matches_integrated_finite_temperature_derivatives() -> Result<(
                 derivative_order,
                 Atom::num(1),
                 Atom::num(1),
-                ThermalDistributionLimit::Default,
+                MediumMode::ThermodynamicEquilibrium,
             )
             .unwrap();
         let chemical_potential = graph[EdgeIndex(1)].chemical_potential_atom().unwrap();

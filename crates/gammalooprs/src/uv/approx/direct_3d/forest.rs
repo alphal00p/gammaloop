@@ -119,12 +119,13 @@ impl Direct3dCts {
         let production = localizer.orientation.root_expression().ok_or_else(|| {
             eyre!("the direct local-3D root requires its stored production CFF expression")
         })?;
-        let cff = graph.cff_from_production_expression(
-            production,
-            localizer.cutset,
-            localizer.orientation.orientation_pattern,
-            localizer.orientation.cff_options()?.vacuum_subtraction,
-        )?;
+        let cff = graph
+            .cff_from_production_expression(
+                production,
+                localizer.cutset,
+                localizer.orientation.orientation_pattern,
+            )?
+            .with_vacuum_subtraction(localizer.orientation.vacuum_subtraction);
         localizer
             .orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);

@@ -243,7 +243,6 @@ mod tests {
                 ParamBuilderGraph, ThermalDistributionReplacement,
             },
             settings::global::OrientationPattern,
-            utils::symbols::ThermalDistributionLimit,
         };
         test_initialise()?;
         let mut graph: Graph = dot!(digraph G {
@@ -256,23 +255,23 @@ mod tests {
         ] {
             let mut options = graph.denominator_only_cff_3d_expression_options();
             options.medium_mode = medium;
-            options.vacuum_subtraction = true;
             let production =
                 graph.generate_3d_expression_for_integrand(&[], &None, &options, None)?;
             let cutset = CutSet::empty(graph.n_hedges());
             let pattern = OrientationPattern::default();
             let raw = graph
-                .cff_from_production_expression(&production, &cutset, &pattern, false)?
+                .cff_from_production_expression(&production, &cutset, &pattern)?
                 .expression_with_selectors();
             let actual = graph
-                .cff_from_production_expression(&production, &cutset, &pattern, true)?
+                .cff_from_production_expression(&production, &cutset, &pattern)?
+                .with_vacuum_subtraction(true)
                 .expression_with_selectors();
             assert_eq!(raw.iter().count(), actual.iter().count());
             for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
                 assert_eq!(raw_key, actual_key);
                 let vacuum = graph.make_thermal_distributions_explicit(
                     raw,
-                    ThermalDistributionLimit::Vacuum,
+                    MediumMode::Vacuum,
                     graph.iter_edges().map(|(_, edge, _)| edge),
                     ThermalDistributionReplacement::All,
                 )?;
@@ -287,12 +286,12 @@ mod tests {
             let full = graph.full_filter();
             let unit = graph
                 .cff(&full, &cutset, &pattern, &options, None)?
+                .with_vacuum_subtraction(true)
                 .expression_with_selectors();
             assert!(
                 unit.iter().all(|(_, atom)| atom.is_zero()),
                 "the fully contracted cograph must subtract its empty weight"
             );
-            options.vacuum_subtraction = false;
             assert!(
                 !graph
                     .cff(&full, &cutset, &pattern, &options, None)?

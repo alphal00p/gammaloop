@@ -79,8 +79,10 @@ impl ThreeDimensionalRepSymbols {
     }
 }
 
-// Register this independently: GammaLoop must not initialize the model-free
+// Register these independently: GammaLoop must not initialize the model-free
 // symbol table before spenso has installed its concrete-index attributes.
+pub static THERMAL_DISTRIBUTION: LazyLock<Symbol> = LazyLock::new(|| symbol!("gammalooprs::N"));
+
 pub static THERMAL_WEIGHT_WRAPPER: LazyLock<Symbol> = LazyLock::new(|| {
     symbol!(
         "gammalooprs::thermal_weight",
@@ -109,7 +111,7 @@ pub static S: LazyLock<ThreeDimensionalRepSymbols> = LazyLock::new(|| ThreeDimen
     affine_parameter: symbol!("three_dimensional_reps::a"),
     coefficient: symbol!("three_dimensional_reps::c"),
     loop_energy: symbol!("three_dimensional_reps::ell0"),
-    thermal_distribution: symbol!("gammalooprs::N"),
+    thermal_distribution: *THERMAL_DISTRIBUTION,
     thermal_weight_wrapper: *THERMAL_WEIGHT_WRAPPER,
 });
 

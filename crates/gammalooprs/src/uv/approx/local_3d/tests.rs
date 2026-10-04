@@ -260,7 +260,6 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
             &ordinary,
             &CutSet::empty(graph.n_hedges()),
             &OrientationPattern::default(),
-            false,
         )?;
         assert_eq!(
             ordinary_cff.production_prefactor_factor(),
@@ -441,7 +440,7 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
     )?;
     let pattern = OrientationPattern::default();
     let cutset = CutSet::empty(graph.n_hedges());
-    let raw_root = graph.cff_from_production_expression(&production, &cutset, &pattern, false)?;
+    let raw_root = graph.cff_from_production_expression(&production, &cutset, &pattern)?;
     let production_prefactor = Atom::num(raw_root.production_prefactor_factor());
     let fourddenoms = GS.wrap_tree_denoms(
         graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),

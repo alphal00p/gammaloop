@@ -88,10 +88,6 @@ pub struct Generate3DExpressionOptions {
     pub representation: RepresentationMode,
     #[serde(default)]
     pub medium_mode: crate::MediumMode,
-    /// Subtract the vacuum weight inside each wrapper at GammaLoop's CFF-to-integrand
-    /// boundary. Generation and component products retain their raw typed weights.
-    #[serde(default)]
-    pub vacuum_subtraction: bool,
     #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
     /// `None` keeps the legacy numerator class, which is affine in every EMR
@@ -112,7 +108,6 @@ impl Default for Generate3DExpressionOptions {
         Self {
             representation: RepresentationMode::Cff,
             medium_mode: crate::MediumMode::Vacuum,
-            vacuum_subtraction: false,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
@@ -1038,43 +1033,10 @@ fn lift_expression_to_preserved_graph(
         let variants = orientation
             .variants
             .iter()
-            .map(|variant| crate::expression::CFFVariant {
-                thermal_weight: {
-                    let mut weight = variant.thermal_weight.clone();
-                    weight.remap_internal_edges(&active_edge_map);
-                    weight
-                },
-                origin: variant.origin.clone(),
-                prefactor: variant.prefactor.clone(),
-                half_edges: variant
-                    .half_edges
-                    .iter()
-                    .map(|edge_id| EdgeIndex(active_edge_map[&edge_id.0]))
-                    .collect(),
-                denominator_edges: variant
-                    .denominator_edges
-                    .iter()
-                    .map(|edge_id| EdgeIndex(active_edge_map[&edge_id.0]))
-                    .collect(),
-                denominator_surface_signs: variant
-                    .denominator_surface_signs
-                    .iter()
-                    .map(|(surface_id, sign)| (map_surface_id(*surface_id, &surface_map), *sign))
-                    .collect(),
-                denominator_edge_support_signs: map_edge_support_signs(
-                    &variant.denominator_edge_support_signs,
-                    &active_edge_map,
-                ),
-                uniform_scale_power: variant.uniform_scale_power,
-                numerator_surfaces: variant
-                    .numerator_surfaces
-                    .iter()
-                    .map(|surface_id| map_surface_id(*surface_id, &surface_map))
-                    .collect(),
-                denominator: variant
-                    .denominator
-                    .clone()
-                    .map(|surface_id| map_surface_id(surface_id, &surface_map)),
+            .cloned()
+            .map(|mut variant| {
+                variant.remap_indices(&active_edge_map, |id| map_surface_id(id, &surface_map));
+                variant
             })
             .collect::<Vec<_>>();
 
@@ -1415,7 +1377,6 @@ fn project_component_options(
     Ok(Generate3DExpressionOptions {
         representation: options.representation,
         medium_mode: options.medium_mode,
-        vacuum_subtraction: options.vacuum_subtraction,
         cff_generation_context: options.cff_generation_context,
         energy_degree_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
@@ -4301,24 +4262,6 @@ fn map_surface_id(
         HybridSurfaceID::Unit | HybridSurfaceID::Infinite => surface_id,
         HybridSurfaceID::Esurface(_) | HybridSurfaceID::Hsurface(_) => surface_id,
     }
-}
-
-fn map_edge_support_signs(
-    signs: &BTreeMap<Vec<EdgeIndex>, i64>,
-    edge_map: &BTreeMap<usize, usize>,
-) -> BTreeMap<Vec<EdgeIndex>, i64> {
-    signs
-        .iter()
-        .map(|(support_edges, sign)| {
-            let mut mapped_support = support_edges
-                .iter()
-                .map(|edge_id| EdgeIndex(edge_map[&edge_id.0]))
-                .collect::<Vec<_>>();
-            mapped_support.sort_unstable();
-            mapped_support.dedup();
-            (mapped_support, *sign)
-        })
-        .collect()
 }
 
 fn union_nodes(parent: &mut BTreeMap<usize, usize>, lhs: usize, rhs: usize) {
@@ -9746,36 +9689,78 @@ mod cff_tests {
     }
 
     #[test]
-    fn cff_preserved_edge_embedding_remaps_component_metadata() {
+    fn cff_preserved_edge_embedding_remaps_component_metadata_and_thermal_weights() {
         let mut parsed = crate::graph_io::test_graphs::triangle_with_external_tree_graph();
         parsed.internal_edges.swap(0, 3);
         for (edge_id, edge) in parsed.internal_edges.iter_mut().enumerate() {
             edge.edge_id = edge_id;
         }
 
-        let generated = generate_3d_expression(
-            &parsed,
-            &Generate3DExpressionOptions {
-                preserve_internal_edges_as_four_d_denominators: vec![0],
-                ..Default::default()
-            },
-        )
-        .unwrap();
+        for medium_mode in [
+            crate::MediumMode::Vacuum,
+            crate::MediumMode::ThermodynamicEquilibrium,
+            crate::MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode,
+                    preserve_internal_edges_as_four_d_denominators: vec![0],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
-        assert_eq!(
-            generated.energy_factor_components,
-            vec![CffEnergyFactorComponent {
-                internal_edge_ids: vec![1, 2, 3],
-                ownership: generated.energy_factor_ownership,
-                denominator_only_global_prefactor_sign: generated
-                    .denominator_only_global_prefactor_sign,
-                core_global_prefactor_sign: generated.core_global_prefactor_sign,
-            }]
-        );
-        assert_eq!(
-            generated.expression.residual_denominators[0].edge_id,
-            EdgeIndex(0)
-        );
+            assert_eq!(
+                generated.energy_factor_components,
+                vec![CffEnergyFactorComponent {
+                    internal_edge_ids: vec![1, 2, 3],
+                    ownership: generated.energy_factor_ownership,
+                    denominator_only_global_prefactor_sign: generated
+                        .denominator_only_global_prefactor_sign,
+                    core_global_prefactor_sign: generated.core_global_prefactor_sign,
+                }]
+            );
+            assert_eq!(
+                generated.expression.residual_denominators[0].edge_id,
+                EdgeIndex(0)
+            );
+            let thermal_edges = generated
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .flat_map(|variant| {
+                    variant
+                        .thermal_weight
+                        .distributions
+                        .iter()
+                        .map(|factor| factor.edge_id)
+                        .chain(
+                            variant
+                                .thermal_weight
+                                .numerators
+                                .iter()
+                                .flat_map(|numerator| {
+                                    numerator
+                                        .positive_energies
+                                        .iter()
+                                        .chain(&numerator.negative_energies)
+                                        .copied()
+                                }),
+                        )
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                thermal_edges,
+                if medium_mode == crate::MediumMode::Vacuum {
+                    BTreeSet::new()
+                } else {
+                    BTreeSet::from([EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)])
+                },
+                "{medium_mode:?}"
+            );
+        }
     }
 
     #[cfg(feature = "eval")]
@@ -11023,7 +11008,6 @@ mod cff_tests {
             &parsed,
             &Generate3DExpressionOptions {
                 medium_mode: crate::MediumMode::Vacuum,
-                vacuum_subtraction: false,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),

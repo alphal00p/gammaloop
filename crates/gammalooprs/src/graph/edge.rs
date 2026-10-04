@@ -118,6 +118,16 @@ impl PossibleParticle {
             PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
         }
     }
+
+    pub(crate) fn chemical_potential_atom(&self) -> Option<Atom> {
+        self.particle()
+            .and_then(|particle| particle.chemical_potential)
+            .map(|mu| {
+                Atom::var(mu.0.0)
+                    .replace(UFOSymbol::zero().0)
+                    .with(Atom::Zero)
+            })
+    }
     // pub fn just_mass(mass:Atom,)
 
     pub fn zero() -> Self {
@@ -292,14 +302,7 @@ impl UVE for Edge {
     }
 
     fn chemical_potential_atom(&self) -> Option<Atom> {
-        self.particle
-            .particle()
-            .and_then(|particle| particle.chemical_potential)
-            .map(|mu| {
-                Atom::var(mu.0.0)
-                    .replace(UFOSymbol::zero().0)
-                    .with(Atom::Zero)
-            })
+        self.particle.chemical_potential_atom()
     }
 }
 
@@ -481,14 +484,7 @@ impl UVE for ParseEdge {
     }
 
     fn chemical_potential_atom(&self) -> Option<Atom> {
-        self.particle
-            .particle()
-            .and_then(|particle| particle.chemical_potential)
-            .map(|mu| {
-                Atom::var(mu.0.0)
-                    .replace(UFOSymbol::zero().0)
-                    .with(Atom::Zero)
-            })
+        self.particle.chemical_potential_atom()
     }
 }
 

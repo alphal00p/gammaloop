@@ -1442,7 +1442,8 @@ impl AmplitudeGraph {
                 &cff_options,
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
-            ),
+            )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction),
             settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -2206,7 +2207,8 @@ impl AmplitudeGraph {
                 &cff_options,
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
-            ),
+            )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction),
             settings,
         )?;
 

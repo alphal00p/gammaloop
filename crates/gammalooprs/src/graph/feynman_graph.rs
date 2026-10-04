@@ -21,6 +21,7 @@ use symbolica::{
     id::Replacement,
     transcendental::{coth, csch, sech, tanh},
 };
+use three_dimensional_reps::{MediumMode, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -31,10 +32,7 @@ use crate::{
     momentum::signature::{ExternalSignature, SignatureLike},
     momentum::{PolDef, SignOrZero},
     numerator::{graph::ReversibleEdge, ufo::UFO},
-    utils::{
-        F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index,
-        symbols::ThermalDistributionLimit,
-    },
+    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
 
@@ -191,7 +189,7 @@ where
         derivative_order: usize,
         thermal_sign: Atom,
         orientation_sign: Atom,
-        limit: ThermalDistributionLimit,
+        limit: MediumMode,
     ) -> Option<Atom> {
         self.1.explicit_thermal_distribution_atom(
             edge,
@@ -259,16 +257,21 @@ where
         derivative_order: usize,
         thermal_sign: Atom,
         orientation_sign: Atom,
-        limit: ThermalDistributionLimit,
+        limit: MediumMode,
     ) -> Option<Atom> {
+        if limit == MediumMode::Vacuum {
+            return Some(ThermalDistributionFactor::vacuum_atom(
+                derivative_order,
+                thermal_sign,
+            ));
+        }
+        let chemical_potential = self[edge].chemical_potential_atom();
+        let shifted_ose = match &chemical_potential {
+            Some(mu) => ose_atom_from_index(edge) - &orientation_sign * mu,
+            None => ose_atom_from_index(edge),
+        };
         match limit {
-            ThermalDistributionLimit::Default => {
-                let chemical_potential = self[edge].chemical_potential_atom();
-                let shifted_ose = match chemical_potential {
-                    Some(mu) => ose_atom_from_index(edge) - &orientation_sign * mu,
-                    None => ose_atom_from_index(edge),
-                };
-
+            MediumMode::ThermodynamicEquilibrium => {
                 let beta = Atom::var(GS.inverse_temperature);
                 let arg = beta.clone() * shifted_ose / Atom::num(2);
                 match (self[edge].is_fermion(), derivative_order) {
@@ -300,28 +303,21 @@ where
                     }
                 }
             }
-            ThermalDistributionLimit::ZeroTemperature => {
-                let chemical_potential = self[edge].chemical_potential_atom();
-                let shifted_ose = match chemical_potential {
-                    Some(mu) => ose_atom_from_index(edge) - orientation_sign * mu,
-                    None => ose_atom_from_index(edge),
-                };
-                let chemical_potential = self[edge].chemical_potential_atom();
+            MediumMode::ZeroTemperatureEquilibrium => {
                 match (chemical_potential, derivative_order) {
                     (Some(_), 0) => {
                         Some(thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose))
                     }
-                    (None, 0) => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
-                    (None, _) => Some(Atom::num(0)),
+                    (None, _) => Some(ThermalDistributionFactor::vacuum_atom(
+                        derivative_order,
+                        thermal_sign,
+                    )),
                     // Zero-temperature derivatives are distributions, consumed by
                     // production Fermi-surface localization rather than a pointwise map.
                     _ => None,
                 }
             }
-            ThermalDistributionLimit::Vacuum => match derivative_order {
-                0 => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
-                _ => Some(Atom::num(0)),
-            },
+            MediumMode::Vacuum => unreachable!("vacuum handled before medium parameters"),
         }
     }
 
@@ -413,7 +409,7 @@ impl ParamBuilderGraph for Graph {
         derivative_order: usize,
         thermal_sign: Atom,
         orientation_sign: Atom,
-        limit: ThermalDistributionLimit,
+        limit: MediumMode,
     ) -> Option<Atom> {
         self.underlying.explicit_thermal_distribution_atom(
             edge,
@@ -1111,6 +1107,59 @@ mod tests {
     }
 
     #[test]
+    fn zero_temperature_distinguishes_absent_and_zero_chemical_potential() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal {
+            node [num=1]; edge [num=1 particle="d"];
+            A -> B; B -> A;
+        })
+        .unwrap();
+        let edge = EdgeIndex(0);
+        let mut particle = graph[edge].particle().unwrap();
+        for chemical_potential in [
+            None,
+            Some(crate::model::ParameterName(UFOSymbol::zero())),
+            particle.chemical_potential,
+        ] {
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            graph.underlying[edge].particle = particle.clone().into();
+            for thermal_sign in [-1, 1] {
+                for order in 0..=3 {
+                    let vacuum = graph
+                        .explicit_thermal_distribution_atom(
+                            edge,
+                            order,
+                            Atom::num(thermal_sign),
+                            GS.sign(edge),
+                            MediumMode::Vacuum,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        vacuum,
+                        Atom::num(if order == 0 && thermal_sign == 1 {
+                            1
+                        } else {
+                            0
+                        })
+                    );
+                    let zero_temperature = graph.explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        Atom::num(thermal_sign),
+                        GS.sign(edge),
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    );
+                    if chemical_potential.is_none() {
+                        assert_eq!(zero_temperature, Some(vacuum));
+                    } else {
+                        assert_eq!(zero_temperature.is_some(), order == 0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn thermal_distribution_bodies_are_energy_derivatives() {
         test_initialise().unwrap();
         let graph: Graph = dot!(digraph thermal {
@@ -1135,7 +1184,7 @@ mod tests {
                         order,
                         thermal_sign.clone(),
                         GS.sign(edge),
-                        ThermalDistributionLimit::Default,
+                        MediumMode::ThermodynamicEquilibrium,
                     )
                     .unwrap()
                     .replace(ose_atom_from_index(edge))
@@ -1184,7 +1233,7 @@ mod tests {
                         order,
                         thermal_sign.clone(),
                         orientation.clone(),
-                        ThermalDistributionLimit::Default,
+                        MediumMode::ThermodynamicEquilibrium,
                     )
                     .unwrap()
                     .replace(ose_atom_from_index(edge))

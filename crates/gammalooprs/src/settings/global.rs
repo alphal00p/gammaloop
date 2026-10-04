@@ -99,13 +99,7 @@ impl GenerationSettings {
             ));
         }
 
-        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
-            && self.uv.local_uv_cts_from_expanded_4d_integrands
-        {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
-            ));
-        }
+        self.validate_medium_uv_compatibility()?;
 
         if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
             return Err(eyre!(
@@ -116,6 +110,18 @@ impl GenerationSettings {
         if self.explicit_orientation_sum_only && self.orientation_pattern.pat.is_some() {
             return Err(eyre!(
                 "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn validate_medium_uv_compatibility(&self) -> EyreResult<()> {
+        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+            && self.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
             ));
         }
 

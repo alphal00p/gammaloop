@@ -1013,6 +1013,7 @@ impl Process {
                         &generation_settings.orientation_pattern,
                         generation_settings.explicit_orientation_sum_only,
                     )
+                    .with_vacuum_subtraction(generation_settings.medium.vacuum_subtraction)
                 });
             let export = integrand.export_uv_forest_graph(
                 graph_id,
@@ -1541,7 +1542,6 @@ mod tests {
                                     source,
                                     &crate::graph::cuts::CutSet::empty(graph.n_hedges()),
                                     &crate::settings::global::OrientationPattern::default(),
-                                    false,
                                 )?
                                 .expression_with_selectors();
                             Ok(expressions

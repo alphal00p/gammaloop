@@ -59,6 +59,14 @@ pub struct ThermalDistributionFactor {
 }
 
 impl ThermalDistributionFactor {
+    /// The vacuum occupation is independent of energy, including its derivatives.
+    pub fn vacuum_atom(derivative_order: usize, thermal_sign: Atom) -> Atom {
+        match derivative_order {
+            0 => (Atom::one() + thermal_sign) / Atom::num(2),
+            _ => Atom::Zero,
+        }
+    }
+
     pub fn to_atom(self, is_finite_temperature: bool) -> Atom {
         // Keep the chemical-potential orientation visible to selection before
         // evaluator construction expands the distribution body.
@@ -88,6 +96,8 @@ impl ThermalNumerator {
     ) -> (Self, i32) {
         positive_energies.sort();
         negative_energies.sort();
+        // Canonicalize with the larger positive side, using the smaller edge
+        // IDs as the tie break when the two sides have equal size.
         let swap = match negative_energies.len().cmp(&positive_energies.len()) {
             std::cmp::Ordering::Greater => true,
             std::cmp::Ordering::Less => false,
@@ -236,7 +246,7 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
                     sign,
                     orientation
                 ))
-                .with((Atom::one() + sign) / Atom::num(2))
+                .with(ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign)))
                 .replace(function!(
                     S.thermal_distribution,
                     edge,
@@ -245,7 +255,8 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
                     sign,
                     orientation
                 ))
-                .with(Atom::Zero);
+                // All remaining factors have positive derivative order.
+                .with(ThermalDistributionFactor::vacuum_atom(1, Atom::var(sign)));
             function!(S.thermal_weight_wrapper, weight - vacuum)
         })]
 });

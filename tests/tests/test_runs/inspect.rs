@@ -9,6 +9,30 @@ use gammalooprs::settings::runtime::{
 };
 use gammalooprs::uv::profile::UVLimitSelection;
 
+// Targets include the loop-dependent CFF normalization phase i^L.
+fn assert_inspect(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process_id: usize,
+    graph_id: usize,
+    point: &[f64],
+    target: Complex<f64>,
+    context: &str,
+) -> Result<()> {
+    let (_, inspect) = Inspect {
+        process: Some(ProcessRef::Id(process_id)),
+        graph_id: Some(graph_id),
+        integrand_name: Some("default".to_string()),
+        point: point.to_vec(),
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(cli)?;
+
+    assert_complex_approx_eq(inspect, target, context);
+    Ok(())
+}
+
 #[test]
 // TODO: extend test matrix once performance is better
 fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
@@ -1608,30 +1632,6 @@ fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
 
 #[test]
 fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
-    // CFF normalization contributes the loop-dependent phase i^L.
-    fn assert_inspect(
-        cli: &mut gammaloop_integration_tests::CLIState,
-        process_id: usize,
-        graph_id: usize,
-        point: &[f64],
-        target: Complex<f64>,
-        context: &str,
-    ) -> Result<()> {
-        let (_, inspect) = Inspect {
-            process: Some(ProcessRef::Id(process_id)),
-            graph_id: Some(graph_id),
-            integrand_name: Some("default".to_string()),
-            point: point.to_vec(),
-            momentum_space: true,
-            use_arb_prec: true,
-            ..Default::default()
-        }
-        .run(cli)?;
-
-        assert_complex_approx_eq(inspect, target, context);
-        Ok(())
-    }
-
     let mut cli = get_test_cli(
         Some("thermal_vacuum_2l_3l_inspect.toml".into()),
         get_tests_workspace_path().join("thermal_vacuum_2l_3l_inspect"),
@@ -1756,30 +1756,6 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
 
 #[test]
 fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
-    // CFF normalization contributes the loop-dependent phase i^L.
-    fn assert_inspect(
-        cli: &mut gammaloop_integration_tests::CLIState,
-        process_id: usize,
-        graph_id: usize,
-        point: &[f64],
-        target: Complex<f64>,
-        context: &str,
-    ) -> Result<()> {
-        let (_, inspect) = Inspect {
-            process: Some(ProcessRef::Id(process_id)),
-            graph_id: Some(graph_id),
-            integrand_name: Some("default".to_string()),
-            point: point.to_vec(),
-            momentum_space: true,
-            use_arb_prec: true,
-            ..Default::default()
-        }
-        .run(cli)?;
-
-        assert_complex_approx_eq(inspect, target, context);
-        Ok(())
-    }
-
     let mut cli = get_test_cli(
         Some("cold_dense_vacuum_2l_3l_inspect.toml".into()),
         get_tests_workspace_path().join("cold_dense_vacuum_2l_3l_inspect"),
@@ -2143,29 +2119,6 @@ mod slow {
 
     #[test]
     fn thermal_vacuum_4l_inspect() -> Result<()> {
-        fn assert_inspect(
-            cli: &mut gammaloop_integration_tests::CLIState,
-            process_id: usize,
-            graph_id: usize,
-            point: &[f64],
-            target: Complex<f64>,
-            context: &str,
-        ) -> Result<()> {
-            let (_, inspect) = Inspect {
-                process: Some(ProcessRef::Id(process_id)),
-                graph_id: Some(graph_id),
-                integrand_name: Some("default".to_string()),
-                point: point.to_vec(),
-                momentum_space: true,
-                use_arb_prec: true,
-                ..Default::default()
-            }
-            .run(cli)?;
-
-            assert_complex_approx_eq(inspect, target, context);
-            Ok(())
-        }
-
         let mut cli = get_test_cli(
             Some("thermal_vacuum_4l_inspect.toml".into()),
             get_tests_workspace_path().join("thermal_vacuum_4l_inspect"),

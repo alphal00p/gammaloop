@@ -26,6 +26,7 @@ use symbolica::prelude::{
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use three_dimensional_reps::MediumMode;
 use tracing::debug;
 use tracing::warn;
 
@@ -42,8 +43,7 @@ use crate::{
     numerator::ParsingNet,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
-        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, symbols::ThermalDistributionLimit,
-        tracing::StatusRenderable,
+        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
 
@@ -165,12 +165,12 @@ pub trait ParamBuilderGraph {
         derivative_order: usize,
         thermal_sign: Atom,
         orientation_sign: Atom,
-        limit: ThermalDistributionLimit,
+        limit: MediumMode,
     ) -> Option<Atom>;
     fn make_thermal_distributions_explicit(
         &self,
         atom: &Atom,
-        limit: ThermalDistributionLimit,
+        limit: MediumMode,
         edges: impl IntoIterator<Item = EdgeIndex>,
         replacement_mode: ThermalDistributionReplacement,
     ) -> Result<Atom> {
@@ -1365,12 +1365,12 @@ impl<T: FloatLike> ParamBuilder<T> {
         let max_thermal_derivative_order = thermal_edges.len().saturating_sub(1).max(2);
         for e in thermal_edges {
             for limit in [
-                ThermalDistributionLimit::Default,
-                ThermalDistributionLimit::ZeroTemperature,
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
             ] {
-                let temperature_flag = limit.temperature_flag();
+                let temperature_flag = Atom::num(i64::from(limit.is_finite_temperature()));
                 let max_derivative_order = match limit {
-                    ThermalDistributionLimit::Default => max_thermal_derivative_order,
+                    MediumMode::ThermodynamicEquilibrium => max_thermal_derivative_order,
                     _ => 2,
                 };
                 for derivative_order in 0..=max_derivative_order {
@@ -2001,11 +2001,11 @@ mod tests {
                 input.push(1.5);
             }
             for limit in [
-                ThermalDistributionLimit::Default,
-                ThermalDistributionLimit::ZeroTemperature,
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
             ] {
                 let orders = match limit {
-                    ThermalDistributionLimit::Default => 0..=4,
+                    MediumMode::ThermodynamicEquilibrium => 0..=4,
                     _ => 0..=0,
                 };
                 for order in orders {
@@ -2015,7 +2015,7 @@ mod tests {
                                 GS.thermal_distribution(
                                     0,
                                     order,
-                                    limit.temperature_flag(),
+                                    Atom::num(i64::from(limit.is_finite_temperature())),
                                     thermal_sign,
                                     orientation_sign,
                                 ),
@@ -2066,7 +2066,7 @@ mod tests {
         let partial = graph
             .make_thermal_distributions_explicit(
                 &weight,
-                ThermalDistributionLimit::Vacuum,
+                MediumMode::Vacuum,
                 [EdgeIndex(0)],
                 ThermalDistributionReplacement::All,
             )
@@ -2082,7 +2082,7 @@ mod tests {
             graph
                 .make_thermal_distributions_explicit(
                     &partial,
-                    ThermalDistributionLimit::Vacuum,
+                    MediumMode::Vacuum,
                     [EdgeIndex(1)],
                     ThermalDistributionReplacement::All,
                 )

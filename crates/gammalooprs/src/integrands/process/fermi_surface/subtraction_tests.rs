@@ -18,7 +18,7 @@ use crate::{
         global::{GenerationSettings, MediumMode},
         runtime::HFunction,
     },
-    utils::{F, GS, load_generic_model, symbols::ThermalDistributionLimit},
+    utils::{F, GS, load_generic_model},
 };
 
 use super::FermiSurfaceSector;
@@ -99,7 +99,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
     let raw = &generated[0];
     let vacuum = original.graph.make_thermal_distributions_explicit(
         raw,
-        ThermalDistributionLimit::Vacuum,
+        MediumMode::Vacuum,
         original.graph.iter_edge_ids(),
         ThermalDistributionReplacement::All,
     )?;

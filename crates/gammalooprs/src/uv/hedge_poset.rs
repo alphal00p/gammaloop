@@ -182,11 +182,7 @@ impl Wood {
                 &graph.loop_momentum_basis,
             ));
         }
-        if settings.medium.vacuum_subtraction {
-            // Completed thermal weights already carry (1 - V). The full-observable
-            // UV operation vanishes, so omit it before either 4D or 3D computation.
-            graph.remove_full_observable_spinney(&mut spinneys);
-        }
+        graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
 
         Self::from_spinneys(spinneys, graph, cuts, &settings.uv)
     }
@@ -1644,7 +1640,7 @@ mod tests {
                 &settings.uv,
                 &graph.loop_momentum_basis,
             );
-            graph.remove_full_observable_spinney(&mut spinneys);
+            graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
             assert!(spinneys.iter().all(|spinney| spinney.subgraph != full));
         }
         Ok(())
@@ -1657,7 +1653,6 @@ mod tests {
                 ParamBuilderGraph, ThermalDistributionReplacement,
             },
             settings::global::MediumMode,
-            utils::symbols::ThermalDistributionLimit,
         };
         test_initialise()?;
         let graphs: Vec<Graph> = dot!(
@@ -1686,21 +1681,19 @@ mod tests {
                     settings.uv.generate_integrated = generate_integrated;
                     let mut graph = graph.clone();
                     let options = graph.production_cff_3d_expression_options(&settings)?;
-                    assert!(options.vacuum_subtraction);
                     let contract =
                         graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
                     let production = graph
                         .generate_3d_expression_for_integrand(&contract, &None, &options, None)?;
                     let mut results = Vec::new();
                     for early_subtraction in [false, true] {
-                        let mut options = options.clone();
-                        options.vacuum_subtraction = early_subtraction;
                         let projection = OrientationProjection::exact_expression(
                             &production,
                             &options,
                             &settings.orientation_pattern,
                             true,
-                        );
+                        )
+                        .with_vacuum_subtraction(early_subtraction);
                         // Both routes use precisely the same proper forests. Only the
                         // boundary where the full vacuum projection acts is different.
                         let mut forests =
@@ -1723,7 +1716,7 @@ mod tests {
                             assert_eq!(late_key, early_key);
                             let vacuum = graph.make_thermal_distributions_explicit(
                                 raw,
-                                ThermalDistributionLimit::Vacuum,
+                                MediumMode::Vacuum,
                                 graph.iter_edges().map(|(_, edge, _)| edge),
                                 ThermalDistributionReplacement::All,
                             )?;

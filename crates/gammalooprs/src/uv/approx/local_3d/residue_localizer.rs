@@ -85,7 +85,6 @@ impl<'a> Localizer<'a> {
                 root_expression,
                 self.cutset,
                 orientation_pattern,
-                options.vacuum_subtraction,
             )?
         } else {
             let capacity_started = std::time::Instant::now();
@@ -122,7 +121,10 @@ impl<'a> Localizer<'a> {
         };
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
-        Ok((cff, contract_subgraph))
+        Ok((
+            cff.with_vacuum_subtraction(self.orientation.vacuum_subtraction),
+            contract_subgraph,
+        ))
     }
 
     #[cfg(test)]
@@ -556,13 +558,15 @@ impl<'a> Localizer<'a> {
             &canonization,
             &initial_cut_edges,
         )?;
-        let cff = graph.cff_from_generated_expression(
-            generated,
-            &contract_subgraph,
-            self.cutset,
-            &OrientationPattern::default(),
-            &options,
-        )?;
+        let cff = graph
+            .cff_from_generated_expression(
+                generated,
+                &contract_subgraph,
+                self.cutset,
+                &OrientationPattern::default(),
+                &options,
+            )?
+            .with_vacuum_subtraction(self.orientation.vacuum_subtraction);
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         let projected = self.project_cff(graph, to_contract, cff, contract_subgraph)?;
@@ -605,12 +609,7 @@ impl<'a> Localizer<'a> {
             let unfiltered = OrientationPattern::default();
             Some(
                 graph
-                    .cff_from_production_expression(
-                        root_expression,
-                        self.cutset,
-                        &unfiltered,
-                        self.orientation.cff_options()?.vacuum_subtraction,
-                    )?
+                    .cff_from_production_expression(root_expression, self.cutset, &unfiltered)?
                     .terms
                     .into_iter()
                     .map(|(index, term)| {

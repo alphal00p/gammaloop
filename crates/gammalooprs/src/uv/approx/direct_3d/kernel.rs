@@ -13,12 +13,13 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use three_dimensional_reps::MediumMode;
 
 use crate::{
     debug_tags,
     graph::{LMBext, LoopMomentumBasis},
     integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
-    utils::{GS, W_, symbols::ThermalDistributionLimit},
+    utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
@@ -269,7 +270,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     let integrands = integrands.map_expressions(|atom| {
         ctx.graph.make_thermal_distributions_explicit(
             atom,
-            ThermalDistributionLimit::Vacuum,
+            MediumMode::Vacuum,
             ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
             ThermalDistributionReplacement::All,
         )
@@ -286,15 +287,19 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         branch_count = integrands.iter_keys().count(),
         "Prepared a shared numerator before its Taylor kernel"
     );
-    match current.renormalization_scheme() {
+    let scheme = current.renormalization_scheme();
+    match scheme {
+        ApproximationType::OS => return Err(eyre!("Not yet implemented OS")),
+        ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
+        ApproximationType::MUV | ApproximationType::PolePart | ApproximationType::IR => {}
+    }
+    let started = integrands
+        .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
+    match scheme {
         ApproximationType::MUV | ApproximationType::PolePart => {
-            let started = integrands
-                .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
             Direct3dApproximation::t(ctx, current, given, &started, lmb)
         }
         ApproximationType::IR => {
-            let started = integrands
-                .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
             let t_tilde = t_tilde(
                 ctx,
                 current,
@@ -310,8 +315,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                     ctx, current, given, &t_tilde, lmb,
                 )?)
         }
-        ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
-        ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
+        ApproximationType::OS | ApproximationType::Unsubtracted => unreachable!(),
     }
 }
 

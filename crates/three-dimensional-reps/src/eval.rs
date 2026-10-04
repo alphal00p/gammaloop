@@ -3865,6 +3865,17 @@ mod thermal_reference_tests {
         surface::LinearSurfaceKind,
     };
 
+    // Independent bosonic reference at beta=1, mu=0, expressed through coth(E/2).
+    fn bose_distribution_derivative(coth: f64, sign: i32, order: usize) -> f64 {
+        match order {
+            0 => (f64::from(sign) + coth) / 2.0,
+            1 => -(coth * coth - 1.0) / 4.0,
+            2 => (coth * coth - 1.0) * coth / 4.0,
+            3 => (coth * coth * (4.0 - 3.0 * coth * coth) - 1.0) / 8.0,
+            _ => panic!("unexpected distribution derivative {order}"),
+        }
+    }
+
     #[test]
     fn thermal_energy_numerators_preserve_propagator_cancellation() {
         check_thermal_energy_numerator_cases(&["sunset", "double_pole"]);
@@ -4127,11 +4138,8 @@ mod thermal_reference_tests {
                             ));
                         }
                     }
-                    let distribution = |edge: usize, sign: i32, order| match order {
-                        0 => (f64::from(sign) + coth[edge]) / 2.0,
-                        1 => -(coth[edge] * coth[edge] - 1.0) / 4.0,
-                        2 => (coth[edge] * coth[edge] - 1.0) * coth[edge] / 4.0,
-                        _ => panic!("unexpected distribution derivative {order}"),
+                    let distribution = |edge: usize, sign: i32, order| {
+                        bose_distribution_derivative(coth[edge], sign, order)
                     };
                     for (numerator, expected) in cases {
                         let numerator_expr = NumeratorExpr::parse(&numerator).unwrap();
@@ -4500,15 +4508,7 @@ mod thermal_reference_tests {
                 // standalone evaluator an implicit choice of particle statistics.
                 let distribution = |edge: usize, sign: i32, derivative_order| {
                     let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
-                    match derivative_order {
-                        0 => (f64::from(sign) + coth) / 2.0,
-                        1 => -(coth * coth - 1.0) / 4.0,
-                        2 => (coth * coth - 1.0) * coth / 4.0,
-                        3 => (coth * coth * (4.0 - 3.0 * coth * coth) - 1.0) / 8.0,
-                        _ => {
-                            panic!("{name}: unexpected distribution derivative {derivative_order}")
-                        }
-                    }
+                    bose_distribution_derivative(coth, sign, derivative_order)
                 };
                 let mut result = 0.0;
                 for variant in expression
