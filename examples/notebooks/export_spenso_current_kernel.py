@@ -172,7 +172,7 @@ def output_block(values, slug, assets, rsvg_convert):
             check=True,
         )
         width = float(re.search(r'width="([0-9.]+)pt"', svg)[1])
-        # Keep native font size, reducing only graphics wider than the paper column.
+        # Fit tensor expressions to the paper column without enlarging them.
         width = min(width, 395)
         if slug == "network":
             width *= 0.7  # Keep the diagram compact beside the other cell outputs.

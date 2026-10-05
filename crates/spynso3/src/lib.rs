@@ -298,6 +298,7 @@ define_spenso_python_surface! {
             "ReductionStatus",
         ],
         display => [
+            "LayoutSettings", "StrokeStyle", "RenderSettings", "DiagramRender",
             "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
             "load_math_font",
         ],

@@ -2706,7 +2706,10 @@ impl PyGenerationResult {
                 .cloned()
                 .map(PyFeynmanDiagram::from),
             None,
+            None,
+            crate::display::PREVIEW_LIMIT,
         )
+        .map(|(html, _)| html)
     }
 
     /// Write a concise result summary to an IPython pretty printer.
