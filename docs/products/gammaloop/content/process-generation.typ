@@ -205,7 +205,8 @@ With
 only the medium-dependent part is generated: each distribution weight is replaced by its
 difference from the vacuum limit, and the overall UV counterterm of the full graph is omitted.
 The maintained #source-link("examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml", label: "NLO cold quark matter run card")
-combines these settings for an integration.
+combines these settings for an integration; see the
+#link("guides/conventions/")[pressure conversion] for interpreting its imaginary result.
 
 Several equal-mass propagators carrying the same loop momentum, as in self-energy insertions,
 produce energy derivatives of a distribution. In `zero_temperature_equilibrium`, those
