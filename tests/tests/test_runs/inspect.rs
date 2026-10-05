@@ -34,14 +34,11 @@ fn assert_inspect(
 }
 
 #[test]
-// TODO: extend test matrix once performance is better
 fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
     let mut failures = Vec::new();
-    for (medium_mode, sampling_mode) in itertools::iproduct!(
-        ["vacuum", "thermodynamic_equilibrium",],
-        // ["none", "beyond_quadratic", "all"],
-        ["none",],
-    ) {
+    for (medium_mode, sampling_mode) in
+        itertools::iproduct!(["vacuum", "thermodynamic_equilibrium"], ["none", "all"],)
+    {
         let test_root = get_tests_workspace_path().join(format!(
             "inverse_propagators_cancel_denominators_{medium_mode}_{sampling_mode}"
         ));
@@ -55,11 +52,6 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             &mut cli,
             &[
                 "import model ./assets/models/json/scalars/scalars.json",
-                "import graphs ./tests/resources/graphs/bubble_inverse_prop_1_cancellation.dot -p bubble_inverse_propagator_1 -i cancellation",
-                "import graphs ./tests/resources/graphs/box_inverse_prop_cancellation.dot -p box_inverse_propagator -i cancellation",
-                "import graphs ./tests/resources/graphs/hexagon_cubed_inverse_prop_cancellation.dot -p hexagon_cubed_inverse_propagator -i cancellation",
-                "import graphs ./tests/resources/graphs/pentagon_two_distinct_inverse_prop_cancellation.dot -p pentagon_two_distinct_inverse_propagators -i cancellation",
-                "import graphs ./tests/resources/graphs/double_box_inverse_prop_cancellation.dot -p double_box_two_distinct_inverse_propagators -i cancellation",
                 "set model mass_scalar_1=0.5",
                 &format!(
                     "set global kv global.generation.medium.mode={medium_mode} global.generation.uniform_numerator_sampling_scale={sampling_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.uv.subtract_uv=false"
@@ -67,20 +59,22 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             ],
         )?;
 
-        for (case, process_name, point, external_momenta, external_helicities) in [
+        for (case, process_name, fixture, point, external_momenta, external_helicities) in [
             (
                 "bubble_1",
                 "bubble_inverse_propagator_1",
+                "bubble_inverse_prop_1_cancellation",
                 vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
                     "dependent"
                 ]"#,
-                "[0, 0, 0, 0]",
+                "[0, 0]",
             ),
             (
                 "box",
                 "box_inverse_propagator",
+                "box_inverse_prop_cancellation",
                 vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
@@ -93,17 +87,19 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             (
                 "hexagon_cubed",
                 "hexagon_cubed_inverse_propagator",
+                "hexagon_cubed_inverse_prop_cancellation",
                 vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
                     [1.5, 0.0, -1.5, 0.0],
                     "dependent"
                 ]"#,
-                "[0, 0, 0, 0, 0]",
+                "[0, 0, 0]",
             ),
             (
                 "pentagon_two_distinct",
                 "pentagon_two_distinct_inverse_propagators",
+                "pentagon_two_distinct_inverse_prop_cancellation",
                 vec![1.1, 0.7, -0.4],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
@@ -117,6 +113,7 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             (
                 "double_box_two_distinct",
                 "double_box_two_distinct_inverse_propagators",
+                "double_box_inverse_prop_cancellation",
                 vec![1.1, 0.7, -0.4, -0.6, 0.8, 0.5],
                 r#"[
                     [3.0, 0.0, 0.0, 3.0],
@@ -124,9 +121,14 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                     [1.5, 0.0, 1.5, 0.0],
                     "dependent"
                 ]"#,
-                "[0, 0, 0, 0, 0]",
+                "[0, 0, 0, 0]",
             ),
         ] {
+            // Exercise active sampling on the small bubble. Higher degrees and
+            // BeyondQuadratic are covered by the shared 3D tests.
+            if sampling_mode != "none" && case != "bubble_1" {
+                continue;
+            }
             let runtime = format!(
                 r#"set default-runtime string '
                 [general]
@@ -154,6 +156,9 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
             run_commands(
                 &mut cli,
                 &[
+                    &format!(
+                        "import graphs ./tests/resources/graphs/{fixture}.dot -p {process_name} -i cancellation"
+                    ),
                     &runtime,
                     &format!("generate existing -p {process_name} -i cancellation"),
                 ],
@@ -185,7 +190,14 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
                 "the {case} diagrams must be evaluated in the same graph group in {medium_mode} mode"
             );
 
-            for (sampling_scale, use_arb_prec) in itertools::iproduct!([0.75, 2.25], [false, true])
+            // None ignores M, so repeating its scale does not add coverage.
+            let sampling_scales: &[f64] = if sampling_mode == "none" {
+                &[0.75]
+            } else {
+                &[0.75, 2.25]
+            };
+            for (&sampling_scale, use_arb_prec) in
+                itertools::iproduct!(sampling_scales, [false, true])
             {
                 cli.run_command(&format!(
                     "set process -p {process_name} -i cancellation kv general.numerator_sampling_scale={sampling_scale}"

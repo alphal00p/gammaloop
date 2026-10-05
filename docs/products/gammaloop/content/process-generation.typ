@@ -175,6 +175,9 @@ derived from the external parameters `muB`, `muQ`, `muLe`, `muLmu`, and `muLtau`
 `CHEMICALPOTENTIAL`) using its baryon number, electric charge, and lepton flavor. The other
 bundled models declare no chemical potentials.
 
+The `sm` parameter `muH` belongs to the Higgs potential. Chemical-potential assignments
+use explicit particle metadata, not the `mu` prefix shared by names such as `muW` and `mut`.
+
 With the default `--simplify-model=true`, a restriction card turns every parameter it sets to
 zero into a constant. `sm-default` therefore fixes all five chemical potentials at zero. Import
 `sm-thermal` instead, which sets `muB = 3` and keeps it adjustable, or `sm-full` when other

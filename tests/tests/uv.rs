@@ -82,7 +82,7 @@ const THERMAL_SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_start: 50_000,
         n_increase: 0,
         n_max: 400_000,
-        n_cores: 1,
+        n_cores: 10,
     };
 
 const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =

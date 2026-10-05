@@ -4203,6 +4203,10 @@ mod thermal_reference_tests {
 
     #[test]
     fn thermal_scalar_bose_references() {
+        // The ring and bugblatter references were cross-checked by evaluating
+        // their factorized CFF expressions at 50 and 80 decimal digits from exact
+        // decimal momenta. Both agree within binary64 rounding; the larger
+        // tolerances below retain the sensitive f64 cancellation probes.
         for (name, edges, signatures, points, surface_counts) in [
             (
                 "thermal_bubble",
@@ -4300,7 +4304,8 @@ mod thermal_reference_tests {
                     (
                         vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
                         8.524_796_385_080_671e1,
-                        // TODO: Investigate why the tolerance needs to be so loose
+                        // This near-H-surface cancellation probe (min |H| ≈ 4.27e-3)
+                        // shows about 2e-11 relative error in f64 evaluation.
                         3.0e-11,
                     ),
                     (
@@ -4379,7 +4384,8 @@ mod thermal_reference_tests {
                             [1.1, 1.2, 1.3],
                         ],
                         1.308_467_742_357_907_9,
-                        // TODO: Investigate why the tolerance needs to be so loose
+                        // Cancelling variants have sum |term| / |sum| ≈ 2.5e5;
+                        // f64 evaluation has about 4e-11 relative error.
                         1.0e-10,
                     ),
                     (
@@ -4390,7 +4396,8 @@ mod thermal_reference_tests {
                             [1.1, 2.2, 1.3],
                         ],
                         3.799_072_627_985_78e-4,
-                        // TODO: Investigate why the tolerance needs to be so loose
+                        // Cancellation remains here (sum |term| / |sum| ≈ 158),
+                        // with about 2e-14 relative error in f64 evaluation.
                         1.0e-13,
                     ),
                 ],
