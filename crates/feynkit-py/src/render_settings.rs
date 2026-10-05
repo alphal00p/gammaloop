@@ -257,8 +257,8 @@ impl PyRenderSettings {
             .map(|(key, value)| {
                 Ok(format!(
                     "{}={}",
-                    key.str()?.to_str()?,
-                    value.repr()?.to_str()?
+                    key.str()?.to_cow()?,
+                    value.repr()?.to_cow()?
                 ))
             })
             .collect::<PyResult<Vec<_>>>()?;
