@@ -33,12 +33,34 @@ def import_without_renderers(name, globals=None, locals=None, fromlist=(), level
 
 
 builtins.__import__ = import_without_renderers
+
+
+def check_render_snapshot(value):
+    config = {"drawing": {"node_radius": 5}}
+    drawing = value.render(config=config)
+    assert isinstance(drawing, hep.DiagramRender)
+    svg, html = drawing.to_svg(), drawing.to_html()
+    ET.fromstring(svg)
+    assert svg in html
+    assert drawing._repr_svg_() == svg
+    assert drawing._repr_html_() == html
+    assert drawing._mime_() == ("text/html", html)
+    assert "#image(bytes(" in drawing.to_linnest()
+    assert repr(drawing) == "DiagramRender()"
+    # Display/export reuse the snapshot rather than consulting mutated settings.
+    config["drawing"]["node_radius"] = "invalid"
+    assert drawing.to_svg() == svg
+    assert drawing._repr_html_() == html
+    assert drawing._mime_() == ("text/html", html)
+
+
 try:
     model = hep.Model.qcd()
     process = model.process(["g"], ["g"])
+    check_render_snapshot(process)
     assert "<svg" in process._repr_html_()
     inclusive = process.with_final_state_alternatives([["g"], ["u", "u~"]])
-    combined = ET.fromstring(inclusive.render())
+    combined = ET.fromstring(inclusive.render().to_svg())
     figures = combined.findall("{http://www.w3.org/2000/svg}svg")
     assert len(figures) == 2
     for figure in figures:
@@ -57,7 +79,9 @@ try:
         (["u", "u~"], ["u", "u~"], {"drawing": {"node_radius": 5}}),
         (["u", "u~"], ["u", "u~"], {"style": {"node-style": {"radius": 6}}}),
     ):
-        drawing = ET.fromstring(model.process(incoming, outgoing).render(config=config))
+        drawing = ET.fromstring(
+            model.process(incoming, outgoing).render(config=config).to_svg()
+        )
         blob = drawing.find(ns + "circle")
         cx, cy, radius = (float(blob.attrib[k]) for k in ("cx", "cy", "r"))
         assert radius >= 45, radius
@@ -88,26 +112,30 @@ try:
             # One-sided processes surround the blob instead of occupying a side.
             xs, ys = zip(*tips)
             assert min(xs) < cx < max(xs) and min(ys) < cy < max(ys)
-    ET.fromstring(model.process([], []).render())
+    ET.fromstring(model.process([], []).render().to_svg())
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
     diagram = amplitude.diagrams[0]
-    ET.fromstring(diagram.render())
+    check_render_snapshot(diagram)
+    check_render_snapshot(diagram.filter(edge=lambda edge: not edge.is_external))
+    ET.fromstring(diagram.render().to_svg())
     ET.fromstring(
         diagram.render(
             config={
                 "layouts": {"impred_steps": 2},
                 "template_options": {"show-particle": False},
             }
-        )
+        ).to_svg()
     )
     expression = diagram.numerator_expression()
     assert isinstance(expression, spenso.TensorExpression)
     assert "<math" in expression.to_html()
     ET.fromstring(expression.to_svg())
     # The remaining graph types also render without Typst graph plugins.
-    ET.fromstring(process.render(config={"template_options": {"show-particle": False}}))
+    ET.fromstring(
+        process.render(config={"template_options": {"show-particle": False}}).to_svg()
+    )
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
     ET.fromstring(network.render(config={"title": "Native network"}))
     assert "#image(bytes(" in network.to_linnest()
@@ -262,7 +290,9 @@ try:
         assert len(tree.fundamental_cycle(internal_half.id).edges) == 1
     sewn_identities = None
     for split in (False, True):
-        svg = cross.render(config={"template_options": {"split-initial-state": split}})
+        svg = cross.render(
+            config={"template_options": {"split-initial-state": split}}
+        ).to_svg()
         root = ET.fromstring(svg)
         targets = [n for n in root.iter() if "data-linnet-kind" in n.attrib]
         identities = {
@@ -290,7 +320,7 @@ try:
     labelled = hep.Model.from_json(json.dumps(custom))
     assert labelled.particle("phi").typstname == "alpha_1"
     assert json.loads(labelled.to_json())["particles"][0]["typstname"] == "alpha_1"
-    ET.fromstring(labelled.process(["phi"], ["phi"]).render())
+    ET.fromstring(labelled.process(["phi"], ["phi"]).render().to_svg())
     parameter = labelled.parameter("g").symbol
     assert "beta_2" in parameter.to_typst()
     assert "g" in spenso.TensorExpression(parameter).to_latex()
@@ -298,7 +328,9 @@ try:
     ET.fromstring(spenso.TensorExpression(parameter).to_svg())
     # Every authored Standard Model label must compile without package access.
     standard = hep.Model.standard_model()
-    ET.fromstring(standard.process([p.name for p in standard.particles], []).render())
+    ET.fromstring(
+        standard.process([p.name for p in standard.particles], []).render().to_svg()
+    )
     all_parameters = sum(p.symbol for p in standard.parameters)
     ET.fromstring(spenso.TensorExpression(all_parameters).to_svg())
     assert not hasattr(sys.modules["symbolica.community"], "linnet")

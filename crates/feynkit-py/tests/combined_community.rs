@@ -406,7 +406,7 @@ for edge in indexed_diagram.edges:
     assert isinstance(edge.numerator_expression(), spenso.TensorExpression)
 # Rich output uses the embedded renderer in every installation.
 # Scalar graphs use the same dashed-particle styling as exported Typst figures.
-assert "stroke-dasharray" in diagram.render()
+assert "stroke-dasharray" in diagram.render().to_svg()
 assert "stroke-dasharray" in diagram._repr_html_()
 # The portable renderer combines inverse factors without changing the tensor.
 rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")

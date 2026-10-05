@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
+from IPython.core.formatters import DisplayFormatter
 from marimo._output.formatting import try_format
 from symbolica.community import hepkit as fk
 
@@ -29,6 +30,17 @@ diagram = next(
     > 1
 )
 region = diagram.filter(edge=lambda edge: not edge.is_external)
+
+for value in (model.process(["scalar_0"], ["scalar_0"]), diagram, region):
+    drawing = value.render(config={"drawing": {"node_radius": 5}})
+    bundle, _ = DisplayFormatter().format(drawing)
+    assert bundle["text/html"] == drawing.to_html()
+    assert bundle["image/svg+xml"] == drawing.to_svg()
+    formatted = try_format(drawing)
+    assert formatted.mimetype == "text/html"
+    assert formatted.data == drawing.to_html()
+    assert formatted.exception is None
+
 snapshot = diagram.to_json()
 namespace = "{http://www.w3.org/2000/svg}"
 xlink = "{http://www.w3.org/1999/xlink}"
@@ -42,7 +54,7 @@ canonical = ET.fromstring(diagram.to_linnet()._repr_html_())
 shared_script = canonical.find(namespace + "script").text
 
 for value in (diagram, region):
-    svg = value.render()
+    svg = value.render().to_svg()
     root = ET.fromstring(svg)
     assert root.get("data-linnet-interactive") == "true"
     assert "feynkit-diagram-svg" in root.get("class", "")
@@ -118,7 +130,7 @@ for options in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.is_external),
     ):
-        root = ET.fromstring(value.render(config=config, momenta=True))
+        root = ET.fromstring(value.render(config=config, momenta=True).to_svg())
         targets = root.findall(".//*[@data-linnet-kind]")
         assert {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))

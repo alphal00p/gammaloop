@@ -29,7 +29,7 @@ snapshot = diagram.to_json()
 source = diagram.to_linnest()
 empty = graph.empty_subgraph()
 assert diagram.to_linnest(highlight=empty) != source
-empty_svg = ET.fromstring(diagram.render(highlight=empty))
+empty_svg = ET.fromstring(diagram.render(highlight=empty).to_svg())
 assert any(
     element.get("stroke", "").lower() == "#77777773" for element in empty_svg.iter()
 )
@@ -49,7 +49,7 @@ for selected in highlights:
     highlighted_source = diagram.to_linnest(highlight=selected)
     assert highlighted_source != source
     assert "fill: none" in highlighted_source
-    svg = diagram.render(highlight=selected)
+    svg = diagram.render(highlight=selected).to_svg()
     root = ET.fromstring(svg)
     assert any(
         element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
@@ -97,7 +97,7 @@ for selected in (
     cross_section.to_linnet().full_subgraph(),
     cross_section.cuts[0].left.subgraph,
 ):
-    root = ET.fromstring(cross_section.render(highlight=selected))
+    root = ET.fromstring(cross_section.render(highlight=selected).to_svg())
     assert any(
         element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
     )
@@ -128,8 +128,8 @@ config = ln.RenderConfig(
     ),
     template_options={"show-particle": False, "show-edge-index": True},
 )
-assert diagram.render(momenta=True) == diagram.render(lmb=basis)
-svg = diagram.render(config=config, lmb=basis)
+assert diagram.render(momenta=True).to_svg() == diagram.render(lmb=basis).to_svg()
+svg = diagram.render(config=config, lmb=basis).to_svg()
 root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert 'data-linnet-interactive="true"' in svg
@@ -150,7 +150,7 @@ alternative = next(
     if candidate.loop_edges != basis.loop_edges
 )
 assert diagram.to_linnest(lmb=alternative) != diagram.to_linnest(lmb=basis)
-assert "<svg" in diagram.render(lmb=alternative)
+assert "<svg" in diagram.render(lmb=alternative).to_svg()
 assert diagram.to_json() == snapshot
 
 foreign = fk.FeynmanDiagram.from_json(model, snapshot).loop_momentum_basis
@@ -169,20 +169,22 @@ for render in (diagram.render, diagram.to_html, diagram.to_linnest):
         raise AssertionError("render config must be a typed RenderConfig")
 
 region = diagram.filter(edge=lambda edge: not edge.is_external)
-assert "<svg" in region.render(lmb=basis, config=config)
+assert "<svg" in region.render(lmb=basis, config=config).to_svg()
 assert "<figure" in diagram.to_html(momenta=True, config=config)
 print("installed rendering options and momentum checks passed")
 
 # Index controls must survive the native diagram-to-renderer boundary.
 unlabelled = ET.fromstring(
-    diagram.render(config=ln.RenderConfig(template_options={"show-particle": False}))
+    diagram.render(
+        config=ln.RenderConfig(template_options={"show-particle": False})
+    ).to_svg()
 )
 indexed = ET.fromstring(
     diagram.render(
         config=ln.RenderConfig(
             template_options={"show-particle": False, "show-node-index": True}
         )
-    )
+    ).to_svg()
 )
 assert len(indexed.findall(".//{http://www.w3.org/2000/svg}use")) > len(
     unlabelled.findall(".//{http://www.w3.org/2000/svg}use")

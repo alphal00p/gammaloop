@@ -43,14 +43,18 @@ parameter labels changes presentation only, preserving algebraic names and expre
 
 == Native SVG configuration
 
-Save the SVG directly, or export a self-contained Typst document embedding that
-SVG, including its typeset glyphs. The exported document needs no graph packages.
+`diagram.render(...)` returns a `DiagramRender` that displays the configured
+figure directly in IPython, Jupyter, and Marimo. The result retains its rendered
+SVG and labels, so later display and export reuse the same snapshot.
+Use `to_svg()` or `to_html()` for text exports, or `to_linnest()` for a
+self-contained Typst document embedding the SVG. The exported document needs
+no graph packages.
 
 // docs-example: compile
 ```python
 from pathlib import Path
 
-Path("diagram.svg").write_text(diagram.render(), encoding="utf-8")
+Path("diagram.svg").write_text(diagram.render().to_svg(), encoding="utf-8")
 Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
 diagram
 ```
@@ -76,12 +80,14 @@ settings = {
     "layouts": {"impred_steps": 100},
     "template_options": {"show-particle": False},
 }
+drawing = diagram.render(momenta=True, config=settings)
+drawing
 Path("momenta.svg").write_text(
-    diagram.render(momenta=True, config=settings), encoding="utf-8"
+    drawing.to_svg(), encoding="utf-8"
 )
 basis = next(iter(diagram.loop_momentum_bases()))
 Path("alternative-routing.svg").write_text(
-    diagram.render(lmb=basis, config=settings), encoding="utf-8"
+    diagram.render(lmb=basis, config=settings).to_svg(), encoding="utf-8"
 )
 ```
 
@@ -121,7 +127,7 @@ diagram, with the remaining graph muted and dotted:
 ```python
 region = diagram.filter(edge=lambda edge: edge.particle_name == "b")
 Path("highlighted-diagram.svg").write_text(
-    region.render(), encoding="utf-8"
+    region.render().to_svg(), encoding="utf-8"
 )
 region
 ```

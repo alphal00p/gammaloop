@@ -2079,6 +2079,96 @@ class DiagramHalfEdge:
         """
 
 @typing.final
+class DiagramRender:
+    r"""
+    A rendered diagram snapshot with its configured notebook display.
+    Displaying or exporting the snapshot reuses the rendered SVG and labels.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
+    >>> drawing = process.render(config={"drawing": {"node_radius": 5}})
+    >>> drawing
+    >>> svg = drawing.to_svg()
+    """
+    def to_svg(self) -> builtins.str:
+        r"""
+        Export the configured SVG, including typeset labels and hover information.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> from pathlib import Path
+        >>> Path("diagram.svg").write_text(drawing.to_svg())
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Export the notebook HTML figure with its caption and interactive SVG.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> html = drawing.to_html()
+        """
+    def to_linnest(self) -> builtins.str:
+        r"""
+        Export a self-contained Typst document embedding this rendered SVG.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> from pathlib import Path
+        >>> Path("diagram.typ").write_text(drawing.to_linnest())
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the configured figure in IPython and Jupyter.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> from IPython.display import display
+        >>> display(drawing)
+        """
+    def _repr_svg_(self) -> builtins.str:
+        r"""
+        Provide the configured SVG to SVG-aware notebook frontends.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> svg = drawing._repr_svg_()
+        """
+    def _mime_(self) -> tuple[builtins.str, builtins.str]:
+        r"""
+        Display the configured HTML figure in Marimo.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> import marimo as mo
+        >>> mo.as_html(drawing)
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Summarize the rendered snapshot in text-only frontends.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramRender`` class example:
+
+        >>> repr(drawing)
+        'DiagramRender()'
+        """
+
+@typing.final
 class DiagramThresholdCandidate:
     r"""
     A topology threshold partition, independent of the requested physical final state.
@@ -3363,9 +3453,9 @@ class FeynmanDiagram:
         highlight : Subgraph or linnet.Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> DiagramRender:
         r"""
-        Render an interactive, transparent SVG using the shared physics renderer.
+        Create a displayable snapshot using the shared physics renderer.
 
         All graph geometry is drawn in Rust; the embedded Typst compiler typesets
         labels and titles. ``layouts={"impred_labels": True}`` refines the layout
@@ -3375,11 +3465,13 @@ class FeynmanDiagram:
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> svg = diagram.render(momenta=True, config={
+        >>> drawing = diagram.render(momenta=True, config={
         ...     "layouts": {"impred_steps": 100},
         ...     "template_options": {"show-particle": False},
         ... })
-        >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+        >>> drawing
+        >>> svg = drawing.to_svg()
+        >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
         ----------
@@ -8225,16 +8317,18 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> DiagramRender:
         r"""
-        Render a blob with the process's physical incoming and outgoing particles.
+        Create a displayable blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> svg = process.render()
+        >>> drawing = process.render()
+        >>> drawing
+        >>> svg = drawing.to_svg()
 
         Parameters
         ----------

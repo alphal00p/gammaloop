@@ -67,7 +67,7 @@ assert (~internal).linnet_selection == external.linnet_selection
 assert all(isinstance(item, fk.Subgraph) for item in internal.connected_components())
 assert isinstance(internal.boundary(), fk.Subgraph)
 assert isinstance(internal.bridges(), fk.Subgraph)
-assert "<svg" in internal.render()
+assert "<svg" in internal.render().to_svg()
 assert "<figure" in internal._repr_html_()
 assert diagram.to_json() == snapshot
 
