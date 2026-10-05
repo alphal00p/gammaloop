@@ -31,6 +31,9 @@ impl Config {
                 key
             };
             if ![
+                "layout-algo",
+                "tree-dx",
+                "tree-dy",
                 "impred-steps",
                 "impred-step-scale",
                 "impred-spacing",
@@ -52,6 +55,14 @@ impl Config {
                 return Err(format!(
                     "layout option {key:?} is not supported by the native SVG renderer"
                 ));
+            }
+            if key == "layout-algo" && !matches!(value.as_str(), Some("dot" | "impred")) {
+                return Err("layout-algo must be dot or impred".into());
+            }
+            if matches!(key.as_str(), "tree-dx" | "tree-dy")
+                && !value.as_f64().is_some_and(|v| v.is_finite() && v > 0.0)
+            {
+                return Err(format!("{key} must be positive"));
             }
             if key == "impred-labels" {
                 scene.label_feedback = value.as_bool().ok_or("impred-labels must be boolean")?;
