@@ -1460,7 +1460,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : dict, optional
+    /// config : RenderSettings, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1488,25 +1488,24 @@ impl SpensoNet {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&display::graph::PyRenderSettings>,
     ) -> PyResult<String> {
         Ok(typst_renderer::Document::svg_source(
             &self.render_graph(py, config)?,
         ))
     }
 
-    /// Render the current network graph to SVG.
+    /// Render a displayable snapshot of the current network graph.
     ///
     /// Parameters
     /// ----------
-    /// config : dict, optional
+    /// config : RenderSettings, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
     /// -------
-    /// str
-    ///     SVG graph, with notebook-theme styling.
+    /// DiagramRender
+    ///     Interactive graph snapshot with SVG/HTML exports and notebook display.
     ///
     /// Notes
     /// -----
@@ -1528,11 +1527,11 @@ impl SpensoNet {
     fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<String> {
-        let svg = self.render_graph(py, config)?;
-        Ok(display::network::svg_theme(&svg))
+        config: Option<&display::graph::PyRenderSettings>,
+    ) -> PyResult<display::graph::PyDiagramRender> {
+        let svg = display::network::svg_theme(&self.render_graph(py, config)?);
+        let html = display::network::html(&svg, &self.status());
+        Ok(display::graph::PyDiagramRender::new(svg, html))
     }
 
     /// Produce compact plain-text tensor notation.
@@ -1685,7 +1684,7 @@ impl SpensoNet {
     ///
     /// Parameters
     /// ----------
-    /// config : dict, optional
+    /// config : RenderSettings, optional
     ///     Graph layout and rendering options. Omit for the standard network view.
     ///
     /// Returns
@@ -1713,13 +1712,9 @@ impl SpensoNet {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&display::graph::PyRenderSettings>,
     ) -> PyResult<String> {
-        Ok(display::network::html(
-            &self.render(py, config)?,
-            &self.status(),
-        ))
+        Ok(self.render(py, config)?.to_html().to_owned())
     }
 
     /// Render static mathematical tensor notation to SVG.

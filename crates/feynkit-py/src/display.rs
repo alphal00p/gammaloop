@@ -6,117 +6,7 @@ use crate::render_settings::PyRenderSettings;
 use pyo3::prelude::*;
 use std::{collections::BTreeMap, fmt::Write};
 
-#[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
-
-/// A rendered diagram snapshot with its configured notebook display.
-/// Displaying or exporting the snapshot reuses the rendered SVG and labels.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import hepkit as hep
-/// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> drawing = process.render(config=hep.RenderSettings(node_radius=5))
-/// >>> drawing
-/// >>> svg = drawing.to_svg()
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "DiagramRender", module = "symbolica.community.hepkit", frozen)]
-pub struct PyDiagramRender {
-    svg: String,
-    html: String,
-}
-
-impl PyDiagramRender {
-    pub(crate) fn new(svg: String, html: String) -> Self {
-        Self { svg, html }
-    }
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PyDiagramRender {
-    /// Export the configured SVG, including typeset labels and hover information.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> from pathlib import Path
-    /// >>> Path("diagram.svg").write_text(drawing.to_svg())
-    pub(crate) fn to_svg(&self) -> &str {
-        &self.svg
-    }
-
-    /// Export the notebook HTML figure with its caption and interactive SVG.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> html = drawing.to_html()
-    pub(crate) fn to_html(&self) -> &str {
-        &self.html
-    }
-
-    /// Export a self-contained Typst document embedding this rendered SVG.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> from pathlib import Path
-    /// >>> Path("diagram.typ").write_text(drawing.to_linnest())
-    fn to_linnest(&self) -> String {
-        typst_renderer::Document::svg_source(&self.svg)
-    }
-
-    /// Display the configured figure in IPython and Jupyter.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> from IPython.display import display
-    /// >>> display(drawing)
-    fn _repr_html_(&self) -> &str {
-        self.to_html()
-    }
-
-    /// Provide the configured SVG to SVG-aware notebook frontends.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> svg = drawing._repr_svg_()
-    fn _repr_svg_(&self) -> &str {
-        self.to_svg()
-    }
-
-    /// Display the configured HTML figure in Marimo.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> import marimo as mo
-    /// >>> mo.as_html(drawing)
-    fn _mime_(&self) -> (&str, &str) {
-        ("text/html", self.to_html())
-    }
-
-    /// Summarize the rendered snapshot in text-only frontends.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``DiagramRender`` class example:
-    ///
-    /// >>> repr(drawing)
-    /// 'DiagramRender()'
-    fn __repr__(&self) -> &str {
-        "DiagramRender()"
-    }
-}
+pub use spynso3::display::graph::PyDiagramRender;
 
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -212,7 +102,9 @@ pub(crate) fn collection_html(
     subtitle: &str,
     diagrams: impl ExactSizeIterator<Item = crate::graph::PyFeynmanDiagram>,
     terms: Option<&[String]>,
-) -> PyResult<String> {
+    config: Option<&PyRenderSettings>,
+    limit: usize,
+) -> PyResult<(String, Vec<PyDiagramRender>)> {
     let count = diagrams.len();
     let mut html = format!(
         "<style>{}</style><section class=\"feynkit-collection\"><header><strong>{}</strong><small>{}</small></header>",
@@ -224,10 +116,12 @@ pub(crate) fn collection_html(
     if terms.is_none() {
         html.push_str("<div class=\"fk-strip\" role=\"group\" aria-label=\"Choose diagram\">");
     }
-    for (index, diagram) in diagrams.take(PREVIEW_LIMIT).enumerate() {
-        let drawing = diagram.render(py, None, false, None, None)?;
+    let mut drawings = Vec::new();
+    for (index, diagram) in diagrams.take(limit).enumerate() {
+        let drawing = diagram.render(py, config, false, None, None)?;
         let svg = drawing.to_svg();
         write!(templates, "<template>{svg}</template>").unwrap();
+        drawings.push(drawing);
         let label = format!("Diagram {}", index + 1);
         let mut caption = format!(
             "{} · {} loop{}",
@@ -257,8 +151,8 @@ pub(crate) fn collection_html(
     if count == 0 {
         html.push_str("<p>No diagrams retained.</p>");
     }
-    if count > PREVIEW_LIMIT {
-        write!(html, "<small>Showing {PREVIEW_LIMIT} of {count} diagrams. Access .diagrams to inspect the complete collection.</small>").unwrap();
+    if count > limit {
+        write!(html, "<small>Showing {limit} of {count} diagrams. Access .diagrams to inspect the complete collection.</small>").unwrap();
     }
     write!(
         html,
@@ -266,7 +160,7 @@ pub(crate) fn collection_html(
         include_str!("collection.js")
     )
     .unwrap();
-    Ok(html)
+    Ok((html, drawings))
 }
 
 /// Draw each process channel as a native star graph with a hatched interaction blob.
