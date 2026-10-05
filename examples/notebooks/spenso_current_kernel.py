@@ -101,18 +101,20 @@ def _(mo):
     The first contraction forms the bracket in the component expression.
     Spenso orders the indices of a gamma matrix as `(row, column, Lorentz)`.
     Assigning the same label to compatible indices contracts them, so
-    `Q2(1)` joins the row index and `G4(2)` the Lorentz index. We mark the
-    remaining spinor index with the label `"b"`, which will also appear
-    on the propagator to specify their contraction.
+    `Q2(1)` joins the row index and `G4(2)` the Lorentz index. The placeholder
+    `AUTO`, imported as `_`, leaves the remaining spinor index unresolved
+    so it can be contracted with the propagator in the next step.
     """)
     return
 
 
 @app.cell
 def _(G4, Q2, Symbol, T):
+    from symbolica.community.tensor import AUTO as _
+
     gamma = T.dirac_gamma(4)
     i = Symbol.I
-    join = i * gamma(1, "b", 2) * Q2(1) * G4(2)
+    join = i * gamma(1, _, 2) * Q2(1) * G4(2)
     join
     return gamma, i, join
 
@@ -124,16 +126,19 @@ def _(mo):
     Lorentz index is contracted with $q_{24}$, while `q24 * q24` gives
     the denominator $s_{24}$. Here the label `3` is used for both the
     contracted Lorentz index and the open output spinor index. Since they
-    belong to different spaces, these indices remain distinct; the first
-    spinor index carries the label `"b"` to receive the vertex contraction.
+    belong to different spaces, these indices remain distinct. The first
+    spinor index is left unresolved with `_`; labelling the output index
+    explicitly makes the subsequent contraction unambiguous.
     """)
     return
 
 
 @app.cell
 def _(gamma, i, q24):
+    from symbolica.community.tensor import AUTO as _
+
     s24 = q24 * q24
-    propagator = i * gamma("b", 3, 3) * q24(3) / s24
+    propagator = i * gamma(_, 3, 3) * q24(3) / s24
     propagator
     return (propagator,)
 
@@ -141,7 +146,7 @@ def _(gamma, i, q24):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Multiplication now contracts the two spinor indices labelled `"b"`,
+    Multiplication now contracts the two compatible unresolved spinor indices,
     completing the expression for $Q(2,4)$ with only its output index open.
     This current has a single vertex contribution. For the three-leg
     currents following equation (3.6), the two contributions would first
