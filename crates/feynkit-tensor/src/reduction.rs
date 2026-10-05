@@ -59,6 +59,9 @@ use crate::{
     orbit_projector::{OrbitProjector, OrbitProjectorError},
 };
 
+// Closed single-vector angular moments need no universal Weingarten table.
+// 31!! still fits the reducer's signed 64-bit multiplicity conversion.
+const MAX_ISOTROPIC_RANK: usize = 32;
 const DEFAULT_PAIRING_LIMIT: u128 = 20_000;
 const DEFAULT_PAIRING_PRODUCT_LIMIT: u128 = 120_000_000;
 const DEFAULT_OUTPUT_TERM_LIMIT: usize = 100_000;
@@ -334,6 +337,10 @@ impl TensorReducer {
     /// dimension below half the tensor rank makes the universal metric basis
     /// singular. The all-equal isotropic fast path remains available there.
     ///
+    /// Fully contracted vacuum monomials with one repeated integrated vector
+    /// additionally support even ranks through 32. General and external-basis
+    /// projectors retain the rank-20 limit.
+    ///
     /// Add selectors with [`Self::with_integrated_head`] or
     /// [`Self::with_integrated_vector`].
     pub fn new(dimension: Atom) -> Self {
@@ -508,7 +515,18 @@ impl TensorReducer {
             let mut monomial = self.parse_monomial(selected.as_view())?;
             monomial.scalar *= coefficient;
             max_rank = max_rank.max(monomial.integrated.len());
-            if monomial.integrated.len() > OrthogonalWeingarten::MAX_RANK {
+            let extended_isotropic = external.is_none()
+                && monomial.integrated.len() <= MAX_ISOTROPIC_RANK
+                && monomial.integrated.len() % 2 == 0
+                && monomial
+                    .integrated
+                    .windows(2)
+                    .all(|pair| pair[0] == pair[1])
+                && monomial
+                    .outside
+                    .iter()
+                    .all(|outside| matches!(outside, Outside::Vector(_)));
+            if monomial.integrated.len() > OrthogonalWeingarten::MAX_RANK && !extended_isotropic {
                 return Err(TensorReductionError::UnsupportedRank {
                     rank: monomial.integrated.len(),
                     maximum: OrthogonalWeingarten::MAX_RANK,
@@ -595,10 +613,10 @@ impl TensorReducer {
                             .and_then(|count| usize::try_from(count).ok())
                             .ok_or(TensorReductionError::InvalidVectorPower(exponent))?;
                         integrated_rank = integrated_rank.saturating_add(count);
-                        if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                        if integrated_rank > MAX_ISOTROPIC_RANK {
                             return Err(TensorReductionError::UnsupportedRank {
                                 rank: integrated_rank,
-                                maximum: OrthogonalWeingarten::MAX_RANK,
+                                maximum: MAX_ISOTROPIC_RANK,
                             });
                         }
                         integrated.extend(std::iter::repeat_n(internal.compact.clone(), count));
@@ -620,23 +638,23 @@ impl TensorReducer {
                     TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
                 })?;
                 let integrated = self.is_integrated(&vector);
-                if exponent > OrthogonalWeingarten::MAX_RANK {
+                if exponent > MAX_ISOTROPIC_RANK {
                     return Err(TensorReductionError::UnsupportedRank {
                         rank: exponent,
-                        maximum: OrthogonalWeingarten::MAX_RANK,
+                        maximum: MAX_ISOTROPIC_RANK,
                     });
                 }
                 if integrated {
                     integrated_rank = integrated_rank.checked_add(exponent).ok_or(
                         TensorReductionError::UnsupportedRank {
                             rank: usize::MAX,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         },
                     )?;
-                    if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                    if integrated_rank > MAX_ISOTROPIC_RANK {
                         return Err(TensorReductionError::UnsupportedRank {
                             rank: integrated_rank,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         });
                     }
                 }
@@ -646,10 +664,10 @@ impl TensorReducer {
             if let Some(vector) = self.indexed_vector(factor)? {
                 if self.is_integrated(&vector) {
                     integrated_rank += 1;
-                    if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                    if integrated_rank > MAX_ISOTROPIC_RANK {
                         return Err(TensorReductionError::UnsupportedRank {
                             rank: integrated_rank,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         });
                     }
                 }
@@ -1809,6 +1827,44 @@ mod tests {
     }
 
     #[test]
+    fn closed_single_vector_rank_32_preserves_general_rank_20_limit() {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_isotropic_32"));
+        let kc = compact(k, 1, &dimension);
+        let qc = compact(q, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        let input = dot(&kc, &pc).pow(32);
+        let actual = reducer.reduce(input.as_view()).unwrap();
+        let multiplicity = (1..32)
+            .step_by(2)
+            .fold(Atom::one(), |a, n| a * Atom::num(n));
+        let expected = multiplicity
+            * dot(&kc, &kc).pow(16)
+            * dot(&pc, &pc).pow(16)
+            * OrthogonalWeingarten::isotropic_pairing_coefficient(16, dimension);
+        assert!(actual.is_fully_contracted());
+        assert!((actual.expression() - expected).together().is_zero());
+        let mixed = dot(&kc, &pc).pow(2) * dot(&qc, &pc).pow(20);
+        assert!(matches!(
+            reducer.reduce(mixed.as_view()),
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 22,
+                maximum: 20
+            })
+        ));
+        assert!(matches!(
+            reducer.reduce(dot(&kc, &pc).pow(34).as_view()),
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 34,
+                maximum: 32
+            })
+        ));
+    }
+
+    #[test]
     fn weighted_compact_dots_use_the_isotropic_second_moment() {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("weighted_dot_D"));
@@ -2737,7 +2793,7 @@ mod tests {
             &result,
             Err(TensorReductionError::UnsupportedRank {
                 rank: 1_000_000,
-                maximum: 20
+                maximum: 32
             })
         ));
     }

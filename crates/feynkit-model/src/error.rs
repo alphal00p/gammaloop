@@ -142,6 +142,8 @@ pub enum ModelError {
     },
     #[error("parameter card references unknown parameter '{name}'")]
     UnknownCardParameter { name: String },
+    #[error("cyclic internal parameter definitions prevent expansion of {parameters:?}")]
+    CyclicParameterDefinitions { parameters: Vec<String> },
     #[error("external parameter '{name}' has no value for the default parameter card")]
     MissingCardValue { name: String },
 }

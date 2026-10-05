@@ -84,7 +84,9 @@
       "linnet",
       "spenso"
     ],
-    "feynkit-model": [],
+    "feynkit-model": [
+      "linnet"
+    ],
     "feynkit-py": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -346,7 +348,11 @@
         "shadowing"
       ]
     },
-    "feynkit-model": {},
+    "feynkit-model": {
+      "linnet": [
+        "nodestore-vec"
+      ]
+    },
     "feynkit-py": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],
@@ -739,7 +745,9 @@
       "spenso-macros",
       "symbolica-utils"
     ],
-    "feynkit-model": [],
+    "feynkit-model": [
+      "linnet"
+    ],
     "feynkit-py": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -774,7 +782,8 @@
       "symbolica-utils"
     ],
     "feynkit-ufo": [
-      "feynkit-model"
+      "feynkit-model",
+      "linnet"
     ],
     "gammaloop-api": [
       "feynkit-amplitude",
@@ -1026,7 +1035,9 @@
       "spenso-macros",
       "symbolica-utils"
     ],
-    "feynkit-model": [],
+    "feynkit-model": [
+      "linnet"
+    ],
     "feynkit-py": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1061,7 +1072,8 @@
       "symbolica-utils"
     ],
     "feynkit-ufo": [
-      "feynkit-model"
+      "feynkit-model",
+      "linnet"
     ],
     "gammaloop-api": [
       "feynkit-amplitude",
@@ -1344,7 +1356,9 @@
       "linnet",
       "spenso"
     ],
-    "feynkit-model": [],
+    "feynkit-model": [
+      "linnet"
+    ],
     "feynkit-py": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1611,7 +1625,11 @@
         "shadowing"
       ]
     },
-    "feynkit-model": {},
+    "feynkit-model": {
+      "linnet": [
+        "nodestore-vec"
+      ]
+    },
     "feynkit-py": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],

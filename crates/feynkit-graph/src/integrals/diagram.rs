@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use feynkit_kinematics::Kinematics;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::id::Pattern;
 
 use super::{IntegralFamily, IntegralFamilyError};
 use crate::{DiagramError, FeynmanDiagram, symbols};
@@ -115,7 +116,9 @@ impl FeynmanDiagram {
             // so propagator construction and model mass conventions stay owned
             // by denominator_of_in_dimension rather than a second implementation.
             let original_square = rep.inner_product(&arguments[1], &arguments[1]);
-            let denominator = arguments[3].replace(original_square).with(square);
+            let denominator = arguments[3]
+                .replace(Pattern::Literal(original_square))
+                .with(Pattern::Literal(square));
             denominators.insert(edge, denominator);
         }
         Ok(IntegralFamily::new(
@@ -131,6 +134,64 @@ impl FeynmanDiagram {
 mod tests {
     use super::*;
     use feynkit_model::Model;
+
+    #[test]
+    fn propagator_extraction_treats_wildcard_dimensions_as_literal_data() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph {
+                a -> a [particle="phi", lmb_id=0];
+                a -> a [particle="phi", lmb_id=1];
+            }"#,
+        )
+        .unwrap();
+        let dimension = Atom::var(symbolica::symbol!("feynkit_graph_test::dimension_"));
+        let kinematics = Kinematics::in_dimension(&dimension).unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        let mass = Atom::var(symbolica::symbol!("UFO::mass"));
+        let expected = (0..2)
+            .map(|index| {
+                let momentum = symbols::loop_momentum().call(index);
+                family
+                    .kinematics()
+                    .scalar_product(&momentum, &momentum)
+                    .unwrap()
+                    - mass.pow(2)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(family.denominators(), expected);
+        assert!(family.is_independent());
+    }
+
+    #[test]
+    fn propagator_extraction_keeps_underscore_named_invariants_literal() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph {
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> a [id=0, particle="phi"];
+                b -> outgoing [id=1, particle="phi"];
+                a -> b [id=2, particle="phi", lmb_id=0];
+                b -> a [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let invariant = symbolica::symbol!("feynkit_graph_test::invariant_");
+        let kinematics = Kinematics::new()
+            .with_mass_squared(&symbols::external_momentum().call(1), Atom::var(invariant))
+            .unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(family.denominators().len(), 2);
+        assert!(family.is_complete());
+        assert_eq!(
+            family
+                .denominators()
+                .iter()
+                .filter(|denominator| denominator.get_all_symbols(false).contains(&invariant))
+                .count(),
+            1
+        );
+    }
 
     #[test]
     fn dependent_graph_propagators_remain_available_for_partial_fractioning() {
