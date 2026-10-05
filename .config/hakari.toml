@@ -92,7 +92,7 @@ third-party = [
     # Symbolica and Numerica feature anchors are maintained below.
     # The workspace patch selects Symbolica's official community branch.
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", branch = "community" },
-    { name = "numerica", version = "3.0.1" },
+    { name = "numerica", git = "https://github.com/symbolica-dev/symbolica", branch = "community" },
     { name = "symbolica-typst-plugin", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },

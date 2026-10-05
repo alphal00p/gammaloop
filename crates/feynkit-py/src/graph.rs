@@ -2287,6 +2287,13 @@ impl PyFeynmanDiagram {
         })
     }
 
+    /// Borrow the shared native owner for computations that outlive this wrapper.
+    /// Partial selections must first be excised into independent diagrams.
+    pub fn as_shared_diagram(&self) -> PyResult<&Arc<FeynmanDiagram>> {
+        self.require_complete()?;
+        Ok(&self.inner)
+    }
+
     pub(crate) fn is_whole_diagram(&self) -> bool {
         self.selected_region.is_none()
     }
@@ -4678,6 +4685,10 @@ mod tests {
             diagram.as_diagram().unwrap(),
             diagram.inner.as_ref()
         ));
+        assert!(std::sync::Arc::ptr_eq(
+            diagram.as_shared_diagram().unwrap(),
+            &diagram.inner
+        ));
 
         let graph = diagram.inner.underlying();
         let empty = SuBitGraph::empty(graph.n_hedges());
@@ -4687,6 +4698,7 @@ mod tests {
             isolated: Default::default(),
         });
         assert!(diagram.as_diagram().is_err());
+        assert!(diagram.as_shared_diagram().is_err());
 
         diagram.selected_region = Some(DiagramSelection {
             hedges: complete,
@@ -4696,6 +4708,10 @@ mod tests {
             diagram.as_diagram().unwrap(),
             diagram.inner.as_ref()
         ));
+        let retained = std::sync::Arc::clone(diagram.as_shared_diagram().unwrap());
+        assert!(std::sync::Arc::ptr_eq(&retained, &diagram.inner));
+        drop(diagram);
+        retained.validate().unwrap();
     }
 
     #[test]
