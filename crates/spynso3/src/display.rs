@@ -1,3 +1,4 @@
+pub mod graph;
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet},
@@ -2678,6 +2679,10 @@ fn formatted(
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DisplaySettings>()?;
+    m.add_class::<graph::PyLayoutSettings>()?;
+    m.add_class::<graph::PyStrokeStyle>()?;
+    m.add_class::<graph::PyRenderSettings>()?;
+    m.add_class::<graph::PyDiagramRender>()?;
     m.add_function(wrap_pyfunction!(load_math_font, m)?)?;
     m.add_function(wrap_pyfunction!(format_tensor, m)?)?;
     m.add_function(wrap_pyfunction!(to_typst, m)?)?;
