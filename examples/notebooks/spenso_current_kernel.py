@@ -14,33 +14,26 @@ def _(mo):
     mo.md(r"""
     ## Deriving current kernels with Spenso
 
-    A UFO Lorentz rule describes an interaction through its tensor indices.
-    To turn it into a current kernel, pyAmpliCol selects an output leg and
-    supplies currents for the others. Spenso contracts their indices and
-    leaves those of the output leg open.
+    The numerical kernels described in the preceding subsections require
+    scalar expressions for the components of the off-shell currents. In
+    the recurrence introduced above, these expressions are implicit in
+    the vertex rules and propagators.
+    Spenso [@SpensoSoftware] provides the tensor contractions needed to
+    obtain them. During model processing, pyAmpliCol selects an output leg
+    of a UFO Lorentz rule and supplies symbolic currents for the remaining
+    legs. Spenso sums over their indices in a chosen basis, leaving one
+    scalar expression for each component of the output current. These are
+    the expressions passed to Symbolica for optimisation and compilation.
 
-    Each component of the resulting current is a scalar symbolic expression
-    in the input components, momenta and model parameters. The spinor current
-    $Q(2,4)_c$ below has four such expressions, one for each value
-    $c=0,1,2,3$. All contracted indices have been summed over. Symbolica
-    optimises these scalar expressions, and SymJIT generates numerical code,
-    as described in the preceding sections.
+    To illustrate this step, return to the $d\bar d\to Zgg$ example and
+    consider the last current in equation (3.6),
 
-    The purpose is similar to that of ALOHA [@deAquino:2011ub] and the UFO
-    extension of Comix [@Hoeche:2014kca]. Spenso [@SpensoSoftware] separates
-    the index spaces and tensor components from the contraction algorithm.
-    Changing the basis of the Dirac matrices, for example, requires supplying
-    the corresponding tensor and current components; the contraction code
-    remains the same.
+    $$Q(2,4)=P_d V_{dgd}[Q(2),G(4)].$$
 
-    Each index belongs to a specified representation: Minkowski vectors for
-    Lorentz indices, four-component bispinors for Dirac indices, and
-    fundamental or adjoint $SU(3)$ representations for colour. The HEP library
-    provides the metric, Dirac matrices, $\gamma^5$ and chiral projectors.
-    For tensors absent from the library, Spenso generates symbolic components;
-    users may instead supply their own symbolic or numerical entries.
-    Before component evaluation, Idenso's `simplify_algebra` method on
-    `TensorExpression` can apply metric, Dirac and colour identities.
+    Here $Q(2)=\bar u_{h_2}(q_2)$ and $G(4)$ are the one-leg currents
+    introduced there. We use Spenso's tensor API to derive the components
+    of their quark–gluon join and then apply the propagator $P_d$, keeping
+    the input components symbolic until numerical evaluation.
     """)
     return
 
@@ -48,12 +41,12 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Consider the quark–gluon join $Q(2,4)=P_d V_{dgd}[Q(2),G(4)]$ from
-    equation (3.6) in the section on off-shell-current recurrence. The
-    tensor API lets us construct this join directly. For this example,
-    we use a four-component row spinor, a massless quark propagator and the
-    vertex normalization $V^\mu=i\gamma^\mu$, omitting the colour matrix and
-    strong coupling. With $q_{24}=q_2+q_4$ and $s_{24}=q_{24}^2$,
+    For this example, take a massless quark and choose the colour-stripped
+    vertex normalisation $V^\mu=i\gamma^\mu$ in four-component notation,
+    with the strong coupling omitted as in equation (3.6). We use the Weyl gamma
+    matrices supplied by Spenso's high-energy-physics tensor library and
+    the metric $g=\mathrm{diag}(1,-1,-1,-1)$. With
+    $q_{24}=q_2+q_4$ and $s_{24}=q_{24}^2$, the current is then
 
     $$
     Q(2,4)_c = \frac{i}{s_{24}}\sum_b
@@ -61,11 +54,11 @@ def _(mo):
     (\not q_{24})_{bc}.
     $$
 
-    The bracket contains the vertex contraction. The propagator acts on its
-    right because the current is a row spinor; it supplies the second factor
-    of $i$. We use the library's Weyl gamma matrices and the metric
-    $g=\mathrm{diag}(1,-1,-1,-1)$. Vector components are supplied
-    contravariantly, and Minkowski contractions provide the metric signs.
+    Here $a,b,c$ are spinor indices and $\mu$ is a Lorentz index, each
+    taking four values, with $\not q_{24}=\gamma^\nu q_{24,\nu}$.
+    The bracket is $V_{dgd}[Q(2),G(4)]$; since $Q(2)$ is a row spinor,
+    the propagator $i\not q_{24}/s_{24}$ acts on its right. Summing the
+    repeated indices therefore leaves four expressions labelled by $c$.
     """)
     return
 
@@ -73,12 +66,14 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The two input currents and their combined momentum are named tensors.
-    `TN.vector` declares a tensor with one index, whose space is set by the
-    representation. The integers preceding that representation identify the
-    external legs: `2` for $Q(2)$, `4` for $G(4)$, and `2, 4` for $q_{24}$.
-    These labels are part of the tensor's name. A later call such as `Q2(1)`
-    assigns its tensor index, here the spinor label `1`.
+    To express this contraction in code, we first specify the spaces to
+    which the indices belong: `Rep.bis(4)` for the four spinor components
+    and `Rep.mink(4)` for Minkowski vectors. The latter includes the metric
+    used in contractions, so vector components can be supplied
+    contravariantly. With these representations, `TN.vector` declares
+    a tensor carrying one index. The arguments `2`, `4` and `2, 4` retain
+    the leg labels of $Q(2)$, $G(4)$ and $q_{24}$ in their names; tensor
+    indices are assigned when the contractions are formed below.
     """)
     return
 
@@ -102,10 +97,12 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The vertex joins the spinor and gluon currents. Its gamma slots follow
-    the order `(row, column, Lorentz)`: index `1` contracts with `Q2`, and
-    index `2` with `G4`. The remaining spinor slot, marked by `AUTO` as `_`,
-    stays unlabelled so that it can connect to the propagator.
+    The first contraction forms the bracket in the component expression.
+    Spenso orders the indices of a gamma matrix as `(row, column, Lorentz)`.
+    Assigning the same label to compatible indices contracts them, so
+    `Q2(1)` joins the row index and `G4(2)` the Lorentz index. We mark the
+    remaining spinor index with `AUTO`, imported as `_`, to connect it to
+    the propagator by multiplication in a later step.
     """)
     return
 
@@ -124,12 +121,12 @@ def _(G4, Q2, Symbol, T):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The propagator is $i\not q_{24}/q_{24}^2$. The product
-    `q24 * q24` forms the Minkowski scalar product. In the numerator,
-    the Lorentz index `3` contracts the gamma matrix with the momentum,
-    while the spinor index `3` remains open. The same label can serve both
-    roles because the indices belong to different spaces. The unlabelled
-    first spinor slot will receive the join.
+    The same gamma matrix supplies the propagator numerator when its
+    Lorentz index is contracted with $q_{24}$, while `q24 * q24` gives
+    the denominator $s_{24}$. Here the label `3` is used for both the
+    contracted Lorentz index and the open output spinor index. Since they
+    belong to different spaces, these indices remain distinct; the first
+    spinor index is again marked with `_` to receive the vertex contraction.
     """)
     return
 
@@ -147,9 +144,11 @@ def _(gamma, i, q24):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Multiplying the join by the propagator connects their unlabelled spinor
-    slots and leaves the output index open. If several vertex contributions
-    fed this current, we would add them before applying the propagator once.
+    Multiplication now connects the two spinor indices marked with `_`,
+    completing the expression for $Q(2,4)$ with only its output index open.
+    This current has a single vertex contribution. For the three-leg
+    currents following equation (3.6), the two contributions would first
+    be added and the propagator applied to their sum.
     """)
     return
 
@@ -158,36 +157,40 @@ def _(mo):
 def _(join, propagator):
     current = join * propagator
     current
-    return (current,)
+    return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Evaluating the contractions gives four scalar component expressions,
-    including the propagator denominator.
-    They form the tensor `Q24`, with its one open bispinor index.
+    Up to this point, `current` records the tensors and their contractions.
+    Calling `to_tensor()` carries out the component sums, using the
+    library's gamma matrices and generating symbolic entries for the named
+    input tensors. The resulting tensor `Q24` contains the four scalar
+    expressions for $Q(2,4)_c$, including the momentum-dependent denominator.
     """)
     return
 
 
-@app.cell
-def _(current):
-    Q24 = current.to_tensor()
+app._unparsable_cell(
+    r"""
+    Q24 = current.()
     Q24
-    return (Q24,)
+    """,
+    name="_"
+)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The tensor's `evaluator` method passes its component expressions to
-    Symbolica, which optimises them together. It accepts the same options as
-    `Expression.evaluator`; `components()` supplies the input symbols in
-    component order. The denominator is already expressed in the momentum
-    components. SymJIT compiles the evaluator on its first numerical use.
-    Subsequent calls reuse it without repeating the tensor contraction.
-    Each input row produces a tensor with the same four spinor components.
+    These expressions can now be evaluated through the Symbolica interface
+    introduced above. The tensor's `evaluator` method accepts the same
+    options as `Expression.evaluator` and optimises all four components
+    together. We use `components()` to list its inputs in the order
+    $Q(2)$, $G(4)$, $q_{24}$; each numerical input row then produces a
+    four-component tensor. As in the earlier scalar example, SymJIT
+    compiles the evaluator on its first numerical use.
     """)
     return
 
@@ -205,13 +208,21 @@ def _(G4, Q2, Q24, q24):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    For the evaluation above, take $q_2=(1,0,0,1)$, $q_4=(1,1,0,0)$,
-    $Q(2)=(1,0,0,0)$ and $G(4)=(0,0,1,0)$. The input momenta are lightlike,
-    the spinor satisfies $Q(2)\not q_2=0$, and the gluon polarization obeys
-    $q_4\cdot G(4)=0$. The spinor's overall normalization is arbitrary.
-    Their combined momentum is $q_{24}=(2,1,0,1)$, with $s_{24}=2$, and the
-    current evaluates to $Q(2,4)=(-i/2,-i/2,0,0)$. This specifies the local
-    join; the remaining legs of the scattering process are not needed here.
+    The numerical inputs above correspond to lightlike momenta
+    $q_2=(1,0,0,1)$ and $q_4=(1,1,0,0)$, with
+    $Q(2)=(1,0,0,0)$ and $G(4)=(0,0,1,0)$. They satisfy
+    $Q(2)\not q_2=0$ and $q_4\cdot G(4)=0$, with an arbitrary overall
+    spinor normalisation. Since $q_{24}=(2,1,0,1)$ and $s_{24}=2$, the
+    result is $Q(2,4)=(-i/2,-i/2,0,0)$. Only the inputs to this local
+    join are needed for the evaluation.
+
+    Returning to the recurrence, $Q(2,4)$ supplies both
+    $V_{dZd}[Q(2,4),Z(3)]$ in $Q(2,3,4)$ and
+    $V_{dgd}[Q(2,4),G(5)]$ in $Q(2,4,5)$. The shared-current construction
+    ensures that its value is computed once for these two uses. Each later
+    join has its own component rule derived in the same way, until the
+    final sum is contracted with the closing-leg spinor $v_{h_1}(q_1)$
+    without a propagator, as in the amplitude expression following (3.6).
     """)
     return
 
@@ -219,40 +230,42 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The same construction extends to currents with more open indices.
-    When pyAmpliCol decomposes a momentum-independent four-point interaction
-    into successive joins, as described in the section on general contact
-    decomposition, the intermediate current may carry two Lorentz indices.
-    Contracting the first two inputs gives the tensor $X_{\rho\sigma}$,
-    with 16 components before reduction. Symbolica identifies exact zeros
-    and equality or sign relations among them. For the pairings discussed
-    there, one independent component remains for
-    $g_{\mu\nu}g_{\rho\sigma}$, and six for the combination in the
-    antisymmetric-contact equation.
+    Deriving numerical routines from interaction tensors is also the purpose
+    of ALOHA [@deAquino:2011ub] and the UFO extension of Comix
+    [@Hoeche:2014kca]. Spenso provides a generic contraction algorithm in
+    which the index spaces and tensor entries are supplied separately.
+    Thus the example can be expressed in a different Dirac basis by
+    supplying the corresponding matrices and current components, while
+    retaining the same contractions. The tensor library also provides
+    $\gamma^5$, chiral projectors and fundamental or adjoint $SU(3)$
+    representations; additional tensors can be defined through their
+    symbolic or numerical entries. Before evaluating components, the
+    symbolic tensor-algebra library Idenso can apply metric, Dirac and
+    colour identities through `TensorExpression.simplify_algebra`.
 
-    The division of work remains the same: pyAmpliCol chooses the joins,
-    Spenso contracts the tensors, and Symbolica simplifies and compares
-    the component expressions. Supported higher-point colour-singlet rules
-    follow this route too. Where no reduced tensor factorisation is used,
-    the original interaction is contracted directly with its input currents.
-    The resulting expressions supply kernels for recurrence and compiled
-    execution. The symbolic work takes place during model processing and
-    kernel construction, before ordinary double-precision event evaluation.
+    The open indices need not describe a single spinor or vector. In the
+    momentum-independent four-point construction of the section on general
+    contact decomposition, contracting two inputs leaves the intermediate
+    tensor $X_{\rho\sigma}$ with two Lorentz indices. Spenso obtains its
+    16 component expressions in the same way as the four expressions
+    above. Symbolica then identifies exact zeros and components related by
+    equality or a sign, giving the one stored representative for the
+    metric-pair structure and the six for the antisymmetric four-gluon
+    structure discussed there. The recorded reconstruction map allows the
+    second join to use this reduced current without changing the rule.
 
-    These tools do not by themselves establish model support. Unresolved
-    UFO tensor functions are rejected. For momentum-independent four-point
-    rules, pyAmpliCol records the component ordering, zeros and exact sign
-    relations for each inequivalent output leg. Coloured contact rules must
-    also match an explicitly reconstructed colour class from the section on
-    general contact decomposition. Adding a Lorentz structure requires its
-    components and contraction rules; adding a colour representation, such
-    as a sextet, also requires the associated Clebsch–Gordan tensors, colour
-    flows, projections and contractions. Further restrictions, including
-    Majorana fermion flow and unverified coloured high-point contacts,
-    appear in the UFO-coverage table.
-
-    Within these boundaries, the construction supports multiple open quark
-    lines and LC, NLC and full-colour calculations.
+    This is also the distinction between deriving a component expression
+    and choosing a decomposition. For the supported higher-point
+    colour-singlet rules that use the input-retaining construction,
+    Spenso contracts the original interaction at the final join; it does
+    not select a smaller intermediate space. The reconstruction conditions
+    and colour restrictions remain those of the contact-decomposition
+    section, and the supported UFO structures are summarised in the
+    UFO-coverage table. In particular, adding a colour representation
+    requires its colour flows and projections as well as its tensors.
+    Within that scope, the component expressions derived during model
+    processing supply both the local recurrence kernels and the combined
+    evaluators described in the preceding subsections.
     """)
     return
 
