@@ -39,7 +39,7 @@ regex-automata = { version = "0.4", default-features = false, features = ["dfa-b
 regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "result", "std"] }
-serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "raw_value"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
@@ -74,7 +74,7 @@ regex-automata = { version = "0.4", default-features = false, features = ["dfa-b
 regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "result", "std"] }
-serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "raw_value"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }

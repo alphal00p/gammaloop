@@ -24,6 +24,12 @@
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-model": [
+      "linnet"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
@@ -139,6 +145,12 @@
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit-model": {
+      "linnet": []
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
       "gammaloop-tracing-filter": [
         "clap"
@@ -292,6 +304,8 @@
     "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
     "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
     "clinnet": "crates/clinnet",
+    "feynkit-model": "crates/feynkit-model",
+    "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
     "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
@@ -319,6 +333,8 @@
     "alphal00p-docs-python-exporter",
     "alphal00p-docs-schema",
     "clinnet",
+    "feynkit-model",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -355,6 +371,13 @@
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-model": [
+      "linnet"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model",
+      "linnet"
+    ],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -490,6 +513,13 @@
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-model": [
+      "linnet"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model",
+      "linnet"
+    ],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -594,6 +624,8 @@
     "vakint": []
   },
   "symbolica_normal_packages": [
+    "feynkit-model",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -610,6 +642,8 @@
   ],
   "symbolica_test_packages": [
     "alphal00p-docs-examples",
+    "feynkit-model",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -659,6 +693,12 @@
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-model": [
+      "linnet"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
@@ -798,6 +838,12 @@
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit-model": {
+      "linnet": []
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
       "gammaloop-tracing-filter": [
         "clap"
