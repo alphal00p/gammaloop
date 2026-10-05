@@ -39,7 +39,7 @@ use pyo3_stub_gen::{
 
 use crate::{
     cff::{PyCffResult, PyCutPropagator, build_cff_for_diagram},
-    display::{escape_html, render_diagram_html},
+    display::{PyDiagramRender, escape_html, render_diagram_html},
     error,
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
@@ -4093,7 +4093,7 @@ impl PyFeynmanDiagram {
         ))
     }
 
-    /// Render an interactive, transparent SVG using the shared physics renderer.
+    /// Create a displayable snapshot using the shared physics renderer.
     ///
     /// All graph geometry is drawn in Rust; the embedded Typst compiler typesets
     /// labels and titles. ``layouts={"impred_labels": True}`` refines the layout
@@ -4103,11 +4103,13 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> svg = diagram.render(momenta=True, config={
+    /// >>> drawing = diagram.render(momenta=True, config={
     /// ...     "layouts": {"impred_steps": 100},
     /// ...     "template_options": {"show-particle": False},
     /// ... })
-    /// >>> svg = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+    /// >>> drawing
+    /// >>> svg = drawing.to_svg()
+    /// >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
@@ -4136,8 +4138,10 @@ impl PyFeynmanDiagram {
         lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<String> {
-        self.render_svg(py, config, momenta, lmb, highlight)
+    ) -> PyResult<PyDiagramRender> {
+        let svg = self.render_svg(py, config, momenta, lmb, highlight)?;
+        let html = render_diagram_html(&self.inner, &svg);
+        Ok(PyDiagramRender::new(svg, html))
     }
 
     /// Render an HTML figure with the same options and hover information as ``render``.
@@ -4170,8 +4174,10 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let svg = self.render(py, config, momenta, lmb, highlight)?;
-        Ok(render_diagram_html(&self.inner, &svg))
+        Ok(self
+            .render(py, config, momenta, lmb, highlight)?
+            .to_html()
+            .to_owned())
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -4195,7 +4201,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import display
     /// >>> display(diagram)
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.render(py, None, false, None, None)
+        self.render_svg(py, None, false, None, None)
     }
 
     /// Write a concise summary to an IPython pretty printer.

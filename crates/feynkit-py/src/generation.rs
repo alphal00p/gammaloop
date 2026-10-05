@@ -28,6 +28,7 @@ use pyo3_stub_gen::{
 
 use crate::{
     amplitude::PyAmplitude,
+    display::PyDiagramRender,
     error,
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
@@ -584,14 +585,16 @@ impl PyProcess {
         )
     }
 
-    /// Render a blob with the process's physical incoming and outgoing particles.
+    /// Create a displayable blob with the process's physical incoming and outgoing particles.
     /// Alternative final states are displayed as separate schematics.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Process`` class example:
     ///
-    /// >>> svg = process.render()
+    /// >>> drawing = process.render()
+    /// >>> drawing
+    /// >>> svg = drawing.to_svg()
     ///
     /// Parameters
     /// ----------
@@ -603,7 +606,7 @@ impl PyProcess {
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "builtins.dict[builtins.str, typing.Any] | None", imports = ("builtins", "typing")))]
         config: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<String> {
+    ) -> PyResult<PyDiagramRender> {
         let resolve = |state: &[ParticleSelector]| {
             state
                 .iter()
@@ -620,7 +623,12 @@ impl PyProcess {
             .iter()
             .map(|state| resolve(state))
             .collect::<PyResult<Vec<_>>>()?;
-        crate::display::process_svg(py, &self.model, &incoming, &outgoing, config)
+        let svg = crate::display::process_svg(py, &self.model, &incoming, &outgoing, config)?;
+        let html = format!(
+            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
+            crate::display::escape_html(&self.__repr__())
+        );
+        Ok(PyDiagramRender::new(svg, html))
     }
 
     /// Display the process schematic in SVG-aware frontends.
@@ -632,7 +640,7 @@ impl PyProcess {
     /// >>> from IPython.display import display
     /// >>> display(process)
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.render(py, None)
+        Ok(self.render(py, None)?.to_svg().to_owned())
     }
 
     /// Display the process blob, model and active restrictions in notebooks.
@@ -644,11 +652,7 @@ impl PyProcess {
     /// >>> from IPython.display import display
     /// >>> display(process)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        let svg = self.render(py, None)?;
-        Ok(format!(
-            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
-            crate::display::escape_html(&self.__repr__())
-        ))
+        Ok(self.render(py, None)?.to_html().to_owned())
     }
 
     /// Return a process accepting any of the supplied final states.

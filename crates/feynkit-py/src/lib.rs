@@ -23,6 +23,7 @@ pub use cff::{
     PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface, PyCffSurfaceGroup,
     PyCutPropagator,
 };
+pub use display::PyDiagramRender;
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
     PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
@@ -164,6 +165,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<symbols::PySymbols>()?;
+    module.add_class::<PyDiagramRender>()?;
     error::register(module)?;
     amplitude::register(module)?;
     model::register(module)?;
@@ -504,7 +506,7 @@ assert denominator.rank == 0
 assert "ZERO" not in str(denominator)
 assert denominator != 1
 integrand = loop_diagram.numerator_expression() / denominator
-diagram_svg = loop_diagram.render()
+diagram_svg = loop_diagram.render().to_svg()
 assert diagram_svg.startswith("<svg")
 assert loop_diagram.to_html() == loop_diagram._repr_html_()
 assert "<svg" in loop_diagram._repr_svg_()
