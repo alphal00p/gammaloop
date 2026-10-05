@@ -3661,6 +3661,32 @@ class FourMomentum:
         pz : float
             Momentum along the z axis.
         """
+    def wavefunction(self, kind: builtins.str, helicity: Helicity) -> Wavefunction:
+        r"""
+        Construct a fixed scalar, vector or spinor external state.
+
+        ``kind`` is ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``,
+        ``v`` or ``v_bar``. Scalar helicity is zero; spinors use plus or minus.
+        A massive vector also admits zero helicity for a longitudinal state.
+        The inherited longitudinal convention is undefined at rest or zero mass
+        and raises ``KinematicsError``. All states use four-dimensional external
+        components and GammaLoop's MadGraph phases; no averaging is included.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> p = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+        >>> eps = p.wavefunction("epsilon", hep.Helicity.PLUS)
+        >>> assert len(eps.components) == 4 and eps.bar().bar() == eps
+
+        Parameters
+        ----------
+        kind : str
+            Scalar, vector or spinor state kind, including the barred variants above.
+        helicity : Helicity
+            Fixed helicity; zero for scalars, plus/minus for spinors, and also zero
+            for a massive longitudinal vector with nonzero spatial momentum.
+        """
     def components(self) -> tuple[builtins.float, builtins.float, builtins.float, builtins.float]:
         r"""
         Return ``(energy, px, py, pz)``.
@@ -10417,6 +10443,97 @@ class VertexRule:
             IPython pretty printer receiving the text.
         cycle : bool
             Whether the object occurs recursively in the current display.
+        """
+
+@typing.final
+class Wavefunction:
+    r"""
+    A fixed numerical external state in GammaLoop's MadGraph phase convention.
+
+    Obtain states from ``FourMomentum.wavefunction(kind, helicity)``. Vector
+    components use ``(E,x,y,z)`` and signature ``+---``; spinors use the chiral
+    gamma-matrix basis. These external states have four components independently
+    of the dimension used for internal symbolic Lorentz/Dirac algebra. A scalar
+    has one component. No helicity sum, spin average or coupling is included.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> momentum = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+    >>> state = momentum.wavefunction("epsilon", hep.Helicity.PLUS)
+    >>> assert state.kind == "epsilon" and len(state) == 4
+    """
+    @property
+    def kind(self) -> builtins.str:
+        r"""
+        One of ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``, ``v``, ``v_bar``.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state.kind == "epsilon"
+        """
+    @property
+    def components(self) -> builtins.list[complex]:
+        r"""
+        Return a copy of the numerical components as native Python complex values.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> values = state.components
+        >>> assert len(values) == 4 and values[0] == 0j
+        >>> assert abs(values[1] + 2**-0.5) < 1e-14
+        """
+    def bar(self) -> Wavefunction:
+        r"""
+        Conjugate a scalar/vector or take the chiral Dirac adjoint of a spinor.
+
+        Calling this twice restores both the original components and state kind.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state.bar().kind == "epsilon_bar"
+        >>> assert state.bar().bar() == state
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Return one for scalar states and four for vector or spinor states.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert len(state) == 4
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the numerical state kind and its components.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert "Wavefunction" in repr(state)
+        """
+    def __eq__(self, other: Wavefunction) -> builtins.bool:
+        r"""
+        Compare both the external-state kind and its numerical components.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state == state.bar().bar()
+
+        Parameters
+        ----------
+        other : Wavefunction
+            State to compare with this one.
         """
 
 @typing.final

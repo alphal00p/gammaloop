@@ -51,6 +51,13 @@ pub struct PyKinematics {
     pub(crate) inner: feynkit_kinematics::Kinematics,
 }
 
+impl PyKinematics {
+    /// Borrow the shared native assumptions when calling another HEPKit backend.
+    pub fn as_kinematics(&self) -> &feynkit_kinematics::Kinematics {
+        &self.inner
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[spenso_macros::track_usage(crate::record_usage)]
@@ -1168,6 +1175,36 @@ impl PyFourMomentum {
     #[new]
     fn new(energy: f64, px: f64, py: f64, pz: f64) -> Self {
         FourMomentum::from_args(energy, px, py, pz).into()
+    }
+
+    /// Construct a fixed scalar, vector or spinor external state.
+    ///
+    /// ``kind`` is ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``,
+    /// ``v`` or ``v_bar``. Scalar helicity is zero; spinors use plus or minus.
+    /// A massive vector also admits zero helicity for a longitudinal state.
+    /// The inherited longitudinal convention is undefined at rest or zero mass
+    /// and raises ``KinematicsError``. All states use four-dimensional external
+    /// components and GammaLoop's MadGraph phases; no averaging is included.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> p = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+    /// >>> eps = p.wavefunction("epsilon", hep.Helicity.PLUS)
+    /// >>> assert len(eps.components) == 4 and eps.bar().bar() == eps
+    ///
+    /// Parameters
+    /// ----------
+    /// kind : str
+    ///     Scalar, vector or spinor state kind, including the barred variants above.
+    /// helicity : Helicity
+    ///     Fixed helicity; zero for scalars, plus/minus for spinors, and also zero
+    ///     for a massive longitudinal vector with nonzero spatial momentum.
+    fn wavefunction(&self, kind: &str, helicity: &PyHelicity) -> PyResult<crate::PyWavefunction> {
+        self.inner
+            .wavefunction(kind.parse().map_err(error::kinematics)?, helicity.inner)
+            .map(|inner| crate::PyWavefunction { inner })
+            .map_err(error::kinematics)
     }
 
     /// Return the energy component.
@@ -2310,6 +2347,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyJetAlgorithm>()?;
     module.add_class::<PyThreeMomentum>()?;
     module.add_class::<PyFourMomentum>()?;
+    module.add_class::<crate::PyWavefunction>()?;
     module.add_class::<PyRotation>()?;
     module.add_class::<PyBoost>()?;
     module.add_class::<PyJet>()?;

@@ -13,6 +13,7 @@ mod model;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
+mod wavefunction;
 
 use pyo3::{prelude::*, types::PyModule};
 use symbolica::api::python::{Citation, SymbolicaCommunityModule};
@@ -44,6 +45,7 @@ pub use model::{
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
+pub use wavefunction::PyWavefunction;
 
 mod symbols;
 

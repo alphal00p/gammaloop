@@ -522,15 +522,29 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     for (runtime, source) in runtime.finalized_cuts.iter().zip(diagram.cuts()) {
         assert_eq!(
             half_edges(&runtime.left),
-            source.left.half_edges.iter().copied().collect()
+            source
+                .left
+                .half_edges
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
         assert_eq!(
             half_edges(&runtime.right),
-            source.right.half_edges.iter().copied().collect()
+            source
+                .right
+                .half_edges
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
         assert_eq!(
             half_edges(&runtime.cut.left),
-            source.cut.iter().copied().collect()
+            source
+                .cut
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
     }
     assert_eq!(
@@ -544,15 +558,27 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     {
         assert_eq!(
             half_edges(&runtime.left),
-            source.left.iter().copied().collect()
+            source
+                .left
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
         assert_eq!(
             half_edges(&runtime.right),
-            source.right.iter().copied().collect()
+            source
+                .right
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
         assert_eq!(
             half_edges(&runtime.cut.left),
-            source.cut.iter().copied().collect()
+            source
+                .cut
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
         );
     }
 }
