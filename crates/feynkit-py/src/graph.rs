@@ -45,6 +45,7 @@ use crate::{
     integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
     model::{PyModel, PyParticle, PyPropagator},
+    render_settings::PyRenderSettings,
     tensor::PyTensorReducer,
 };
 
@@ -4069,7 +4070,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : dict or None, optional
+    /// config : RenderSettings or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -4081,8 +4082,7 @@ impl PyFeynmanDiagram {
     fn to_linnest(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&PyRenderSettings>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
@@ -4096,29 +4096,27 @@ impl PyFeynmanDiagram {
     /// Create a displayable snapshot using the shared physics renderer.
     ///
     /// All graph geometry is drawn in Rust; the embedded Typst compiler typesets
-    /// labels and titles. ``layouts={"impred_labels": True}`` refines the layout
+    /// labels and titles. ``LayoutSettings(impred_labels=True)`` refines the layout
     /// around the drawn labels. No Python renderer or Typst graph package is needed.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> drawing = diagram.render(momenta=True, config={
-    /// ...     "layouts": {"impred_steps": 100},
-    /// ...     "template_options": {"show-particle": False},
-    /// ... })
+    /// >>> settings = hep.RenderSettings(
+    /// ...     layout=hep.LayoutSettings(impred_steps=100), show_particle=False)
+    /// >>> drawing = diagram.render(momenta=True, config=settings)
     /// >>> drawing
     /// >>> svg = drawing.to_svg()
     /// >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
-    /// config : dict or None, optional
-    ///     Native ``layouts``, ``drawing`` and ``style`` dictionaries. Boolean physics
-    ///     controls in ``template_options`` include ``show-particle``, ``show-momentum``,
-    ///     ``show-edge-index``, ``show-node-index``, ``debug``, and ``momentum-arrows``.
-    ///     Cross sections open their initial-state connections by default; set
-    ///     ``split-initial-state`` to ``False`` to draw the sewn graph.
+    /// config : RenderSettings or None, optional
+    ///     Immutable layout, styling, and physics overrides. Use ``help(RenderSettings)``
+    ///     and ``help(LayoutSettings)`` to discover the supported options.
+    ///     Cross sections open initial-state connections by default; set
+    ///     ``split_initial_state=False`` to draw the sewn graph.
     /// momenta : bool, optional
     ///     Show momentum arrows and labels routed in the diagram's stored basis.
     ///     Explicit physics settings in ``config`` override these display defaults.
@@ -4132,8 +4130,7 @@ impl PyFeynmanDiagram {
     pub(crate) fn render(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&PyRenderSettings>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
@@ -4155,7 +4152,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// config : dict or None, optional
+    /// config : RenderSettings or None, optional
     ///     Layout, drawing, style and physics settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
@@ -4167,8 +4164,7 @@ impl PyFeynmanDiagram {
     fn to_html(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.dict[builtins.str, typing.Any] | None", imports=("builtins", "typing")))]
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&PyRenderSettings>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
@@ -4616,7 +4612,7 @@ impl PyFeynmanDiagram {
     fn render_svg(
         &self,
         py: Python<'_>,
-        config: Option<&Bound<'_, PyAny>>,
+        config: Option<&PyRenderSettings>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
@@ -4628,8 +4624,7 @@ impl PyFeynmanDiagram {
                 "momentum basis belongs to a different diagram",
             ));
         }
-        let config = crate::display::render_config(py, config)?;
-        let options = crate::display::scene_options(&config, momenta || lmb.is_some())?;
+        let (config, options) = PyRenderSettings::resolve(config, momenta || lmb.is_some());
         let region = self.render_region(py, highlight)?;
         let isolated = region
             .as_ref()

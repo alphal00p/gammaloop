@@ -70,7 +70,8 @@ impl ImpredConfig {
         false
     }
 
-    fn validate(self) -> Result<(), String> {
+    /// Check force, cooling, and refinement parameters before starting a layout.
+    pub fn validate(self) -> Result<(), String> {
         if self.step_scale == 0 {
             return Err("ImPrEd step scale must be positive".into());
         }

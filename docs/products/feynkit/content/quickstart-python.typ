@@ -47,8 +47,9 @@ topology filters, and execution settings as keywords. These settings belong to e
 obtained from that model can select external states.
 
 In notebooks, displaying a `Process` draws the external states around a central blob.
-`process.render()` returns a displayable `DiagramRender` and accepts a configuration dictionary,
-for example `process.render(config={"drawing": {"node_radius": 5}})`.
+`process.render()` returns a displayable `DiagramRender` and accepts typed settings,
+for example `process.render(config=fk.RenderSettings(node_radius=5))`.
+Use `help(fk.RenderSettings)` to discover the options.
 Use the result's `to_svg()` to export the schematic as text. Alternative final
 states are drawn separately.
 

@@ -540,7 +540,7 @@ Nine independent quadratures check massive rates, including three checks
 against the published massless total. The notebook keeps widths zero and
 uses illustrative tree-level inputs. The installed regression, HTML export,
 strict Marimo checks and all 36 live energy, mass and angular selections pass.
-The diagram cell uses the public `RenderConfig` generic layout independently
+The diagram cell uses the native graph layout independently
 of the algebra cells.
 
 == Generated chiral Z decays

@@ -2,9 +2,11 @@
 
 import builtins
 import importlib.abc
+import inspect
 import itertools
 import json
 import math
+import pydoc
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -36,7 +38,7 @@ builtins.__import__ = import_without_renderers
 
 
 def check_render_snapshot(value):
-    config = {"drawing": {"node_radius": 5}}
+    config = hep.RenderSettings(node_radius=5)
     drawing = value.render(config=config)
     assert isinstance(drawing, hep.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
@@ -47,16 +49,69 @@ def check_render_snapshot(value):
     assert drawing._mime_() == ("text/html", html)
     assert "#image(bytes(" in drawing.to_linnest()
     assert repr(drawing) == "DiagramRender()"
-    # Display/export reuse the snapshot rather than consulting mutated settings.
-    config["drawing"]["node_radius"] = "invalid"
+    # Settings are immutable and the completed drawing remains reusable.
+    try:
+        config.node_radius = 6
+    except AttributeError:
+        pass
+    else:
+        raise AssertionError("render settings must be immutable")
     assert drawing.to_svg() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)
 
 
 try:
+    # Constructor signatures, documented properties, and early errors make
+    # settings discoverable without importing the optional graph bindings.
+    for settings_type in (hep.RenderSettings, hep.LayoutSettings, hep.StrokeStyle):
+        signature = inspect.signature(settings_type)
+        assert signature.parameters
+        assert all(
+            parameter.kind is inspect.Parameter.KEYWORD_ONLY
+            for parameter in signature.parameters.values()
+        )
+        assert repr(settings_type()) == f"{settings_type.__name__}()"
+    assert "node_radius" in pydoc.render_doc(hep.RenderSettings)
+    assert "impred_steps" in pydoc.render_doc(hep.LayoutSettings)
+    for construct, keywords in (
+        (hep.RenderSettings, {"node_radius": -1}),
+        (hep.RenderSettings, {"node_radius": float("nan")}),
+        (hep.LayoutSettings, {"layout_algo": "unknown"}),
+        (hep.LayoutSettings, {"tree_dx": 0}),
+        (hep.LayoutSettings, {"impred_step_scale": 0}),
+        (hep.LayoutSettings, {"impred_spacing": float("inf")}),
+        (hep.LayoutSettings, {"impred_external_max_points": 4}),
+        (hep.LayoutSettings, {"impred_contract_chord_ratio": 2}),
+        (hep.StrokeStyle, {"thickness": -1}),
+        (hep.StrokeStyle, {"dash": "unknown"}),
+    ):
+        try:
+            construct(**keywords)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid settings accepted: {keywords}")
+    try:
+        hep.RenderSettings(show_partcle=False)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("misspelled setting names must be rejected")
     model = hep.Model.qcd()
     process = model.process(["g"], ["g"])
+    settings = hep.RenderSettings(
+        layout=hep.LayoutSettings(impred_steps=2),
+        node_fill="#112233",
+        node_stroke=hep.StrokeStyle(paint="#445566", thickness=2),
+        edge_stroke=hep.StrokeStyle(paint="#778899", dash="dashed"),
+    )
+    assert settings.layout.impred_steps == 2
+    assert settings.node_stroke.thickness == 2
+    styled = ET.fromstring(process.render(config=settings).to_svg())
+    assert any(node.get("fill") == "#112233" for node in styled.iter())
+    assert any(node.get("stroke") == "#445566" for node in styled.iter())
+    assert any(node.get("stroke") == "#778899" for node in styled.iter())
     check_render_snapshot(process)
     assert "<svg" in process._repr_html_()
     inclusive = process.with_final_state_alternatives([["g"], ["u", "u~"]])
@@ -71,13 +126,13 @@ try:
     # Check the rendered SVG: seed-only checks miss pins lost during layout.
     ns = "{http://www.w3.org/2000/svg}"
     for incoming, outgoing, config in (
-        (["g"], ["g"], {}),
-        (["u", "u~"], ["u", "u~"], {}),
-        (["g", "g"], ["g", "g", "g"], {}),
-        (["u"] * 4, [], {}),
-        ([], ["u"] * 4, {}),
-        (["u", "u~"], ["u", "u~"], {"drawing": {"node_radius": 5}}),
-        (["u", "u~"], ["u", "u~"], {"style": {"node-style": {"radius": 6}}}),
+        (["g"], ["g"], hep.RenderSettings()),
+        (["u", "u~"], ["u", "u~"], hep.RenderSettings()),
+        (["g", "g"], ["g", "g", "g"], hep.RenderSettings()),
+        (["u"] * 4, [], hep.RenderSettings()),
+        ([], ["u"] * 4, hep.RenderSettings()),
+        (["u", "u~"], ["u", "u~"], hep.RenderSettings(node_radius=5)),
+        (["u", "u~"], ["u", "u~"], hep.RenderSettings(node_radius=6)),
     ):
         drawing = ET.fromstring(
             model.process(incoming, outgoing).render(config=config).to_svg()
@@ -119,13 +174,17 @@ try:
     diagram = amplitude.diagrams[0]
     check_render_snapshot(diagram)
     check_render_snapshot(diagram.filter(edge=lambda edge: not edge.is_external))
+    config = hep.RenderSettings(show_particle=False, show_node_index=True)
+    basis = diagram.loop_momentum_basis
+    drawing = diagram.render(config=config, lmb=basis)
+    assert drawing.to_html() == diagram.to_html(config=config, lmb=basis)
+    assert drawing.to_linnest() == diagram.to_linnest(config=config, lmb=basis)
     ET.fromstring(diagram.render().to_svg())
     ET.fromstring(
         diagram.render(
-            config={
-                "layouts": {"impred_steps": 2},
-                "template_options": {"show-particle": False},
-            }
+            config=hep.RenderSettings(
+                layout=hep.LayoutSettings(impred_steps=2), show_particle=False
+            )
         ).to_svg()
     )
     expression = diagram.numerator_expression()
@@ -134,7 +193,7 @@ try:
     ET.fromstring(expression.to_svg())
     # The remaining graph types also render without Typst graph plugins.
     ET.fromstring(
-        process.render(config={"template_options": {"show-particle": False}}).to_svg()
+        process.render(config=hep.RenderSettings(show_particle=False)).to_svg()
     )
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
     ET.fromstring(network.render(config={"title": "Native network"}))
@@ -291,7 +350,7 @@ try:
     sewn_identities = None
     for split in (False, True):
         svg = cross.render(
-            config={"template_options": {"split-initial-state": split}}
+            config=hep.RenderSettings(split_initial_state=split)
         ).to_svg()
         root = ET.fromstring(svg)
         targets = [n for n in root.iter() if "data-linnet-kind" in n.attrib]

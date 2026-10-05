@@ -1,7 +1,8 @@
-use feynkit_graph::{FeynmanDiagram, SceneOptions};
+use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
-use linnest::svg::{Config, Scene};
+use linnest::svg::Scene;
 
+use crate::render_settings::PyRenderSettings;
 use pyo3::prelude::*;
 use std::{collections::BTreeMap, fmt::Write};
 
@@ -15,7 +16,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 /// --------
 /// >>> from symbolica.community import hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> drawing = process.render(config={"drawing": {"node_radius": 5}})
+/// >>> drawing = process.render(config=hep.RenderSettings(node_radius=5))
 /// >>> drawing
 /// >>> svg = drawing.to_svg()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -130,51 +131,6 @@ pub(crate) fn escape_html(value: &str) -> String {
         }
     }
     escaped
-}
-
-/// Parse the native, serializable SVG configuration.
-pub(crate) fn render_config(py: Python<'_>, config: Option<&Bound<'_, PyAny>>) -> PyResult<Config> {
-    let source = match config {
-        Some(config) => py
-            .import("json")?
-            .call_method1("dumps", (config,))?
-            .extract::<String>()?,
-        None => "{}".into(),
-    };
-    Config::from_json(&source).map_err(pyo3::exceptions::PyValueError::new_err)
-}
-
-pub(crate) fn scene_options(config: &Config, momenta: bool) -> PyResult<SceneOptions> {
-    let mut options = SceneOptions {
-        momentum_arrows: momenta,
-        ..Default::default()
-    };
-    for (key, value) in &config.template_options {
-        if key == "mode" && value.as_str() == Some("auto") {
-            continue;
-        }
-        let flag = value.as_bool().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!("{key} must be boolean"))
-        })?;
-        match key.as_str() {
-            "momentum-arrows" => options.momentum_arrows = flag,
-            "show-momentum" => options.show_momentum = Some(flag),
-            "show-particle" => options.show_particle = flag,
-            "show-edge-index" => options.show_edge_index = flag,
-            "show-node-index" => options.show_node_index = flag,
-            "split-initial-state" => options.split_initial_state = flag,
-            "debug" => {
-                options.show_node_index = flag;
-                options.show_edge_index = flag;
-            }
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "unsupported SVG physics option {key:?}"
-                )));
-            }
-        }
-    }
-    Ok(options)
 }
 
 /// Typst handles only label pages; Rust owns all graph layout and geometry.
@@ -315,14 +271,12 @@ pub(crate) fn collection_html(
 
 /// Draw each process channel as a native star graph with a hatched interaction blob.
 pub(crate) fn process_svg(
-    py: Python<'_>,
     model: &Model,
     incoming: &[ParticleId],
     outgoing: &[Vec<ParticleId>],
-    config: Option<&Bound<'_, PyAny>>,
+    config: Option<&PyRenderSettings>,
 ) -> PyResult<String> {
-    let config = render_config(py, config)?;
-    let options = scene_options(&config, false)?;
+    let (config, options) = PyRenderSettings::resolve(config, false);
     let mut figures = Vec::new();
     for state in outgoing {
         let scene = options

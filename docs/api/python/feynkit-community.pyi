@@ -2088,7 +2088,7 @@ class DiagramRender:
     --------
     >>> from symbolica.community import hepkit as hep
     >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-    >>> drawing = process.render(config={"drawing": {"node_radius": 5}})
+    >>> drawing = process.render(config=hep.RenderSettings(node_radius=5))
     >>> drawing
     >>> svg = drawing.to_svg()
     """
@@ -3427,7 +3427,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding the rendered SVG.
 
@@ -3444,7 +3444,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : dict or None, optional
+        config : RenderSettings or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -3453,34 +3453,32 @@ class FeynmanDiagram:
         highlight : Subgraph or linnet.Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> DiagramRender:
         r"""
         Create a displayable snapshot using the shared physics renderer.
 
         All graph geometry is drawn in Rust; the embedded Typst compiler typesets
-        labels and titles. ``layouts={"impred_labels": True}`` refines the layout
+        labels and titles. ``LayoutSettings(impred_labels=True)`` refines the layout
         around the drawn labels. No Python renderer or Typst graph package is needed.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> drawing = diagram.render(momenta=True, config={
-        ...     "layouts": {"impred_steps": 100},
-        ...     "template_options": {"show-particle": False},
-        ... })
+        >>> settings = hep.RenderSettings(
+        ...     layout=hep.LayoutSettings(impred_steps=100), show_particle=False)
+        >>> drawing = diagram.render(momenta=True, config=settings)
         >>> drawing
         >>> svg = drawing.to_svg()
         >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
         ----------
-        config : dict or None, optional
-            Native ``layouts``, ``drawing`` and ``style`` dictionaries. Boolean physics
-            controls in ``template_options`` include ``show-particle``, ``show-momentum``,
-            ``show-edge-index``, ``show-node-index``, ``debug``, and ``momentum-arrows``.
-            Cross sections open their initial-state connections by default; set
-            ``split-initial-state`` to ``False`` to draw the sewn graph.
+        config : RenderSettings or None, optional
+            Immutable layout, styling, and physics overrides. Use ``help(RenderSettings)``
+            and ``help(LayoutSettings)`` to discover the supported options.
+            Cross sections open initial-state connections by default; set
+            ``split_initial_state=False`` to draw the sewn graph.
         momenta : bool, optional
             Show momentum arrows and labels routed in the diagram's stored basis.
             Explicit physics settings in ``config`` override these display defaults.
@@ -3491,7 +3489,7 @@ class FeynmanDiagram:
             Highlight a region while preserving the full diagram as muted context.
             A Subgraph highlights its own region by default.
         """
-    def to_html(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
         r"""
         Render an HTML figure with the same options and hover information as ``render``.
 
@@ -3504,7 +3502,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        config : dict or None, optional
+        config : RenderSettings or None, optional
             Layout, drawing, style and physics settings, as in ``render``.
         momenta : bool, optional
             Draw momentum arrows and labels in the stored basis.
@@ -5866,6 +5864,256 @@ class KinematicsError(FeynkitError):
     ...     message = str(error)
     """
     ...
+
+@typing.final
+class LayoutSettings:
+    r"""
+    Immutable native graph layout overrides.
+    None leaves an option to the renderer; it does not force a default override.
+    Constructors and read-only properties expose options to help() and completion.
+
+    Examples
+    --------
+    >>> from symbolica.community.hepkit import LayoutSettings
+    >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
+    """
+    @property
+    def layout_algo(self) -> typing.Optional[builtins.str]:
+        r"""
+        Layout algorithm: "impred" preserves the embedding; "dot" uses layered ranks.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().layout_algo
+        """
+    @property
+    def tree_dx(self) -> typing.Optional[builtins.float]:
+        r"""
+        Horizontal spacing for layered layouts, in drawing units.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().tree_dx
+        """
+    @property
+    def tree_dy(self) -> typing.Optional[builtins.float]:
+        r"""
+        Vertical spacing for layered layouts, in drawing units.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().tree_dy
+        """
+    @property
+    def impred_steps(self) -> typing.Optional[builtins.int]:
+        r"""
+        Cooling schedule duration in reference steps; the native default is 500.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_steps
+        """
+    @property
+    def impred_step_scale(self) -> typing.Optional[builtins.int]:
+        r"""
+        Maximum integration stride after settling; the native default is 2.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_step_scale
+        """
+    @property
+    def impred_spacing(self) -> typing.Optional[builtins.float]:
+        r"""
+        Target spacing in drawing units; the native default is 2.4.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_spacing
+        """
+    @property
+    def impred_repulsion(self) -> typing.Optional[builtins.float]:
+        r"""
+        Nonnegative repulsion multiplier; the native default is 2.5.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_repulsion
+        """
+    @property
+    def impred_attraction(self) -> typing.Optional[builtins.float]:
+        r"""
+        Nonnegative attraction multiplier; the native default is 2.5.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_attraction
+        """
+    @property
+    def impred_parallel_balance(self) -> typing.Optional[builtins.float]:
+        r"""
+        Parallel-edge attraction balance; the native default is 1.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_parallel_balance
+        """
+    @property
+    def impred_pull(self) -> typing.Optional[builtins.float]:
+        r"""
+        External-leg pull multiplier; the native default is 0.45.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_pull
+        """
+    @property
+    def impred_pull_balance(self) -> typing.Optional[builtins.float]:
+        r"""
+        Balance of external-leg pulls; the native default is 1.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_pull_balance
+        """
+    @property
+    def impred_external_max_points(self) -> typing.Optional[builtins.int]:
+        r"""
+        Maximum intermediate external-route points, from 0 to 3; default 2.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_external_max_points
+        """
+    @property
+    def impred_split_length_ratio(self) -> typing.Optional[builtins.float]:
+        r"""
+        Subdivision threshold relative to spacing; the native default is 1.5.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_split_length_ratio
+        """
+    @property
+    def impred_contract_chord_ratio(self) -> typing.Optional[builtins.float]:
+        r"""
+        Positive contraction threshold below the subdivision threshold; default 1.25.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_contract_chord_ratio
+        """
+    @property
+    def impred_edge_clearance(self) -> typing.Optional[builtins.float]:
+        r"""
+        Positive edge clearance in drawing units; the native default is 0.4.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_edge_clearance
+        """
+    @property
+    def impred_node_edge_strength(self) -> typing.Optional[builtins.float]:
+        r"""
+        Nonnegative node-edge repulsion multiplier; the native default is 4.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_node_edge_strength
+        """
+    @property
+    def impred_labels(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Refine the layout around measured labels; disabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_labels
+        """
+    @property
+    def impred_level(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Rotate toward the external-pull optimum; enabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> value = LayoutSettings().impred_level
+        """
+    def __new__(cls, *, layout_algo: typing.Literal['dot', 'impred'] | None = None, tree_dx: typing.Optional[builtins.float] = None, tree_dy: typing.Optional[builtins.float] = None, impred_steps: typing.Optional[builtins.int] = None, impred_step_scale: typing.Optional[builtins.int] = None, impred_spacing: typing.Optional[builtins.float] = None, impred_repulsion: typing.Optional[builtins.float] = None, impred_attraction: typing.Optional[builtins.float] = None, impred_parallel_balance: typing.Optional[builtins.float] = None, impred_pull: typing.Optional[builtins.float] = None, impred_pull_balance: typing.Optional[builtins.float] = None, impred_external_max_points: typing.Optional[builtins.int] = None, impred_split_length_ratio: typing.Optional[builtins.float] = None, impred_contract_chord_ratio: typing.Optional[builtins.float] = None, impred_edge_clearance: typing.Optional[builtins.float] = None, impred_node_edge_strength: typing.Optional[builtins.float] = None, impred_labels: typing.Optional[builtins.bool] = None, impred_level: typing.Optional[builtins.bool] = None) -> LayoutSettings:
+        r"""
+        Construct immutable overrides; None preserves the renderer's defaults.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
+
+        Parameters
+        ----------
+        layout_algo : str or None, optional
+            Layout algorithm: "impred" preserves the embedding; "dot" uses layered ranks.
+        tree_dx : float or None, optional
+            Horizontal spacing for layered layouts, in drawing units.
+        tree_dy : float or None, optional
+            Vertical spacing for layered layouts, in drawing units.
+        impred_steps : int or None, optional
+            Cooling schedule duration in reference steps; the native default is 500.
+        impred_step_scale : int or None, optional
+            Maximum integration stride after settling; the native default is 2.
+        impred_spacing : float or None, optional
+            Target spacing in drawing units; the native default is 2.4.
+        impred_repulsion : float or None, optional
+            Nonnegative repulsion multiplier; the native default is 2.5.
+        impred_attraction : float or None, optional
+            Nonnegative attraction multiplier; the native default is 2.5.
+        impred_parallel_balance : float or None, optional
+            Parallel-edge attraction balance; the native default is 1.
+        impred_pull : float or None, optional
+            External-leg pull multiplier; the native default is 0.45.
+        impred_pull_balance : float or None, optional
+            Balance of external-leg pulls; the native default is 1.
+        impred_external_max_points : int or None, optional
+            Maximum intermediate external-route points, from 0 to 3; default 2.
+        impred_split_length_ratio : float or None, optional
+            Subdivision threshold relative to spacing; the native default is 1.5.
+        impred_contract_chord_ratio : float or None, optional
+            Positive contraction threshold below the subdivision threshold; default 1.25.
+        impred_edge_clearance : float or None, optional
+            Positive edge clearance in drawing units; the native default is 0.4.
+        impred_node_edge_strength : float or None, optional
+            Nonnegative node-edge repulsion multiplier; the native default is 4.
+        impred_labels : bool or None, optional
+            Refine the layout around measured labels; disabled by default.
+        impred_level : bool or None, optional
+            Rotate toward the external-pull optimum; enabled by default.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Inspect the selected overrides without rendering a diagram.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import LayoutSettings
+        >>> text = repr(LayoutSettings(impred_steps=100, impred_labels=True))
+        """
 
 @typing.final
 class LoadedModel:
@@ -8317,7 +8565,7 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None) -> DiagramRender:
         r"""
         Create a displayable blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
@@ -8332,7 +8580,7 @@ class Process:
 
         Parameters
         ----------
-        config : dict or None, optional
+        config : RenderSettings or None, optional
             Particle-label, layout and drawing overrides shared with Feynman diagrams.
         """
     def _repr_svg_(self) -> builtins.str:
@@ -8890,6 +9138,196 @@ class PropagatorMapping:
         """
 
 @typing.final
+class RenderSettings:
+    r"""
+    Immutable presentation settings for diagrams, subgraphs, and process schematics.
+    None leaves an option to the renderer; it does not force a default override.
+    Constructors and read-only properties expose options to help() and completion.
+
+    Examples
+    --------
+    >>> from symbolica.community.hepkit import RenderSettings
+    >>> settings = RenderSettings(node_radius=5, show_particle=False)
+    """
+    @property
+    def title(self) -> typing.Optional[builtins.str]:
+        r"""
+        Plain-text title above the drawing.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().title
+        """
+    @property
+    def layout(self) -> typing.Optional[LayoutSettings]:
+        r"""
+        Native graph layout options; omitted values retain renderer defaults.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().layout
+        """
+    @property
+    def node_radius(self) -> typing.Optional[builtins.float]:
+        r"""
+        Finite nonnegative vertex radius in drawing units.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().node_radius
+        """
+    @property
+    def node_fill(self) -> typing.Optional[builtins.str]:
+        r"""
+        Vertex fill as a CSS color.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().node_fill
+        """
+    @property
+    def node_stroke(self) -> typing.Optional[StrokeStyle]:
+        r"""
+        Vertex outline paint, width, and dash pattern.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().node_stroke
+        """
+    @property
+    def edge_stroke(self) -> typing.Optional[StrokeStyle]:
+        r"""
+        Edge paint, width, and dash pattern.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().edge_stroke
+        """
+    @property
+    def show_particle(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Show particle labels; enabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().show_particle
+        """
+    @property
+    def show_momentum(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Show momentum labels; None follows momenta or the supplied momentum basis.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().show_momentum
+        """
+    @property
+    def show_edge_index(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Show native edge IDs; disabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().show_edge_index
+        """
+    @property
+    def show_node_index(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Show native vertex IDs; disabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().show_node_index
+        """
+    @property
+    def momentum_arrows(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Draw momentum arrows; None follows momenta or the supplied momentum basis.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().momentum_arrows
+        """
+    @property
+    def split_initial_state(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Open sewn initial-state connections in cross sections; enabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().split_initial_state
+        """
+    @property
+    def debug(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Show both vertex and edge IDs; disabled by default.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> value = RenderSettings().debug
+        """
+    def __new__(cls, *, title: typing.Optional[builtins.str] = None, layout: typing.Optional[LayoutSettings] = None, node_radius: typing.Optional[builtins.float] = None, node_fill: typing.Optional[builtins.str] = None, node_stroke: typing.Optional[StrokeStyle] = None, edge_stroke: typing.Optional[StrokeStyle] = None, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None) -> RenderSettings:
+        r"""
+        Construct immutable overrides; None preserves the renderer's defaults.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> settings = RenderSettings(node_radius=5, show_particle=False)
+
+        Parameters
+        ----------
+        title : str or None, optional
+            Plain-text title above the drawing.
+        layout : LayoutSettings or None, optional
+            Native graph layout options; omitted values retain renderer defaults.
+        node_radius : float or None, optional
+            Finite nonnegative vertex radius in drawing units.
+        node_fill : str or None, optional
+            Vertex fill as a CSS color.
+        node_stroke : StrokeStyle or None, optional
+            Vertex outline paint, width, and dash pattern.
+        edge_stroke : StrokeStyle or None, optional
+            Edge paint, width, and dash pattern.
+        show_particle : bool or None, optional
+            Show particle labels; enabled by default.
+        show_momentum : bool or None, optional
+            Show momentum labels; None follows momenta or the supplied momentum basis.
+        show_edge_index : bool or None, optional
+            Show native edge IDs; disabled by default.
+        show_node_index : bool or None, optional
+            Show native vertex IDs; disabled by default.
+        momentum_arrows : bool or None, optional
+            Draw momentum arrows; None follows momenta or the supplied momentum basis.
+        split_initial_state : bool or None, optional
+            Open sewn initial-state connections in cross sections; enabled by default.
+        debug : bool or None, optional
+            Show both vertex and edge IDs; disabled by default.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Inspect the selected overrides without rendering a diagram.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import RenderSettings
+        >>> text = repr(RenderSettings(node_radius=5, show_particle=False))
+        """
+
+@typing.final
 class Rotation:
     r"""
     A spatial rotation acting on three- and four-momenta.
@@ -9244,6 +9682,76 @@ class SquaredAmplitude:
 
         >>> from IPython.display import display
         >>> display(squared)
+        """
+
+@typing.final
+class StrokeStyle:
+    r"""
+    Immutable stroke overrides shared by vertices and edges.
+    None leaves an option to the renderer; it does not force a default override.
+    Constructors and read-only properties expose options to help() and completion.
+
+    Examples
+    --------
+    >>> from symbolica.community.hepkit import StrokeStyle
+    >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
+    """
+    @property
+    def paint(self) -> typing.Optional[builtins.str]:
+        r"""
+        Stroke paint as a CSS color, for example "#6f4d85".
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import StrokeStyle
+        >>> value = StrokeStyle().paint
+        """
+    @property
+    def thickness(self) -> typing.Optional[builtins.float]:
+        r"""
+        Finite nonnegative stroke width in points.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import StrokeStyle
+        >>> value = StrokeStyle().thickness
+        """
+    @property
+    def dash(self) -> typing.Optional[builtins.str]:
+        r"""
+        Line pattern: "solid", "dotted", or "dashed".
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import StrokeStyle
+        >>> value = StrokeStyle().dash
+        """
+    def __new__(cls, *, paint: typing.Optional[builtins.str] = None, thickness: typing.Optional[builtins.float] = None, dash: typing.Literal['solid', 'dotted', 'dashed'] | None = None) -> StrokeStyle:
+        r"""
+        Construct immutable overrides; None preserves the renderer's defaults.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import StrokeStyle
+        >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
+
+        Parameters
+        ----------
+        paint : str or None, optional
+            Stroke paint as a CSS color, for example "#6f4d85".
+        thickness : float or None, optional
+            Finite nonnegative stroke width in points.
+        dash : str or None, optional
+            Line pattern: "solid", "dotted", or "dashed".
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Inspect the selected overrides without rendering a diagram.
+
+        Examples
+        --------
+        >>> from symbolica.community.hepkit import StrokeStyle
+        >>> text = repr(StrokeStyle(paint="#6f4d85", thickness=1.5))
         """
 
 @typing.final
