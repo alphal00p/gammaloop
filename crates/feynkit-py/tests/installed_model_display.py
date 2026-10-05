@@ -51,14 +51,16 @@ assert "structure=" in repr(model.lorentz_structures[0])
 assert "numerator=" in repr(model.propagators[0])
 
 process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=[vertex])
-svg = process.render()
+svg = process.render().to_svg()
 root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert list(root.iter("{http://www.w3.org/2000/svg}path"))
 assert "prefers-color-scheme:dark" in svg
 assert "vertex_allow=[V_98]" in html.unescape(process._repr_html_())
 assert ET.fromstring(process._repr_svg_()).tag == root.tag
-assert ET.fromstring(process.render(config=linnet.RenderConfig())).tag == root.tag
+assert (
+    ET.fromstring(process.render(config=linnet.RenderConfig()).to_svg()).tag == root.tag
+)
 
 # A large process blob must leave four visible legs, with incoming legs left of
 # outgoing ones, without inheriting the much wider amplitude centroid target.
@@ -86,7 +88,7 @@ for config in (
     ),
     linnet.RenderConfig(layouts=linnet.LayoutOptions(length_scale=0.3)),
 ):
-    larger = ET.fromstring(process.render(config=config))
+    larger = ET.fromstring(process.render(config=config).to_svg())
     assert float(larger.attrib["viewBox"].split()[2]) > width
     assert (
         sum(
@@ -104,7 +106,7 @@ for config in (
 
 # A single flow has no preferred side: its external legs spread around the blob.
 for incoming, outgoing in ((["a"] * 4, []), ([], ["a"] * 4)):
-    radial = ET.fromstring(model.process(incoming, outgoing).render())
+    radial = ET.fromstring(model.process(incoming, outgoing).render().to_svg())
     radial_width, radial_height = map(float, radial.attrib["viewBox"].split()[2:])
     assert 0.7 < radial_width / radial_height < 1.5
 
@@ -113,11 +115,11 @@ for other in (
     model.process([], []),
     process.with_final_state_alternatives([["a", "a"], ["mu-", "mu+"]]),
 ):
-    assert ET.fromstring(other.render()).tag == root.tag
+    assert ET.fromstring(other.render().to_svg()).tag == root.tag
 
 # The same asset preparation must preserve existing diagram rendering.
 diagram = process.generate_diagrams(progress=None)[0]
-assert ET.fromstring(diagram.render()).tag == root.tag
+assert ET.fromstring(diagram.render().to_svg()).tag == root.tag
 
 # User model metadata is escaped before being inserted into rich output.
 scalar = hep.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
