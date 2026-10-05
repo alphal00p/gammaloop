@@ -1953,6 +1953,7 @@ dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
  "blake3",
+ "linnet",
  "miniz_oxide 0.8.9",
  "serde",
  "serde_json",
@@ -2593,8 +2594,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "118912fe5e24df9c7f36c1211bdeb1a803013b312cc149bd1794b9a0e4ef9c78"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4270,8 +4270,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",

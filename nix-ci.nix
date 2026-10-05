@@ -297,6 +297,7 @@
     "packages.x86_64-linux.crate-test-dependencies-feynkit-model" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit-py" = [
       "packages.x86_64-linux.cargoArtifacts"
