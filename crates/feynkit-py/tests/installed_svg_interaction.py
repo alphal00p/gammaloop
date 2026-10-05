@@ -32,7 +32,7 @@ diagram = next(
 region = diagram.filter(edge=lambda edge: not edge.is_external)
 
 for value in (model.process(["scalar_0"], ["scalar_0"]), diagram, region):
-    drawing = value.render(config={"drawing": {"node_radius": 5}})
+    drawing = value.render(config=fk.RenderSettings(node_radius=5))
     bundle, _ = DisplayFormatter().format(drawing)
     assert bundle["text/html"] == drawing.to_html()
     assert bundle["image/svg+xml"] == drawing.to_svg()
@@ -118,14 +118,12 @@ expected = (
     | {("edge", edge_id) for edge_id in edges}
     | {("halfedge", half.index) for half in graph.half_edges()}
 )
-for options in (
-    {},
-    {"mode": "auto"},
-    {"split-initial-state": True},
-    {"split-initial-state": False},
+for config in (
+    fk.RenderSettings(),
+    fk.RenderSettings(split_initial_state=True),
+    fk.RenderSettings(split_initial_state=False),
 ):
-    split = options.get("split-initial-state", True)
-    config = {"template_options": options}
+    split = config.split_initial_state is not False
     for value in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.is_external),

@@ -54,34 +54,38 @@ no graph packages.
 ```python
 from pathlib import Path
 
-Path("diagram.svg").write_text(diagram.render().to_svg(), encoding="utf-8")
-Path("diagram.typ").write_text(diagram.to_linnest(), encoding="utf-8")
-diagram
+drawing = diagram.render()
+Path("diagram.svg").write_text(drawing.to_svg(), encoding="utf-8")
+Path("diagram.typ").write_text(drawing.to_linnest(), encoding="utf-8")
+drawing
 ```
 
-Configuration is a nested Python dictionary. `title` supplies a plain-text title.
-`layouts` accepts native ImPrEd options such as `impred_steps`, `impred_spacing`,
-`impred_repulsion`, and `impred_labels`; underscores and hyphens are equivalent.
-`drawing.node_radius` sets the vertex radius in graph units. `style.node-style`
-accepts `fill`, `radius`, and `stroke`; `style.edge-style` accepts `stroke`.
-A stroke is a CSS color string or a dictionary with `paint`, `thickness` in points,
-and `dash` (`solid`, `dotted`, or `dashed`).
+Pass an immutable `RenderSettings` object as `config`. Its named arguments and
+read-only properties support editor completion and `help(RenderSettings)`.
+Omitted options keep the renderer's defaults. `title` is plain text;
+`node_radius` is in graph units, and `node_fill` is a CSS color.
+`node_stroke` and `edge_stroke` accept a `StrokeStyle` with a CSS `paint`,
+`thickness` in points, and `dash` (`solid`, `dotted`, or `dashed`).
 
-Physics options in `template_options` are booleans: `show-particle`,
-`show-momentum`, `show-edge-index`, `show-node-index`, `momentum-arrows`,
-`split-initial-state`, and `debug` (node and edge indices).
-Unsupported options raise an error. Standalone Linnet configuration objects,
-custom Typst templates, and the older template-specific layout controls do not
-apply to this renderer; those remain features of the standalone drawing tools.
+`LayoutSettings` groups advanced layout controls such as `impred_steps`,
+`impred_spacing`, `impred_repulsion`, and `impred_labels`. Use
+`help(LayoutSettings)` for all options and their defaults. Invalid options and
+numeric values are rejected when constructing settings.
+
+Particle and momentum presentation uses boolean `RenderSettings` arguments:
+`show_particle`, `show_momentum`, `show_edge_index`, `show_node_index`,
+`momentum_arrows`, `split_initial_state`, and `debug` (node and edge indices).
 
 // docs-example: compile
 ```python
-settings = {
-    "layouts": {"impred_steps": 100},
-    "template_options": {"show-particle": False},
-}
+from symbolica.community.hepkit import RenderSettings, LayoutSettings, StrokeStyle
+
+settings = RenderSettings(
+    layout=LayoutSettings(impred_steps=100),
+    show_particle=False,
+    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.2),
+)
 drawing = diagram.render(momenta=True, config=settings)
-drawing
 Path("momenta.svg").write_text(
     drawing.to_svg(), encoding="utf-8"
 )
@@ -89,6 +93,7 @@ basis = next(iter(diagram.loop_momentum_bases()))
 Path("alternative-routing.svg").write_text(
     diagram.render(lmb=basis, config=settings).to_svg(), encoding="utf-8"
 )
+drawing
 ```
 
 `momenta=True` displays the stored routing. Passing `lmb=basis` enables momentum
@@ -99,7 +104,7 @@ A basis from a different diagram is rejected.
 
 Cross sections open initial-state connections into incoming and outgoing legs by
 default, retaining final-state cut edges. Set
-`{"template_options": {"split-initial-state": False}}` for the sewn view.
+`RenderSettings(split_initial_state=False)` for the sewn view.
 Both views preserve the original edge and half-edge IDs. Configuration is per-call;
 it changes neither the physics graph nor its loop-momentum basis.
 

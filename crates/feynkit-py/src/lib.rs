@@ -10,6 +10,7 @@ mod graph_interop;
 mod integrals;
 mod kinematics;
 mod model;
+mod render_settings;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
@@ -43,6 +44,7 @@ pub use model::{
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
+pub use render_settings::{PyLayoutSettings, PyRenderSettings, PyStrokeStyle};
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
@@ -166,6 +168,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<symbols::PySymbols>()?;
     module.add_class::<PyDiagramRender>()?;
+    render_settings::register(module)?;
     error::register(module)?;
     amplitude::register(module)?;
     model::register(module)?;

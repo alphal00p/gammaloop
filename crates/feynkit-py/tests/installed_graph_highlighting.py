@@ -108,7 +108,6 @@ print("installed graph highlighting checks passed")
 # the diagram or a caller-owned configuration.
 import json
 
-import linnet as ln
 
 diagram = next(
     candidate
@@ -117,16 +116,10 @@ diagram = next(
 )
 snapshot = diagram.to_json()
 basis = diagram.loop_momentum_basis
-config = ln.RenderConfig(
-    layouts=ln.LayoutOptions(
-        seed=17,
-        steps=40,
-        epochs=10,
-        internal_label_length_scale=0.8,
-        external_label_length_scale=0.7,
-        external_pull=1.5,
-    ),
-    template_options={"show-particle": False, "show-edge-index": True},
+config = fk.RenderSettings(
+    layout=fk.LayoutSettings(impred_steps=40, impred_pull=1.5),
+    show_particle=False,
+    show_edge_index=True,
 )
 assert diagram.render(momenta=True).to_svg() == diagram.render(lmb=basis).to_svg()
 svg = diagram.render(config=config, lmb=basis).to_svg()
@@ -141,7 +134,7 @@ edge_details = [
 assert edge_details, "configurable SVGs must retain edge hover information"
 for signature in basis.edge_signatures.values():
     assert signature.format_momentum() in json.dumps(edge_details)
-assert config.template_options == {"show-particle": False, "show-edge-index": True}
+assert config.show_particle is False and config.show_edge_index is True
 assert diagram.to_json() == snapshot
 
 alternative = next(
@@ -166,7 +159,7 @@ for render in (diagram.render, diagram.to_html, diagram.to_linnest):
     except TypeError:
         pass
     else:
-        raise AssertionError("render config must be a typed RenderConfig")
+        raise AssertionError("render config must be a typed RenderSettings")
 
 region = diagram.filter(edge=lambda edge: not edge.is_external)
 assert "<svg" in region.render(lmb=basis, config=config).to_svg()
@@ -175,15 +168,11 @@ print("installed rendering options and momentum checks passed")
 
 # Index controls must survive the native diagram-to-renderer boundary.
 unlabelled = ET.fromstring(
-    diagram.render(
-        config=ln.RenderConfig(template_options={"show-particle": False})
-    ).to_svg()
+    diagram.render(config=fk.RenderSettings(show_particle=False)).to_svg()
 )
 indexed = ET.fromstring(
     diagram.render(
-        config=ln.RenderConfig(
-            template_options={"show-particle": False, "show-node-index": True}
-        )
+        config=fk.RenderSettings(show_particle=False, show_node_index=True)
     ).to_svg()
 )
 assert len(indexed.findall(".//{http://www.w3.org/2000/svg}use")) > len(
