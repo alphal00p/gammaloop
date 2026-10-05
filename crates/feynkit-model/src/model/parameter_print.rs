@@ -34,7 +34,7 @@ impl Model {
             // Existing user declarations (including their printers) are immutable.
             symbol
         } else {
-            SymbolBuilder::new(symbol_name)
+            SymbolBuilder::new(symbol_name.clone())
                 .with_print_function(|view, options, _| {
                     if !options.mode.is_latex() && !options.mode.is_typst() {
                         return None;
@@ -51,6 +51,10 @@ impl Model {
                     })
                 })
                 .build()
+                // Another import can create this same immutable symbol after
+                // the first lookup. Reuse that declaration exactly as in the
+                // fast path, preserving an existing user printer as well.
+                .or_else(|message| Symbol::get_symbol(symbol_name).ok_or(message))
                 .map_err(|message| ModelError::SymbolicParse {
                     kind: EntityKind::Parameter,
                     name: name.to_owned(),
@@ -77,5 +81,81 @@ impl Model {
             labels.remove(&symbol);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Barrier};
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        printer::PrintOptions,
+    };
+
+    #[test]
+    fn concurrent_parameter_registration_preserves_process_wide_symbols() {
+        let barrier = Arc::new(Barrier::new(16));
+        let workers = (0..16)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut errors = Vec::new();
+                    for round in 0..64 {
+                        barrier.wait();
+                        if let Err(error) = Model::register_parameter_symbol(
+                            &format!("concurrent_model_parameter_{round}"),
+                            None,
+                            None,
+                        ) {
+                            errors.push(error.to_string());
+                        }
+                    }
+                    errors
+                })
+            })
+            .collect::<Vec<_>>();
+        let errors = workers
+            .into_iter()
+            .flat_map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn parameter_registration_keeps_existing_user_printer_and_invalid_name_errors() {
+        let name = NamespacedSymbol::parse("UFO::preserved_parameter_printer_test");
+        let symbol = SymbolBuilder::new(name)
+            .with_print_function(|_, _, _| Some("user-printer".into()))
+            .build()
+            .unwrap();
+        Model::register_parameter_symbol(
+            "preserved_parameter_printer_test",
+            Some("model label"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            Atom::var(symbol).printer(PrintOptions::latex()).to_string(),
+            "user-printer"
+        );
+        assert!(Model::register_parameter_symbol("invalid parameter name", None, None).is_err());
+    }
+
+    #[test]
+    fn parameter_reregistration_retains_independent_latex_and_typst_labels() {
+        let name = "reregistered_dual_label_parameter";
+        Model::register_parameter_symbol(name, Some("old latex"), Some("old typst")).unwrap();
+        let symbol = Symbol::get_symbol(NamespacedSymbol::parse(&format!("UFO::{name}"))).unwrap();
+        Model::register_parameter_symbol(name, Some("new latex"), Some("new typst")).unwrap();
+        let expression = Atom::var(symbol);
+        assert_eq!(
+            expression.printer(PrintOptions::latex()).to_string(),
+            "new latex"
+        );
+        assert_eq!(
+            expression.printer(PrintOptions::typst()).to_string(),
+            "new typst"
+        );
     }
 }

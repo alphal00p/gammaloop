@@ -5,11 +5,17 @@ use std::{
     sync::OnceLock,
 };
 
+use linnet::half_edge::{
+    HedgeGraph,
+    algorithms::{DirectionBasis, topological_order::TopoError},
+    builder::HedgeGraphBuilder,
+    involution::Orientation,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    id::Replacement,
+    id::{Pattern, Replacement},
     parser::ParseSettings,
     printer::PrintOptions,
     symbol,
@@ -1470,6 +1476,66 @@ impl Model {
         expression.replace_multiple(self.coupling_replacement_rules())
     }
 
+    /// Expand internal analytic parameter definitions to their external inputs.
+    ///
+    /// Linnet orders the definitions by their dependencies, and Symbolica performs
+    /// the exact substitutions. External parameters and internal parameters with
+    /// only numerical values remain symbolic: this never reads a parameter card
+    /// or converts binary64 defaults into symbolic constants.
+    ///
+    /// All internal analytic definitions must be acyclic, including unused ones.
+    /// The cycle error lists definitions still blocked by a cycle, which may
+    /// include definitions depending on that cycle. The model and input expression
+    /// are unchanged, and applying this expansion twice gives the same result.
+    pub fn expand_parameters(&self, expression: &Atom) -> Result<Atom, ModelError> {
+        let mut builder = HedgeGraphBuilder::<(), _>::new();
+        let definitions = self
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.nature == ParameterNature::Internal)
+            .filter_map(|parameter| {
+                parameter.expression.as_ref().map(|definition| {
+                    let name = symbol!(&format!("UFO::{}", parameter.name));
+                    (name, (builder.add_node(parameter), definition))
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (node, definition) in definitions.values() {
+            for dependency in definition.get_all_symbols(false) {
+                if let Some((dependency_node, _)) = definitions.get(&dependency) {
+                    builder.add_edge(*dependency_node, *node, (), Orientation::Default);
+                }
+            }
+        }
+        let graph: HedgeGraph<(), &Parameter> = builder.build();
+        let order = graph.topo_sort_kahn(DirectionBasis::Underlying).map_err(
+            |TopoError::NotDag {
+                 remaining_nodes, ..
+             }| {
+                let mut parameters = remaining_nodes
+                    .into_iter()
+                    .map(|(node, _)| graph[node].name.clone())
+                    .collect::<Vec<_>>();
+                parameters.sort();
+                ModelError::CyclicParameterDefinitions { parameters }
+            },
+        )?;
+        let mut replacements = Vec::with_capacity(order.len());
+        for node in order {
+            let parameter = graph[node];
+            let definition = parameter
+                .expression
+                .as_ref()
+                .expect("dependency nodes contain analytic definitions");
+            let expanded = definition.replace_multiple(&replacements);
+            replacements.push(Replacement::new(
+                Pattern::Literal(Atom::var(symbol!(&format!("UFO::{}", parameter.name)))),
+                Pattern::Literal(expanded),
+            ));
+        }
+        Ok(expression.replace_multiple(&replacements))
+    }
+
     fn coupling_replacement_rules(&self) -> &[Replacement] {
         self.coupling_replacement_rules.get_or_init(|| {
             self.couplings
@@ -2459,6 +2525,93 @@ mod tests {
             named_coupling * 2 + Atom::var(symbol!("UFO::GC_UNKNOWN"))
         );
         assert_eq!(model.expand_couplings(&expanded), expanded);
+    }
+
+    #[test]
+    fn expands_parameters_transitively_in_dependency_order_without_numeric_defaults() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        let mut derived = definition.parameters[2].clone();
+        derived.name = "derived_mass".to_owned();
+        derived.expression = Some("double_mass^2/3+mass".to_owned());
+        // Put the dependent definition before its dependency deliberately.
+        definition.parameters.insert(0, derived);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+        let fingerprint = model.fingerprint();
+        let source = Atom::var(symbol!("UFO::derived_mass"))
+            + Atom::var(symbol!("UFO::ZERO"))
+            + Atom::var(symbol!("other_model::mass"));
+        let original = source.clone();
+        let mass = Atom::var(symbol!("UFO::mass"));
+        let expected = (&mass * 2).pow(2) / 3
+            + mass
+            + Atom::var(symbol!("UFO::ZERO"))
+            + Atom::var(symbol!("other_model::mass"));
+
+        let expanded = model.expand_parameters(&source).unwrap();
+        assert_eq!(expanded, expected);
+        assert_eq!(model.expand_parameters(&expanded).unwrap(), expanded);
+        assert_eq!(source, original);
+        assert_eq!(model.fingerprint(), fingerprint);
+        assert_eq!(
+            model
+                .expand_parameters(&model.expand_couplings(&Atom::var(symbol!("UFO::GC1"))))
+                .unwrap(),
+            Atom::var(symbol!("UFO::mass")) * 2
+        );
+    }
+
+    #[test]
+    fn parameter_expansion_rejects_self_cycles_even_for_unused_definitions() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition.parameters[2].expression = Some("double_mass".to_owned());
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+
+        assert!(matches!(
+            model.expand_parameters(&Atom::num(1)),
+            Err(ModelError::CyclicParameterDefinitions { parameters })
+                if parameters == ["double_mass"]
+        ));
+    }
+
+    #[test]
+    fn parameter_expansion_treats_trailing_underscores_as_literal_names() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        let mut external = definition.parameters[1].clone();
+        external.name = "external_".to_owned();
+        external.lhacode = Some(vec![999]);
+        let mut derived = definition.parameters[2].clone();
+        derived.name = "derived_".to_owned();
+        derived.expression = Some("2*external_".to_owned());
+        definition.parameters[2].expression = Some("derived_+mass".to_owned());
+        definition.parameters.extend([external, derived]);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+        let unrelated = Atom::var(symbol!("other_model::unrelated_"));
+        let source = Atom::var(symbol!("UFO::double_mass")) + &unrelated;
+        let expected =
+            Atom::var(symbol!("UFO::external_")) * 2 + Atom::var(symbol!("UFO::mass")) + unrelated;
+        let expanded = model.expand_parameters(&source).unwrap();
+        assert_eq!(expanded, expected);
+        assert_eq!(model.expand_parameters(&expanded).unwrap(), expanded);
+    }
+
+    #[test]
+    fn parameter_expansion_reports_cycles_and_definitions_blocked_by_them() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition.parameters[2].expression = Some("cycle_peer+mass".to_owned());
+        let mut peer = definition.parameters[2].clone();
+        peer.name = "cycle_peer".to_owned();
+        peer.expression = Some("double_mass/2".to_owned());
+        let mut dependent = peer.clone();
+        dependent.name = "dependent".to_owned();
+        dependent.expression = Some("cycle_peer^2".to_owned());
+        definition.parameters.extend([peer, dependent]);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+
+        assert!(matches!(
+            model.expand_parameters(&Atom::var(symbol!("UFO::dependent"))),
+            Err(ModelError::CyclicParameterDefinitions { parameters })
+                if parameters == ["cycle_peer", "dependent", "double_mass"]
+        ));
     }
 
     #[test]

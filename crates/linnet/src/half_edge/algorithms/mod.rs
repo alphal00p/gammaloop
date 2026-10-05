@@ -20,9 +20,9 @@
 //! handle both half-edges of each pair to maintain graph integrity.
 
 use super::{
+    HedgeGraph,
     involution::{Flow, Hedge},
     nodestore::NodeStorageOps,
-    HedgeGraph,
 };
 
 /// Selects which notion of edge direction a directed graph algorithm follows.
@@ -52,6 +52,7 @@ impl DirectionBasis {
     }
 }
 
+pub mod strongly_connected;
 pub mod topological_order;
 pub mod trace_unfold;
 pub mod transitive_ops;

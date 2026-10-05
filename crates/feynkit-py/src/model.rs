@@ -2763,6 +2763,13 @@ pub struct PyModel {
     pub(crate) inner: Arc<Model>,
 }
 
+impl PyModel {
+    /// Borrow the shared native model without serializing or reloading it.
+    pub fn as_model(&self) -> &Arc<Model> {
+        &self.inner
+    }
+}
+
 impl From<Model> for PyModel {
     fn from(inner: Model) -> Self {
         Arc::new(inner).into()
@@ -3768,6 +3775,16 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn native_model_borrow_preserves_shared_identity() {
+        let model = Arc::new(Model::phi4());
+        let wrapper = PyModel::from(Arc::clone(&model));
+        assert!(Arc::ptr_eq(wrapper.as_model(), &model));
+        let retained = Arc::clone(wrapper.as_model());
+        drop(wrapper);
+        assert!(Arc::ptr_eq(&retained, &model));
+    }
 
     const MODEL_JSON: &str = r#"{
         "name": "scalar",
