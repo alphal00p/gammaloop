@@ -175,7 +175,13 @@ impl SpensoNet {
                         .count();
                     label.property("Inputs", inputs);
                     match op {
-                        NetworkOp::Power(power) => label.property("Exponent", power),
+                        NetworkOp::Power(power) => {
+                            // The parenthesized dot denotes the incoming expression,
+                            // without inventing a variable name for that subnetwork.
+                            label.value = format!("(·)^{power}");
+                            label.typst = Some(format!("(dot.c)^({power})"));
+                            label.property("Exponent", power);
+                        }
                         NetworkOp::Function(name) => label.property("Function", name.get_name()),
                         _ => {}
                     }
