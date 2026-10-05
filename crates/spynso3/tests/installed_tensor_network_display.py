@@ -31,6 +31,51 @@ def graph_labels(network):
 
 
 class NetworkDisplayTests(unittest.TestCase):
+    def test_native_svg_keeps_the_expression_hierarchy(self):
+        rep = Representation.euc(2)
+        A = TensorName("network_layout_tests::A")(rep, rep, rep)
+        p = TensorName.vector("network_layout_tests::p")(rep)
+        q = TensorName.vector("network_layout_tests::q")(rep)
+        network = (A("i", "j", "k") * p("i") * q("j") / (p * p)).to_network()
+        before = network.to_dot()
+        root = ET.fromstring(network.render())
+        centers, edges = {}, {}
+        for element in root.iter():
+            kind = element.attrib.get("data-linnet-kind")
+            if kind not in {"node", "edge"}:
+                continue
+            detail = json.loads(element.attrib["data-linnet-detail"])
+            if kind == "edge":
+                edges[detail["edge"]] = detail
+                continue
+            transform = re.fullmatch(
+                r"translate\(([-\d.]+) ([-\d.]+)\)",
+                element.attrib.get("transform", ""),
+            )
+            rect = element.find("{http://www.w3.org/2000/svg}rect")
+            if transform and rect is not None:
+                centers[detail["node"]] = (
+                    float(transform[1]) + float(rect.attrib["width"]) / 2,
+                    float(transform[2]) + float(rect.attrib["height"]) / 2,
+                )
+        dependencies = [
+            edge for edge in edges.values() if edge["title"] == "Expression dependency"
+        ]
+        self.assertTrue(dependencies)
+        for edge in dependencies:
+            # SVG y increases downward: every input belongs below its operator.
+            self.assertGreater(centers[edge["source"]][1], centers[edge["sink"]][1])
+        # A contraction must not turn siblings into successive dependency ranks.
+        children = {}
+        for edge in dependencies:
+            children.setdefault(edge["sink"], []).append(edge["source"])
+        for siblings in children.values():
+            for sibling in siblings[1:]:
+                self.assertAlmostEqual(
+                    centers[sibling][1], centers[siblings[0]][1], delta=0.001
+                )
+        self.assertEqual(network.to_dot(), before)
+
     def test_execution_summary_tracks_remaining_work_without_executing(self):
         rep = Representation.euc(2)
         tensor = Tensor.dense(

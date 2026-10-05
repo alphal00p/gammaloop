@@ -1,5 +1,5 @@
 //! Native SVG drawing of prepared graphs, the host-side counterpart of
-//! `draw.typ`: ImPrEd layout, Kurvst geometry, the shared annotation search
+//! `draw.typ`: native layout, Kurvst geometry, the shared annotation search
 //! and SVG output. Typst only typesets the label pages a [`Scene`] lists.
 mod config;
 mod curves;
@@ -10,7 +10,11 @@ mod marks;
 mod output;
 
 use kurbo::{BezPath, Point};
-use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
+use linnet::half_edge::{
+    involution::EdgeIndex,
+    layout::impred::{EdgeLabel, ImpredConfig},
+    subgraph::{ModifySubSet, SuBitGraph},
+};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -37,8 +41,11 @@ pub struct Scene {
     pub title: Option<String>,
     /// Typst content of each label page.
     pub pages: Vec<String>,
-    /// Explicit `impred-*` options; omitted ones keep ImPrEd's defaults.
+    /// Layout options; `layout-algo` selects `dot` or `impred` (the default).
     pub layout: serde_json::Map<String, Value>,
+    /// Edges defining the layered hierarchy, in spec order. Other edges are
+    /// routed around it without changing the ranks. `None` uses all edges.
+    pub layout_edges: Option<Vec<usize>>,
     /// Refine the layout around drawn labels in short warm ImPrEd passes.
     pub label_feedback: bool,
 }
@@ -157,8 +164,16 @@ impl Scene {
                 .insert("layout-height".into(), (2.0 * h).to_string());
         }
         let graph = TypstGraph::from_spec(spec)?;
+        match self.layout.get("layout-algo").and_then(Value::as_str) {
+            Some("dot") => {
+                let laid = Laid::layered(graph, self)?;
+                return Ok(Drawing::new(self, typeset, &laid)?.svg(typeset));
+            }
+            Some("impred") | None => {}
+            Some(algo) => return Err(format!("unsupported SVG layout algorithm {algo:?}")),
+        }
         let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
-        let drawing = Drawing::new(self, typeset, &run)?;
+        let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
             return Ok(drawing.svg(typeset));
         }
@@ -180,7 +195,7 @@ impl Scene {
                 steps: FEEDBACK_STEPS,
                 ..run.config
             })?;
-            let drawing = Drawing::new(self, typeset, &run)?;
+            let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
             if drawing.score() < best.score() {
                 best = drawing;
                 rejected = None;
@@ -200,6 +215,50 @@ struct Laid {
 }
 
 impl Laid {
+    fn layered(mut graph: TypstGraph, scene: &Scene) -> Result<Self, String> {
+        graph.layout_config = serde_json::from_value(Value::Object(scene.layout.clone()))
+            .map_err(|error| format!("invalid layered layout options: {error}"))?;
+        let selected = scene
+            .layout_edges
+            .as_ref()
+            .map(|edges| {
+                let mut selected = graph.empty_subgraph::<SuBitGraph>();
+                for &edge in edges {
+                    if edge >= graph.n_edges() {
+                        return Err("layout edge is outside the scene graph".to_owned());
+                    }
+                    selected.add(graph.graph[&EdgeIndex(edge)].1);
+                }
+                Ok(selected)
+            })
+            .transpose()?;
+        graph.layout_with_subgraph(selected.as_ref())?;
+        let nodes = graph.node_records()?;
+        let edges = graph.edge_records()?;
+        let point = |p: &crate::TypstPoint| [p.x, p.y];
+        let carriers = edges
+            .iter()
+            .map(|edge| {
+                let mut route = Vec::new();
+                if let Some(source) = &edge.source {
+                    route.push(point(nodes[source.node].pos.as_ref().unwrap()));
+                    route.extend(source.route_points.iter().map(point));
+                }
+                route.push(point(edge.pos.as_ref().unwrap()));
+                if let Some(sink) = &edge.sink {
+                    route.extend(sink.route_points.iter().rev().map(point));
+                    route.push(point(nodes[sink.node].pos.as_ref().unwrap()));
+                }
+                route
+            })
+            .collect();
+        Ok(Self {
+            nodes,
+            edges,
+            carriers,
+        })
+    }
+
     fn new(run: &ImpredRun) -> Result<Self, String> {
         let graph = run
             .session
@@ -311,8 +370,7 @@ impl Drawing {
         labels
     }
 
-    fn new(scene: &Scene, typeset: &Typeset, run: &ImpredRun) -> Result<Self, String> {
-        let laid = Laid::new(run)?;
+    fn new(scene: &Scene, typeset: &Typeset, laid: &Laid) -> Result<Self, String> {
         let mut layers = Vec::new();
         let mut targets = Vec::new();
         let mut strokes = Vec::new();
@@ -326,7 +384,7 @@ impl Drawing {
                 .ok_or("scene edges do not match the layout graph")?;
             let hrefs = output::edge_hrefs(edge, &drawing.details);
             let anchor = edge.pos.as_ref().map_or([0.0; 2], |p| [p.x, p.y]);
-            let (visible, parts) = Self::edge_paths(scene, typeset, &laid, edge, carrier, anchor)?;
+            let (visible, parts) = Self::edge_paths(scene, typeset, laid, edge, carrier, anchor)?;
             let part_refs: Vec<&BezPath> = parts.iter().collect();
             for (region, points) in curves::region_samples(&part_refs, UNIT)? {
                 targets.extend(points.into_iter().map(|at| Target {
@@ -532,7 +590,28 @@ impl Drawing {
         carrier: &[[f64; 2]],
         anchor: [f64; 2],
     ) -> Result<(BezPath, Vec<BezPath>), String> {
+        // Compass ports attach to the measured boundary. In particular, a
+        // dependency can enter/leave vertically without following the chord
+        // between its parent and child, as in the Typst anchored-edge drawing.
+        let port = |end: &TypstDotEndpoint| {
+            let direction = match end.compass.as_deref() {
+                Some("n") => [0.0, 1.0],
+                Some("s") => [0.0, -1.0],
+                Some("e") => [1.0, 0.0],
+                Some("w") => [-1.0, 0.0],
+                _ => return None,
+            };
+            let center = laid.node(end.node);
+            let (w, h) = scene.nodes[end.node].size(typeset);
+            Some((
+                [center[0] + direction[0] * w, center[1] + direction[1] * h],
+                direction,
+            ))
+        };
         let outset = |end: &TypstDotEndpoint| {
+            if port(end).is_some() {
+                return 0.0;
+            }
             let (w, h) = scene.nodes[end.node].size(typeset);
             if !scene.nodes[end.node].rectangular {
                 return w;
@@ -552,6 +631,86 @@ impl Drawing {
             let dy = (neighbor[1] - center[1]).abs();
             (w / dx).min(h / dy) * dx.hypot(dy)
         };
+        let anchored = edge
+            .source
+            .iter()
+            .chain(&edge.sink)
+            .any(|end| port(end).is_some());
+        if anchored {
+            let endpoint = |end: &Option<TypstDotEndpoint>| {
+                end.as_ref().map_or((anchor, None), |end| {
+                    port(end).map_or((laid.node(end.node), None), |(point, dir)| {
+                        (point, Some(dir))
+                    })
+                })
+            };
+            let (start, source_dir) = endpoint(&edge.source);
+            let (end, sink_dir) = endpoint(&edge.sink);
+            let paired = edge.source.is_some() && edge.sink.is_some();
+            let direct = edge
+                .statements
+                .get("route")
+                .is_some_and(|route| route == "direct");
+            let amount = if direct {
+                (0.18 * (end[0] - start[0]).abs() + 0.3 * (end[1] - start[1]).abs())
+                    .clamp(0.45, 4.0)
+            } else {
+                0.01
+            };
+            let guide = |point: [f64; 2], dir: Option<[f64; 2]>| {
+                Point::new(
+                    point[0] + dir.map_or((anchor[0] - point[0]) / 3.0, |d| d[0] * amount),
+                    point[1] + dir.map_or((anchor[1] - point[1]) / 3.0, |d| d[1] * amount),
+                )
+            };
+            let (a, b, middle) = (
+                Point::new(start[0], start[1]),
+                Point::new(end[0], end[1]),
+                Point::new(anchor[0], anchor[1]),
+            );
+            let curve = if !paired {
+                let mut points = vec![start];
+                points.extend_from_slice(
+                    carrier
+                        .get(1..carrier.len().saturating_sub(1))
+                        .unwrap_or(&[]),
+                );
+                points.push(end);
+                curves::routed_curve(&points)?
+            } else if direct {
+                let chord = b - a;
+                let handle = if chord.hypot() == 0.0 {
+                    chord
+                } else {
+                    chord / chord.hypot()
+                        * amount.min(a.distance(middle).min(b.distance(middle)) / 3.0)
+                };
+                curves::from_cubics(&[
+                    kurbo::CubicBez::new(a, guide(start, source_dir), middle - handle, middle),
+                    kurbo::CubicBez::new(middle, middle + handle, guide(end, sink_dir), b),
+                ])
+            } else {
+                let mut points = vec![start];
+                if source_dir.is_some() {
+                    let p = guide(start, source_dir);
+                    points.push([p.x, p.y]);
+                }
+                points.extend_from_slice(
+                    carrier
+                        .get(1..carrier.len().saturating_sub(1))
+                        .unwrap_or(&[]),
+                );
+                if sink_dir.is_some() {
+                    let p = guide(end, sink_dir);
+                    points.push([p.x, p.y]);
+                }
+                points.push(end);
+                curves::routed_curve(&points)?
+            };
+            let start_trim = edge.source.as_ref().map_or(0.0, outset);
+            let end_trim = edge.sink.as_ref().map_or(0.0, outset);
+            return Self::split_edge(&curve, start_trim, end_trim, paired);
+        }
         let interior = carrier
             .get(1..carrier.len().saturating_sub(1))
             .unwrap_or(&[]);
@@ -564,16 +723,7 @@ impl Drawing {
                 let source_radius = outset(source_node);
                 let sink_radius = outset(sink_node);
                 let curve = curves::routed_curve(carrier)?;
-                let half = curves::length(&curve) / 2.0;
-                let source =
-                    curves::trim_routed(&curves::trim(&curve, 0.0, half)?, source_radius, 0.0)?;
-                let sink =
-                    curves::trim_routed(&curves::trim(&curve, half, 0.0)?, 0.0, sink_radius)?;
-                // `layer(curve, outsets)`: one trimmed window, reassembled from its cubics.
-                let visible = curves::from_cubics(&curves::cubics(
-                    &curves::windows(&curve, &[(source_radius, sink_radius)])?.remove(0),
-                ));
-                Ok((visible, vec![source, sink]))
+                Self::split_edge(&curve, source_radius, sink_radius, true)
             }
             (Some(TypstDotEndpoint { node, .. }), None) => {
                 let mut points = vec![laid.node(*node)];
@@ -589,6 +739,25 @@ impl Drawing {
             }
             (None, None) => Err("edge without endpoints".to_owned()),
         }
+    }
+
+    fn split_edge(
+        curve: &BezPath,
+        start: f64,
+        end: f64,
+        paired: bool,
+    ) -> Result<(BezPath, Vec<BezPath>), String> {
+        if !paired {
+            let path = curves::trim_routed(curve, start, end)?;
+            return Ok((path.clone(), vec![path]));
+        }
+        let half = curves::length(curve) / 2.0;
+        let source = curves::trim_routed(&curves::trim(curve, 0.0, half)?, start, 0.0)?;
+        let sink = curves::trim_routed(&curves::trim(curve, half, 0.0)?, 0.0, end)?;
+        let visible = curves::from_cubics(&curves::cubics(
+            &curves::windows(curve, &[(start, end)])?.remove(0),
+        ));
+        Ok((visible, vec![source, sink]))
     }
 
     /// The base layer: a decorated edge, or each cubic as its own stroke, then
@@ -786,6 +955,7 @@ mod tests {
             title: Some("#\"bubble\"".to_owned()),
             pages: vec!["[x]".to_owned()],
             layout: serde_json::Map::new(),
+            layout_edges: None,
             label_feedback: false,
         }
     }
@@ -854,6 +1024,120 @@ mod tests {
     }
 
     #[test]
+    fn layered_scene_keeps_dependency_ranks_and_routes_contractions_below_leaves() {
+        let mut scene = bubble(false);
+        scene.title = None;
+        scene.pages.clear();
+        let mut node = scene.graph.nodes[0].clone();
+        node.statements.clear();
+        scene.graph.nodes = (0..4)
+            .map(|index| TypstNodeSpec {
+                index: Some(index),
+                name: Some(format!("n{index}")),
+                ..node.clone()
+            })
+            .collect();
+        let mut drawing = scene.nodes[0].clone();
+        drawing.rectangular = true;
+        drawing.radius = 0.5;
+        scene.nodes = vec![drawing; 4];
+        // The root deliberately is not node zero. A contraction between the
+        // leaves must not put either leaf below its sibling.
+        scene.layout = serde_json::from_value(serde_json::json!({
+            "layout-algo": "dot", "layout-roots": [3], "tree-dx": 0.35, "tree-dy": 2.2,
+        }))
+        .unwrap();
+        scene.layout_edges = Some(vec![0, 1, 2, 3]);
+        let endpoint = |node, compass: &str| {
+            Some(TypstEndpointSpec {
+                node,
+                compass: Some(compass.into()),
+                id: None,
+                statement: None,
+                data: None,
+                port_label: None,
+                in_subgraph: false,
+                route_points: vec![],
+            })
+        };
+        let template = scene.graph.edges[1].clone();
+        scene.graph.edges = [
+            (endpoint(0, "n"), endpoint(3, "s")),
+            (endpoint(1, "n"), endpoint(0, "s")),
+            (endpoint(2, "n"), endpoint(0, "s")),
+            (endpoint(3, "n"), None),
+            (endpoint(1, "s"), endpoint(2, "s")),
+            (endpoint(2, "s"), None),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (source, sink))| TypstEdgeSpec {
+            id: Some(index),
+            source,
+            sink,
+            statements: [(
+                "route".into(),
+                if index < 4 { "direct" } else { "hobby-through" }.into(),
+            )]
+            .into(),
+            ..template.clone()
+        })
+        .collect();
+        let mut edge = scene.edges[0].clone();
+        edge.pattern = None;
+        edge.label = None;
+        scene.edges = vec![edge; 6];
+        let typeset = scene.typeset(&[]).unwrap();
+        let mut spec = scene.graph.clone();
+        for node in &mut spec.nodes {
+            node.statements.extend([
+                ("layout-width".into(), "1".into()),
+                ("layout-height".into(), "1".into()),
+            ]);
+        }
+        let laid = Laid::layered(TypstGraph::from_spec(spec).unwrap(), &scene).unwrap();
+        assert!(laid.node(3)[1] > laid.node(0)[1]);
+        assert!(laid.node(0)[1] > laid.node(1)[1]);
+        assert_eq!(laid.node(1)[1], laid.node(2)[1]);
+        assert_ne!(laid.node(1)[0], laid.node(2)[0]);
+        for (index, record) in laid.edges.iter().enumerate() {
+            let pos = record.pos.as_ref().unwrap();
+            let (path, _) = Drawing::edge_paths(
+                &scene,
+                &typeset,
+                &laid,
+                record,
+                &laid.carriers[index],
+                [pos.x, pos.y],
+            )
+            .unwrap();
+            let cubics = curves::cubics(&path);
+            assert!(!cubics.is_empty());
+            let source = record.source.as_ref().unwrap();
+            let center = laid.node(source.node);
+            assert!((cubics[0].p0.x - center[0]).abs() < 1e-9);
+            let sign = if index < 4 { 1.0 } else { -1.0 };
+            assert!((cubics[0].p0.y - center[1] - sign * 0.5).abs() < 1e-9);
+            if index < 3 {
+                assert!((cubics[0].p1.x - cubics[0].p0.x).abs() < 1e-9);
+                assert!(cubics[0].p1.y > cubics[0].p0.y);
+            } else if index == 4 {
+                assert!(cubics.iter().any(|c| c.p3.y < center[1] - 0.5));
+            } else if index == 5 {
+                // A free tensor slot must leave below its box, not double back
+                // through it or turn a collinear Hobby guide into a huge loop.
+                assert!(cubics.last().unwrap().p3.y < cubics[0].p0.y);
+                assert!(curves::length(&path) < (laid.node(3)[1] - center[1]).abs());
+            }
+        }
+        // Enabling force-label feedback must not relax away the selected ranks.
+        let expected = scene.render(&typeset).unwrap();
+        scene.label_feedback = true;
+        assert_eq!(scene.render(&typeset).unwrap(), expected);
+        assert!(expected.contains("#linnet-node-3?"));
+    }
+
+    #[test]
     fn feedback_emits_the_same_svg_as_serializing_every_pass() {
         // Keep an eager reference to check both painting order and selection:
         // later rejected/tied passes must still drive the next warm layout.
@@ -868,7 +1152,7 @@ mod tests {
             }
             let graph = TypstGraph::from_spec(spec).unwrap();
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
-            let mut drawing = Drawing::new(scene, typeset, &run).unwrap();
+            let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
             let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset));
             for _ in 0..FEEDBACK_PASSES {
@@ -884,7 +1168,7 @@ mod tests {
                         ..run.config
                     })
                     .unwrap();
-                drawing = Drawing::new(scene, typeset, &run).unwrap();
+                drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
                 let rendered = drawing.svg(typeset);
                 scores.push(drawing.score());
                 if drawing.score() < best {

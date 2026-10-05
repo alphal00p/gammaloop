@@ -4642,7 +4642,16 @@ impl TypstGraph {
                 self.centered_edge_label_offsets(edges, cfg.dx * 0.35, cfg.dx * 0.12, false);
             let anchor = pos_v[NodeIndex(*node)];
             for (&eid, offset) in edges.iter().zip(offsets) {
-                targets[eid] = Some(anchor + Vector2::new(offset, cfg.dy * 0.5));
+                let hedge = self.graph[&eid].1.any_hedge();
+                // A free endpoint must stay on its requested side of the
+                // node, just as paired layered routes respect compass ports.
+                let delta = match self.graph[hedge].compasspt.as_deref() {
+                    Some("s") => Vector2::new(offset, -cfg.dy * 0.5),
+                    Some("e") => Vector2::new(cfg.dy * 0.5, offset),
+                    Some("w") => Vector2::new(-cfg.dy * 0.5, offset),
+                    _ => Vector2::new(offset, cfg.dy * 0.5),
+                };
+                targets[eid] = Some(anchor + delta);
             }
         }
 
