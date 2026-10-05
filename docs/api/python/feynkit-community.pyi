@@ -1340,6 +1340,57 @@ class Coupling:
         """
 
 @typing.final
+class CutPartition:
+    r"""
+    A separating topology partition, independent of physical final-state cuts.
+
+    Both boundary selections retain half-edges on their respective sides.
+
+    Examples
+    --------
+    Using the setup in the ``FeynmanDiagram`` class example:
+
+    >>> partitions = diagram.all_cuts([0], [1])
+    >>> boundary_edges = partitions[0].boundary_left.edges
+    """
+    @property
+    def source_side(self) -> Subgraph:
+        r"""
+        Region containing the requested source vertices.
+
+        Examples
+        --------
+        >>> source = diagram.all_cuts([0], [1])[0].source_side
+        """
+    @property
+    def target_side(self) -> Subgraph:
+        r"""
+        Region containing the requested target vertices.
+
+        Examples
+        --------
+        >>> target = diagram.all_cuts([0], [1])[0].target_side
+        """
+    @property
+    def boundary_left(self) -> Subgraph:
+        r"""
+        Crossing half-edges incident to the source side.
+
+        Examples
+        --------
+        >>> source_ports = diagram.all_cuts([0], [1])[0].boundary_left.half_edges
+        """
+    @property
+    def boundary_right(self) -> Subgraph:
+        r"""
+        Crossing half-edges incident to the target side.
+
+        Examples
+        --------
+        >>> target_ports = diagram.all_cuts([0], [1])[0].boundary_right.half_edges
+        """
+
+@typing.final
 class CutPropagator:
     r"""
     An oriented generalized cut distribution for a possibly raised propagator.
@@ -1980,6 +2031,54 @@ class DiagramGroup:
         """
 
 @typing.final
+class DiagramHalfEdge:
+    r"""
+    A particle-line endpoint using the diagram's native half-edge numbering.
+
+    Examples
+    --------
+    Using the setup in the ``FeynmanDiagram`` class example:
+
+    >>> endpoints = [(half.id, half.vertex, half.edge.particle_name) for half in diagram.half_edges]
+    """
+    @property
+    def id(self) -> builtins.int:
+        r"""
+        Native half-edge ID, also used in symbolic hedge annotations.
+
+        Examples
+        --------
+        >>> ids = [half.id for half in diagram.half_edges]
+        """
+    @property
+    def vertex(self) -> builtins.int:
+        r"""
+        Incident interaction vertex ID.
+
+        Examples
+        --------
+        >>> incident = [half.vertex for half in diagram.half_edges]
+        """
+    @property
+    def edge(self) -> DiagramEdge:
+        r"""
+        Physics edge containing this half-edge.
+
+        Examples
+        --------
+        >>> particles = [half.edge.particle_name for half in diagram.half_edges]
+        """
+    @property
+    def flow(self) -> builtins.str:
+        r"""
+        Underlying endpoint flow: ``source`` or ``sink``.
+
+        Examples
+        --------
+        >>> incoming = [half.id for half in diagram.half_edges if half.flow == "sink"]
+        """
+
+@typing.final
 class DiagramThresholdCandidate:
     r"""
     A topology threshold partition, independent of the requested physical final state.
@@ -2501,15 +2600,15 @@ class FeynmanDiagram:
         >>> particles_by_edge = {edge.id: edge.particle_name for edge in diagram.edges}
         """
     @property
-    def half_edges(self) -> list[linnet.HalfEdge]:
+    def half_edges(self) -> builtins.list[DiagramHalfEdge]:
         r"""
-        Return native Linnet half-edge views; ``data`` records their native diagram IDs.
+        Return FeynKit half-edges with native diagram IDs and physics edge objects.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> half_edge_payloads = [half_edge.data for half_edge in diagram.half_edges]
+        >>> half_edge_ids = [half_edge.id for half_edge in diagram.half_edges]
         """
     @property
     def internal_edges(self) -> builtins.list[DiagramEdge]:
@@ -2551,7 +2650,7 @@ class FeynmanDiagram:
         """
     def subgraph(self, selection: Subgraph | linnet.Subgraph | None = None, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> Subgraph:
         r"""
-        Select graph elements using canonical Linnet IDs, or import a graph-bound selection.
+        Select graph elements using native diagram IDs, or import a graph-bound selection.
         Nested selections intersect this region and retain its immutable original diagram.
 
         Examples
@@ -2566,30 +2665,30 @@ class FeynmanDiagram:
         selection : Subgraph or linnet.Subgraph or None, optional
             Existing selection from the same original diagram; exclusive with element IDs.
         nodes : list[int] or None, optional
-            Canonical Linnet nodes IDs to include.
+            Diagram vertex IDs to include, with all incident half-edges.
         edges : list[int] or None, optional
-            Canonical Linnet edges IDs to include.
+            Diagram edge IDs to include.
         half_edges : list[int] or None, optional
-            Canonical Linnet half-edges IDs to include.
+            Native diagram half-edge IDs to include.
         """
-    def filter(self, *, node: typing.Callable[[linnet.Node], bool] | None = None, edge: typing.Callable[[linnet.Edge], bool] | None = None, half_edge: typing.Callable[[linnet.HalfEdge], bool] | None = None) -> Subgraph:
+    def filter(self, *, node: typing.Callable[[DiagramVertex], bool] | None = None, edge: typing.Callable[[DiagramEdge], bool] | None = None, half_edge: typing.Callable[[DiagramHalfEdge], bool] | None = None) -> Subgraph:
         r"""
-        Select by predicates on Linnet views; their ``data`` is a physics object.
+        Select by predicates on FeynKit vertices, edges, and half-edges.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
+        >>> region = diagram.filter(edge=lambda edge: edge.particle_name == "g")
 
         Parameters
         ----------
         node : callable or None, optional
-            Predicate on canonical Linnet node views.
+            Predicate on DiagramVertex objects.
         edge : callable or None, optional
-            Predicate on canonical Linnet edge views.
+            Predicate on DiagramEdge objects.
         half_edge : callable or None, optional
-            Predicate on canonical Linnet half-edge views.
+            Predicate on DiagramHalfEdge objects.
         """
     def boundary(self) -> Subgraph:
         r"""
@@ -2634,15 +2733,15 @@ class FeynmanDiagram:
 
         >>> bridges = diagram.bridges()
         """
-    def cycle_basis(self) -> tuple[list[linnet.Cycle], Subgraph]:
+    def cycle_basis(self) -> tuple[builtins.list[Subgraph], Subgraph]:
         r"""
-        Return a cycle basis and its covered half-edges.
+        Return structural cycles and the spanning forest used to construct them.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> cycles, covered = diagram.cycle_basis()
+        >>> cycles, forest = diagram.cycle_basis()
         """
     def all_spanning_forests(self) -> builtins.list[Subgraph]:
         r"""
@@ -2671,7 +2770,7 @@ class FeynmanDiagram:
         max_size : int or None, optional
             Maximum number of crossing edges.
         """
-    def all_cuts(self, source: typing.Sequence[builtins.int], target: typing.Sequence[builtins.int]) -> list[linnet.CutPartition]:
+    def all_cuts(self, source: typing.Sequence[builtins.int], target: typing.Sequence[builtins.int]) -> builtins.list[CutPartition]:
         r"""
         Enumerate separating partitions between disjoint interaction vertex groups.
 
@@ -2684,11 +2783,11 @@ class FeynmanDiagram:
         Parameters
         ----------
         source : list[int]
-            Canonical Linnet vertices required on the first side.
+            Diagram vertex IDs required on the first side.
         target : list[int]
-            Canonical Linnet vertices required on the opposite side.
+            Diagram vertex IDs required on the opposite side.
         """
-    def depth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
+    def depth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> TraversalTree:
         r"""
         Traverse a selected interaction region in depth-first order.
 
@@ -2701,11 +2800,11 @@ class FeynmanDiagram:
         Parameters
         ----------
         root : int
-            Canonical Linnet vertex ID at which traversal starts.
+            Diagram vertex ID at which traversal starts.
         include : int or None, optional
-            Canonical Linnet half-edge ID to prioritize at the root.
+            Native diagram half-edge ID to prioritize at the root.
         """
-    def breadth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> linnet.TraversalTree:
+    def breadth_first_traverse(self, root: builtins.int, *, include: typing.Optional[builtins.int] = None) -> TraversalTree:
         r"""
         Traverse a selected interaction region in breadth-first order.
 
@@ -2718,9 +2817,9 @@ class FeynmanDiagram:
         Parameters
         ----------
         root : int
-            Canonical Linnet vertex ID at which traversal starts.
+            Diagram vertex ID at which traversal starts.
         include : int or None, optional
-            Canonical Linnet half-edge ID to prioritize at the root.
+            Native diagram half-edge ID to prioritize at the root.
         """
     @staticmethod
     def from_json(model: Model, json: builtins.str) -> FeynmanDiagram:
@@ -3142,7 +3241,7 @@ class FeynmanDiagram:
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
+        >>> contracted = diagram.filter(edge=lambda edge: edge.is_dummy)
         >>> basis = diagram.contracted_momentum_basis(contracted)
 
         Parameters
@@ -9071,7 +9170,7 @@ class Subgraph(FeynmanDiagram):
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
-    >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+    >>> region = diagram.filter(edge=lambda edge: not edge.is_external)
     >>> left = diagram.subgraph(nodes=[0])
     >>> right = diagram.subgraph(nodes=[1])
     >>> common = left & right
@@ -9119,14 +9218,14 @@ class Subgraph(FeynmanDiagram):
         """
     def half_edge_indices(self) -> builtins.list[builtins.int]:
         r"""
-        Return canonical Linnet half-edge IDs of this region.
+        Return native diagram half-edge IDs of this region.
 
         Examples
         --------
         Using the setup in the ``Subgraph`` class example:
 
         >>> selected_half_edges = region.half_edge_indices()
-        >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
+        >>> selected = region.original.subgraph(half_edges=selected_half_edges)
         """
     def isolated_node_indices(self) -> builtins.list[builtins.int]:
         r"""
@@ -9965,6 +10064,106 @@ class ThreeMomentum:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+
+@typing.final
+class TraversalTree:
+    r"""
+    A native DFS or BFS result retaining the immutable physics diagram.
+
+    Examples
+    --------
+    Using the setup in the ``FeynmanDiagram`` class example:
+
+    >>> tree = diagram.depth_first_traverse(0)
+    >>> discovery_order = [vertex.id for vertex in tree.nodes]
+    """
+    @property
+    def subgraph(self) -> Subgraph:
+        r"""
+        Traversal edges as a reusable physics region, retaining isolated roots.
+
+        Examples
+        --------
+        >>> edges = diagram.depth_first_traverse(0).subgraph.edges
+        """
+    @property
+    def nodes(self) -> builtins.list[DiagramVertex]:
+        r"""
+        Physics vertices in traversal discovery order.
+
+        Examples
+        --------
+        >>> order = [vertex.id for vertex in diagram.depth_first_traverse(0).nodes]
+        """
+    def covers(self, subgraph: Subgraph) -> Subgraph:
+        r"""
+        Restrict a physics region to vertices visited by this traversal.
+
+        Examples
+        --------
+        >>> region = diagram.subgraph(edges=[0])
+        >>> covered = diagram.depth_first_traverse(0).covers(region)
+
+        Parameters
+        ----------
+        subgraph : Subgraph
+            Region from the same original diagram.
+        """
+    def parent(self, node: builtins.int) -> typing.Optional[DiagramVertex]:
+        r"""
+        Immediate parent vertex, or None for the traversal root.
+
+        Examples
+        --------
+        >>> tree = diagram.depth_first_traverse(0)
+        >>> parent = tree.parent(tree.nodes[-1].id)
+
+        Parameters
+        ----------
+        node : int
+            Diagram vertex ID in this traversal.
+        """
+    def children(self, node: builtins.int) -> builtins.list[DiagramVertex]:
+        r"""
+        Immediate children in discovery order.
+
+        Examples
+        --------
+        >>> children = diagram.depth_first_traverse(0).children(0)
+
+        Parameters
+        ----------
+        node : int
+            Diagram vertex ID in this traversal.
+        """
+    def ancestors(self, node: builtins.int) -> builtins.list[DiagramVertex]:
+        r"""
+        Strict ancestors from the immediate parent to the root.
+
+        Examples
+        --------
+        >>> tree = diagram.depth_first_traverse(0)
+        >>> ancestors = tree.ancestors(tree.nodes[-1].id)
+
+        Parameters
+        ----------
+        node : int
+            Diagram vertex ID in this traversal.
+        """
+    def fundamental_cycle(self, half_edge: builtins.int) -> typing.Optional[Subgraph]:
+        r"""
+        Fundamental cycle closed by a half-edge, or None for a tree edge.
+
+        Examples
+        --------
+        >>> tree = diagram.depth_first_traverse(0)
+        >>> cycles = [tree.fundamental_cycle(half.id) for half in diagram.half_edges if not half.edge.is_dangling]
+
+        Parameters
+        ----------
+        half_edge : int
+            Native diagram half-edge ID whose endpoints are in this traversal.
         """
 
 @typing.final

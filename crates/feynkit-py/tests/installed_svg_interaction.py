@@ -28,7 +28,7 @@ diagram = next(
     )
     > 1
 )
-region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+region = diagram.filter(edge=lambda edge: not edge.is_external)
 snapshot = diagram.to_json()
 namespace = "{http://www.w3.org/2000/svg}"
 xlink = "{http://www.w3.org/1999/xlink}"
@@ -116,7 +116,7 @@ for options in (
     config = {"template_options": options}
     for value in (
         cross_section,
-        cross_section.filter(edge=lambda edge: edge.data.is_external),
+        cross_section.filter(edge=lambda edge: edge.is_external),
     ):
         root = ET.fromstring(value.render(config=config, momenta=True))
         targets = root.findall(".//*[@data-linnet-kind]")

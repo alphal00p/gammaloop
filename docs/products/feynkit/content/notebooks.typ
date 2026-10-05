@@ -119,7 +119,7 @@ diagram, with the remaining graph muted and dotted:
 
 // docs-example: compile
 ```python
-region = diagram.filter(edge=lambda edge: edge.data.particle_name == "b")
+region = diagram.filter(edge=lambda edge: edge.particle_name == "b")
 Path("highlighted-diagram.svg").write_text(
     region.render(), encoding="utf-8"
 )

@@ -20,7 +20,7 @@ snapshot = diagram.to_json()
 
 for first_caller in ("parent", "view"):
     parent = fk.FeynmanDiagram.from_json(model, snapshot)
-    view = parent.filter(edge=lambda edge: not edge.data.is_external)
+    view = parent.filter(edge=lambda edge: not edge.is_external)
     old_graph = parent.to_linnet()
     stale = old_graph.full_subgraph()
     old_graph.reverse_edge(0)
@@ -63,7 +63,7 @@ class BackReference:
 
 def cyclic_view(kind):
     parent = fk.FeynmanDiagram.from_json(model, snapshot)
-    view = parent.filter(edge=lambda edge: not edge.data.is_external)
+    view = parent.filter(edge=lambda edge: not edge.is_external)
     graph = parent.to_linnet()
     payload = BackReference(view)
     if kind == "payload":
@@ -83,5 +83,22 @@ for kind in ("payload", "callback"):
     del survivor
     gc.collect()
     assert reference() is None, f"the shared export retained its {kind} cycle"
+
+# Native result wrappers can also retain the optional export through their
+# immutable owner; GC must see each counted holder reference.
+for result_kind in ("tree", "partition"):
+    parent = fk.FeynmanDiagram.from_json(model, cross_section.to_json())
+    result = (
+        parent.depth_first_traverse(0)
+        if result_kind == "tree"
+        else parent.all_cuts([0], [1])[0]
+    )
+    graph = parent.to_linnet()
+    payload = BackReference(result)
+    graph.edge(0).data = payload
+    reference = weakref.ref(payload)
+    del parent, result, graph, payload
+    gc.collect()
+    assert reference() is None, f"the native {result_kind} retained its export cycle"
 
 print("installed shared subgraph cache checks passed")

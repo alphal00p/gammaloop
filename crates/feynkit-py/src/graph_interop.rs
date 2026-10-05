@@ -171,8 +171,13 @@ impl LinnetCacheHolder {
         let Some(selection) = selection else {
             return Ok(diagram.inner.underlying().full_filter());
         };
-        let module = py.import("linnet")?;
-        if !selection.is_instance(&module.getattr("Subgraph")?)? {
+        // A supplied Linnet selection already has its extension loaded. Do not
+        // import an optional dependency just to reject a foreign Python object.
+        let module = py
+            .import("sys")?
+            .getattr("modules")?
+            .call_method1("get", ("linnet",))?;
+        if module.is_none() || !selection.is_instance(&module.getattr("Subgraph")?)? {
             return Err(pyo3::exceptions::PyTypeError::new_err(
                 "subgraph must be a linnet.Subgraph from diagram.to_linnet()",
             ));

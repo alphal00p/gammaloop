@@ -57,7 +57,7 @@ raw_full = graph.full_subgraph()
 assert type(raw_full).__module__ == "linnet"
 full = diagram.subgraph(raw_full)
 empty = diagram.subgraph()
-internal = diagram.filter(edge=lambda edge: not edge.data.is_external)
+internal = diagram.filter(edge=lambda edge: not edge.is_external)
 assert isinstance(full, fk.Subgraph)
 assert isinstance(full, fk.FeynmanDiagram)
 assert full.numerator_expression() == diagram.numerator_expression()
@@ -66,7 +66,7 @@ assert empty.denominator_expression() == TensorExpression(1)
 assert empty.numerator_expression() == TensorExpression(1)
 assert full.loop_count == diagram.loop_count
 assert internal.loop_count == diagram.loop_count
-external = diagram.filter(edge=lambda edge: edge.data.is_external)
+external = diagram.filter(edge=lambda edge: edge.is_external)
 external_vertices = {
     edge.source if edge.source is not None else edge.target
     for edge in diagram.external_edges
@@ -75,7 +75,7 @@ assert len(external.connected_components()) == len(external_vertices)
 assert external.loop_count == 0
 assert external.denominator_expression() == TensorExpression(1)
 paired = next(edge for edge in graph.edges() if not edge.data.is_external)
-boundary_half = diagram.subgraph(half_edges=[paired.source.index])
+boundary_half = diagram.subgraph(half_edges=[paired.source.data])
 assert boundary_half.denominator_expression() == TensorExpression(1)
 assert boundary_half.numerator_expression() == TensorExpression(1)
 assert full.is_connected()
@@ -93,8 +93,34 @@ assert isinstance(internal.boundary(), fk.Subgraph)
 assert internal.all_spanning_forests()
 assert full.all_bonds()
 assert diagram.all_cuts([0], [1])
-assert isinstance(full.depth_first_traverse(0), linnet.TraversalTree)
-assert isinstance(full.breadth_first_traverse(0), linnet.TraversalTree)
+assert isinstance(full.depth_first_traverse(0), fk.TraversalTree)
+assert isinstance(full.breadth_first_traverse(0), fk.TraversalTree)
+
+
+def native_ids(selection):
+    return frozenset(half.data for half in selection.to_half_edges())
+
+
+# Direct Rust analysis agrees with optional Python interoperability even when
+# the exported half-edge numbering differs from the native diagram numbering.
+assert full.bridges().half_edge_indices() == sorted(native_ids(graph.bridges(raw_full)))
+assert {
+    frozenset(component.half_edge_indices())
+    for component in full.connected_components()
+} == {native_ids(component) for component in graph.connected_components(raw_full)}
+assert {
+    frozenset(forest.half_edge_indices()) for forest in full.all_spanning_forests()
+} == {native_ids(forest) for forest in graph.all_spanning_forests(raw_full)}
+assert {frozenset(bond.half_edge_indices()) for bond in full.all_bonds()} == {
+    native_ids(bond) for bond in graph.all_bonds(subgraph=raw_full)
+}
+assert internal.boundary().half_edge_indices() == sorted(
+    native_ids(graph.boundary(internal.linnet_selection))
+)
+for half in graph.half_edges():
+    assert diagram.subgraph(half_edges=[half.data]).linnet_selection == graph.subgraph(
+        half_edges=[half.index]
+    )
 
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.to_json() == diagram.to_json()
