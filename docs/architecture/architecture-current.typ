@@ -224,6 +224,12 @@ model-free standalone eager evaluator rejects thermal expressions because it
 does not accept distribution inputs; production evaluation remains owned by
 GammaLoop.
 
+Process generation configures the graph's parameter builder with its selected medium and
+registers only that mode's distribution functions. Higher energy derivatives are built
+incrementally. The builder persists the mode so runtime warmup can validate the current
+temperature, chemical potentials, and bosonic mass domain after loading or updating a model.
+Vacuum builders register no thermal distribution functions.
+
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
 distribution derivatives. Production amplitude evaluation separates these
 distributions from the completed UV-subtracted expression before compiling
@@ -962,7 +968,9 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 10` currently).
+- State format is versioned with `state_manifest.toml` (`version = 11` currently).
+- Version 11 stores the selected medium in graph parameter builders. Earlier states
+  use a different positional layout and must be regenerated.
 - Version 10 records UFO symbol names and Linnet subgraph labels with custom print callbacks,
   including couplings removed from the saved model by restrictions. State loading restores
   those registrations before parsing the model or importing Symbolica's archive. Linnet's

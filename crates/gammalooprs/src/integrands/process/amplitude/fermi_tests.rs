@@ -205,3 +205,132 @@ sampling_multichanneling = false
     }
     Ok(())
 }
+
+#[test]
+fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
+    use three_dimensional_reps::MediumMode;
+
+    test_initialise()?;
+    let mut model = load_generic_model("sm");
+    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
+    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
+    let graphs = Graph::from_string(
+        r#"digraph thermal_boson {
+            node [num=1]; edge [num=1 particle="G+"];
+            A -> A [id=0];
+        }"#,
+        &model,
+    )?;
+    let global: GlobalSettings = toml::from_str(
+        r#"
+[generation.medium]
+mode = "thermodynamic_equilibrium"
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.threshold_subtraction]
+enable_thresholds = false
+[generation.tropical_subgraph_table]
+disable_tropical_generation = true
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = false
+iterative_orientation_optimization = false
+"#,
+    )?;
+    let settings: RuntimeSettings = toml::from_str(
+        r#"
+[general]
+evaluator_method = "SingleParametric"
+inverse_temperature = 1.0
+[kinematics]
+e_cm = 10.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = []
+helicities = []
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = false
+"#,
+    )?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .stack_size(256 * 1024 * 1024)
+        .build()?;
+    let mut amplitude = Amplitude::from_graph_list("thermal_boson", graphs)?;
+    amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+    amplitude.build_integrand(&model, "thermal_boson", &global, (&settings).into(), &pool)?;
+    let runtime = amplitude.integrand.as_mut().unwrap();
+    runtime.warm_up(&model)?;
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta: vec![ThreeMomentum::new(F(1.0), F(0.25), F(0.5))],
+        integrator_weight: F(1.0),
+        graph_id: Some(0),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
+    let expected = runtime
+        .evaluate_momentum_configuration(&model, &input, false)?
+        .integrand_result;
+    assert!(expected.re.0.is_finite() && expected.im.0.is_finite());
+    assert_ne!(expected, Complex::new_re(F(0.0)));
+
+    let bytes = bincode::encode_to_vec(&*runtime, bincode::config::standard())?;
+    let mut symbols = Vec::new();
+    State::export(&mut symbols)?;
+    let state_map = State::import(&mut Cursor::new(symbols), None)?;
+    let context = GammaLoopContextContainer {
+        model: &model,
+        state_map: &state_map,
+    };
+    let (mut restored, consumed): (ProcessIntegrand, usize) =
+        bincode::decode_from_slice_with_context(&bytes, bincode::config::standard(), context)?;
+    assert_eq!(consumed, bytes.len());
+    let ProcessIntegrand::Amplitude(generated) = &restored else {
+        unreachable!()
+    };
+    let term = &generated.data.graph_terms[0];
+    assert_eq!(
+        term.graph.param_builder.medium_mode,
+        MediumMode::ThermodynamicEquilibrium
+    );
+    assert_eq!(
+        term.param_builder.medium_mode,
+        MediumMode::ThermodynamicEquilibrium
+    );
+    restored.warm_up(&model)?;
+    assert_eq!(
+        restored
+            .evaluate_momentum_configuration(&model, &input, false)?
+            .integrand_result,
+        expected,
+    );
+
+    restored.get_mut_settings().general.inverse_temperature = 0.0;
+    let error = restored.warm_up(&model).unwrap_err();
+    assert!(error.to_string().contains("inverse_temperature"), "{error}");
+    restored.get_mut_settings().general.inverse_temperature = 1.0;
+    // Both signs of bosonic saturation and a changed mass must be revalidated
+    // from refreshed model slots after loading the compiled integrand.
+    for (mass, mu) in [(2.0, 2.0), (2.0, -2.0), (2.0, 3.0), (0.5, 1.0)] {
+        model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(mass)));
+        model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+        let error = restored.warm_up(&model).unwrap_err();
+        assert!(error.to_string().contains("|mu| < m"), "{error}");
+    }
+    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
+    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
+    restored.warm_up(&model)?;
+    assert_eq!(
+        restored
+            .evaluate_momentum_configuration(&model, &input, false)?
+            .integrand_result,
+        expected,
+    );
+    Ok(())
+}

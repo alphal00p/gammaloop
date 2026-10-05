@@ -452,8 +452,9 @@ impl fmt::Display for CompilationOptionsSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} fast_math={} unsafe_math={} compiler={} custom={}",
+            "{} jit_direct_translation={} fast_math={} unsafe_math={} compiler={} custom={}",
             self.optimization_level,
+            self.jit_direct_translation,
             self.fast_math,
             self.unsafe_math,
             self.compiler,

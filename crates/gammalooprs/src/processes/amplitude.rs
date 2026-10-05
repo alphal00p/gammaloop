@@ -1007,6 +1007,7 @@ impl AmplitudeGraph {
     #[instrument(skip_all, err)]
     pub(crate) fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
         settings.validate_for_process(GenerationType::Amplitude)?;
+        self.graph.set_medium_mode(settings.medium.mode)?;
         self.graph.ensure_energy_convergent_cycles(
             &self
                 .graph
@@ -1228,7 +1229,7 @@ impl AmplitudeGraph {
             if config.evaluate_numerically || pysec_dec_enabled_in_vakint.is_some() {
                 let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
                 if config.refresh_model_values {
-                    param_builder.update_model_values(config.model);
+                    param_builder.update_model_values(config.model)?;
                 }
                 param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
                 param_builder.renormalization_localization_scale_value(Complex::new_re(F(config

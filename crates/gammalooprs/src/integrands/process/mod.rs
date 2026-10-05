@@ -2364,7 +2364,11 @@ pub struct LmbMultiChannelingSetup {
 impl LmbMultiChannelingSetup {
     /// Refresh master-owned mass evaluators independently of member parameter slots.
     /// Keep complex values until the selected score decides whether it supports them.
-    pub(crate) fn warm_up_masses(&mut self, settings: &RuntimeSettings, model: &Model) {
+    pub(crate) fn warm_up_masses(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+    ) -> Result<()> {
         self.master_edge_masses.invalidate();
         let parameters = &mut self.graph.param_builder;
         parameters.m_uv_value(Complex::new_re(F(settings.general.m_uv)));
@@ -2375,12 +2379,13 @@ impl LmbMultiChannelingSetup {
         parameters.numerator_sampling_scale_value(Complex::new_re(F(settings
             .general
             .numerator_sampling_scale)));
-        parameters.update_model_values(model);
+        parameters.update_model_values(model)?;
         self.master_edge_masses
             .set(self.graph.new_edgevec(|edge, _, _| {
                 edge.mass_value(model, &self.graph.param_builder)
                     .unwrap_or_else(|| Complex::new_re(F(0.0)))
             }));
+        Ok(())
     }
 
     /// Borrow the bridge compiled in the current successful warmup epoch, or
@@ -9017,7 +9022,9 @@ pub(crate) mod tests {
             setup.graph.underlying[edge].mass = crate::graph::edge::EdgeMass::Value(
                 spenso::algebra::complex::Complex::new_re(F(mass)),
             );
-            setup.warm_up_masses(&RuntimeSettings::default(), &model);
+            setup
+                .warm_up_masses(&RuntimeSettings::default(), &model)
+                .unwrap();
             assert_eq!(setup.master_edge_masses.as_ref().unwrap()[edge].re, F(mass));
             assert_ne!(graph.get_real_mass_vector::<f64>(&model)[edge], F(mass));
             let catalogue = setup

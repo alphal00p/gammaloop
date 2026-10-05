@@ -316,7 +316,7 @@ impl CFFVariant {
             * self.denominator.to_atom_inv()
     }
 
-    pub fn remap_indices(
+    pub(crate) fn remap_indices(
         &mut self,
         edge_map: &BTreeMap<usize, usize>,
         map_surface: impl Fn(HybridSurfaceID) -> HybridSurfaceID,

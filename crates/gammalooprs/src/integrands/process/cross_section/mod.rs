@@ -2548,10 +2548,13 @@ impl GraphTerm for CrossSectionGraphTerm {
             .numerator_sampling_scale_value(Complex::new_re(F(settings
                 .general
                 .numerator_sampling_scale)));
-        self.graph.param_builder.update_model_values(model);
+        self.graph.param_builder.update_model_values(model)?;
+        self.graph
+            .validate_medium_parameters(model, settings.general.inverse_temperature)?;
 
         self.param_builder = self.graph.param_builder.clone();
-        self.multi_channeling_setup.warm_up_masses(settings, model);
+        self.multi_channeling_setup
+            .warm_up_masses(settings, model)?;
         self.real_mass_vec = Some(self.graph.new_edgevec(|edge, _, _| {
             edge.mass_value(model, &self.param_builder)
                 .map(|mass| mass.re)

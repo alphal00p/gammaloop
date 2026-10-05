@@ -1649,10 +1649,7 @@ mod tests {
     #[test]
     fn vacuum_subtraction_commutes_with_local_and_integrated_forests() -> Result<()> {
         use crate::{
-            integrands::process::param_builder::{
-                ParamBuilderGraph, ThermalDistributionReplacement,
-            },
-            settings::global::MediumMode,
+            integrands::process::param_builder::ParamBuilderGraph, settings::global::MediumMode,
         };
         test_initialise()?;
         let graphs: Vec<Graph> = dot!(
@@ -1718,7 +1715,6 @@ mod tests {
                                 raw,
                                 MediumMode::Vacuum,
                                 graph.iter_edges().map(|(_, edge, _)| edge),
-                                ThermalDistributionReplacement::All,
                             )?;
                             assert!(
                                 raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper)

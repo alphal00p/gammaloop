@@ -100,12 +100,6 @@ pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThermalDistributionReplacement {
-    All,
-    ConstantOnly,
-}
-
 /// The tagged arguments of an N call, before physical orientations are resolved.
 pub(crate) struct ThermalDistributionCall {
     pub edge: EdgeIndex,
@@ -172,7 +166,6 @@ pub trait ParamBuilderGraph {
         atom: &Atom,
         limit: MediumMode,
         edges: impl IntoIterator<Item = EdgeIndex>,
-        replacement_mode: ThermalDistributionReplacement,
     ) -> Result<Atom> {
         let edges = edges.into_iter().collect::<BTreeSet<_>>();
         let mut error = None;
@@ -217,11 +210,6 @@ pub trait ParamBuilderGraph {
                 ));
                 return;
             };
-            if replacement_mode == ThermalDistributionReplacement::ConstantOnly
-                && !replacement.is_constant()
-            {
-                return;
-            }
             **out = replacement;
         });
 
@@ -774,6 +762,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
+    pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
@@ -1277,6 +1266,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn new_empty() -> Self {
         Self {
+            medium_mode: MediumMode::Vacuum,
             polarization_cache: ParamCache::default(),
 
             fn_map: FunctionMap::default(),
@@ -1296,7 +1286,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         model: &Model,
         lmb: &LoopMomentumBasis,
         additional_params: P,
-    ) -> Self {
+    ) -> Result<Self> {
         let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
@@ -1348,54 +1338,6 @@ impl<T: FloatLike> ParamBuilder<T> {
                 rhs,
             )
             .unwrap();
-        }
-
-        let thermal_sign = symbol!("thermal_sign");
-        let orientation_sign = symbol!("orientation_sign");
-        let thermal_edges = graph
-            .iter_edge_ids()
-            .filter(|&edge| {
-                lmb.edge_signatures[edge]
-                    .internal
-                    .iter()
-                    .any(|sign| sign.is_sign())
-            })
-            .collect_vec();
-        // A thermal cycle with n loop-dependent edges produces order n - 1.
-        let max_thermal_derivative_order = thermal_edges.len().saturating_sub(1).max(2);
-        for e in thermal_edges {
-            for limit in [
-                MediumMode::ThermodynamicEquilibrium,
-                MediumMode::ZeroTemperatureEquilibrium,
-            ] {
-                let temperature_flag = Atom::num(i64::from(limit.is_finite_temperature()));
-                let max_derivative_order = match limit {
-                    MediumMode::ThermodynamicEquilibrium => max_thermal_derivative_order,
-                    _ => 2,
-                };
-                for derivative_order in 0..=max_derivative_order {
-                    if let Some(body) = graph.explicit_thermal_distribution_atom(
-                        e,
-                        derivative_order,
-                        Atom::var(thermal_sign),
-                        Atom::var(orientation_sign),
-                        limit,
-                    ) {
-                        new.add_tagged_function::<Symbol>(
-                            GS.thermal_distribution,
-                            vec![
-                                Atom::num(e.0 as i64),
-                                Atom::num(derivative_order as i64),
-                                temperature_flag.clone(),
-                            ],
-                            format!("N{e}_{derivative_order}_{temperature_flag}"),
-                            vec![thermal_sign, orientation_sign],
-                            body,
-                        )
-                        .unwrap();
-                    }
-                }
-            }
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
@@ -1457,9 +1399,9 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
-        new.update_model_values(model);
+        new.update_model_values(model)?;
         //panic!();
-        new
+        Ok(new)
     }
 
     #[inline]
@@ -1533,7 +1475,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
-    pub fn update_model_values(&mut self, model: &Model) {
+    pub fn update_model_values(&mut self, model: &Model) -> Result<()> {
         // Loading a state can remap symbol IDs and change the model's iteration order.
         // The evaluator still expects the parameter order stored in this builder.
         let model_values: HashMap<Atom, Complex<F<T>>> = model
@@ -1553,23 +1495,29 @@ impl<T: FloatLike> ParamBuilder<T> {
                 })
             }))
             .collect();
-        for (param, position) in self
+        let required_values = self
             .pairs
             .model_parameters
             .params
             .iter()
+            .map(|param| {
+                model_values.get(param).ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Model parameter {param} has no value in model {}",
+                        model.name
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (value, position) in required_values
+            .into_iter()
             .zip_eq(self.pairs.model_parameters.value_range.clone())
         {
-            let value = model_values.get(param).unwrap_or_else(|| {
-                panic!(
-                    "Model parameter {param} has no value in model {}",
-                    model.name
-                )
-            });
             for (value_index, values) in self.values.iter_mut().enumerate() {
                 values[position * (value_index + 1)] = value.clone();
             }
         }
+        Ok(())
     }
 
     pub(crate) fn add_external_four_mom(
@@ -1977,11 +1925,104 @@ mod tests {
     }
 
     #[test]
+    fn model_parameter_refresh_fails_without_changing_slots() {
+        test_initialise().unwrap();
+        let mut model = load_generic_model("sm");
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = ParamValuePairs {
+            params: vec![
+                model.get_parameter("MT").name.into(),
+                model.get_parameter("aS").name.into(),
+            ],
+            value_range: 0..2,
+        };
+        builder.values = vec![
+            vec![Complex::new_re(F(3.0)), Complex::new_re(F(5.0))],
+            vec![
+                Complex::new_re(F(3.0)),
+                Complex::new_re(F(7.0)),
+                Complex::new_re(F(5.0)),
+                Complex::new_re(F(11.0)),
+            ],
+        ];
+        let previous = builder.values.clone();
+        model.get_parameter_mut("MT").unwrap().value = Some(Complex::new_re(F(13.0)));
+        model.get_parameter_mut("aS").unwrap().value = None;
+        let error = builder.update_model_values(&model).unwrap_err().to_string();
+        assert!(error.contains("aS"), "{error}");
+        assert_eq!(builder.values, previous);
+        model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(17.0)));
+        builder.update_model_values(&model).unwrap();
+        assert_eq!(
+            builder.values,
+            vec![
+                vec![Complex::new_re(F(13.0)), Complex::new_re(F(17.0))],
+                vec![
+                    Complex::new_re(F(13.0)),
+                    Complex::new_re(F(7.0)),
+                    Complex::new_re(F(17.0)),
+                    Complex::new_re(F(11.0))
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn thermal_function_registration_follows_the_selected_medium() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal {
+            node [num=1]; edge [num=1 particle="d"];
+            A -> B; B -> A;
+        })
+        .unwrap();
+        let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
+        graph
+            .param_builder
+            .add_constant(alias.clone(), Rational::from(5).into());
+        let vacuum_entries = graph.param_builder.reps.clone();
+        assert!(
+            !vacuum_entries
+                .iter()
+                .any(|entry| entry.lhs.contains_symbol(GS.thermal_distribution))
+        );
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(mode).unwrap();
+            let entries = graph.param_builder.reps.clone();
+            let calls = entries
+                .iter()
+                .filter_map(|entry| ThermalDistributionCall::try_from(entry.lhs.as_view()).ok())
+                .collect_vec();
+            assert!(!calls.is_empty());
+            assert!(
+                calls.iter().all(|call| call.temperature_flag
+                    == Atom::num(i64::from(mode.is_finite_temperature())))
+            );
+            graph.set_medium_mode(mode).unwrap();
+            assert_eq!(graph.param_builder.reps, entries);
+            assert_eq!(
+                alias
+                    .evaluator(&[] as &[Atom])
+                    .function_map(graph.param_builder.fn_map.clone())
+                    .build()
+                    .unwrap()
+                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                    .evaluate_single(&[]),
+                5.0,
+            );
+        }
+        graph.set_medium_mode(MediumMode::Vacuum).unwrap();
+        assert_eq!(graph.param_builder.reps, vacuum_entries);
+    }
+
+    #[test]
     fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
         for particle in ["d", "g"] {
-            let graph: Graph = format!(
+            let mut graph: Graph = format!(
                 r#"digraph thermal_cycle {{
                     node [num=1]; edge [num=1 particle="{particle}"];
                     A -> B; B -> C; C -> D; D -> E; E -> A;
@@ -2004,6 +2045,7 @@ mod tests {
                 MediumMode::ThermodynamicEquilibrium,
                 MediumMode::ZeroTemperatureEquilibrium,
             ] {
+                graph.set_medium_mode(limit).unwrap();
                 let orders = match limit {
                     MediumMode::ThermodynamicEquilibrium => 0..=4,
                     _ => 0..=0,
@@ -2064,12 +2106,7 @@ mod tests {
                 - 1
         );
         let partial = graph
-            .make_thermal_distributions_explicit(
-                &weight,
-                MediumMode::Vacuum,
-                [EdgeIndex(0)],
-                ThermalDistributionReplacement::All,
-            )
+            .make_thermal_distributions_explicit(&weight, MediumMode::Vacuum, [EdgeIndex(0)])
             .unwrap();
         assert_eq!(
             partial,
@@ -2080,12 +2117,7 @@ mod tests {
         );
         assert!(
             graph
-                .make_thermal_distributions_explicit(
-                    &partial,
-                    MediumMode::Vacuum,
-                    [EdgeIndex(1)],
-                    ThermalDistributionReplacement::All,
-                )
+                .make_thermal_distributions_explicit(&partial, MediumMode::Vacuum, [EdgeIndex(1)],)
                 .unwrap()
                 .is_zero()
         );

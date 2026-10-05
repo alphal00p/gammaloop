@@ -160,6 +160,13 @@ The mode is fixed at generation; changing it requires regenerating the integrand
 temperature and the chemical potentials are runtime values that can change per integrand
 without regeneration.
 
+Finite-temperature evaluation requires a finite, positive inverse temperature. Chemical
+potentials must be finite and real. Bosons require a finite, nonnegative real mass and
+`|mu| < m`, with the massless `m = mu = 0` case also supported. Massive saturation
+(`|mu| = m > 0`) and boson condensation are unsupported. These checks use the current
+model values and any DOT mass overrides when the integrand is warmed up, including after
+model updates or state reloads. Fermions may have `|mu| >= m`.
+
 Chemical potentials are model parameters. Each particle may name one (`chemical_potential`
 in JSON and UFO models); a particle without one has zero chemical potential. UFO import keeps
 these assignments and therefore requires `ufo-model-loader>=1.0.0`. In the bundled `sm`

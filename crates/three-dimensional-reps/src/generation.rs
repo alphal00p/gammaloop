@@ -175,6 +175,19 @@ pub struct CffGlobalPrefactorSign {
 }
 
 impl CffGlobalPrefactorSign {
+    fn denominator_contour_frame(parsed: &ParsedGraph, medium_mode: crate::MediumMode) -> Self {
+        // The vacuum scalar denominator convention is the product of independent
+        // rational contour frames. Incidence may join those factors at a vertex,
+        // but it cannot replace their (-1)^(L-C) product by (-1)^(L-1). Thermal
+        // CFF instead retains its connected-core sign and distribution derivatives.
+        let exponent = if medium_mode == crate::MediumMode::Vacuum {
+            denominator_contour_frame_exponent(parsed)
+        } else {
+            parsed.loop_names.len().saturating_sub(1)
+        };
+        Self::from_exponent(exponent)
+    }
+
     /// Construct the sign represented by `(-1)^exponent`.
     pub const fn from_exponent(exponent: usize) -> Self {
         Self {
@@ -601,15 +614,14 @@ fn generate_3d_expression_from_parsed_generated(
     // energies in the distributions or their derivatives.
     let uses_generalized_expression = cff_bounds_need_generalized_expression(&bounds);
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
-    let mut scalar = LowerSectorCffBuilder::new(parsed, options.medium_mode);
-    scalar.context = options.cff_generation_context;
-    let denominator_only_global_prefactor_sign = scalar.denominator_contour_frame_sign();
+    let denominator_only_global_prefactor_sign =
+        CffGlobalPrefactorSign::denominator_contour_frame(parsed, options.medium_mode);
     let core_global_prefactor_sign = CffGlobalPrefactorSign::from_exponent(
         parsed.loop_names.len().saturating_sub(1)
             + if uses_generalized_expression {
                 0
             } else {
-                scalar.duplicate_signature_excess()
+                LowerSectorCffBuilder::duplicate_signature_excess(parsed, options.medium_mode)
             },
     );
     let (expression, energy_factor_ownership) = if uses_generalized_expression {
@@ -631,7 +643,7 @@ fn generate_3d_expression_from_parsed_generated(
         // denominators. External cut aliases cannot supply missing rank;
         // rank-deficient contacts remain internal to the lower-sector path.
         let basis = LowerSectorCffBuilder::component_basis_edges(
-            &scalar.signatures(),
+            &parsed.signatures(),
             &denominator_edge_ids,
         );
         if basis.len() != parsed.loop_names.len() {
@@ -640,6 +652,8 @@ fn generate_3d_expression_from_parsed_generated(
         // Ordinary consumers restore the advertised core frame. An
         // embedded terminal must normalize to that same frame even
         // when incidence joins several independent one-loop residues.
+        let mut scalar = LowerSectorCffBuilder::new(parsed, options.medium_mode);
+        scalar.context = options.cff_generation_context;
         scalar.source_prefactor = Some(Rational::from(
             CffGlobalPrefactorSign::from_exponent(denominator_edge_ids.len())
                 .product(core_global_prefactor_sign)
@@ -687,7 +701,7 @@ fn denominator_set_is_complete_residue_basis(parsed: &ParsedGraph) -> bool {
     }
     // Contacts retain the source's loop-coordinate names after losing rank.
     // Equal counts alone cannot make the surviving denominators a residue basis.
-    let signatures = LowerSectorCffBuilder::new(parsed, crate::MediumMode::Vacuum).signatures();
+    let signatures = parsed.signatures();
     LowerSectorCffBuilder::component_basis_edges(&signatures, &denominator_edge_ids).len()
         == parsed.loop_names.len()
 }
@@ -696,13 +710,8 @@ fn generate_pure_cff_expression_from_parsed(
     parsed: &ParsedGraph,
     medium_mode: crate::MediumMode,
 ) -> Result<ThreeDExpression<OrientationID>> {
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
-    let mut factorized = LowerSectorCffBuilder::new(parsed, medium_mode);
-    if factorized.vector_matroid_components(&signatures).len() > 1 {
+    let signatures = parsed.signatures();
+    if LowerSectorCffBuilder::vector_matroid_components(parsed, &signatures).len() > 1 {
         // A graph may be vertex-connected while its rational denominator
         // factorizes into independent loop-energy components (for example a
         // tadpole attached at one vertex). Construct its causal product in
@@ -710,12 +719,13 @@ fn generate_pure_cff_expression_from_parsed(
         // mix components merely because they share an incidence vertex. The
         // component containing a structural cut retains that cut and its fixed
         // contour; every uncut component retains its complete public CFF sum.
+        let mut factorized = LowerSectorCffBuilder::new(parsed, medium_mode);
         factorized.force_component_factorization = true;
         return factorized.build();
     }
     generate_pure_cff_expression_from_parsed_with_duplicate_excess(
         parsed,
-        factorized.duplicate_signature_excess(),
+        LowerSectorCffBuilder::duplicate_signature_excess(parsed, medium_mode),
         medium_mode,
     )
 }
@@ -826,11 +836,7 @@ fn expression_with_only_preserved_edges(
         return Err(GenerationError::SingularBasis);
     }
 
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
+    let signatures = parsed.signatures();
     let mut edge_energy_map = edge_q0_from_loop_exprs(&signatures, &[]);
     apply_initial_state_cut_edge_energy_exprs(parsed, &mut edge_energy_map);
     let orientation =
@@ -992,11 +998,7 @@ fn lift_expression_to_preserved_graph(
         .enumerate()
         .map(|(active_id, orig_id)| (active_id, *orig_id))
         .collect::<BTreeMap<_, _>>();
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
+    let signatures = parsed.signatures();
 
     let mut expression = ThreeDExpression::<OrientationID>::new_empty();
     expression.residual_denominators = preserved
@@ -1553,11 +1555,7 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
     duplicate_excess: usize,
     medium_mode: crate::MediumMode,
 ) -> Result<ThreeDExpression<OrientationID>> {
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
+    let signatures = parsed.signatures();
     let n_internal = signatures.len();
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
     let basis = LowerSectorCffBuilder::component_basis_edges(&signatures, &denominator_edge_ids);
@@ -1665,11 +1663,7 @@ fn generate_simple_residue_basis_expression_from_parsed(
     parsed: &ParsedGraph,
     contour_closure: &[ContourClosure],
 ) -> Result<ThreeDExpression<OrientationID>> {
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
+    let signatures = parsed.signatures();
     let n_internal = signatures.len();
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
     let n_loops = signatures
@@ -2484,10 +2478,10 @@ impl<'a> BoundedCffBuilder<'a> {
             parsed,
             source_prefactor: Rational::from(
                 CffGlobalPrefactorSign::from_exponent(parsed.denominator_internal_edge_ids().len())
-                    .product(
-                        LowerSectorCffBuilder::new(parsed, medium_mode)
-                            .denominator_contour_frame_sign(),
-                    )
+                    .product(CffGlobalPrefactorSign::denominator_contour_frame(
+                        parsed,
+                        medium_mode,
+                    ))
                     .factor(),
             ),
             bounds,
@@ -2717,12 +2711,7 @@ impl<'a> BoundedCffBuilder<'a> {
             .map(|(sub_id, orig_id)| (sub_id, *orig_id))
             .collect::<BTreeMap<_, _>>();
         let surface_map = self.assembly.copy_expression_surfaces(source, &edge_map);
-        let signatures = self
-            .parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
+        let signatures = self.parsed.signatures();
 
         for orientation in &source.orientations {
             let full_loop_exprs = orientation
@@ -2828,12 +2817,7 @@ impl<'a> BoundedCffBuilder<'a> {
         let surface_map = self
             .assembly
             .copy_expression_surfaces(&sub_expression, &edge_map);
-        let signatures = self
-            .parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
+        let signatures = self.parsed.signatures();
 
         for orientation in &sub_expression.orientations {
             let full_loop_exprs = orientation
@@ -3146,10 +3130,10 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 CffGlobalPrefactorSign::from_exponent(
                     original.denominator_internal_edge_ids().len(),
                 )
-                .product(
-                    LowerSectorCffBuilder::new(original, medium_mode)
-                        .denominator_contour_frame_sign(),
-                )
+                .product(CffGlobalPrefactorSign::denominator_contour_frame(
+                    original,
+                    medium_mode,
+                ))
                 .factor(),
             ),
             bounds,
@@ -3688,12 +3672,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 .loop_signature
                 .clone()
         }));
-        let original_signatures = self
-            .original
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
+        let original_signatures = self.original.signatures();
         let mut reconstruction_edges = branch_local_to_orig.clone();
         reconstruction_edges.extend(
             replacements
@@ -3829,13 +3808,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         if loop_variables.is_empty() {
             return true;
         }
-        let lower_sector = LowerSectorCffBuilder::new(self.original, self.medium_mode);
-        let signatures = self
-            .original
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
+        let signatures = self.original.signatures();
         let candidate_edges = denominator_edges
             .iter()
             .map(|edge_id| local_to_orig[*edge_id])
@@ -3852,9 +3825,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         loop_variables.into_iter().all(|loop_id| {
             let mut unit = vec![0; self.original.loop_names.len()];
             unit[loop_id] = 1;
-            lower_sector
-                .row_coordinates_in_basis(&basis_rows, &unit)
-                .is_ok()
+            LowerSectorCffBuilder::row_coordinates_in_basis(&basis_rows, &unit).is_ok()
         })
     }
 
@@ -4198,20 +4169,17 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 ));
             }
         }
-        let signatures = parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
+        let signatures = parsed.signatures();
         let edges = (0..signatures.len()).collect::<Vec<_>>();
-        let lower_sector = LowerSectorCffBuilder::new(parsed, self.medium_mode);
         let basis = LowerSectorCffBuilder::component_basis_edges(&signatures, &edges);
         let basis_rows = basis
             .iter()
             .map(|edge_id| signatures[*edge_id].loop_signature.clone())
             .collect::<Vec<_>>();
-        let coords =
-            lower_sector.row_coordinates_in_basis(&basis_rows, &signature.loop_signature)?;
+        let coords = LowerSectorCffBuilder::row_coordinates_in_basis(
+            &basis_rows,
+            &signature.loop_signature,
+        )?;
 
         let mut reconstructed = vec![0i64; signature.loop_signature.len()];
         for (coord, row) in coords.iter().zip(&basis_rows) {
@@ -4427,11 +4395,10 @@ struct LowerSectorCffBuilder<'a> {
 }
 
 impl<'a> LowerSectorCffBuilder<'a> {
-    fn duplicate_signature_excess(&self) -> usize {
-        if self.medium_mode != crate::MediumMode::Vacuum {
+    fn duplicate_signature_excess(parsed: &ParsedGraph, medium_mode: crate::MediumMode) -> usize {
+        if medium_mode != crate::MediumMode::Vacuum {
             return 0;
         }
-        let parsed = self.parsed;
         let mut counts = BTreeMap::<(MomentumSignature, Option<String>), usize>::new();
         for edge in &parsed.internal_edges {
             if parsed.is_initial_state_cut_edge(edge.edge_id) {
@@ -4443,19 +4410,6 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 .or_default() += 1;
         }
         counts.values().map(|count| count.saturating_sub(1)).sum()
-    }
-
-    fn denominator_contour_frame_sign(&self) -> CffGlobalPrefactorSign {
-        // The vacuum scalar denominator convention is the product of independent
-        // rational contour frames. Incidence may join those factors at a vertex,
-        // but it cannot replace their (-1)^(L-C) product by (-1)^(L-1). Thermal
-        // CFF instead retains its connected-core sign and distribution derivatives.
-        let exponent = if self.medium_mode == crate::MediumMode::Vacuum {
-            denominator_contour_frame_exponent(self.parsed)
-        } else {
-            self.parsed.loop_names.len().saturating_sub(1)
-        };
-        CffGlobalPrefactorSign::from_exponent(exponent)
     }
 
     fn new(parsed: &'a ParsedGraph, medium_mode: crate::MediumMode) -> Self {
@@ -4495,7 +4449,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         if self.medium_mode != crate::MediumMode::Vacuum {
             self.inherited_contour_rows.clear();
         }
-        let signatures = self.signatures();
+        let signatures = self.parsed.signatures();
         let denominator_edge_ids = self.parsed.denominator_internal_edge_ids();
         let denominator_rank =
             Self::component_basis_edges(&signatures, &denominator_edge_ids).len();
@@ -4520,7 +4474,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         // denominator product. Retain duplicate parity in the inherited parent
         // functional. Components sharing only an incidence vertex still close
         // independently; their product uses the component constructor below.
-        let single_component = self.vector_matroid_components(&signatures).len() == 1;
+        let single_component = Self::vector_matroid_components(self.parsed, &signatures).len() == 1;
         let direct = self.occurrence_normal_form_consumed && single_component;
         // A connected, unraised full-rank lower sector is already an
         // ordinary affine CFF problem. Keep it intact: vector-matroid
@@ -4544,7 +4498,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
                     Rational::one(),
                 )
             } else {
-                let duplicate_excess = self.duplicate_signature_excess();
+                let duplicate_excess =
+                    Self::duplicate_signature_excess(self.parsed, self.medium_mode);
                 let expression = generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                     self.parsed,
                     duplicate_excess,
@@ -4619,7 +4574,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         components: &[LowerSectorComponent],
         initial_coeff: Rational,
     ) -> Result<ThreeDExpression<OrientationID>> {
-        let signatures = self.signatures();
+        let signatures = self.parsed.signatures();
         // The native product carries initial_coeff times its components. Its
         // conversion to the signed contour contains that same sign, so the two
         // cancel when embedding in one original source frame. Each selected
@@ -4799,19 +4754,11 @@ impl<'a> LowerSectorCffBuilder<'a> {
         Ok(self.assembly.expression)
     }
 
-    fn signatures(&self) -> Vec<MomentumSignature> {
-        self.parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect()
-    }
-
     fn component_bundles(
         &self,
         signatures: &[MomentumSignature],
     ) -> Result<Vec<LowerSectorComponent>> {
-        let components = self.vector_matroid_components(signatures);
+        let components = Self::vector_matroid_components(self.parsed, signatures);
         let component_bases = components
             .iter()
             .map(|component| Self::component_basis_edges(signatures, component))
@@ -4843,7 +4790,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
                     }
                     ordered_basis_rows.push(basis_row);
                     let Ok(coordinates) =
-                        self.rational_row_coordinates_in_basis(&ordered_basis_rows, inherited_row)
+                        Self::rational_row_coordinates_in_basis(&ordered_basis_rows, inherited_row)
                     else {
                         continue;
                     };
@@ -4985,8 +4932,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 CffGlobalPrefactorSign::from_exponent(
                     denominator_count
                         + rank.saturating_sub(1)
-                        + LowerSectorCffBuilder::new(&component_parsed, self.medium_mode)
-                            .duplicate_signature_excess(),
+                        + Self::duplicate_signature_excess(&component_parsed, self.medium_mode),
                 )
                 .factor(),
             ) / Rational::from(
@@ -5033,7 +4979,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         let projected = edges
             .iter()
             .map(|edge_id| {
-                self.row_coordinates_in_basis(&basis_rows, &signatures[*edge_id].loop_signature)
+                Self::row_coordinates_in_basis(&basis_rows, &signatures[*edge_id].loop_signature)
             })
             .collect::<Result<Vec<_>>>()?;
         let rank = basis_edges.len();
@@ -5173,13 +5119,15 @@ impl<'a> LowerSectorCffBuilder<'a> {
         ))
     }
 
-    fn vector_matroid_components(&self, signatures: &[MomentumSignature]) -> Vec<Vec<usize>> {
+    fn vector_matroid_components(
+        parsed: &ParsedGraph,
+        signatures: &[MomentumSignature],
+    ) -> Vec<Vec<usize>> {
         let rows = signatures
             .iter()
             .map(|signature| signature.loop_signature.clone())
             .collect::<Vec<_>>();
-        let denominator_edges = self
-            .parsed
+        let denominator_edges = parsed
             .denominator_internal_edge_ids()
             .into_iter()
             .collect::<BTreeSet<_>>();
@@ -5211,7 +5159,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 basis_rows.push(rows[*edge_id].clone());
                 continue;
             }
-            if let Ok(coords) = self.rational_row_coordinates_in_basis(&basis_rows, &rows[*edge_id])
+            if let Ok(coords) =
+                Self::rational_row_coordinates_in_basis(&basis_rows, &rows[*edge_id])
             {
                 for (basis_edge, coeff) in basis.iter().zip(coords) {
                     if !coeff.is_zero() {
@@ -5263,8 +5212,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
         selected
     }
 
-    fn row_coordinates_in_basis(&self, basis_rows: &[Vec<i32>], row: &[i32]) -> Result<Vec<i32>> {
-        let coords = self.rational_row_coordinates_in_basis(basis_rows, row)?;
+    fn row_coordinates_in_basis(basis_rows: &[Vec<i32>], row: &[i32]) -> Result<Vec<i32>> {
+        let coords = Self::rational_row_coordinates_in_basis(basis_rows, row)?;
         if coords.iter().any(|coord| {
             coord
                 .to_i64_pair()
@@ -5284,7 +5233,6 @@ impl<'a> LowerSectorCffBuilder<'a> {
     }
 
     fn rational_row_coordinates_in_basis(
-        &self,
         basis_rows: &[Vec<i32>],
         row: &[i32],
     ) -> Result<Vec<Rational>> {
@@ -5663,11 +5611,7 @@ fn apply_initial_state_cut_edge_energy_exprs(
 }
 
 fn denominator_contour_frame_exponent(parsed: &ParsedGraph) -> usize {
-    let signatures = parsed
-        .internal_edges
-        .iter()
-        .map(|edge| edge.signature.clone())
-        .collect::<Vec<_>>();
+    let signatures = parsed.signatures();
     let denominator_rows = parsed
         .denominator_internal_edge_ids()
         .into_iter()
@@ -5684,18 +5628,18 @@ fn denominator_contour_frame_exponent(parsed: &ParsedGraph) -> usize {
     // denominator frame is set by the rank that remains in the rational
     // denominator, not by the number of names in that ambient namespace.
     let denominator_rank = rank_i64(&denominator_rows);
-    let rational_component_count = LowerSectorCffBuilder::new(parsed, crate::MediumMode::Vacuum)
-        .vector_matroid_components(&signatures)
-        .into_iter()
-        .filter(|component| {
-            component.iter().any(|edge_id| {
-                signatures[*edge_id]
-                    .loop_signature
-                    .iter()
-                    .any(|coefficient| *coefficient != 0)
+    let rational_component_count =
+        LowerSectorCffBuilder::vector_matroid_components(parsed, &signatures)
+            .into_iter()
+            .filter(|component| {
+                component.iter().any(|edge_id| {
+                    signatures[*edge_id]
+                        .loop_signature
+                        .iter()
+                        .any(|coefficient| *coefficient != 0)
+                })
             })
-        })
-        .count();
+            .count();
     let mut active_signature_counts = BTreeMap::<(MomentumSignature, Option<String>), usize>::new();
     for edge_id in parsed.denominator_internal_edge_ids() {
         let signature = &signatures[edge_id];

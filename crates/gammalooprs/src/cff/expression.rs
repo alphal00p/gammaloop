@@ -238,10 +238,7 @@ mod tests {
     #[test]
     fn vacuum_subtraction_reaches_root_and_unit_cographs() -> color_eyre::Result<()> {
         use crate::{
-            graph::cuts::CutSet,
-            integrands::process::param_builder::{
-                ParamBuilderGraph, ThermalDistributionReplacement,
-            },
+            graph::cuts::CutSet, integrands::process::param_builder::ParamBuilderGraph,
             settings::global::OrientationPattern,
         };
         test_initialise()?;
@@ -273,7 +270,6 @@ mod tests {
                     raw,
                     MediumMode::Vacuum,
                     graph.iter_edges().map(|(_, edge, _)| edge),
-                    ThermalDistributionReplacement::All,
                 )?;
                 assert!(raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper));
                 assert!(actual.is_zero() || actual.contains_symbol(GS.thermal_weight_wrapper));

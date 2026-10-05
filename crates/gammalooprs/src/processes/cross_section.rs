@@ -1506,7 +1506,7 @@ impl CrossSectionGraph {
             model,
             &self.graph.loop_momentum_basis,
             &self.graph.param_builder.pairs.additional_params.params,
-        );
+        )?;
         Ok(())
     }
 
@@ -1632,7 +1632,7 @@ impl CrossSectionGraph {
     }
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
-        settings.validate_for_process(GenerationType::CrossSection)?;
+        self.graph.set_medium_mode(settings.medium.mode)?;
         self.graph.ensure_energy_convergent_cycles(
             &self
                 .graph

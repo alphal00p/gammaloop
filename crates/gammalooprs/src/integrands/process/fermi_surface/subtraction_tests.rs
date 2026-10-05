@@ -7,8 +7,7 @@ use crate::{
     graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
     integrands::process::{
-        MomentumSpaceEvaluationInput, ProcessIntegrand,
-        param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
+        MomentumSpaceEvaluationInput, ProcessIntegrand, param_builder::ParamBuilderGraph,
     },
     momentum::ThreeMomentum,
     numerator::symbolica_ext::NumeratorAtomExt,
@@ -101,7 +100,6 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
         raw,
         MediumMode::Vacuum,
         original.graph.iter_edge_ids(),
-        ThermalDistributionReplacement::All,
     )?;
     let difference = (&generated[1] - (raw - vacuum)).unwrap_function(GS.thermal_weight_wrapper);
     assert!(

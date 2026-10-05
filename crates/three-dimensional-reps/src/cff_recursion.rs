@@ -422,7 +422,7 @@ pub(crate) fn enumerate_cff_surface_chains(
         return Vec::new();
     }
     let mut branches = Vec::new();
-    enumerate_cff_branches(&graph, parsed, edge_signs, medium_mode, &mut branches);
+    enumerate_cff_branches(graph, parsed, edge_signs, medium_mode, &mut branches);
     branches
 }
 
@@ -478,13 +478,12 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
 }
 
 fn enumerate_cff_branches(
-    graph: &CffGenerationGraph,
+    mut graph: CffGenerationGraph,
     parsed: &ParsedGraph,
     edge_signs: &[i32],
     medium_mode: MediumMode,
     branch_acc: &mut Vec<CffSurfaceChain>,
 ) {
-    let mut graph = graph.clone();
     let thermal = medium_mode != MediumMode::Vacuum;
     let (distributions, reduction_prefactor) = if thermal {
         graph.strip_thermal_distribution_factors(parsed, edge_signs)
@@ -587,7 +586,7 @@ fn enumerate_cff_branches(
             }
         }
         let mut sub = Vec::new();
-        enumerate_cff_branches(&child, parsed, edge_signs, medium_mode, &mut sub);
+        enumerate_cff_branches(child, parsed, edge_signs, medium_mode, &mut sub);
         for mut chain in sub {
             chain.surfaces.insert(0, surface.clone());
             chain.thermal_weight = branch_weight.product(&chain.thermal_weight);

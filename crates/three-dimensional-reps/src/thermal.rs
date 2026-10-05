@@ -33,7 +33,7 @@ use crate::symbols::{S, sign};
     JsonSchema,
 )]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
+#[serde(rename_all = "snake_case")]
 pub enum MediumMode {
     #[default]
     Vacuum,
@@ -186,7 +186,10 @@ impl ThermalWeight {
         self.distributions.sort();
     }
 
-    pub fn remap_internal_edges(&mut self, edge_map: &std::collections::BTreeMap<usize, usize>) {
+    pub(crate) fn remap_internal_edges(
+        &mut self,
+        edge_map: &std::collections::BTreeMap<usize, usize>,
+    ) {
         let remap = |edge: &mut EdgeIndex| {
             edge.0 = edge_map.get(&edge.0).copied().unwrap_or(edge.0);
         };
@@ -208,6 +211,12 @@ impl ThermalWeight {
     }
 
     pub(crate) fn product(&self, rhs: &Self) -> Self {
+        debug_assert!(
+            self.medium_mode == rhs.medium_mode
+                || self.medium_mode == MediumMode::Vacuum
+                || rhs.medium_mode == MediumMode::Vacuum,
+            "cannot multiply thermal weights with different equilibrium modes"
+        );
         let mut result = self.clone();
         if result.medium_mode == MediumMode::Vacuum {
             result.medium_mode = rhs.medium_mode;
@@ -300,6 +309,21 @@ mod tests {
         }
     }
 
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "cannot multiply thermal weights with different equilibrium modes")]
+    fn thermal_product_rejects_mixed_equilibrium_modes() {
+        let finite = ThermalWeight {
+            medium_mode: MediumMode::ThermodynamicEquilibrium,
+            ..Default::default()
+        };
+        let zero_temperature = ThermalWeight {
+            medium_mode: MediumMode::ZeroTemperatureEquilibrium,
+            ..Default::default()
+        };
+        finite.product(&zero_temperature);
+    }
+
     #[test]
     fn vacuum_subtraction_acts_on_completed_products_and_units() {
         for medium_mode in [
@@ -324,6 +348,9 @@ mod tests {
                 }],
             };
             let product = left.product(&right);
+            let vacuum_unit = ThermalWeight::default();
+            assert_eq!(vacuum_unit.product(&product), product);
+            assert_eq!(product.product(&vacuum_unit), product);
             let subtracted = product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION);
             assert_eq!(
                 subtracted.replace_multiple(&*VACUUM_SUBTRACTION),
@@ -347,6 +374,8 @@ mod tests {
                 medium_mode,
                 ..Default::default()
             };
+            assert_eq!(vacuum_unit.product(&unit), unit);
+            assert_eq!(unit.product(&vacuum_unit), unit);
             assert_eq!(unit.to_atom(), function!(S.thermal_weight_wrapper, 1));
             assert_eq!(
                 unit.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),

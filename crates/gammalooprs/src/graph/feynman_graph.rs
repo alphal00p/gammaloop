@@ -16,9 +16,11 @@ use spenso::{
 };
 // use petgraph::Direction::Outgoing;
 use symbolica::{
-    atom::{Atom, AtomCore, Indeterminate},
+    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    evaluate::FunctionMap,
     function,
     id::Replacement,
+    symbol,
     transcendental::{coth, csch, sech, tanh},
 };
 use three_dimensional_reps::{MediumMode, ThermalDistributionFactor};
@@ -26,7 +28,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::generation::ShiftRewrite,
-    integrands::process::param_builder::{ParamBuilderGraph, SplitPolarizations},
+    integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
@@ -91,13 +93,187 @@ pub trait FeynmanGraph {
 }
 
 impl Graph {
+    /// Thermal functions are needed only after a process selects a medium.
+    /// Replacing the mode also removes definitions from a previous generation.
+    pub(crate) fn set_medium_mode(&mut self, medium_mode: MediumMode) -> eyre::Result<()> {
+        if self.param_builder.medium_mode == medium_mode {
+            return Ok(());
+        }
+        let mut entries = self.param_builder.reps.iter().filter(|entry| {
+            !matches!(entry.lhs.as_view(), AtomView::Fun(f) if f.get_symbol() == GS.thermal_distribution)
+        }).cloned().collect_vec();
+        if medium_mode != MediumMode::Vacuum {
+            let thermal_sign = symbol!("thermal_sign");
+            let orientation_sign = symbol!("orientation_sign");
+            let thermal_edges = self
+                .iter_edge_ids()
+                .filter(|&edge| {
+                    self.loop_momentum_basis.edge_signatures[edge]
+                        .internal
+                        .iter()
+                        .any(|sign| sign.is_sign())
+                })
+                .collect_vec();
+            // A thermal cycle with n loop-dependent edges produces order n - 1.
+            let max_order = if medium_mode.is_finite_temperature() {
+                thermal_edges.len().saturating_sub(1).max(2)
+            } else {
+                2
+            };
+            let temperature_flag = Atom::num(i64::from(medium_mode.is_finite_temperature()));
+            for edge in thermal_edges {
+                let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
+                let mut previous_body: Option<Atom> = None;
+                for derivative_order in 0..=max_order {
+                    let body = if derivative_order > 2 {
+                        previous_body
+                            .as_ref()
+                            .map(|body| body.derivative(&energy).expand())
+                    } else {
+                        self.explicit_thermal_distribution_atom(
+                            edge,
+                            derivative_order,
+                            Atom::var(thermal_sign),
+                            Atom::var(orientation_sign),
+                            medium_mode,
+                        )
+                    };
+                    let Some(body) = body else {
+                        continue;
+                    };
+                    entries.push(FnMapEntry {
+                        lhs: GS.thermal_distribution(
+                            edge.0 as i64,
+                            derivative_order as i64,
+                            temperature_flag.clone(),
+                            thermal_sign,
+                            orientation_sign,
+                        ),
+                        rhs: body.clone(),
+                        args: vec![thermal_sign.into(), orientation_sign.into()],
+                        tags: vec![
+                            Atom::num(edge.0 as i64),
+                            Atom::num(derivative_order as i64),
+                            temperature_flag.clone(),
+                        ],
+                    });
+                    previous_body = Some(body);
+                }
+            }
+        }
+        let mut function_map = FunctionMap::new();
+        for entry in &entries {
+            match entry.lhs.as_view() {
+                AtomView::Fun(function) if !entry.tags.is_empty() || !entry.args.is_empty() => {
+                    function_map.add_tagged_function(
+                        function.get_symbol(),
+                        entry.tags.clone(),
+                        entry.args.clone(),
+                        entry.rhs.clone(),
+                    )
+                }
+                _ => function_map.add_aliases([(entry.lhs.clone(), entry.rhs.clone())]),
+            }
+            .map_err(|error| eyre::eyre!(error))?;
+        }
+        self.param_builder.fn_map = function_map;
+        self.param_builder.reps = entries;
+        self.param_builder.medium_mode = medium_mode;
+        Ok(())
+    }
+
+    /// Check the thermal domain after refreshing model parameter slots, including DOT mass overrides.
+    /// Vacuum graphs do not consume temperature or chemical potentials.
+    pub(crate) fn validate_medium_parameters(
+        &self,
+        model: &Model,
+        inverse_temperature: f64,
+    ) -> eyre::Result<()> {
+        let parameters = &self.param_builder;
+        let mode = parameters.medium_mode;
+        if mode == MediumMode::Vacuum {
+            return Ok(());
+        }
+        if mode.is_finite_temperature()
+            && (!inverse_temperature.is_finite() || inverse_temperature <= 0.0)
+        {
+            return Err(eyre::eyre!(
+                "Thermal graph '{}' requires finite positive runtime.general.inverse_temperature; got {inverse_temperature}",
+                self.name
+            ));
+        }
+        for (_, edge_id, edge) in self.iter_edges() {
+            if edge.data.is_dummy
+                || !self.loop_momentum_basis.edge_signatures[edge_id]
+                    .internal
+                    .iter()
+                    .any(|sign| sign.is_sign())
+            {
+                continue;
+            }
+            let mu = match edge.data.chemical_potential_atom() {
+                Some(atom) if !atom.is_zero() => parameters
+                    .pairs
+                    .model_parameters
+                    .params
+                    .iter()
+                    .zip(parameters.model_values())
+                    .find_map(|(parameter, value)| (parameter == &atom).then_some(*value))
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "Thermal graph '{}' has no value for chemical potential {atom} on edge {edge_id}",
+                            self.name
+                        )
+                    })?,
+                _ => Complex::new_re(F(0.0)),
+            };
+            if !mu.im.is_zero() || !mu.re.0.is_finite() {
+                return Err(eyre::eyre!(
+                    "Thermal graph '{}' requires a finite real chemical potential on edge {edge_id}; got {mu}",
+                    self.name
+                ));
+            }
+            if edge.data.is_fermion() {
+                continue;
+            }
+            let mass = match edge.data.mass_value::<f64>(model, parameters) {
+                Some(mass) => mass,
+                None if edge.data.mass_atom().is_zero() => Complex::new_re(F(0.0)),
+                None => {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' has no value for boson mass '{}' on edge {edge_id}",
+                        self.name,
+                        edge.data.mass_atom()
+                    ));
+                }
+            };
+            if !mass.im.is_zero() || !mass.re.0.is_finite() || mass.re.0 < 0.0 {
+                return Err(eyre::eyre!(
+                    "Thermal graph '{}' requires a finite nonnegative real boson mass on edge {edge_id}; got {mass}",
+                    self.name
+                ));
+            }
+            // Massless bosons at zero chemical potential retain their infrared endpoint.
+            // Massive saturation would require condensate support, which is not implemented.
+            if !(mass.re.is_zero() && mu.re.is_zero()) && mu.re.0.abs() >= mass.re.0 {
+                return Err(eyre::eyre!(
+                    "Thermal graph '{}' requires |mu| < m for bosons, except m = mu = 0; edge {edge_id} has mu = {} and m = {} (boson condensation is unsupported)",
+                    self.name,
+                    mu.re,
+                    mass.re
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// LU uses real on-shell energies and stable-particle cuts; width metadata alone
     /// does not turn a real mass into a complex-mass-scheme propagator.
     /// Used UFO denominators must agree with the standard pole reconstructed from the mass.
     pub(crate) fn validate_real_masses(&self, model: &Model) -> eyre::Result<()> {
         // DOT mass expressions use evaluator slots, which may predate a model update.
         let mut parameters = self.param_builder.clone();
-        parameters.update_model_values(model);
+        parameters.update_model_values(model)?;
         for (pair, edge_id, edge) in self.iter_edges() {
             if let Some(mass) = edge.data.mass_value::<f64>(model, &parameters)
                 && !mass.im.is_zero()
@@ -940,6 +1116,84 @@ mod tests {
         evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
         symbol,
     };
+
+    #[test]
+    fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mut graph: Graph = r#"
+            digraph thermal_domain {
+                node [num=1]; edge [num=1];
+                A -> A [id=0 particle="G+" mass=2];
+                A -> A [id=1 particle="d" mass=0];
+                A -> A [id=2 particle="a"];
+            }
+        "#
+        .into_graph(&model)?;
+        // Dense fermions and massless zero-mu bosons are both supported.
+        model.get_parameter_mut("mud")?.value = Some(Complex::new_re(F(3.0)));
+        for mode in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(mode)?;
+            graph.param_builder.update_model_values(&model)?;
+            for beta in [1.0, 0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let result = graph.validate_medium_parameters(&model, beta);
+                assert_eq!(result.is_ok(), !mode.is_finite_temperature() || beta == 1.0);
+                if let Err(error) = result {
+                    assert!(error.to_string().contains("inverse_temperature"));
+                }
+            }
+            for mu in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, f64::NAN, f64::INFINITY] {
+                model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+                graph.param_builder.update_model_values(&model)?;
+                let result = graph.validate_medium_parameters(&model, 1.0);
+                assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
+                if let Err(error) = result {
+                    assert!(error.to_string().contains("thermal_domain"));
+                }
+            }
+            model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_boson_validation_uses_mass_overrides_and_rejects_complex_parameters()
+    -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+        let mut graph: Graph = format!(
+            r#"digraph thermal_mass {{
+                node [num=1]; edge [num=1];
+                A -> A [particle="G+" mass="{mass_parameter}+1"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        for (mass, mu, valid) in [
+            (Complex::new_re(F(2.0)), Complex::new_re(F(2.0)), true),
+            (Complex::new_re(F(1.0)), Complex::new_re(F(2.0)), false),
+            (Complex::new_re(F(-1.0)), Complex::new_re(F(0.0)), true),
+            (Complex::new_re(F(-1.0)), Complex::new_re(F(0.1)), false),
+            (Complex::new_re(F(-2.0)), Complex::new_re(F(0.0)), false),
+            (Complex::new(F(2.0), F(1.0)), Complex::new_re(F(0.0)), false),
+            (Complex::new_re(F(2.0)), Complex::new(F(0.0), F(1.0)), false),
+        ] {
+            model.get_parameter_mut("MT")?.value = Some(mass);
+            model.get_parameter_mut("muG")?.value = Some(mu);
+            graph.param_builder.update_model_values(&model)?;
+            assert_eq!(
+                graph.validate_medium_parameters(&model, 1.0).is_ok(),
+                valid,
+                "mass override MT+1 with MT={mass}, mu={mu}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn cross_section_real_masses_accept_zero_real_and_width_metadata() -> eyre::Result<()> {

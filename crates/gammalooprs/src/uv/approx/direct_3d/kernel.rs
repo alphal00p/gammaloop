@@ -18,7 +18,7 @@ use three_dimensional_reps::MediumMode;
 use crate::{
     debug_tags,
     graph::{LMBext, LoopMomentumBasis},
-    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
+    integrands::process::param_builder::ParamBuilderGraph,
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -272,7 +272,6 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             atom,
             MediumMode::Vacuum,
             ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
-            ThermalDistributionReplacement::All,
         )
     })?;
     let scope = DirectResidueBranches::numerator_scope();

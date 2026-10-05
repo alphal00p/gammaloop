@@ -7373,9 +7373,7 @@ mod tests {
 
     #[test]
     fn thermal_mass_cycles_match_partial_fraction_contours() -> Result<()> {
-        use crate::integrands::process::param_builder::{
-            ParamBuilderGraph, ThermalDistributionReplacement,
-        };
+        use crate::integrands::process::param_builder::ParamBuilderGraph;
         use three_dimensional_reps::MediumMode;
 
         test_initialise()?;
@@ -7422,7 +7420,6 @@ mod tests {
                     &sum,
                     MediumMode::ThermodynamicEquilibrium,
                     graph.iter_edge_ids(),
-                    ThermalDistributionReplacement::All,
                 )?
                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
                 .with(W_.a_);
