@@ -174,13 +174,15 @@ def output_block(values, slug, assets, rsvg_convert):
         width = float(re.search(r'width="([0-9.]+)pt"', svg)[1])
         # Keep native font size, reducing only graphics wider than the paper column.
         width = min(width, 395)
+        if slug == "network":
+            width *= 0.7  # Keep the diagram compact beside the other cell outputs.
         graphics.append(
             rf"\includegraphics[width={width:.3f}pt]{{spenso-current/{basename}.pdf}}"
         )
     note = " (line-wrapped)" if slug == "components" else ""
     return (
         "\\tcblower\n"
-        + rf"{{\small\sffamily\color{{pythoncomment}} Output{note}}}\par\smallskip"
+        + rf"{{\small\sffamily\color{{codecomment}} Output{note}}}\par\smallskip"
         + "\n\\centering\n"
         + "\\qquad\n".join(graphics)
         + "\n"
@@ -243,7 +245,7 @@ def export(notebook, output, rsvg_convert):
             values = [displayed]
         listing = (
             rf"\begin{{notebookcell}}{{{caption}}}{{lst:spenso-{slug}}}"
-            + "\n\\begin{lstlisting}[style=notebookcode]"
+            + "\n\\begin{lstlisting}[style=pythoncode]"
             + "\n"
             + code
             + "\n\\end{lstlisting}\n"
