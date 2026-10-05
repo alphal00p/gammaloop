@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::LazyLock};
 
 use crate::utils::vakint_macros::vk_symbol;
 use regex::Regex;
+use spenso::network::tags::SPENSO_TAG;
 use symbolica::{
     atom::{Atom, AtomOrView, Symbol},
     function, symbol,
@@ -101,8 +102,16 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     error_flag_symbol: vk_symbol!("ERROR"),
     error_flag: Atom::var(vk_symbol!("ERROR")),
     n_loops: Atom::var(vk_symbol!("n_loops")),
-    p: vk_symbol!(EXTERNAL_MOMENTUM_SYMBOL),
-    k: vk_symbol!(LOOP_MOMENTUM_SYMBOL),
+    p: SPENSO_TAG.rank_one_tensor_symbol(&format!(
+        "{}::{}",
+        crate::NAMESPACE,
+        EXTERNAL_MOMENTUM_SYMBOL
+    )),
+    k: SPENSO_TAG.rank_one_tensor_symbol(&format!(
+        "{}::{}",
+        crate::NAMESPACE,
+        LOOP_MOMENTUM_SYMBOL
+    )),
     id1_: vk_symbol!("id1_"),
     id2_: vk_symbol!("id2_"),
     id1_a: Atom::var(vk_symbol!("id1_")),
