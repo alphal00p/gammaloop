@@ -114,7 +114,7 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
 graph = diagram.to_linnet()
 full = diagram.subgraph(graph.full_subgraph())
 empty = diagram.subgraph()
-region = diagram.filter(edge=lambda edge: edge.data.id == loop_edge.id)
+region = diagram.filter(edge=lambda edge: edge.id == loop_edge.id)
 region_basis = region.momentum_basis()
 for name in ("numerator_expression", "denominator_expression"):
     assert getattr(full, name)(in_lmb=True) == getattr(diagram, name)(in_lmb=True)

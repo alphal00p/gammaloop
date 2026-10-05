@@ -21,15 +21,13 @@ assert expanded.is_scalar
 assert expanded
 assert bubble.uv_counterterm(mass) == -expanded
 assert bubble.to_json() == original
-region = bubble.filter(
-    edge=lambda e: e.data.id in {x.id for x in bubble.internal_edges}
-)
+region = bubble.filter(edge=lambda e: e.id in {x.id for x in bubble.internal_edges})
 assert region.uv_expansion(mass) == expanded
 assert region.uv_counterterm(mass) == -expanded
 assert not bubble.uv_expansion(mass, dimension=2)
 assert not bubble.uv_expansion(mass, numerator=0)
 assert not bubble.subgraph().uv_expansion(mass)
-tree = bubble.filter(edge=lambda e: e.data.id == bubble.internal_edges[0].id)
+tree = bubble.filter(edge=lambda e: e.id == bubble.internal_edges[0].id)
 assert not tree.uv_expansion(mass)
 
 # Signed powers share denominator_expression's edge IDs and selection semantics.

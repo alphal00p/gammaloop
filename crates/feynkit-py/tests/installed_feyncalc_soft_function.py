@@ -134,10 +134,10 @@ for outgoing in (["b", "b~"], ["b", "b~", "g"]):
             diagram.numerator_expression(in_lmb=True).to_expression()
         ).replace(S("UFO::MB"), zero)
         for half in diagram.half_edges:
-            edge = half.edge.data
+            edge = half.edge
             if edge.is_external:
                 numerator = numerator.replace(
-                    S("gammalooprs::hedge")(half.data, 1), ports[edge.external_index]
+                    S("gammalooprs::hedge")(half.id, 1), ports[edge.external_index]
                 )
         numerator = (
             TensorExpression(numerator).with_lorentz_dimension(D).to_expression()

@@ -33,8 +33,8 @@ snapshot = diagram.to_json()
 graph = diagram.to_linnet()
 raw_full = graph.full_subgraph()
 full = diagram.subgraph(raw_full)
-internal = diagram.filter(edge=lambda edge: not edge.data.is_external)
-external = diagram.filter(edge=lambda edge: edge.data.is_external)
+internal = diagram.filter(edge=lambda edge: not edge.is_external)
+external = diagram.filter(edge=lambda edge: edge.is_external)
 empty = diagram.subgraph()
 
 assert issubclass(fk.Subgraph, fk.FeynmanDiagram)
@@ -55,9 +55,9 @@ assert full.denominator_expression() == diagram.denominator_expression()
 
 # Nested selection and selection algebra retain the immutable physics owner.
 assert internal.subgraph(raw_full).linnet_selection == internal.linnet_selection
-assert internal.filter(edge=lambda edge: edge.data.is_external).loop_count == 0
+assert internal.filter(edge=lambda edge: edge.is_external).loop_count == 0
 assert internal.filter(
-    edge=lambda edge: edge.data.is_external
+    edge=lambda edge: edge.is_external
 ).denominator_expression() == TensorExpression(1)
 assert (internal | external).linnet_selection == full.linnet_selection
 assert (internal & external).linnet_selection == empty.linnet_selection
@@ -160,7 +160,7 @@ assert type(internal.linnet_selection) is linnet.Subgraph
 
 # The native Arc keeps the source available after its Python wrapper is dropped.
 source = fk.FeynmanDiagram.from_json(model, snapshot)
-retained = source.filter(edge=lambda edge: not edge.data.is_external)
+retained = source.filter(edge=lambda edge: not edge.is_external)
 expected = retained.numerator_expression()
 del source
 gc.collect()

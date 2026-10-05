@@ -2,7 +2,6 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo==0.24.0",
-#     "linnet==0.1.0",
 #     "symbolica==3.0.1",
 #     "typst==0.15.0",
 # ]
@@ -242,11 +241,11 @@ def _(FeynmanDiagram, generated, mo, model, table):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Select interaction regions with Linnet
+    ## Select interaction regions
 
     External states live on dangling edges in an amplitude. Every vertex is
-    an interaction. The canonical `linnet.Graph` keeps the diagram's typed
-    physics objects in its element payloads. `diagram.filter(...)` returns a
+    an interaction. Graph analysis calls Rust Linnet directly, and filters
+    receive the diagram's physics objects. `diagram.filter(...)` returns a
     `Subgraph` inheriting `FeynmanDiagram`, so the selected region can compute
     its own numerator, denominator, routing, or CFF expression.
     """)
@@ -255,8 +254,7 @@ def _(mo):
 
 @app.cell
 def _(from_json, mo, table):
-    analysis_graph = from_json.to_linnet()
-    selected_region = from_json.filter(edge=lambda edge: not edge.data.is_external)
+    selected_region = from_json.filter(edge=lambda edge: not edge.is_external)
     _basis = selected_region.momentum_basis()
     _numerator = selected_region.numerator_expression()
     mo.vstack(
@@ -265,15 +263,13 @@ def _(from_json, mo, table):
             table(
                 [
                     {
-                        "interaction vertices": analysis_graph.n_nodes,
+                        "interaction vertices": len(from_json.vertices),
                         "external momentum carriers": len(from_json.external_edges),
                         "selected components": len(
                             selected_region.connected_components()
                         ),
                         "selected loops": selected_region.loop_count,
-                        "selected bridge half-edges": len(
-                            selected_region.bridges().linnet_selection
-                        ),
+                        "selected bridge half-edges": len(selected_region.bridges()),
                     }
                 ]
             ),
@@ -281,7 +277,7 @@ def _(from_json, mo, table):
             _basis.route_expression(_numerator),
         ]
     )
-    return analysis_graph, selected_region
+    return (selected_region,)
 
 
 @app.cell(hide_code=True)

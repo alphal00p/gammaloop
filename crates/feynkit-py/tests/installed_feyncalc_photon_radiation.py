@@ -51,10 +51,10 @@ def calculate(outgoing, kin):
             diagram.numerator_expression(in_lmb=True).to_expression()
         ).replace(S("UFO::MM"), mass)
         for half in diagram.half_edges:
-            edge = half.edge.data
+            edge = half.edge
             if edge.is_external:
                 numerator = numerator.replace(
-                    S("gammalooprs::hedge")(half.data, 1), ports[edge.external_index]
+                    S("gammalooprs::hedge")(half.id, 1), ports[edge.external_index]
                 )
         denominator = kin.apply(
             diagram.denominator_expression(dimension=4, in_lmb=True)
