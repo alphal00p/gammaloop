@@ -171,6 +171,34 @@ try:
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
+    assert hep.DiagramRender is spenso.DiagramRender
+    assert hep.LayoutSettings is spenso.LayoutSettings
+    assert hep.StrokeStyle is spenso.StrokeStyle
+    assert inspect.signature(amplitude.render).parameters["max_diagrams"].default == 6
+    snapshot = amplitude.render(
+        config=hep.RenderSettings(edge_stroke=hep.StrokeStyle(paint="#123456")),
+        max_diagrams=2,
+        term_settings=spenso.DisplaySettings(show_dimensions=True),
+    )
+    assert isinstance(snapshot, hep.AmplitudeRender)
+    assert len(snapshot.diagrams) == 2
+    assert all(isinstance(item, hep.DiagramRender) for item in snapshot.diagrams)
+    assert all("#123456" in item.to_svg() for item in snapshot.diagrams)
+    assert snapshot._mime_() == ("text/html", snapshot.to_html())
+    assert snapshot._repr_html_() == snapshot.to_html()
+    assert "Showing 2 of 48" in snapshot.to_html()
+    assert snapshot.to_html().count('class="fk-row"') == 2
+    assert amplitude.render(max_diagrams=0).diagrams == []
+    assert len(amplitude.diagrams) == 48
+    small = hep.Amplitude(amplitude.diagrams[:2])
+    assert len(small.render(max_diagrams=None).diagrams) == 2
+    assert "Showing" not in small.render(max_diagrams=None).to_html()
+    try:
+        amplitude.render(max_diagrams=-1)
+    except OverflowError:
+        pass
+    else:
+        raise AssertionError("negative amplitude preview limit was accepted")
     diagram = amplitude.diagrams[0]
     check_render_snapshot(diagram)
     check_render_snapshot(diagram.filter(edge=lambda edge: not edge.is_external))
@@ -196,7 +224,9 @@ try:
         process.render(config=hep.RenderSettings(show_particle=False)).to_svg()
     )
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
-    ET.fromstring(network.render(config={"title": "Native network"}))
+    ET.fromstring(
+        network.render(config=spenso.RenderSettings(title="Native network")).to_svg()
+    )
     assert "#image(bytes(" in network.to_linnest()
     scalar = hep.Model.phi3()
     cross = scalar.process(["phi"], ["phi", "phi"]).generate_cross_section(

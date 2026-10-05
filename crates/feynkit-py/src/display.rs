@@ -152,7 +152,7 @@ pub(crate) fn collection_html(
         html.push_str("<p>No diagrams retained.</p>");
     }
     if count > limit {
-        write!(html, "<small>Showing {limit} of {count} diagrams. Access .diagrams to inspect the complete collection.</small>").unwrap();
+        write!(html, "<small>Showing {limit} of {count} diagrams. The source collection retains all diagrams.</small>").unwrap();
     }
     write!(
         html,

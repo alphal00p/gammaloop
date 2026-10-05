@@ -373,6 +373,13 @@ impl PyAmplitude {
     }
     /// Render a configurable snapshot of the amplitude's diagrams and weighted terms.
     ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> drawing = amplitude.render(config=hep.RenderSettings(node_radius=5), max_diagrams=2)
+    /// >>> html = drawing.to_html()
+    ///
     /// Parameters
     /// ----------
     /// config : RenderSettings, optional
@@ -382,13 +389,8 @@ impl PyAmplitude {
     /// term_settings : DisplaySettings, optional
     ///     Tensor notation settings for each weighted contribution.
     ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``Amplitude`` class example:
-    ///
-    /// >>> drawing = amplitude.render(config=hep.RenderSettings(node_radius=5), max_diagrams=2)
-    /// >>> html = drawing.to_html()
-    #[pyo3(signature = (*, config=None, max_diagrams=Some(6), term_settings=None))]
+    #[pyo3(signature = (*, config=None, max_diagrams=Some(6), term_settings=None),
+        text_signature = "($self, *, config=None, max_diagrams=6, term_settings=None)")]
     fn render(
         &self,
         py: Python<'_>,

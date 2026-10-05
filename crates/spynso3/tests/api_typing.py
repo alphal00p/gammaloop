@@ -3,7 +3,6 @@
 from collections.abc import Iterator, Sequence
 from typing import Literal, assert_type
 
-import linnet
 from symbolica import (
     AtomType,
     Condition,
@@ -76,8 +75,9 @@ def check_types(
     assert_type(expression.structure, sp.TensorStructure)
     assert_type(tensor.structure, sp.TensorStructure)
     assert_type(network.structure, sp.TensorStructure)
-    config = linnet.RenderConfig()
-    assert_type(network.render(config=config), str)
+    config = sp.RenderSettings(layout=sp.LayoutSettings(layout_algo="dot"))
+    assert_type(network.render(config=config), sp.DiagramRender)
+    assert_type(network.render(config=config).to_svg(), str)
     assert_type(network.to_linnest(config=config), str)
     assert_type(network.to_html(config=config), str)
     assert_type(expression.name, sp.TensorName | None)
@@ -96,6 +96,7 @@ def check_types(
     tensor[0, 1] = 2.0
     tensor[0] = 1j
     assert_type(expression + scalar, sp.TensorExpression)
+
     class Product:
         def __symbolica_rmul__(self, left: Expression) -> str:
             return str(left)
