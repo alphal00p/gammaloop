@@ -236,7 +236,10 @@ def _(G4, Q2, Q24, q24):
     parameters = [*Q2.components(), *G4.components(), *q24.components()]
     evaluator = Q24.evaluator(parameters)
 
-    value = evaluator.evaluate_complex([[1, .1, .3, 0.4, 3.1, 2.1, 1.1, 0.1, 2.2, 1.2, 0.2, 1.2]])[0]
+    quark = [2, 1 - 1j, 0, 0]
+    gluon = [0, 0, 4 / 5, -3 / 5]
+    momentum = [8, 2, 5, 5]
+    value = evaluator.evaluate_complex([[*quark, *gluon, *momentum]])[0]
     value
     return
 
@@ -245,12 +248,18 @@ def _(G4, Q2, Q24, q24):
 def _(mo):
     mo.md(r"""
     The numerical inputs above correspond to lightlike momenta
-    $q_2=(1,0,0,1)$ and $q_4=(1,1,0,0)$, with
-    $Q(2)=(1,0,0,0)$ and $G(4)=(0,0,1,0)$. They satisfy
-    $Q(2)\not q_2=0$ and $q_4\cdot G(4)=0$, with an arbitrary overall
-    spinor normalisation. Since $q_{24}=(2,1,0,1)$ and $s_{24}=2$, the
-    result is $Q(2,4)=(-i/2,-i/2,0,0)$. Only the inputs to this local
-    join are needed for the evaluation.
+    $q_2=(3,2,2,1)$ and $q_4=(5,0,3,4)$, with
+    $Q(2)=(2,1-i,0,0)$ and $G(4)=(0,0,4/5,-3/5)$. The spinor satisfies
+    $Q(2)\not q_2=0$, while the linearly polarised gluon obeys
+    $q_4\cdot G(4)=0$ and $G(4)^2=-1$. The spinor's overall normalisation
+    is arbitrary. Their sum gives $q_{24}=(8,2,5,5)$ and $s_{24}=10$, so
+
+    $$Q(2,4)=\left(\frac{7+9i}{10},\frac{5-3i}{10},0,0\right).$$
+
+    The two vanishing components reflect the chirality of the input
+    spinor, which is preserved by the vertex and massless propagator
+    together. Only the inputs to this local join are needed for the
+    evaluation.
 
     Returning to the recurrence, $Q(2,4)$ supplies both
     $V_{dZd}[Q(2,4),Z(3)]$ in $Q(2,3,4)$ and
