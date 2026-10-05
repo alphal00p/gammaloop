@@ -101,19 +101,17 @@ def _(mo):
     Spenso orders the indices of a gamma matrix as `(row, column, Lorentz)`.
     Assigning the same label to compatible indices contracts them, so
     `Q2(1)` joins the row index and `G4(2)` the Lorentz index. We mark the
-    remaining spinor index with `AUTO`, imported as `_`, to connect it to
-    the propagator by multiplication in a later step.
+    remaining spinor index with the label `"b"`, which will also appear
+    on the propagator to specify their contraction.
     """)
     return
 
 
 @app.cell
 def _(G4, Q2, Symbol, T):
-    from symbolica.community.tensor import AUTO as _
-
     gamma = T.dirac_gamma(4)
     i = Symbol.I
-    join = i * gamma(1, _, 2) * Q2(1) * G4(2)
+    join = i * gamma(1, "b", 2) * Q2(1) * G4(2)
     join
     return gamma, i, join
 
@@ -126,17 +124,15 @@ def _(mo):
     the denominator $s_{24}$. Here the label `3` is used for both the
     contracted Lorentz index and the open output spinor index. Since they
     belong to different spaces, these indices remain distinct; the first
-    spinor index is again marked with `_` to receive the vertex contraction.
+    spinor index carries the label `"b"` to receive the vertex contraction.
     """)
     return
 
 
 @app.cell
 def _(gamma, i, q24):
-    from symbolica.community.tensor import AUTO as _
-
     s24 = q24 * q24
-    propagator = i * gamma(_, 3, 3) * q24(3) / s24
+    propagator = i * gamma("b", 3, 3) * q24(3) / s24
     propagator
     return (propagator,)
 
@@ -144,7 +140,7 @@ def _(gamma, i, q24):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Multiplication now connects the two spinor indices marked with `_`,
+    Multiplication now contracts the two spinor indices labelled `"b"`,
     completing the expression for $Q(2,4)$ with only its output index open.
     This current has a single vertex contribution. For the three-leg
     currents following equation (3.6), the two contributions would first
@@ -184,25 +180,8 @@ def _(current):
 def _(mo):
     mo.md(r"""
     Executing the network carries out the component sums and scalar
-    operations, leaving the input components symbolic. Since `execute()`
-    changes the network in place, we execute a copy so that the original
-    network remains available for inspection.
-    """)
-    return
-
-
-@app.cell
-def _(network):
-    network.execute()
-    network
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    The completed network now contains the current's component expressions.
-    `result_tensor()` extracts them as the tensor `Q24`, whose open spinor
+    operations, leaving the input components symbolic. From the completed
+    network, `result_tensor()` extracts the tensor `Q24`, whose open spinor
     index labels the four expressions for $Q(2,4)_c$. Each includes the
     momentum-dependent propagator denominator and is ready for numerical
     evaluation.
@@ -212,6 +191,7 @@ def _(mo):
 
 @app.cell
 def _(network):
+    network.execute()
     Q24 = network.result_tensor()
     Q24
     return (Q24,)
