@@ -1972,7 +1972,7 @@ mod tests {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal {
             node [num=1]; edge [num=1 particle="d"];
-            A -> B; B -> A;
+            A -> B; B -> A [particle="g"];
         })
         .unwrap();
         let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
@@ -2000,6 +2000,23 @@ mod tests {
                 calls.iter().all(|call| call.temperature_flag
                     == Atom::num(i64::from(mode.is_finite_temperature())))
             );
+            let expected_orders = if mode.is_finite_temperature() {
+                vec![0, 1, 2]
+            } else {
+                vec![0]
+            };
+            // Both chemical-potential metadata and its absence use only the
+            // ordinary order-zero function at zero temperature.
+            for edge in graph.iter_edge_ids() {
+                assert_eq!(
+                    calls
+                        .iter()
+                        .filter(|call| call.edge == edge)
+                        .map(|call| call.derivative_order)
+                        .collect_vec(),
+                    expected_orders,
+                );
+            }
             graph.set_medium_mode(mode).unwrap();
             assert_eq!(graph.param_builder.reps, entries);
             assert_eq!(

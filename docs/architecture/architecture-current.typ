@@ -225,8 +225,10 @@ does not accept distribution inputs; production evaluation remains owned by
 GammaLoop.
 
 Process generation configures the graph's parameter builder with its selected medium and
-registers only that mode's distribution functions. Higher energy derivatives are built
-incrementally. The builder persists the mode so runtime warmup can validate the current
+registers only that mode's distribution functions. Finite-temperature energy derivatives
+are built incrementally. Zero-temperature registration contains only order zero; positive-order
+factors are removed or localized before ordinary evaluator construction, as described below.
+The builder persists the mode so runtime warmup can validate the current
 temperature, chemical potentials, and bosonic mass domain after loading or updating a model.
 Vacuum builders register no thermal distribution functions.
 

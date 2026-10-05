@@ -227,6 +227,10 @@ integrates such a contribution.
   - Local UV counterterms must be built in three dimensions;
     #link("reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-local-uv-cts-from-expanded-4d-integrands-7def650172e108c5")[`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true`]
     is rejected.
+  - Exceptional runtime external momenta that make otherwise distinct propagator poles
+    coincide are not yet supported. For example, zero four-momentum transfer between
+    equal-mass propagators can leave unresolved `0/0` thermal factors. Repeated poles
+    already identified symbolically during generation use the derivative treatment above.
   - Zero-temperature step functions whose boundaries move with a localized loop momentum are
     rejected.
   - Standalone evaluator export rejects processes with Fermi-surface localization; keep the

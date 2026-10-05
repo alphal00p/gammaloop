@@ -114,11 +114,13 @@ impl Graph {
                         .any(|sign| sign.is_sign())
                 })
                 .collect_vec();
-            // A thermal cycle with n loop-dependent edges produces order n - 1.
             let max_order = if medium_mode.is_finite_temperature() {
+                // A thermal cycle with n loop-dependent edges produces order n - 1.
                 thermal_edges.len().saturating_sub(1).max(2)
             } else {
-                2
+                // Positive zero-temperature orders belong to Fermi-surface
+                // extraction, including vanishing derivatives without a chemical potential.
+                0
             };
             let temperature_flag = Atom::num(i64::from(medium_mode.is_finite_temperature()));
             for edge in thermal_edges {

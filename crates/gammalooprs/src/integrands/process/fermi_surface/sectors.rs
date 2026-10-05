@@ -238,28 +238,32 @@ mod tests {
         let y = Atom::var(symbol!("fermi_sector_y"));
         let numerator = function!(symbol!("fermi_sector_numerator"), &x, &y);
         let coefficient = numerator * (&x + Atom::num(1)) * (&y + Atom::num(2));
-        let delta = GS.thermal_distribution(1, 2, 0, -1, 1);
         let independent_step = GS.thermal_distribution(3, 0, 0, -1, -1);
         let bulk = Atom::num(7) * GS.thermal_distribution(1, 3, 1, 1, 1);
-        let expression =
-            &bulk + function!(GS.thermal_weight_wrapper, &delta) * &coefficient * &independent_step;
-        let (actual_bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
-        assert_eq!(actual_bulk, bulk);
-        assert_eq!(sectors.len(), 1);
-        assert_eq!(sectors[0].coefficient, &coefficient * &independent_step);
-        assert_eq!(sectors[0].orientations, [1]);
-        assert_eq!(
-            sectors[0].product.factors(),
-            &[ThermalDistributionFactor {
-                edge_id: linnet::half_edge::involution::EdgeIndex(1),
-                sign: -1,
-                derivative_order: 2,
-            }]
-        );
-        assert_eq!(
-            actual_bulk + &sectors[0].coefficient * delta,
-            expression.unwrap_function(GS.thermal_weight_wrapper)
-        );
+        for derivative_order in [2, 3] {
+            let delta = GS.thermal_distribution(1, derivative_order as i64, 0, -1, 1);
+            let expression = &bulk
+                + function!(GS.thermal_weight_wrapper, &delta) * &coefficient * &independent_step;
+            let (actual_bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+            assert_eq!(actual_bulk, bulk);
+            assert_eq!(sectors.len(), 1);
+            assert_eq!(sectors[0].coefficient, &coefficient * &independent_step);
+            assert_eq!(sectors[0].orientations, [1]);
+            assert_eq!(
+                sectors[0].product.factors(),
+                &[ThermalDistributionFactor {
+                    edge_id: linnet::half_edge::involution::EdgeIndex(1),
+                    sign: -1,
+                    derivative_order,
+                }]
+            );
+            assert_eq!(sectors[0].product.derivative_orders, [derivative_order - 1]);
+            assert_eq!(sectors[0].product.shape.len(), derivative_order);
+            assert_eq!(
+                actual_bulk + &sectors[0].coefficient * delta,
+                expression.unwrap_function(GS.thermal_weight_wrapper)
+            );
+        }
         Ok(())
     }
 
@@ -321,10 +325,14 @@ mod tests {
             assert_eq!(bulk, expression);
             assert!(sectors.is_empty());
         }
-        let (bulk, sectors) =
-            FermiSurfaceSector::extract(&graph, &GS.thermal_distribution(4, 1, 0, 1, 1))?;
-        assert!(bulk.is_zero());
-        assert!(sectors.is_empty());
+        for derivative_order in [1, 3] {
+            let (bulk, sectors) = FermiSurfaceSector::extract(
+                &graph,
+                &GS.thermal_distribution(4, derivative_order, 0, 1, 1),
+            )?;
+            assert!(bulk.is_zero());
+            assert!(sectors.is_empty());
+        }
         Ok(())
     }
 

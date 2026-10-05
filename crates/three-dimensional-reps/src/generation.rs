@@ -761,7 +761,7 @@ fn build_expression_preserving_internal_edges(
 
     let (active_parsed, active_to_orig) = contract_preserved_parsed_edges(parsed, &preserved);
     if active_parsed.denominator_internal_edge_ids().is_empty() {
-        return expression_with_only_preserved_edges(parsed, &preserved);
+        return expression_with_only_preserved_edges(parsed, &preserved, options.medium_mode);
     }
 
     let orig_to_active = active_to_orig
@@ -831,6 +831,7 @@ fn build_expression_preserving_internal_edges(
 fn expression_with_only_preserved_edges(
     parsed: &ParsedGraph,
     preserved: &BTreeSet<usize>,
+    medium_mode: crate::MediumMode,
 ) -> Result<GeneratedThreeDExpression> {
     if !parsed.loop_names.is_empty() {
         return Err(GenerationError::SingularBasis);
@@ -850,7 +851,10 @@ fn expression_with_only_preserved_edges(
         loop_energy_map: Vec::new(),
         edge_energy_map,
         variants: vec![crate::expression::CFFVariant {
-            thermal_weight: crate::ThermalWeight::default(),
+            thermal_weight: crate::ThermalWeight {
+                medium_mode,
+                ..Default::default()
+            },
             origin: Some("preserved_tree".to_string()),
             prefactor: Rational::one(),
             half_edges: Vec::new(),
@@ -9702,6 +9706,50 @@ mod cff_tests {
                 } else {
                     BTreeSet::from([EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)])
                 },
+                "{medium_mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn cff_preserved_tree_retains_medium_unit_for_vacuum_subtraction() {
+        use symbolica::{
+            atom::{Atom, AtomCore},
+            function,
+        };
+
+        use crate::{MediumMode, symbols::S, thermal::VACUUM_SUBTRACTION};
+
+        let parsed = crate::graph_io::test_graphs::pure_tree_graph();
+        for medium_mode in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode,
+                    preserve_internal_edges_as_four_d_denominators: vec![0, 1],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(generated.expression.orientations.len(), 1);
+            let orientation = &generated.expression.orientations[OrientationID(0)];
+            assert_eq!(orientation.variants.len(), 1);
+            let weight = &orientation.variants[0].thermal_weight;
+            assert_eq!(weight.medium_mode, medium_mode);
+            let weight = weight.to_atom();
+            let (expected, subtracted) = if medium_mode == MediumMode::Vacuum {
+                (Atom::one(), Atom::one())
+            } else {
+                (function!(S.thermal_weight_wrapper, 1), Atom::Zero)
+            };
+            assert_eq!(weight, expected, "{medium_mode:?}");
+            assert_eq!(
+                weight.replace_multiple(&*VACUUM_SUBTRACTION),
+                subtracted,
                 "{medium_mode:?}"
             );
         }
