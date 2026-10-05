@@ -179,12 +179,11 @@ def output_block(values, slug, assets, rsvg_convert):
         )
     note = " (line-wrapped)" if slug == "components" else ""
     return (
-        "\\par\\smallskip\n\\noindent\\fcolorbox{black!20}{white}{%\n"
-        "\\begin{minipage}{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}\n"
-        + rf"{{\small\sffamily Output of Listing~\ref{{lst:spenso-{slug}}}{note}}}\par\smallskip"
+        "\\tcblower\n"
+        + rf"{{\small\sffamily\color{{pythoncomment}} Output{note}}}\par\smallskip"
         + "\n\\centering\n"
         + "\\qquad\n".join(graphics)
-        + "\n\\end{minipage}}\\par\\medskip\n\n"
+        + "\n"
     )
 
 
@@ -243,13 +242,13 @@ def export(notebook, output, rsvg_convert):
         else:
             values = [displayed]
         listing = (
-            "\\noindent\\begin{minipage}{\\linewidth}\n"
-            + rf"\begin{{lstlisting}}[style=pythoncode,caption={{{caption}}},label={{lst:spenso-{slug}}}]"
+            rf"\begin{{notebookcell}}{{{caption}}}{{lst:spenso-{slug}}}"
+            + "\n\\begin{lstlisting}[style=notebookcode]"
             + "\n"
             + code
             + "\n\\end{lstlisting}\n"
             + output_block(values, slug, assets, rsvg_convert)
-            + "\\end{minipage}\n\n"
+            + "\\end{notebookcell}\n\n"
         )
         blocks.append((slug, listing))
     exact = numerical_check(namespace)
