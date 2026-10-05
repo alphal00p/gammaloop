@@ -12,13 +12,15 @@ use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
 use linnet::half_edge::{
     NodeIndex,
+    involution::{EdgeIndex, Flow, Hedge},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+    tree::SimpleTraversalTree,
 };
 use pyo3::{
     PyTraverseError, PyVisit,
-    exceptions::{PyTypeError, PyValueError},
+    exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyDict, PyModule, PyTuple},
+    types::{PyAny, PyModule},
 };
 use spynso3::{expression::TensorExpression, structure::SpensoName};
 use symbolica::{
@@ -1908,6 +1910,342 @@ struct DiagramSelection {
     isolated: BTreeSet<usize>,
 }
 
+/// A particle-line endpoint using the diagram's native half-edge numbering.
+///
+/// Examples
+/// --------
+/// Using the setup in the ``FeynmanDiagram`` class example:
+///
+/// >>> endpoints = [(half.id, half.vertex, half.edge.particle_name) for half in diagram.half_edges]
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "DiagramHalfEdge",
+    module = "symbolica.community.hepkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyDiagramHalfEdge {
+    /// Native half-edge ID, also used in symbolic hedge annotations.
+    ///
+    /// Examples
+    /// --------
+    /// >>> ids = [half.id for half in diagram.half_edges]
+    #[pyo3(get)]
+    id: usize,
+    /// Incident interaction vertex ID.
+    ///
+    /// Examples
+    /// --------
+    /// >>> incident = [half.vertex for half in diagram.half_edges]
+    #[pyo3(get)]
+    vertex: usize,
+    /// Physics edge containing this half-edge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particles = [half.edge.particle_name for half in diagram.half_edges]
+    #[pyo3(get)]
+    edge: PyDiagramEdge,
+    /// Underlying endpoint flow: ``source`` or ``sink``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> incoming = [half.id for half in diagram.half_edges if half.flow == "sink"]
+    #[pyo3(get)]
+    flow: &'static str,
+}
+
+/// A separating topology partition, independent of physical final-state cuts.
+///
+/// Both boundary selections retain half-edges on their respective sides.
+///
+/// Examples
+/// --------
+/// Using the setup in the ``FeynmanDiagram`` class example:
+///
+/// >>> partitions = diagram.all_cuts([0], [1])
+/// >>> boundary_edges = partitions[0].boundary_left.edges
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(name = "CutPartition", module = "symbolica.community.hepkit", frozen)]
+pub struct PyCutPartition {
+    diagram: PyFeynmanDiagram,
+    source_side: SuBitGraph,
+    target_side: SuBitGraph,
+    boundary_left: SuBitGraph,
+    boundary_right: SuBitGraph,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
+#[pymethods]
+impl PyCutPartition {
+    /// Region containing the requested source vertices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> source = diagram.all_cuts([0], [1])[0].source_side
+    #[getter]
+    fn source_side(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        self.diagram.subgraph_view(py, self.source_side.clone())
+    }
+
+    /// Region containing the requested target vertices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> target = diagram.all_cuts([0], [1])[0].target_side
+    #[getter]
+    fn target_side(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        self.diagram.subgraph_view(py, self.target_side.clone())
+    }
+
+    /// Crossing half-edges incident to the source side.
+    ///
+    /// Examples
+    /// --------
+    /// >>> source_ports = diagram.all_cuts([0], [1])[0].boundary_left.half_edges
+    #[getter]
+    fn boundary_left(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        self.diagram.subgraph_view(py, self.boundary_left.clone())
+    }
+
+    /// Crossing half-edges incident to the target side.
+    ///
+    /// Examples
+    /// --------
+    /// >>> target_ports = diagram.all_cuts([0], [1])[0].boundary_right.half_edges
+    #[getter]
+    fn boundary_right(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        self.diagram.subgraph_view(py, self.boundary_right.clone())
+    }
+
+    #[gen_stub(skip)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        self.diagram.linnet.traverse(visit)
+    }
+
+    #[gen_stub(skip)]
+    fn __clear__(&self) {
+        self.diagram.linnet.clear();
+    }
+}
+
+/// A native DFS or BFS result retaining the immutable physics diagram.
+///
+/// Examples
+/// --------
+/// Using the setup in the ``FeynmanDiagram`` class example:
+///
+/// >>> tree = diagram.depth_first_traverse(0)
+/// >>> discovery_order = [vertex.id for vertex in tree.nodes]
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(name = "TraversalTree", module = "symbolica.community.hepkit", frozen)]
+pub struct PyTraversalTree {
+    diagram: PyFeynmanDiagram,
+    tree: SimpleTraversalTree,
+    root: usize,
+}
+
+impl PyTraversalTree {
+    fn check_node(&self, node: usize) -> PyResult<NodeIndex> {
+        let node = self.diagram.check_node(node)?;
+        if node.0 != self.root && !self.tree.node_data(node).includes() {
+            return Err(PyValueError::new_err(
+                "vertex is not part of this traversal tree",
+            ));
+        }
+        Ok(node)
+    }
+
+    fn vertex(&self, node: NodeIndex) -> PyDiagramVertex {
+        PyDiagramVertex {
+            id: node.0,
+            inner: self.diagram.inner.underlying()[node].clone(),
+            model: self.diagram.inner.model_arc(),
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
+#[pymethods]
+impl PyTraversalTree {
+    /// Traversal edges as a reusable physics region, retaining isolated roots.
+    ///
+    /// Examples
+    /// --------
+    /// >>> edges = diagram.depth_first_traverse(0).subgraph.edges
+    #[getter]
+    fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
+        self.diagram.view(
+            py,
+            DiagramSelection {
+                hedges: self.tree.tree_subgraph.clone(),
+                isolated: self
+                    .diagram
+                    .isolated_nodes()
+                    .contains(&self.root)
+                    .then_some(self.root)
+                    .into_iter()
+                    .collect(),
+            },
+        )
+    }
+
+    /// Physics vertices in traversal discovery order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> order = [vertex.id for vertex in diagram.depth_first_traverse(0).nodes]
+    #[getter]
+    fn nodes(&self) -> Vec<PyDiagramVertex> {
+        let mut nodes = self.tree.node_order();
+        if nodes.is_empty() {
+            nodes.push(NodeIndex(self.root));
+        }
+        nodes.into_iter().map(|node| self.vertex(node)).collect()
+    }
+
+    /// Restrict a physics region to vertices visited by this traversal.
+    ///
+    /// Examples
+    /// --------
+    /// >>> region = diagram.subgraph(edges=[0])
+    /// >>> covered = diagram.depth_first_traverse(0).covers(region)
+    ///
+    /// Parameters
+    /// ----------
+    /// subgraph : Subgraph
+    ///     Region from the same original diagram.
+    fn covers(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "Subgraph"))] subgraph: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PySubgraph>> {
+        let region = self.diagram.region_argument(py, subgraph)?;
+        self.diagram.view(
+            py,
+            DiagramSelection {
+                hedges: self.tree.covers(&region.hedges),
+                isolated: region
+                    .isolated
+                    .into_iter()
+                    .filter(|node| *node == self.root)
+                    .collect(),
+            },
+        )
+    }
+
+    /// Immediate parent vertex, or None for the traversal root.
+    ///
+    /// Examples
+    /// --------
+    /// >>> tree = diagram.depth_first_traverse(0)
+    /// >>> parent = tree.parent(tree.nodes[-1].id)
+    ///
+    /// Parameters
+    /// ----------
+    /// node : int
+    ///     Diagram vertex ID in this traversal.
+    fn parent(&self, node: usize) -> PyResult<Option<PyDiagramVertex>> {
+        let node = self.check_node(node)?;
+        Ok(self
+            .tree
+            .node_parent(node, self.diagram.inner.underlying())
+            .map(|node| self.vertex(node)))
+    }
+
+    /// Immediate children in discovery order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> children = diagram.depth_first_traverse(0).children(0)
+    ///
+    /// Parameters
+    /// ----------
+    /// node : int
+    ///     Diagram vertex ID in this traversal.
+    fn children(&self, node: usize) -> PyResult<Vec<PyDiagramVertex>> {
+        let node = self.check_node(node)?;
+        Ok(self
+            .tree
+            .node_order()
+            .into_iter()
+            .filter(|child| {
+                self.tree
+                    .node_parent(*child, self.diagram.inner.underlying())
+                    == Some(node)
+            })
+            .map(|child| self.vertex(child))
+            .collect())
+    }
+
+    /// Strict ancestors from the immediate parent to the root.
+    ///
+    /// Examples
+    /// --------
+    /// >>> tree = diagram.depth_first_traverse(0)
+    /// >>> ancestors = tree.ancestors(tree.nodes[-1].id)
+    ///
+    /// Parameters
+    /// ----------
+    /// node : int
+    ///     Diagram vertex ID in this traversal.
+    fn ancestors(&self, node: usize) -> PyResult<Vec<PyDiagramVertex>> {
+        let mut node = self.check_node(node)?;
+        let mut ancestors = Vec::new();
+        while let Some(parent) = self.tree.node_parent(node, self.diagram.inner.underlying()) {
+            ancestors.push(self.vertex(parent));
+            node = parent;
+        }
+        Ok(ancestors)
+    }
+
+    /// Fundamental cycle closed by a half-edge, or None for a tree edge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> tree = diagram.depth_first_traverse(0)
+    /// >>> cycles = [tree.fundamental_cycle(half.id) for half in diagram.half_edges if not half.edge.is_dangling]
+    ///
+    /// Parameters
+    /// ----------
+    /// half_edge : int
+    ///     Native diagram half-edge ID whose endpoints are in this traversal.
+    fn fundamental_cycle(
+        &self,
+        py: Python<'_>,
+        half_edge: usize,
+    ) -> PyResult<Option<Py<PySubgraph>>> {
+        let hedge = self.diagram.check_half_edge(half_edge)?;
+        let graph = self.diagram.inner.underlying();
+        if graph.inv(hedge) == hedge {
+            return Err(PyValueError::new_err(
+                "a dangling half-edge cannot close a cycle",
+            ));
+        }
+        self.check_node(graph.node_id(hedge).0)?;
+        self.check_node(graph.node_id(graph.inv(hedge)).0)?;
+        self.tree
+            .get_cycle(hedge, graph)
+            .map(|cycle| self.diagram.subgraph_view(py, cycle.filter))
+            .transpose()
+    }
+
+    #[gen_stub(skip)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        self.diagram.linnet.traverse(visit)
+    }
+
+    #[gen_stub(skip)]
+    fn __clear__(&self) {
+        self.diagram.linnet.clear();
+    }
+}
+
 impl PyFeynmanDiagram {
     /// Borrow the native diagram without discarding a partial selected region.
     ///
@@ -1916,6 +2254,36 @@ impl PyFeynmanDiagram {
     pub fn as_diagram(&self) -> PyResult<&FeynmanDiagram> {
         self.require_complete()?;
         Ok(&self.inner)
+    }
+
+    fn traverse(
+        &self,
+        root: usize,
+        include: Option<usize>,
+        depth_first: bool,
+    ) -> PyResult<PyTraversalTree> {
+        let root = self.check_node(root)?;
+        let include = include.map(|id| self.check_half_edge(id)).transpose()?;
+        let graph = self.inner.underlying();
+        let tree = if self.isolated_nodes().contains(&root.0) {
+            if include.is_some() {
+                return Err(PyValueError::new_err(
+                    "an isolated root has no includable half-edge",
+                ));
+            }
+            SimpleTraversalTree::empty(graph)
+        } else if depth_first {
+            SimpleTraversalTree::depth_first_traverse(graph, &self.selection(), &root, include)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
+        } else {
+            SimpleTraversalTree::breadth_first_traverse(graph, &self.selection(), &root, include)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
+        };
+        Ok(PyTraversalTree {
+            diagram: self.clone(),
+            tree,
+            root: root.0,
+        })
     }
 
     pub(crate) fn is_whole_diagram(&self) -> bool {
@@ -1989,20 +2357,35 @@ impl PyFeynmanDiagram {
         Py::new(py, (PySubgraph {}, base))
     }
 
-    fn wrap_selection(
-        &self,
-        py: Python<'_>,
-        selection: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<PySubgraph>> {
-        self.view(py, self.region_argument(py, selection)?)
+    fn subgraph_view(&self, py: Python<'_>, hedges: SuBitGraph) -> PyResult<Py<PySubgraph>> {
+        self.view(
+            py,
+            DiagramSelection {
+                hedges,
+                isolated: BTreeSet::new(),
+            },
+        )
     }
 
-    fn restrict_selection(
+    fn check_node(&self, node: usize) -> PyResult<NodeIndex> {
+        if node >= self.inner.underlying().n_nodes() {
+            return Err(PyIndexError::new_err("vertex ID out of range"));
+        }
+        Ok(NodeIndex(node))
+    }
+
+    fn check_half_edge(&self, hedge: usize) -> PyResult<Hedge> {
+        if hedge >= self.inner.underlying().n_hedges() {
+            return Err(PyIndexError::new_err("half-edge ID out of range"));
+        }
+        Ok(Hedge(hedge))
+    }
+
+    fn restrict_region(
         &self,
         py: Python<'_>,
-        selection: &Bound<'_, PyAny>,
+        region: DiagramSelection,
     ) -> PyResult<Py<PySubgraph>> {
-        let region = self.region_argument(py, selection)?;
         self.view(
             py,
             DiagramSelection {
@@ -2014,6 +2397,15 @@ impl PyFeynmanDiagram {
                     .collect(),
             },
         )
+    }
+
+    fn restrict_selection(
+        &self,
+        py: Python<'_>,
+        selection: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PySubgraph>> {
+        let region = self.region_argument(py, selection)?;
+        self.restrict_region(py, region)
     }
 
     fn half_edge_selection(
@@ -2155,7 +2547,7 @@ impl PyFeynmanDiagram {
         self.linnet.clear();
     }
 
-    /// Select graph elements using canonical Linnet IDs, or import a graph-bound selection.
+    /// Select graph elements using native diagram IDs, or import a graph-bound selection.
     /// Nested selections intersect this region and retain its immutable original diagram.
     ///
     /// Examples
@@ -2170,11 +2562,11 @@ impl PyFeynmanDiagram {
     /// selection : Subgraph or linnet.Subgraph or None, optional
     ///     Existing selection from the same original diagram; exclusive with element IDs.
     /// nodes : list[int] or None, optional
-    ///     Canonical Linnet nodes IDs to include.
+    ///     Diagram vertex IDs to include, with all incident half-edges.
     /// edges : list[int] or None, optional
-    ///     Canonical Linnet edges IDs to include.
+    ///     Diagram edge IDs to include.
     /// half_edges : list[int] or None, optional
-    ///     Canonical Linnet half-edges IDs to include.
+    ///     Native diagram half-edge IDs to include.
     #[pyo3(signature = (selection=None, *, nodes=None, edges=None, half_edges=None))]
     fn subgraph(
         &self,
@@ -2193,55 +2585,94 @@ impl PyFeynmanDiagram {
             }
             return self.restrict_selection(py, selection);
         }
-        let graph = self.to_linnet(py)?;
-        let kwargs = PyDict::new(py);
-        for (name, indices) in [
-            ("nodes", nodes),
-            ("edges", edges),
-            ("half_edges", half_edges),
-        ] {
-            if let Some(indices) = indices {
-                kwargs.set_item(name, indices)?;
+        let graph = self.inner.underlying();
+        let mut region = DiagramSelection {
+            hedges: SuBitGraph::empty(graph.n_hedges()),
+            isolated: BTreeSet::new(),
+        };
+        for id in nodes.unwrap_or_default() {
+            let node = self.check_node(id)?;
+            if graph.iter_crown(node).next().is_none() {
+                region.isolated.insert(id);
+            } else {
+                region.hedges.union_with_iter(graph.iter_crown(node));
             }
         }
-        let selected = graph.bind(py).call_method("subgraph", (), Some(&kwargs))?;
-        self.restrict_selection(py, &selected)
+        for id in edges.unwrap_or_default() {
+            if id >= graph.n_edges() {
+                return Err(PyIndexError::new_err("edge ID out of range"));
+            }
+            region.hedges.add(graph[&EdgeIndex(id)].1);
+        }
+        for id in half_edges.unwrap_or_default() {
+            region.hedges.add(self.check_half_edge(id)?);
+        }
+        self.restrict_region(py, region)
     }
 
-    /// Select by predicates on Linnet views; their ``data`` is a physics object.
+    /// Select by predicates on FeynKit vertices, edges, and half-edges.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
+    /// >>> region = diagram.filter(edge=lambda edge: edge.particle_name == "g")
     ///
     /// Parameters
     /// ----------
     /// node : callable or None, optional
-    ///     Predicate on canonical Linnet node views.
+    ///     Predicate on DiagramVertex objects.
     /// edge : callable or None, optional
-    ///     Predicate on canonical Linnet edge views.
+    ///     Predicate on DiagramEdge objects.
     /// half_edge : callable or None, optional
-    ///     Predicate on canonical Linnet half-edge views.
+    ///     Predicate on DiagramHalfEdge objects.
     #[pyo3(signature = (*, node=None, edge=None, half_edge=None))]
     fn filter(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[linnet.Node], bool] | None", imports=("typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[DiagramVertex], bool] | None", imports=("typing")))]
         node: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[linnet.Edge], bool] | None", imports=("typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[DiagramEdge], bool] | None", imports=("typing")))]
         edge: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[linnet.HalfEdge], bool] | None", imports=("typing", "linnet")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[DiagramHalfEdge], bool] | None", imports=("typing")))]
         half_edge: Option<Py<PyAny>>,
     ) -> PyResult<Py<PySubgraph>> {
-        let graph = self.to_linnet(py)?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("node", node)?;
-        kwargs.set_item("edge", edge)?;
-        kwargs.set_item("half_edge", half_edge)?;
-        let selected = graph.bind(py).call_method("filter", (), Some(&kwargs))?;
-        self.restrict_selection(py, &selected)
+        let graph = self.inner.underlying();
+        let mut region = DiagramSelection {
+            hedges: SuBitGraph::empty(graph.n_hedges()),
+            isolated: BTreeSet::new(),
+        };
+        if let Some(predicate) = node {
+            for vertex in self.vertices() {
+                let id = vertex.id;
+                if predicate.call1(py, (vertex,))?.bind(py).is_truthy()? {
+                    if graph.iter_crown(NodeIndex(id)).next().is_none() {
+                        region.isolated.insert(id);
+                    } else {
+                        region
+                            .hedges
+                            .union_with_iter(graph.iter_crown(NodeIndex(id)));
+                    }
+                }
+            }
+        }
+        if let Some(predicate) = edge {
+            for edge in self.edges() {
+                let id = edge.id;
+                if predicate.call1(py, (edge,))?.bind(py).is_truthy()? {
+                    region.hedges.add(graph[&EdgeIndex(id)].1);
+                }
+            }
+        }
+        if let Some(predicate) = half_edge {
+            for half in self.half_edges() {
+                let id = half.id;
+                if predicate.call1(py, (half,))?.bind(py).is_truthy()? {
+                    region.hedges.add(Hedge(id));
+                }
+            }
+        }
+        self.restrict_region(py, region)
     }
 
     /// Return boundaries around the selected interaction region.
@@ -2255,12 +2686,7 @@ impl PyFeynmanDiagram {
     /// >>> region = diagram.subgraph(nodes=[0])
     /// >>> boundary = region.boundary()
     fn boundary(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
-        let selected = self.linnet_selection(py)?;
-        let result = self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method1("boundary", (selected,))?;
-        self.wrap_selection(py, &result)
+        self.subgraph_view(py, self.inner.underlying().full_crown(&self.selection()))
     }
 
     /// Return connected interaction regions as reusable selections.
@@ -2271,13 +2697,22 @@ impl PyFeynmanDiagram {
     ///
     /// >>> components = diagram.connected_components()
     fn connected_components(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
-        let selected = self.linnet_selection(py)?;
-        self.to_linnet(py)?
-            .bind(py)
-            .call_method1("connected_components", (selected,))?
-            .try_iter()?
-            .map(|value| self.wrap_selection(py, &value?))
-            .collect()
+        let graph = self.inner.underlying();
+        let mut components = graph
+            .connected_components(&self.selection())
+            .into_iter()
+            .map(|hedges| self.subgraph_view(py, hedges))
+            .collect::<PyResult<Vec<_>>>()?;
+        for node in self.isolated_nodes() {
+            components.push(self.view(
+                py,
+                DiagramSelection {
+                    hedges: SuBitGraph::empty(graph.n_hedges()),
+                    isolated: [node].into_iter().collect(),
+                },
+            )?);
+        }
+        Ok(components)
     }
 
     /// Test connectivity of the current diagram or selected region.
@@ -2287,12 +2722,12 @@ impl PyFeynmanDiagram {
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
     /// >>> connected = diagram.is_connected()
-    fn is_connected(&self, py: Python<'_>) -> PyResult<bool> {
-        let selected = self.linnet_selection(py)?;
-        self.to_linnet(py)?
-            .bind(py)
-            .call_method1("is_connected", (selected,))?
-            .extract()
+    fn is_connected(&self) -> bool {
+        self.inner
+            .underlying()
+            .count_connected_components(&self.selection())
+            + self.isolated_nodes().len()
+            <= 1
     }
 
     /// Return lines whose removal disconnects the selection.
@@ -2303,33 +2738,23 @@ impl PyFeynmanDiagram {
     ///
     /// >>> bridges = diagram.bridges()
     fn bridges(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
-        let selected = self.linnet_selection(py)?;
-        let result = self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method1("bridges", (selected,))?;
-        self.wrap_selection(py, &result)
+        self.subgraph_view(py, self.inner.underlying().bridges_of(&self.selection()))
     }
 
-    /// Return a cycle basis and its covered half-edges.
+    /// Return structural cycles and the spanning forest used to construct them.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> cycles, covered = diagram.cycle_basis()
-    #[gen_stub(override_return_type(type_repr="tuple[list[linnet.Cycle], Subgraph]", imports=("linnet")))]
-    fn cycle_basis(&self, py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PySubgraph>)> {
-        let selected = self.linnet_selection(py)?;
-        let result = self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method1("cycle_basis", (selected,))?;
-        let result = result.cast::<PyTuple>()?;
-        Ok((
-            result.get_item(0)?.unbind(),
-            self.wrap_selection(py, &result.get_item(1)?)?,
-        ))
+    /// >>> cycles, forest = diagram.cycle_basis()
+    fn cycle_basis(&self, py: Python<'_>) -> PyResult<(Vec<Py<PySubgraph>>, Py<PySubgraph>)> {
+        let (cycles, forest) = self.inner.underlying().cycle_basis_of(&self.selection());
+        let cycles = cycles
+            .into_iter()
+            .map(|cycle| self.subgraph_view(py, cycle.filter))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok((cycles, self.subgraph_view(py, forest)?))
     }
 
     /// Enumerate spanning forests within the selected topology.
@@ -2340,12 +2765,23 @@ impl PyFeynmanDiagram {
     ///
     /// >>> forests = diagram.all_spanning_forests()
     fn all_spanning_forests(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
-        let selected = self.linnet_selection(py)?;
-        self.to_linnet(py)?
-            .bind(py)
-            .call_method1("all_spanning_forests", (selected,))?
-            .try_iter()?
-            .map(|value| self.wrap_selection(py, &value?))
+        let graph = self.inner.underlying();
+        let isolated = self.isolated_nodes();
+        let mut forests = graph.all_spanning_forests_of(&self.selection());
+        if forests.is_empty() && !isolated.is_empty() {
+            forests.push(SuBitGraph::empty(graph.n_hedges()));
+        }
+        forests
+            .into_iter()
+            .map(|hedges| {
+                self.view(
+                    py,
+                    DiagramSelection {
+                        hedges,
+                        isolated: isolated.clone(),
+                    },
+                )
+            })
             .collect()
     }
 
@@ -2370,15 +2806,21 @@ impl PyFeynmanDiagram {
         min_size: Option<usize>,
         max_size: Option<usize>,
     ) -> PyResult<Vec<Py<PySubgraph>>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
-        kwargs.set_item("min_size", min_size)?;
-        kwargs.set_item("max_size", max_size)?;
-        self.to_linnet(py)?
-            .bind(py)
-            .call_method("all_bonds", (), Some(&kwargs))?
-            .try_iter()?
-            .map(|value| self.wrap_selection(py, &value?))
+        let minimum = min_size.unwrap_or(1);
+        let maximum = max_size.unwrap_or(usize::MAX);
+        if minimum == 0 || minimum > maximum {
+            return Err(PyValueError::new_err(
+                "bond sizes must satisfy 1 <= min_size <= max_size",
+            ));
+        }
+        let mut bonds = self
+            .inner
+            .underlying()
+            .all_bonds_of(&self.selection(), &(minimum..=maximum));
+        bonds.sort();
+        bonds
+            .into_iter()
+            .map(|hedges| self.subgraph_view(py, hedges))
             .collect()
     }
 
@@ -2393,22 +2835,53 @@ impl PyFeynmanDiagram {
     /// Parameters
     /// ----------
     /// source : list[int]
-    ///     Canonical Linnet vertices required on the first side.
+    ///     Diagram vertex IDs required on the first side.
     /// target : list[int]
-    ///     Canonical Linnet vertices required on the opposite side.
-    #[gen_stub(override_return_type(type_repr="list[linnet.CutPartition]", imports=("linnet")))]
-    fn all_cuts(
-        &self,
-        py: Python<'_>,
-        source: Vec<usize>,
-        target: Vec<usize>,
-    ) -> PyResult<Py<PyAny>> {
+    ///     Diagram vertex IDs required on the opposite side.
+    fn all_cuts(&self, source: Vec<usize>, target: Vec<usize>) -> PyResult<Vec<PyCutPartition>> {
         self.require_complete()?;
-        Ok(self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method1("all_cuts", (source, target))?
-            .unbind())
+        if source.is_empty() || target.is_empty() || source.iter().any(|id| target.contains(id)) {
+            return Err(PyValueError::new_err(
+                "source and target must be nonempty, disjoint vertex groups",
+            ));
+        }
+        let source = source
+            .into_iter()
+            .map(|id| self.check_node(id))
+            .collect::<PyResult<Vec<_>>>()?;
+        let target = target
+            .into_iter()
+            .map(|id| self.check_node(id))
+            .collect::<PyResult<Vec<_>>>()?;
+        let graph = self.inner.underlying();
+        if source
+            .iter()
+            .chain(&target)
+            .any(|node| graph.iter_crown(*node).next().is_none())
+        {
+            return Err(PyValueError::new_err(
+                "every source and target vertex must have an incident half-edge",
+            ));
+        }
+        let source = graph.combine_to_single_hedgenode(&source);
+        let target = graph.combine_to_single_hedgenode(&target);
+        if source.hairs.is_empty() || target.hairs.is_empty() {
+            return Err(PyValueError::new_err(
+                "source and target groups must each have a boundary half-edge",
+            ));
+        }
+        let mut cuts = graph.all_cuts(source, target);
+        cuts.sort_by(|a, b| (&a.0, &a.1.left, &a.2).cmp(&(&b.0, &b.1.left, &b.2)));
+        Ok(cuts
+            .into_iter()
+            .map(|(source, boundary, target)| PyCutPartition {
+                diagram: self.clone(),
+                source_side: source,
+                target_side: target,
+                boundary_left: boundary.left,
+                boundary_right: boundary.right,
+            })
+            .collect())
     }
 
     /// Traverse a selected interaction region in depth-first order.
@@ -2422,25 +2895,16 @@ impl PyFeynmanDiagram {
     /// Parameters
     /// ----------
     /// root : int
-    ///     Canonical Linnet vertex ID at which traversal starts.
+    ///     Diagram vertex ID at which traversal starts.
     /// include : int or None, optional
-    ///     Canonical Linnet half-edge ID to prioritize at the root.
+    ///     Native diagram half-edge ID to prioritize at the root.
     #[pyo3(signature = (root, *, include=None))]
-    #[gen_stub(override_return_type(type_repr="linnet.TraversalTree", imports=("linnet")))]
     fn depth_first_traverse(
         &self,
-        py: Python<'_>,
         root: usize,
         include: Option<usize>,
-    ) -> PyResult<Py<PyAny>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
-        kwargs.set_item("include", include)?;
-        Ok(self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method("depth_first_traverse", (root,), Some(&kwargs))?
-            .unbind())
+    ) -> PyResult<PyTraversalTree> {
+        self.traverse(root, include, true)
     }
 
     /// Traverse a selected interaction region in breadth-first order.
@@ -2454,25 +2918,16 @@ impl PyFeynmanDiagram {
     /// Parameters
     /// ----------
     /// root : int
-    ///     Canonical Linnet vertex ID at which traversal starts.
+    ///     Diagram vertex ID at which traversal starts.
     /// include : int or None, optional
-    ///     Canonical Linnet half-edge ID to prioritize at the root.
+    ///     Native diagram half-edge ID to prioritize at the root.
     #[pyo3(signature = (root, *, include=None))]
-    #[gen_stub(override_return_type(type_repr="linnet.TraversalTree", imports=("linnet")))]
     fn breadth_first_traverse(
         &self,
-        py: Python<'_>,
         root: usize,
         include: Option<usize>,
-    ) -> PyResult<Py<PyAny>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("subgraph", self.linnet_selection(py)?)?;
-        kwargs.set_item("include", include)?;
-        Ok(self
-            .to_linnet(py)?
-            .bind(py)
-            .call_method("breadth_first_traverse", (root,), Some(&kwargs))?
-            .unbind())
+    ) -> PyResult<PyTraversalTree> {
+        self.traverse(root, include, false)
     }
 
     /// Deserialize a Feynman diagram from its JSON representation.
@@ -3303,7 +3758,7 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
+    /// >>> contracted = diagram.filter(edge=lambda edge: edge.is_dummy)
     /// >>> basis = diagram.contracted_momentum_basis(contracted)
     ///
     /// Parameters
@@ -3445,21 +3900,33 @@ impl PyFeynmanDiagram {
             .collect()
     }
 
-    /// Return native Linnet half-edge views; ``data`` records their native diagram IDs.
+    /// Return FeynKit half-edges with native diagram IDs and physics edge objects.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> half_edge_payloads = [half_edge.data for half_edge in diagram.half_edges]
+    /// >>> half_edge_ids = [half_edge.id for half_edge in diagram.half_edges]
     #[getter]
-    #[gen_stub(override_return_type(type_repr="list[linnet.HalfEdge]", imports=("linnet")))]
-    fn half_edges(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(self
-            .linnet_selection(py)?
-            .bind(py)
-            .call_method0("to_half_edges")?
-            .unbind())
+    fn half_edges(&self) -> Vec<PyDiagramHalfEdge> {
+        let edges = self
+            .edges()
+            .into_iter()
+            .map(|edge| (edge.id, edge))
+            .collect::<BTreeMap<_, _>>();
+        let graph = self.inner.underlying();
+        self.selection()
+            .included_iter()
+            .map(|hedge| PyDiagramHalfEdge {
+                id: hedge.0,
+                vertex: graph.node_id(hedge).0,
+                edge: edges[&graph[&hedge].0].clone(),
+                flow: match graph.flow(hedge) {
+                    Flow::Source => "source",
+                    Flow::Sink => "sink",
+                },
+            })
+            .collect()
     }
 
     /// Return propagators excluding external momentum carriers and dummy edges.
@@ -3831,7 +4298,7 @@ impl PyFeynmanDiagram {
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+/// >>> region = diagram.filter(edge=lambda edge: not edge.is_external)
 /// >>> left = diagram.subgraph(nodes=[0])
 /// >>> right = diagram.subgraph(nodes=[1])
 /// >>> common = left & right
@@ -3888,20 +4355,20 @@ impl PySubgraph {
             .map_err(error::diagram)
     }
 
-    /// Return canonical Linnet half-edge IDs of this region.
+    /// Return native diagram half-edge IDs of this region.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Subgraph`` class example:
     ///
     /// >>> selected_half_edges = region.half_edge_indices()
-    /// >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
-    fn half_edge_indices(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Vec<usize>> {
+    /// >>> selected = region.original.subgraph(half_edges=selected_half_edges)
+    fn half_edge_indices(slf: PyRef<'_, Self>) -> Vec<usize> {
         slf.into_super()
-            .linnet_selection(py)?
-            .bind(py)
-            .call_method0("half_edge_indices")?
-            .extract()
+            .selection()
+            .included_iter()
+            .map(|hedge| hedge.0)
+            .collect()
     }
 
     /// Return explicitly selected vertices with no incident half-edges.
@@ -4125,6 +4592,9 @@ impl PySubgraph {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyDiagramVertex>()?;
     module.add_class::<PyDiagramEdge>()?;
+    module.add_class::<PyDiagramHalfEdge>()?;
+    module.add_class::<PyCutPartition>()?;
+    module.add_class::<PyTraversalTree>()?;
     module.add_class::<PyMomentumSignature>()?;
     module.add_class::<PyLoopMomentumBasis>()?;
     module.add_class::<PyFeynmanDiagram>()?;

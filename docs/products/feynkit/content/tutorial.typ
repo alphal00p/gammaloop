@@ -219,16 +219,14 @@ states are sewn paired edges; their `is_external` metadata still identifies exte
 momentum carriers. Every item in `diagram.vertices` is an interaction. A missing edge
 endpoint is `None`, and external names, indices, and states belong to the edge.
 
-Install the matching `linnet` extension to use the graph analysis interface.
-`to_linnet()` returns that module's canonical `Graph`, with `DiagramVertex` and
-`DiagramEdge` payloads. Wrap a canonical selection with `diagram.subgraph(selection)`,
-or use `diagram.filter(...)` to obtain a FeynKit `Subgraph` directly:
+Graph analysis calls Rust Linnet directly and needs no Python `linnet` installation.
+Filters receive FeynKit `DiagramVertex`, `DiagramEdge`, and `DiagramHalfEdge` objects.
+Select native diagram IDs with `diagram.subgraph(nodes=..., edges=..., half_edges=...)`,
+or use `diagram.filter(...)` to obtain a FeynKit `Subgraph`:
 
 // docs-example: compile
 ```python
-graph = diagram.to_linnet()
-selected = graph.filter(edge=lambda edge: not edge.data.is_external)
-region = diagram.subgraph(selected)
+region = diagram.filter(edge=lambda edge: not edge.is_external)
 numerator = region.numerator_expression()
 components = region.connected_components()
 boundary = region.boundary()
@@ -247,12 +245,22 @@ implicitly integrated. Overall factors, numerator prefactors, and projectors rem
 
 Nested `region.subgraph(...)` and `region.filter(...)` intersect with the current region.
 Set operations `&`, `|`, `^`, `-`, and `~` preserve the original diagram owner.
+Cycles are FeynKit `Subgraph` objects. `CutPartition` exposes `source_side`,
+`target_side`, `boundary_left`, and `boundary_right` regions. `TraversalTree` returns
+physics vertices in discovery order and supports parent, child, ancestor, and
+fundamental-cycle queries. All result regions retain the immutable physics owner.
+Structural cycles include sewn initial-state carriers, while the physical
+`loop_count` excludes those carriers when constructing a momentum basis.
+
+For optional interoperability, install the matching Python `linnet` extension.
+`diagram.to_linnet()` returns its canonical `Graph` with physics payloads, and
+`diagram.subgraph(selection)` imports graph-bound Linnet selections. Exported half-edge
+indices may differ from native IDs; the exported half-edge's `data` contains its native ID.
 `region.to_linnet()` returns the complete analysis graph; `region.linnet_selection` supplies
 its corresponding canonical selection for direct Linnet algorithms. Importing a canonical
 selection checks the graph owner and topology revision. A structural edit to the analysis
 graph invalidates those canonical selections, while existing physics views retain their
-immutable topology and remain usable. Half-edge views carry their native diagram half-edge
-ID in `data`; the bridge preserves this mapping even when exported IDs differ.
+immutable topology and remain usable.
 
 Call `region.excise()` to obtain an independent `FeynmanDiagram`. Excision retains selected
 vertices and their complete interaction slots, preserving selected paired edges and opening

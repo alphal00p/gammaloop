@@ -168,7 +168,7 @@ for render in (diagram.render, diagram.to_html, diagram.to_linnest):
     else:
         raise AssertionError("render config must be a typed RenderConfig")
 
-region = diagram.filter(edge=lambda edge: not edge.data.is_external)
+region = diagram.filter(edge=lambda edge: not edge.is_external)
 assert "<svg" in region.render(lmb=basis, config=config)
 assert "<figure" in diagram.to_html(momenta=True, config=config)
 print("installed rendering options and momentum checks passed")

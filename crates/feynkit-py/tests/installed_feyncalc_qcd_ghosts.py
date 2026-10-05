@@ -49,10 +49,10 @@ for outgoing, vertices, count in (
         # Align external spin and color ports using the graph's native half-edge IDs.
         # Ghosts have no polarization wavefunctions; these IDs cover them as well.
         for half in diagram.half_edges:
-            edge = half.edge.data
+            edge = half.edge
             if edge.is_external:
                 numerator = numerator.replace(
-                    S("gammalooprs::hedge")(half.data, 1), ports[edge.external_index]
+                    S("gammalooprs::hedge")(half.id, 1), ports[edge.external_index]
                 )
         denominator = kinematics.apply(
             diagram.denominator_expression(dimension=4, in_lmb=True)

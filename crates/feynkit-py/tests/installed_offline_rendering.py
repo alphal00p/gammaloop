@@ -1,6 +1,7 @@
 """Community rendering uses no Python graph or Typst packages, including in WASM."""
 
 import builtins
+import importlib.abc
 import itertools
 import json
 import math
@@ -13,6 +14,16 @@ from symbolica.community import tensor as spenso
 from symbolica.core import S
 
 original_import = builtins.__import__
+
+
+class NoLinnet(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname.split(".")[0] == "linnet":
+            raise AssertionError("native graph analysis tried to import linnet")
+
+
+no_linnet = NoLinnet()
+sys.meta_path.insert(0, no_linnet)
 
 
 def import_without_renderers(name, globals=None, locals=None, fromlist=(), level=0):
@@ -105,6 +116,150 @@ try:
         loops=1, max_vertices=2, allow_self_loops=True, progress=None
     )[0]
     original = cross.to_json()
+    # Selection and graph algorithms must work without the Python Linnet wheel,
+    # including partial half-edges, physics callbacks, and returned result objects.
+    full = cross.filter(edge=lambda edge: True)
+    assert full.to_json() == original
+    assert full.is_connected()
+    assert len(full.connected_components()) == 1
+    empty = cross.subgraph()
+    assert empty.is_connected() and empty.connected_components() == []
+    assert full.subgraph(empty).half_edge_indices() == []
+    assert (~empty).half_edge_indices() == full.half_edge_indices()
+    for half in cross.half_edges:
+        assert isinstance(half, hep.DiagramHalfEdge)
+        assert half.flow in {"source", "sink"}
+        selected = cross.subgraph(half_edges=[half.id])
+        assert selected.half_edge_indices() == [half.id]
+        assert selected.denominator_expression() == spenso.TensorExpression(1)
+        assert cross.filter(
+            half_edge=lambda item: item.id == half.id
+        ).half_edge_indices() == [half.id]
+        assert half.vertex in {half.edge.source, half.edge.target}
+    for vertex in cross.vertices:
+        assert (
+            cross.filter(node=lambda item: item.id == vertex.id).half_edge_indices()
+            == cross.subgraph(nodes=[vertex.id]).half_edge_indices()
+        )
+    internal = cross.filter(edge=lambda edge: not edge.is_external)
+    assert not internal.filter(edge=lambda edge: edge.is_external)
+    assert isinstance(internal.boundary(), hep.Subgraph)
+    assert isinstance(full.bridges(), hep.Subgraph)
+    cycles, covered = full.cycle_basis()
+    # Sewn initial-state carriers participate in structural cycles but are
+    # excluded from the physical momentum-basis loop count.
+    assert len(cycles) == len(full.edges) - len(full.vertices) + 1
+    assert all(isinstance(cycle, hep.Subgraph) for cycle in cycles)
+    assert covered.loop_count == 0 and covered.is_connected()
+    assert len(covered.edges) == len(full.vertices) - 1
+    forests = full.all_spanning_forests()
+    assert forests and all(
+        forest.is_connected() and len(forest.edges) == len(full.vertices) - 1
+        for forest in forests
+    )
+    assert full.all_bonds() and full.all_bonds(min_size=99) == []
+    partitions = full.all_cuts([0], [1])
+    assert partitions and all(isinstance(cut, hep.CutPartition) for cut in partitions)
+    for cut in partitions:
+        assert cut.source_side.vertices[0].id == 0
+        assert cut.target_side.vertices[0].id == 1
+        assert {half.edge.id for half in cut.boundary_left.half_edges} == {
+            half.edge.id for half in cut.boundary_right.half_edges
+        }
+        assert not (cut.boundary_left & cut.boundary_right)
+    for traverse in (full.depth_first_traverse, full.breadth_first_traverse):
+        tree = traverse(0)
+        assert isinstance(tree, hep.TraversalTree)
+        assert [vertex.id for vertex in tree.nodes] == [0, 1]
+        assert tree.parent(0) is None and tree.parent(1).id == 0
+        assert [vertex.id for vertex in tree.children(0)] == [1]
+        assert [vertex.id for vertex in tree.ancestors(1)] == [0]
+        assert len(tree.subgraph.edges) == len(tree.nodes) - 1
+        assert tree.covers(full).half_edge_indices() == full.half_edge_indices()
+        non_tree = [
+            half
+            for half in cross.half_edges
+            if half.id not in tree.subgraph.half_edge_indices()
+        ]
+        assert non_tree
+        fundamental = tree.fundamental_cycle(non_tree[0].id)
+        assert fundamental.is_connected() and len(fundamental.edges) == 2
+        assert tree.fundamental_cycle(tree.subgraph.half_edge_indices()[0]) is None
+        assert (
+            traverse(
+                0,
+                include=next(half.id for half in cross.half_edges if half.vertex == 0),
+            )
+            .nodes[0]
+            .id
+            == 0
+        )
+    foreign = hep.FeynmanDiagram.from_json(scalar, original).subgraph(nodes=[0])
+    for operation, error_type in (
+        (lambda: cross.subgraph(object()), TypeError),
+        (lambda: cross.subgraph(foreign), ValueError),
+        (lambda: tree.covers(foreign), ValueError),
+        (lambda: cross.subgraph(nodes=[99]), IndexError),
+        (lambda: cross.subgraph(edges=[99]), IndexError),
+        (lambda: cross.subgraph(half_edges=[99]), IndexError),
+        (lambda: cross.depth_first_traverse(99), IndexError),
+        (lambda: cross.depth_first_traverse(0, include=99), IndexError),
+        (lambda: empty.depth_first_traverse(0), ValueError),
+        (lambda: full.all_bonds(min_size=0), ValueError),
+        (lambda: full.all_bonds(min_size=2, max_size=1), ValueError),
+        (lambda: full.all_cuts([], [1]), ValueError),
+        (lambda: full.all_cuts([0], [0]), ValueError),
+        (lambda: full.all_cuts([99], [1]), IndexError),
+    ):
+        try:
+            operation()
+        except error_type:
+            pass
+        else:
+            raise AssertionError("invalid native graph input was accepted")
+    assert cross.to_json() == original
+    # Zero-crown interactions survive selection, component/forest results, and
+    # singleton traversals even though they have no half-edge bit to select.
+    zero_model = json.loads(scalar.to_json())
+    zero_model["vertex_rules"][0]["particles"] = []
+    zero_model["lorentz_structures"][0]["spins"] = []
+    zero_scalar = hep.Model.from_json(json.dumps(zero_model))
+    isolated = hep.FeynmanDiagram.from_dot(
+        zero_scalar, "digraph isolated { a [num=2]; b [num=3]; }"
+    )
+    assert not isolated.is_connected()
+    components = isolated.connected_components()
+    assert [component.isolated_node_indices() for component in components] == [[0], [1]]
+    assert isolated.subgraph(
+        nodes=[0]
+    ).numerator_expression() == spenso.TensorExpression(2)
+    assert isolated.filter(
+        node=lambda vertex: vertex.id == 1
+    ).isolated_node_indices() == [1]
+    assert isolated.all_spanning_forests()[0].isolated_node_indices() == [0, 1]
+    for traverse in (isolated.depth_first_traverse, isolated.breadth_first_traverse):
+        tree = traverse(0)
+        assert [vertex.id for vertex in tree.nodes] == [0]
+        assert tree.subgraph.isolated_node_indices() == [0]
+        assert tree.covers(isolated.subgraph(nodes=[0, 1])).isolated_node_indices() == [
+            0
+        ]
+        assert tree.parent(0) is None and tree.children(0) == tree.ancestors(0) == []
+    tadpole = (
+        hep.Model.phi4()
+        .process(["phi"], ["phi"])
+        .generate_diagrams(
+            loops=1, max_vertices=1, allow_self_loops=True, progress=None
+        )[0]
+    )
+    assert len(tadpole.cycle_basis()[0]) == 1
+    for traverse in (tadpole.depth_first_traverse, tadpole.breadth_first_traverse):
+        tree = traverse(0)
+        assert [vertex.id for vertex in tree.nodes] == [0]
+        internal_half = next(
+            half for half in tadpole.half_edges if not half.edge.is_external
+        )
+        assert len(tree.fundamental_cycle(internal_half.id).edges) == 1
     sewn_identities = None
     for split in (False, True):
         svg = cross.render(config={"template_options": {"split-initial-state": split}})
@@ -154,3 +309,4 @@ try:
     )
 finally:
     builtins.__import__ = original_import
+    sys.meta_path.remove(no_linnet)
