@@ -8225,7 +8225,7 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | linnet.RenderConfig | None = None) -> builtins.str:
+    def render(self, *, config: builtins.dict[builtins.str, typing.Any] | None = None) -> builtins.str:
         r"""
         Render a blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
@@ -8238,7 +8238,7 @@ class Process:
 
         Parameters
         ----------
-        config : dict or linnet.RenderConfig or None, optional
+        config : dict or None, optional
             Particle-label, layout and drawing overrides shared with Feynman diagrams.
         """
     def _repr_svg_(self) -> builtins.str:
