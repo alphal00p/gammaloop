@@ -17,6 +17,10 @@
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
+      name = "feynkit";
+      packages = ["feynkit-model" "feynkit-ufo"];
+    }
+    {
       name = "core";
       runtimeUfoLoader = hasUfoWheel;
       # Shared Python stub generation also enables ufo-import. Preserve the
