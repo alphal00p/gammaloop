@@ -1909,6 +1909,15 @@ struct DiagramSelection {
 }
 
 impl PyFeynmanDiagram {
+    /// Borrow the native diagram without discarding a partial selected region.
+    ///
+    /// As with family construction, partial subgraphs must first be excised
+    /// into independent diagrams; complete selections retain their graph.
+    pub fn as_diagram(&self) -> PyResult<&FeynmanDiagram> {
+        self.require_complete()?;
+        Ok(&self.inner)
+    }
+
     pub(crate) fn is_whole_diagram(&self) -> bool {
         self.selected_region.is_none()
     }
@@ -4180,6 +4189,43 @@ impl PyFeynmanDiagram {
 #[cfg(test)]
 mod tests {
     use super::parse_symbolic_annotation;
+
+    #[test]
+    fn native_diagram_borrow_preserves_complete_selection_semantics() {
+        use super::{DiagramSelection, PyFeynmanDiagram};
+        use feynkit_graph::FeynmanDiagram;
+        use feynkit_model::Model;
+        use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+
+        let native = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph { a -> a [particle="phi"]; a -> a [particle="phi"]; }"#,
+        )
+        .unwrap();
+        let mut diagram = PyFeynmanDiagram::from(native);
+        assert!(std::ptr::eq(
+            diagram.as_diagram().unwrap(),
+            diagram.inner.as_ref()
+        ));
+
+        let graph = diagram.inner.underlying();
+        let empty = SuBitGraph::empty(graph.n_hedges());
+        let complete = graph.full_filter();
+        diagram.selected_region = Some(DiagramSelection {
+            hedges: empty,
+            isolated: Default::default(),
+        });
+        assert!(diagram.as_diagram().is_err());
+
+        diagram.selected_region = Some(DiagramSelection {
+            hedges: complete,
+            isolated: Default::default(),
+        });
+        assert!(std::ptr::eq(
+            diagram.as_diagram().unwrap(),
+            diagram.inner.as_ref()
+        ));
+    }
 
     #[test]
     fn canonical_denominator_has_a_scalar_interface() {
