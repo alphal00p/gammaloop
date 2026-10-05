@@ -153,4 +153,28 @@ for the underlying graph renderer.
 The #link("guides/community-host/")[host guide] describes embedding the renderer
 in a distribution. Optional standalone Linnet graph interoperability is separate
 from rendering and requires that package only when explicitly used.
+
+== Configured amplitude collections
+
+`amplitude.render()` returns an `AmplitudeRender` snapshot that displays directly
+in IPython, Jupyter, and Marimo. `config` accepts the same `RenderSettings` as
+individual diagrams, while `term_settings` controls the weighted tensor notation.
+The default preview shows six contributions; `max_diagrams=None` renders all.
+
+```python
+from symbolica.community.tensor import DisplaySettings
+from symbolica.community.hepkit import RenderSettings
+
+drawing = amplitude.render(
+    config=RenderSettings(show_momentum=True),
+    max_diagrams=3,
+    term_settings=DisplaySettings(show_dimensions=True),
+)
+drawing
+html = drawing.to_html()
+svg = drawing.diagrams[0].to_svg()
+```
+
+The `diagrams` property contains only the rendered contributions, in amplitude
+order. Rendering captures a presentation snapshot and leaves the amplitude intact.
 ]

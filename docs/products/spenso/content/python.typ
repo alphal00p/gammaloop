@@ -184,10 +184,27 @@ Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` dr
 current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
 The renderer passes native node, edge, and half-edge identities directly to Linnest's
 graph builder; DOT remains a separate export format.
-`render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
-self-contained Typst document embedding that SVG. Both accept native configuration
-dictionaries, like Feynman diagrams. Rust draws the graph directly and the embedded
-Typst compiler typesets labels without graph plugins or MiTeX.
+`render(config=...)` returns a displayable `DiagramRender` snapshot, while
+`to_linnest(config=...)` returns a self-contained Typst document embedding the SVG.
+Both accept typed `tensor.RenderSettings` values. Rust draws the graph directly
+and the embedded Typst compiler typesets labels without graph plugins or MiTeX.
+
+Use `drawing.to_svg()` or `drawing.to_html()` for string exports. Graph settings are
+immutable typed values with discoverable constructors and properties:
+
+```python
+from symbolica.community.tensor import RenderSettings, LayoutSettings, StrokeStyle
+
+drawing = network.render(config=RenderSettings(
+    layout=LayoutSettings(layout_algo="dot"),
+    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.5),
+))
+drawing  # Displays directly in IPython, Jupyter, and Marimo.
+```
+
+`LayoutSettings`, `StrokeStyle`, and `DiagramRender` are also available from
+`symbolica.community.hepkit`; both modules expose the same shared types.
+
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 Its execution summary uses `network.status` to show remaining nodes, operations,
 contractions, and ready operations. “Graph reduced” means no graph work remains;
@@ -768,7 +785,6 @@ subscript notation, including distinct higher-spin and dummy slots.
 After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
 bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
 
-
 Tensor names accept backend-specific head formatting through `print`:
 
 // docs-example: compile
@@ -818,7 +834,6 @@ raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
 custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
 display for those settings. Source-only methods reject unsupported settings rather than
 silently ignoring them.
-
 
 A supplied rank-one tensor fills an argument position in the ports layout.
 A filled marker distinguishes it from an unresolved axis: inline-metric spaces

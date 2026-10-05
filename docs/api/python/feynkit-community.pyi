@@ -14,9 +14,12 @@ import symbolica.core
 import types
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.tensor import Slot, TensorExpression, TensorName
+from symbolica.community.tensor import DiagramRender, DisplaySettings, LayoutSettings, Slot, StrokeStyle, TensorExpression, TensorName
 from symbolica.core import Expression
 
+DiagramRender: typing.TypeAlias = symbolica.community.tensor.DiagramRender
+LayoutSettings: typing.TypeAlias = symbolica.community.tensor.LayoutSettings
+StrokeStyle: typing.TypeAlias = symbolica.community.tensor.StrokeStyle
 @typing.final
 class Amplitude:
     r"""
@@ -172,6 +175,26 @@ class Amplitude:
 
         >>> print(amplitude)
         """
+    def render(self, *, config: typing.Optional[RenderSettings] = None, max_diagrams: typing.Optional[builtins.int] = 6, term_settings: typing.Optional[DisplaySettings] = None) -> AmplitudeRender:
+        r"""
+        Render a configurable snapshot of the amplitude's diagrams and weighted terms.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> drawing = amplitude.render(config=hep.RenderSettings(node_radius=5), max_diagrams=2)
+        >>> html = drawing.to_html()
+
+        Parameters
+        ----------
+        config : RenderSettings, optional
+            Layout, labels, and stroke settings shared by all diagrams.
+        max_diagrams : int or None, optional
+            Maximum displayed contributions (default 6); None includes all, 0 none.
+        term_settings : DisplaySettings, optional
+            Tensor notation settings for each weighted contribution.
+        """
     def _repr_html_(self) -> builtins.str:
         r"""
         Render compact diagram rows with weighted operators and expandable graphs.
@@ -293,6 +316,72 @@ class AmplitudeLeg:
         Using the setup in the ``AmplitudeLeg`` class example:
 
         >>> print(amplitude.legs[0])
+        """
+
+@typing.final
+class AmplitudeRender:
+    r"""
+    A rendered amplitude collection retaining its configured diagram snapshots.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> process = hep.Model.phi4().process(["phi", "phi"], ["phi", "phi"])
+    >>> amplitude = hep.Amplitude(process.generate_diagrams().diagrams)
+    >>> drawing = amplitude.render(max_diagrams=None)
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramRender]:
+        r"""
+        Rendered diagram snapshots in contribution order, bounded by max_diagrams.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeRender`` class example:
+
+        >>> svg = drawing.diagrams[0].to_svg()
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Export the configured collection as interactive notebook HTML.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeRender`` class example:
+
+        >>> html = drawing.to_html()
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the configured collection in IPython and Jupyter.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeRender`` class example:
+
+        >>> from IPython.display import display
+        >>> display(drawing)
+        """
+    def _mime_(self) -> tuple[builtins.str, builtins.str]:
+        r"""
+        Display the configured collection in Marimo.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeRender`` class example:
+
+        >>> import marimo as mo
+        >>> mo.as_html(drawing)
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Summarize the number of rendered contributions in text-only frontends.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeRender`` class example:
+
+        >>> text = repr(drawing)
         """
 
 @typing.final
@@ -2076,96 +2165,6 @@ class DiagramHalfEdge:
         Examples
         --------
         >>> incoming = [half.id for half in diagram.half_edges if half.flow == "sink"]
-        """
-
-@typing.final
-class DiagramRender:
-    r"""
-    A rendered diagram snapshot with its configured notebook display.
-    Displaying or exporting the snapshot reuses the rendered SVG and labels.
-
-    Examples
-    --------
-    >>> from symbolica.community import hepkit as hep
-    >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-    >>> drawing = process.render(config=hep.RenderSettings(node_radius=5))
-    >>> drawing
-    >>> svg = drawing.to_svg()
-    """
-    def to_svg(self) -> builtins.str:
-        r"""
-        Export the configured SVG, including typeset labels and hover information.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> from pathlib import Path
-        >>> Path("diagram.svg").write_text(drawing.to_svg())
-        """
-    def to_html(self) -> builtins.str:
-        r"""
-        Export the notebook HTML figure with its caption and interactive SVG.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> html = drawing.to_html()
-        """
-    def to_linnest(self) -> builtins.str:
-        r"""
-        Export a self-contained Typst document embedding this rendered SVG.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> from pathlib import Path
-        >>> Path("diagram.typ").write_text(drawing.to_linnest())
-        """
-    def _repr_html_(self) -> builtins.str:
-        r"""
-        Display the configured figure in IPython and Jupyter.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> from IPython.display import display
-        >>> display(drawing)
-        """
-    def _repr_svg_(self) -> builtins.str:
-        r"""
-        Provide the configured SVG to SVG-aware notebook frontends.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> svg = drawing._repr_svg_()
-        """
-    def _mime_(self) -> tuple[builtins.str, builtins.str]:
-        r"""
-        Display the configured HTML figure in Marimo.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> import marimo as mo
-        >>> mo.as_html(drawing)
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Summarize the rendered snapshot in text-only frontends.
-
-        Examples
-        --------
-        Using the setup in the ``DiagramRender`` class example:
-
-        >>> repr(drawing)
-        'DiagramRender()'
         """
 
 @typing.final
@@ -5866,256 +5865,6 @@ class KinematicsError(FeynkitError):
     ...
 
 @typing.final
-class LayoutSettings:
-    r"""
-    Immutable native graph layout overrides.
-    None leaves an option to the renderer; it does not force a default override.
-    Constructors and read-only properties expose options to help() and completion.
-
-    Examples
-    --------
-    >>> from symbolica.community.hepkit import LayoutSettings
-    >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
-    """
-    @property
-    def layout_algo(self) -> typing.Optional[builtins.str]:
-        r"""
-        Layout algorithm: "impred" preserves the embedding; "dot" uses layered ranks.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().layout_algo
-        """
-    @property
-    def tree_dx(self) -> typing.Optional[builtins.float]:
-        r"""
-        Horizontal spacing for layered layouts, in drawing units.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().tree_dx
-        """
-    @property
-    def tree_dy(self) -> typing.Optional[builtins.float]:
-        r"""
-        Vertical spacing for layered layouts, in drawing units.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().tree_dy
-        """
-    @property
-    def impred_steps(self) -> typing.Optional[builtins.int]:
-        r"""
-        Cooling schedule duration in reference steps; the native default is 500.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_steps
-        """
-    @property
-    def impred_step_scale(self) -> typing.Optional[builtins.int]:
-        r"""
-        Maximum integration stride after settling; the native default is 2.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_step_scale
-        """
-    @property
-    def impred_spacing(self) -> typing.Optional[builtins.float]:
-        r"""
-        Target spacing in drawing units; the native default is 2.4.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_spacing
-        """
-    @property
-    def impred_repulsion(self) -> typing.Optional[builtins.float]:
-        r"""
-        Nonnegative repulsion multiplier; the native default is 2.5.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_repulsion
-        """
-    @property
-    def impred_attraction(self) -> typing.Optional[builtins.float]:
-        r"""
-        Nonnegative attraction multiplier; the native default is 2.5.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_attraction
-        """
-    @property
-    def impred_parallel_balance(self) -> typing.Optional[builtins.float]:
-        r"""
-        Parallel-edge attraction balance; the native default is 1.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_parallel_balance
-        """
-    @property
-    def impred_pull(self) -> typing.Optional[builtins.float]:
-        r"""
-        External-leg pull multiplier; the native default is 0.45.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_pull
-        """
-    @property
-    def impred_pull_balance(self) -> typing.Optional[builtins.float]:
-        r"""
-        Balance of external-leg pulls; the native default is 1.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_pull_balance
-        """
-    @property
-    def impred_external_max_points(self) -> typing.Optional[builtins.int]:
-        r"""
-        Maximum intermediate external-route points, from 0 to 3; default 2.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_external_max_points
-        """
-    @property
-    def impred_split_length_ratio(self) -> typing.Optional[builtins.float]:
-        r"""
-        Subdivision threshold relative to spacing; the native default is 1.5.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_split_length_ratio
-        """
-    @property
-    def impred_contract_chord_ratio(self) -> typing.Optional[builtins.float]:
-        r"""
-        Positive contraction threshold below the subdivision threshold; default 1.25.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_contract_chord_ratio
-        """
-    @property
-    def impred_edge_clearance(self) -> typing.Optional[builtins.float]:
-        r"""
-        Positive edge clearance in drawing units; the native default is 0.4.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_edge_clearance
-        """
-    @property
-    def impred_node_edge_strength(self) -> typing.Optional[builtins.float]:
-        r"""
-        Nonnegative node-edge repulsion multiplier; the native default is 4.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_node_edge_strength
-        """
-    @property
-    def impred_labels(self) -> typing.Optional[builtins.bool]:
-        r"""
-        Refine the layout around measured labels; disabled by default.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_labels
-        """
-    @property
-    def impred_level(self) -> typing.Optional[builtins.bool]:
-        r"""
-        Rotate toward the external-pull optimum; enabled by default.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> value = LayoutSettings().impred_level
-        """
-    def __new__(cls, *, layout_algo: typing.Literal['dot', 'impred'] | None = None, tree_dx: typing.Optional[builtins.float] = None, tree_dy: typing.Optional[builtins.float] = None, impred_steps: typing.Optional[builtins.int] = None, impred_step_scale: typing.Optional[builtins.int] = None, impred_spacing: typing.Optional[builtins.float] = None, impred_repulsion: typing.Optional[builtins.float] = None, impred_attraction: typing.Optional[builtins.float] = None, impred_parallel_balance: typing.Optional[builtins.float] = None, impred_pull: typing.Optional[builtins.float] = None, impred_pull_balance: typing.Optional[builtins.float] = None, impred_external_max_points: typing.Optional[builtins.int] = None, impred_split_length_ratio: typing.Optional[builtins.float] = None, impred_contract_chord_ratio: typing.Optional[builtins.float] = None, impred_edge_clearance: typing.Optional[builtins.float] = None, impred_node_edge_strength: typing.Optional[builtins.float] = None, impred_labels: typing.Optional[builtins.bool] = None, impred_level: typing.Optional[builtins.bool] = None) -> LayoutSettings:
-        r"""
-        Construct immutable overrides; None preserves the renderer's defaults.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
-
-        Parameters
-        ----------
-        layout_algo : str or None, optional
-            Layout algorithm: "impred" preserves the embedding; "dot" uses layered ranks.
-        tree_dx : float or None, optional
-            Horizontal spacing for layered layouts, in drawing units.
-        tree_dy : float or None, optional
-            Vertical spacing for layered layouts, in drawing units.
-        impred_steps : int or None, optional
-            Cooling schedule duration in reference steps; the native default is 500.
-        impred_step_scale : int or None, optional
-            Maximum integration stride after settling; the native default is 2.
-        impred_spacing : float or None, optional
-            Target spacing in drawing units; the native default is 2.4.
-        impred_repulsion : float or None, optional
-            Nonnegative repulsion multiplier; the native default is 2.5.
-        impred_attraction : float or None, optional
-            Nonnegative attraction multiplier; the native default is 2.5.
-        impred_parallel_balance : float or None, optional
-            Parallel-edge attraction balance; the native default is 1.
-        impred_pull : float or None, optional
-            External-leg pull multiplier; the native default is 0.45.
-        impred_pull_balance : float or None, optional
-            Balance of external-leg pulls; the native default is 1.
-        impred_external_max_points : int or None, optional
-            Maximum intermediate external-route points, from 0 to 3; default 2.
-        impred_split_length_ratio : float or None, optional
-            Subdivision threshold relative to spacing; the native default is 1.5.
-        impred_contract_chord_ratio : float or None, optional
-            Positive contraction threshold below the subdivision threshold; default 1.25.
-        impred_edge_clearance : float or None, optional
-            Positive edge clearance in drawing units; the native default is 0.4.
-        impred_node_edge_strength : float or None, optional
-            Nonnegative node-edge repulsion multiplier; the native default is 4.
-        impred_labels : bool or None, optional
-            Refine the layout around measured labels; disabled by default.
-        impred_level : bool or None, optional
-            Rotate toward the external-pull optimum; enabled by default.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Inspect the selected overrides without rendering a diagram.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import LayoutSettings
-        >>> text = repr(LayoutSettings(impred_steps=100, impred_labels=True))
-        """
-
-@typing.final
 class LoadedModel:
     r"""
     A normalized model, its parameter card, and its loading diagnostics.
@@ -9682,76 +9431,6 @@ class SquaredAmplitude:
 
         >>> from IPython.display import display
         >>> display(squared)
-        """
-
-@typing.final
-class StrokeStyle:
-    r"""
-    Immutable stroke overrides shared by vertices and edges.
-    None leaves an option to the renderer; it does not force a default override.
-    Constructors and read-only properties expose options to help() and completion.
-
-    Examples
-    --------
-    >>> from symbolica.community.hepkit import StrokeStyle
-    >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
-    """
-    @property
-    def paint(self) -> typing.Optional[builtins.str]:
-        r"""
-        Stroke paint as a CSS color, for example "#6f4d85".
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import StrokeStyle
-        >>> value = StrokeStyle().paint
-        """
-    @property
-    def thickness(self) -> typing.Optional[builtins.float]:
-        r"""
-        Finite nonnegative stroke width in points.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import StrokeStyle
-        >>> value = StrokeStyle().thickness
-        """
-    @property
-    def dash(self) -> typing.Optional[builtins.str]:
-        r"""
-        Line pattern: "solid", "dotted", or "dashed".
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import StrokeStyle
-        >>> value = StrokeStyle().dash
-        """
-    def __new__(cls, *, paint: typing.Optional[builtins.str] = None, thickness: typing.Optional[builtins.float] = None, dash: typing.Literal['solid', 'dotted', 'dashed'] | None = None) -> StrokeStyle:
-        r"""
-        Construct immutable overrides; None preserves the renderer's defaults.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import StrokeStyle
-        >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
-
-        Parameters
-        ----------
-        paint : str or None, optional
-            Stroke paint as a CSS color, for example "#6f4d85".
-        thickness : float or None, optional
-            Finite nonnegative stroke width in points.
-        dash : str or None, optional
-            Line pattern: "solid", "dotted", or "dashed".
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Inspect the selected overrides without rendering a diagram.
-
-        Examples
-        --------
-        >>> from symbolica.community.hepkit import StrokeStyle
-        >>> text = repr(StrokeStyle(paint="#6f4d85", thickness=1.5))
         """
 
 @typing.final

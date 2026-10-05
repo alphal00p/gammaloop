@@ -9,6 +9,10 @@ from symbolica.core import Expression
 
 E = Expression.parse
 from symbolica.community.tensor import (
+    DiagramRender,
+    LayoutSettings,
+    RenderSettings,
+    StrokeStyle,
     Representation,
     Tensor,
     TensorExpression,
@@ -19,7 +23,7 @@ from symbolica.community.tensor import (
 
 def graph_labels(network):
     labels = {}
-    for node in ET.fromstring(network.render()).iter():
+    for node in ET.fromstring(network.render().to_svg()).iter():
         if node.attrib.get("data-linnet-kind") not in {"node", "edge"}:
             continue
         detail = json.loads(node.attrib["data-linnet-detail"])
@@ -38,7 +42,7 @@ class NetworkDisplayTests(unittest.TestCase):
         q = TensorName.vector("network_layout_tests::q")(rep)
         network = (A("i", "j", "k") * p("i") * q("j") / (p * p)).to_network()
         before = network.to_dot()
-        root = ET.fromstring(network.render())
+        root = ET.fromstring(network.render().to_svg())
         centers, edges = {}, {}
         for element in root.iter():
             kind = element.attrib.get("data-linnet-kind")
@@ -116,7 +120,7 @@ class NetworkDisplayTests(unittest.TestCase):
         gamma = TensorExpression.dirac_gamma(4)(1, 2, 1).to_network()
         labels = graph_labels(gamma)
         self.assertCountEqual(labels, ["a", "b", "mu", "gamma"])
-        ET.fromstring(gamma.render())
+        ET.fromstring(gamma.render().to_svg())
 
         # Compound graph indices must be named together, not independently as mu.
         rep = Representation.mink(4)
@@ -128,7 +132,7 @@ class NetworkDisplayTests(unittest.TestCase):
         labels = graph_labels(network)
         self.assertIn("mu", labels)
         self.assertIn("nu", labels)
-        ET.fromstring(network.render())
+        ET.fromstring(network.render().to_svg())
 
     def test_registered_names_and_typed_inspection(self):
         spinor = Representation.bis(4)
@@ -136,7 +140,7 @@ class NetworkDisplayTests(unittest.TestCase):
         gamma = TensorExpression.dirac_gamma(4)
         network = (jbar(1) * gamma(1, 2, 1)).to_network()
         self.assertIn("macron(J)", graph_labels(network))
-        root = ET.fromstring(network.render())
+        root = ET.fromstring(network.render().to_svg())
         details = [
             json.loads(node.attrib["data-linnet-detail"])
             for node in root.iter()
@@ -243,14 +247,41 @@ class NetworkDisplayTests(unittest.TestCase):
             TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network(),
         ):
             with self.subTest(network=repr(network)):
-                svg = network.render()
+                svg = network.render().to_svg()
                 self.assertIn("data-linnet-interactive", svg)
                 self.assertIn("spenso-network-svg", svg)
                 self.assertIn("light-dark", svg)
 
+    def test_configured_snapshot_has_rich_display_and_is_stable(self):
+        network = TensorNetwork(E("2 + x"))
+        config = RenderSettings(
+            title="Configured graph",
+            layout=LayoutSettings(layout_algo="dot"),
+            edge_stroke=StrokeStyle(paint="#123456", thickness=2),
+        )
+        drawing = network.render(config=config)
+        self.assertIsInstance(drawing, DiagramRender)
+        svg, html = drawing.to_svg(), drawing.to_html()
+        self.assertIn("#123456", svg)
+        self.assertIn("spenso-network", html)
+        self.assertEqual(drawing._repr_svg_(), svg)
+        self.assertEqual(drawing._repr_html_(), html)
+        self.assertEqual(drawing._mime_(), ("text/html", html))
+        self.assertIn("#image(bytes(", drawing.to_linnest())
+        network.execute()
+        self.assertEqual(drawing.to_html(), html)
+        self.assertEqual(drawing.to_svg(), svg)
+        self.assertIn("layout=LayoutSettings", repr(config))
+        with self.assertRaises(AttributeError):
+            config.title = "changed"
+        with self.assertRaises(ValueError):
+            RenderSettings(node_radius=-1)
+        with self.assertRaises(TypeError):
+            network.render(config={"title": "obsolete"})
+
     def test_linnet_configuration_and_portable_source(self):
         network = TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network()
-        config = {"title": "Network preview"}
+        config = RenderSettings(title="Network preview")
         source = network.to_linnest(config=config)
         self.assertIn("#image(bytes(", source)
         self.assertNotIn("@preview", source)
@@ -258,7 +289,7 @@ class NetworkDisplayTests(unittest.TestCase):
         self.assertNotIn("network-dot", source)
         # Portable source contains the complete SVG, including typeset glyphs.
         self.assertIn("<svg", source)
-        self.assertIn("<svg", network.render(config=config))
+        self.assertIn("<svg", network.render(config=config).to_svg())
         self.assertIn("<math", network.expression().to_html())
 
 

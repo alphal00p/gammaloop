@@ -182,12 +182,11 @@ def _(mo):
     mo.md(r"""
     Executing the network carries out the component sums and scalar
     operations, leaving the input components symbolic. From the completed
-    network, `result_tensor()` extracts the tensor `Q24`, whose open spinor
-    index labels the four expressions for $Q(2,4)_c$. Each includes the
-    momentum-dependent propagator denominator and is ready for numerical
-    evaluation. In the component output, numeric superscripts label entries
-    in the chosen basis. Line breaks have been added to fit the expressions
-    on the page.
+    network, `result_tensor()` extracts the four-component current $Q(2,4)$.
+    We display its first component, `Q24[0]`, below; the complete tensor is
+    retained for numerical evaluation. Numeric superscripts in the output
+    label entries in the chosen basis. Line breaks have been added to fit
+    the expression on the page.
     """)
     return
 
@@ -196,14 +195,14 @@ def _(mo):
 def _(network):
     network.execute()
     Q24 = network.result_tensor()
-    Q24
+    Q24[0]
     return (Q24,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    These expressions can now be evaluated through the Symbolica interface
+    The full current can now be evaluated through the Symbolica interface
     introduced above. The tensor's `evaluator` method accepts the same
     options as `Expression.evaluator` and optimises all four components
     together. We use `components()` to list its inputs in the order
@@ -275,8 +274,8 @@ def _(mo):
     momentum-independent four-point construction of the section on general
     contact decomposition, contracting two inputs leaves the intermediate
     tensor $X_{\rho\sigma}$ with two Lorentz indices. Spenso obtains its
-    16 component expressions in the same way as the four expressions
-    above. Symbolica then identifies exact zeros and components related by
+    16 component expressions in the same way as the four spinor components
+    of $Q(2,4)$. Symbolica then identifies exact zeros and components related by
     equality or a sign, giving the one stored representative for the
     metric-pair structure and the six for the antisymmetric four-gluon
     structure discussed there. In the four-gluon case, only the six entries
